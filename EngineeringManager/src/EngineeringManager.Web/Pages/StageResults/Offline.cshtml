@@ -1,0 +1,58 @@
+@page
+@model EngineeringManager.Web.Pages.StageResults.OfflineModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "现场离线草稿";
+}
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">有限离线 · 阶段成果</p>
+        <h1>现场离线草稿</h1>
+        <p class="page-lead">仅保存阶段成果、工程量、备注和照片。财务、工资、合同金额及最终结算仍须联网操作。</p>
+    </div>
+    <div class="pwa-badge" data-offline-connection>正在检查网络</div>
+</section>
+
+<section class="offline-workspace" data-offline-stage-results data-user-id="@Model.CurrentUserId">
+    <form method="post" class="panel form-grid" data-offline-draft-form>
+        @Html.AntiForgeryToken()
+        <div class="form-span panel-heading">
+            <div><p class="eyebrow">本机草稿</p><h2>阶段成果信息</h2></div>
+            <span class="pill" data-offline-save-state>尚未保存</span>
+        </div>
+        <input type="hidden" name="clientDraftId" data-client-draft-id />
+        <label>项目<select name="projectId" data-offline-project required><option value="">请选择项目</option></select></label>
+        <label>合同<select name="contractId" data-offline-contract><option value="">不关联合同</option></select></label>
+        <label>阶段名称<input name="title" required maxlength="200" /></label>
+        <label>成果日期<input name="resultDate" type="date" required /></label>
+        <label>成果类型<select name="resultType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.StageResultType>()"></select></label>
+        <label>质量情况<select name="qualityResult" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.QualityResult>()"></select></label>
+        <label class="form-span">备注<textarea name="description" rows="4" maxlength="3000"></textarea></label>
+        <div class="form-span" data-offline-lines></div>
+        <label class="form-span">现场照片（最多 20 张）<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple data-offline-photos /></label>
+        <div class="form-span offline-actions">
+            <button class="button button--secondary" type="submit">保存到本机</button>
+            <button class="button button--secondary" type="button" data-offline-sync-now>立即同步</button>
+            <button class="button button--danger" type="button" data-offline-clear>清除此设备离线数据</button>
+        </div>
+    </form>
+
+    <aside class="panel offline-status-panel" aria-live="polite">
+        <p class="eyebrow">同步状态</p>
+        <h2>本设备队列</h2>
+        <dl class="status-list">
+            <div><dt>待同步</dt><dd data-offline-pending>0</dd></div>
+            <div><dt>失败</dt><dd data-offline-failed>0</dd></div>
+            <div><dt>冲突</dt><dd data-offline-conflicts>0</dd></div>
+        </dl>
+        <p class="panel-copy" data-offline-message>首次打开后，项目选项和草稿会保存在当前浏览器。</p>
+        <div data-offline-conflict-panel hidden></div>
+    </aside>
+</section>
+
+<script id="offline-project-options" type="application/json">@Html.Raw(JsonSerializer.Serialize(Model.Projects))</script>
+
+@section Scripts {
+    <script src="~/js/offline-stage-results.js" asp-append-version="true"></script>
+}

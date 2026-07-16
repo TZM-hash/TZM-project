@@ -54,6 +54,7 @@ public sealed record OfflinePhotoSyncRequest(
     string? Description);
 
 public sealed record OfflinePhotoSyncResultDto(Guid AttachmentId, bool IsIdempotent);
+public sealed record OfflineFailureReport(Guid ClientDraftId, string ErrorMessage);
 
 public sealed record OfflineLineItemOptionDto(Guid Id, string Code, string Name, string Unit);
 public sealed record OfflineContractOptionDto(Guid Id, string Number, string Name, IReadOnlyList<OfflineLineItemOptionDto> LineItems);
