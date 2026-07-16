@@ -79,6 +79,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ImportError> ImportErrors => Set<ImportError>();
     public DbSet<BackupTask> BackupTasks => Set<BackupTask>();
     public DbSet<ReminderItem> ReminderItems => Set<ReminderItem>();
+    public DbSet<OfflineDraftSync> OfflineDraftSyncs => Set<OfflineDraftSync>();
+    public DbSet<OfflineAttachmentSync> OfflineAttachmentSyncs => Set<OfflineAttachmentSync>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -182,6 +184,28 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         ConfigurePayrollModel(builder);
         ConfigureEmployeeLedgerModel(builder);
         ConfigureDataExchangeModel(builder);
+        ConfigureOfflineModel(builder);
+    }
+
+    private static void ConfigureOfflineModel(ModelBuilder builder)
+    {
+        builder.Entity<OfflineDraftSync>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(item => item.LastError).HasMaxLength(2000);
+            entity.HasIndex(item => new { item.UserId, item.ClientDraftId }).IsUnique();
+            entity.HasIndex(item => new { item.Status, item.UpdatedAt });
+            entity.HasOne(item => item.User).WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.StageResult).WithMany().HasForeignKey(item => item.StageResultId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<OfflineAttachmentSync>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => new { item.OfflineDraftSyncId, item.ClientAttachmentId }).IsUnique();
+            entity.HasOne(item => item.DraftSync).WithMany(sync => sync.Attachments).HasForeignKey(item => item.OfflineDraftSyncId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureDataExchangeModel(ModelBuilder builder)
