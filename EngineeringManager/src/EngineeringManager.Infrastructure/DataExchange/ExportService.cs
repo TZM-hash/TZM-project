@@ -97,6 +97,42 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("opening_balance", "期初余额", ExportFieldDataType.Number, true),
                 new("current_balance", "当前余额", ExportFieldDataType.Number, true),
                 new("is_active", "状态", ExportFieldDataType.Boolean, true)
+            ],
+            [ExportDataset.Companies] =
+            [
+                new("company_code", "公司编码", ExportFieldDataType.Text, true),
+                new("name", "公司全称", ExportFieldDataType.Text, true),
+                new("short_name", "公司简称", ExportFieldDataType.Text, true),
+                new("category", "组合分类", ExportFieldDataType.Text, true),
+                new("legal_representative", "法人/经营者", ExportFieldDataType.Text, true),
+                new("tax_code", "统一社会信用代码/税号", ExportFieldDataType.Text, true),
+                new("phone", "电话", ExportFieldDataType.Text, false),
+                new("registered_address", "注册地址", ExportFieldDataType.Text, false),
+                new("business_address", "经营地址", ExportFieldDataType.Text, false),
+                new("invoice_title", "开票抬头", ExportFieldDataType.Text, false),
+                new("is_active", "状态", ExportFieldDataType.Boolean, true)
+            ],
+            [ExportDataset.CompanyAccounts] =
+            [
+                new("company_code", "公司编码", ExportFieldDataType.Text, true),
+                new("account_name", "账户名称", ExportFieldDataType.Text, true),
+                new("account_type", "账户类型", ExportFieldDataType.Text, true),
+                new("account_number", "账号", ExportFieldDataType.Text, false),
+                new("bank_name", "开户行", ExportFieldDataType.Text, false),
+                new("opening_balance", "期初余额", ExportFieldDataType.Number, true),
+                new("default_collection", "默认收款", ExportFieldDataType.Boolean, true),
+                new("default_payment", "默认付款", ExportFieldDataType.Boolean, true),
+                new("default_invoice", "默认开票", ExportFieldDataType.Boolean, true),
+                new("is_active", "状态", ExportFieldDataType.Boolean, true)
+            ],
+            [ExportDataset.CompanyCertificates] =
+            [
+                new("company_code", "公司编码", ExportFieldDataType.Text, true),
+                new("certificate_type", "资料类型", ExportFieldDataType.Text, true),
+                new("certificate_number", "资料编号", ExportFieldDataType.Text, false),
+                new("issued_on", "签发日期", ExportFieldDataType.Date, false),
+                new("expires_on", "有效期", ExportFieldDataType.Date, false),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ]
         };
 
@@ -118,6 +154,9 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ExportDataset.Payments => await ExportPaymentsAsync(fields, request.CutoffDate, cancellationToken),
             ExportDataset.Invoices => await ExportInvoicesAsync(fields, request.CutoffDate, cancellationToken),
             ExportDataset.Accounts => await ExportAccountsAsync(fields, request.CutoffDate, cancellationToken),
+            ExportDataset.Companies => await ExportCompaniesAsync(fields, cancellationToken),
+            ExportDataset.CompanyAccounts => await ExportCompanyAccountsAsync(fields, cancellationToken),
+            ExportDataset.CompanyCertificates => await ExportCompanyCertificatesAsync(fields, cancellationToken),
             _ => throw new NotSupportedException($"暂不支持导出数据集：{request.Dataset}")
         };
         await SaveLastSelectionAsync(userId, request.Dataset, fields.Select(item => item.Key).ToArray(), request.CutoffDate, cancellationToken);
@@ -357,6 +396,58 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 ["is_active"] = item.IsActive
             });
         }), "资金账户台账");
+    }
+
+    private async Task<ExportFileResult> ExportCompaniesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    {
+        var companies = await db.LegalEntities.AsNoTracking().Include(item => item.CompanyCategory).OrderBy(item => item.Code).ToListAsync(cancellationToken);
+        return CreateSingleSheet("自有公司", fields, companies.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["company_code"] = item.Code,
+            ["name"] = item.Name,
+            ["short_name"] = item.ShortName,
+            ["category"] = item.CompanyCategory?.Name,
+            ["legal_representative"] = item.LegalRepresentative,
+            ["tax_code"] = item.UnifiedSocialCreditCode,
+            ["phone"] = item.Phone,
+            ["registered_address"] = item.RegisteredAddress,
+            ["business_address"] = item.BusinessAddress,
+            ["invoice_title"] = item.InvoiceTitle,
+            ["is_active"] = item.IsActive
+        })), "自有公司");
+    }
+
+    private async Task<ExportFileResult> ExportCompanyAccountsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    {
+        var accounts = await db.FinancialAccounts.AsNoTracking().Include(item => item.LegalEntity).OrderBy(item => item.LegalEntity.Code).ThenBy(item => item.AccountName).ToListAsync(cancellationToken);
+        return CreateSingleSheet("公司账户", fields, accounts.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["company_code"] = item.LegalEntity.Code,
+            ["account_name"] = item.AccountName,
+            ["account_type"] = item.AccountType.ToString(),
+            ["account_number"] = item.AccountNumber,
+            ["bank_name"] = item.BankName,
+            ["opening_balance"] = item.OpeningBalance,
+            ["default_collection"] = item.IsDefaultCollection,
+            ["default_payment"] = item.IsDefaultPayment,
+            ["default_invoice"] = item.IsDefaultInvoice,
+            ["is_active"] = item.IsActive
+        })), "公司账户");
+    }
+
+    private async Task<ExportFileResult> ExportCompanyCertificatesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    {
+        var certificates = await db.CompanyCertificates.AsNoTracking().Include(item => item.LegalEntity)
+            .Where(item => !item.IsDeleted).OrderBy(item => item.LegalEntity.Code).ThenBy(item => item.CertificateType).ToListAsync(cancellationToken);
+        return CreateSingleSheet("公司证照", fields, certificates.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["company_code"] = item.LegalEntity.Code,
+            ["certificate_type"] = item.CertificateType,
+            ["certificate_number"] = item.CertificateNumber,
+            ["issued_on"] = item.IssuedOn,
+            ["expires_on"] = item.ExpiresOn,
+            ["notes"] = item.Notes
+        })), "公司证照");
     }
 
     private static object?[] Project(IReadOnlyList<ExportFieldDefinition> fields, Dictionary<string, object?> values) =>

@@ -1,6 +1,6 @@
 # EngineeringManager
 
-工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。当前已完成阶段 0～7，后续自有公司、设备和集成交付会按 `docs/开发进度.md` 的阶段路线图连续实现。
+工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。当前已完成阶段 0～8，后续设备和集成交付会按 `docs/开发进度.md` 的阶段路线图连续实现。
 
 ## 本地工具
 
@@ -22,7 +22,7 @@ $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 
 ## 数据库
 
-开发环境默认使用本机 SQL Server Express：`localhost\SQLEXPRESS`，数据库名为 `EngineeringManager`。连接字符串位于 `src/EngineeringManager.Web/appsettings.Development.json`；生产环境应通过 IIS 配置或环境变量提供，不把密码提交到仓库。
+开发与自动验收默认使用本机 SQL Server Express：`localhost\SQLEXPRESS`，数据库名为 `EngineeringManager_Test`。测试库连接字符串位于 `src/EngineeringManager.Web/appsettings.Development.json`；生产环境必须通过 IIS 配置或环境变量提供正式连接字符串，不把密码提交到仓库，也不得复用测试库。
 
 迁移命令：
 
@@ -34,7 +34,7 @@ $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 & .\.tools\dotnet-tools\dotnet-ef.exe database update --project .\src\EngineeringManager.Infrastructure\EngineeringManager.Infrastructure.csproj --startup-project .\src\EngineeringManager.Web\EngineeringManager.Web.csproj
 ```
 
-阶段 0 的 `InitialIdentity`、阶段 1 的 `IdentityOrganizationAuthorization`、阶段 2 的 `ProjectsContractsBillOfQuantities`、阶段 3 的 `PartnersStageResultsAttachments`、阶段 4 的 `InternalFinanceLedger`、阶段 5 的 `EmployeesPayrollLedger`、阶段 6 的 `DataExchangeBackupsReminders` 和阶段 7 的 `PwaOfflineDashboard` 迁移已在本机 SQL Server 应用成功。阶段 8 起的自动开发使用明确标识的 `EngineeringManager_Test` 测试数据库，不操作生产数据库。
+阶段 0～7 的历史迁移和阶段 8 的 `CompanyManagement` 已应用到 `EngineeringManager_Test`。该测试库会保留到未来实际生产部署并确认正式系统可用后再删除；自动开发不操作生产数据库。
 
 阶段 1 的角色模板可以通过一次性环境变量启用幂等种子；系统不会自动生成带密码的管理员账号：
 
@@ -69,4 +69,4 @@ $ErrorActionPreference = 'Stop'
 
 ## 当前范围边界
 
-阶段 7 已实现真实经营驾驶舱、项目阶段/金额轻量图形、匿名数据保护、阶段成果有限离线和安全 Service Worker。财务、工资、合同、结算、导入导出、备份和提醒等敏感业务响应不进入离线缓存。当前不包含复杂通用映射平台、外部云备份、外部消息通知或生产部署；自有公司、设备和最终集成交付进入阶段 8～10。
+阶段 8 已扩展现有 `LegalEntity` 为轻量自有公司管理：组合分类、多账户默认用途、证照、公司/项目数据范围、合同/财务/工资/账户汇总、指标卡和 Excel 导入导出。公开注册已关闭，登录页使用公司内部中文入口。系统不建设公司内部往来台账，公司间资金只记录真实账户转账。设备和最终集成交付进入阶段 9～10。

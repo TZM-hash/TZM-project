@@ -32,6 +32,39 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("项目名称", "name", true),
             new("项目阶段", "stage", false),
             new("总包单位", "general_contractor", false)
+        ],
+        [ExportDataset.Companies] =
+        [
+            new("公司编码", "company_code", true),
+            new("公司全称", "name", true),
+            new("公司简称", "short_name", true),
+            new("组合分类编码", "category_code", true),
+            new("法人/经营者", "legal_representative", false),
+            new("统一社会信用代码/税号", "tax_code", false),
+            new("注册地址", "registered_address", false),
+            new("经营地址", "business_address", false),
+            new("电话", "phone", false)
+        ],
+        [ExportDataset.CompanyAccounts] =
+        [
+            new("公司编码", "company_code", true),
+            new("账户名称", "account_name", true),
+            new("账户类型", "account_type", true),
+            new("账号", "account_number", false),
+            new("开户行", "bank_name", false),
+            new("期初余额", "opening_balance", false),
+            new("默认收款", "default_collection", false),
+            new("默认付款", "default_payment", false),
+            new("默认开票", "default_invoice", false)
+        ],
+        [ExportDataset.CompanyCertificates] =
+        [
+            new("公司编码", "company_code", true),
+            new("资料类型", "certificate_type", true),
+            new("资料编号", "certificate_number", false),
+            new("签发日期", "issued_on", false),
+            new("有效期", "expires_on", false),
+            new("备注", "notes", false)
         ]
     };
 
@@ -130,6 +163,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             ExportDataset.Employees => "employee_number",
             ExportDataset.Partners => "partner_number",
             ExportDataset.Projects => "project_number",
+            ExportDataset.Companies => "company_code",
             _ => string.Empty
         };
         for (var index = 0; index < rows.Length; index++)
@@ -153,6 +187,39 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             {
                 errors.Add(new ImportErrorDto(excelRow, "员工类型", "员工类型必须是正式员工或劳务员工。", type));
             }
+
+            if (dataset is ExportDataset.CompanyAccounts or ExportDataset.CompanyCertificates)
+            {
+                var companyCode = values.GetValueOrDefault("company_code");
+                if (!string.IsNullOrWhiteSpace(companyCode) && !await db.LegalEntities.AnyAsync(item => item.Code == companyCode, cancellationToken))
+                {
+                    errors.Add(new ImportErrorDto(excelRow, "公司编码", "公司编码不存在。", companyCode));
+                }
+            }
+            if (dataset == ExportDataset.Companies)
+            {
+                var categoryCode = values.GetValueOrDefault("category_code");
+                if (!string.IsNullOrWhiteSpace(categoryCode) && !await db.CompanyCategories.AnyAsync(item => item.Code == categoryCode && item.IsActive, cancellationToken))
+                {
+                    errors.Add(new ImportErrorDto(excelRow, "组合分类编码", "组合分类不存在或已停用。", categoryCode));
+                }
+            }
+            if (dataset == ExportDataset.CompanyAccounts)
+            {
+                if (!TryParseAccountType(values.GetValueOrDefault("account_type"), out _))
+                {
+                    errors.Add(new ImportErrorDto(excelRow, "账户类型", "账户类型必须是银行、现金或其他。", values.GetValueOrDefault("account_type")));
+                }
+                if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("opening_balance")) && !decimal.TryParse(values.GetValueOrDefault("opening_balance"), out _))
+                {
+                    errors.Add(new ImportErrorDto(excelRow, "期初余额", "期初余额必须是数字。", values.GetValueOrDefault("opening_balance")));
+                }
+            }
+            if (dataset == ExportDataset.CompanyCertificates)
+            {
+                ValidateDate(values.GetValueOrDefault("issued_on"), excelRow, "签发日期", errors);
+                ValidateDate(values.GetValueOrDefault("expires_on"), excelRow, "有效期", errors);
+            }
         }
 
         foreach (var number in seenNumbers)
@@ -162,6 +229,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 ExportDataset.Employees => await db.Employees.AnyAsync(item => item.EmployeeNumber == number, cancellationToken),
                 ExportDataset.Partners => await db.BusinessPartners.AnyAsync(item => item.PartnerNumber == number, cancellationToken),
                 ExportDataset.Projects => await db.Projects.AnyAsync(item => item.ProjectNumber == number, cancellationToken),
+                ExportDataset.Companies => await db.LegalEntities.AnyAsync(item => item.Code == number, cancellationToken),
                 _ => false
             };
             if (exists)
@@ -238,6 +306,50 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     GeneralContractorName = values.GetValueOrDefault("general_contractor")
                 });
                 break;
+            case ExportDataset.Companies:
+                var category = db.CompanyCategories.Single(item => item.Code == values["category_code"]);
+                db.LegalEntities.Add(new EngineeringManager.Domain.Organization.LegalEntity
+                {
+                    Code = values["company_code"]!,
+                    Name = values["name"]!,
+                    ShortName = values["short_name"]!,
+                    CompanyCategory = category,
+                    LegalRepresentative = values.GetValueOrDefault("legal_representative"),
+                    UnifiedSocialCreditCode = values.GetValueOrDefault("tax_code"),
+                    RegisteredAddress = values.GetValueOrDefault("registered_address"),
+                    BusinessAddress = values.GetValueOrDefault("business_address"),
+                    Phone = values.GetValueOrDefault("phone"),
+                    InvoiceTitle = values["name"]
+                });
+                break;
+            case ExportDataset.CompanyAccounts:
+                if (!TryParseAccountType(values["account_type"], out var accountType)) throw new InvalidOperationException("已通过预览的账户类型无法解析。");
+                var accountCompany = db.LegalEntities.Single(item => item.Code == values["company_code"]);
+                db.FinancialAccounts.Add(new FinancialAccount
+                {
+                    LegalEntity = accountCompany,
+                    AccountName = values["account_name"]!,
+                    AccountType = accountType,
+                    AccountNumber = values.GetValueOrDefault("account_number"),
+                    BankName = values.GetValueOrDefault("bank_name"),
+                    OpeningBalance = decimal.TryParse(values.GetValueOrDefault("opening_balance"), out var opening) ? opening : 0m,
+                    IsDefaultCollection = ParseBoolean(values.GetValueOrDefault("default_collection")),
+                    IsDefaultPayment = ParseBoolean(values.GetValueOrDefault("default_payment")),
+                    IsDefaultInvoice = ParseBoolean(values.GetValueOrDefault("default_invoice"))
+                });
+                break;
+            case ExportDataset.CompanyCertificates:
+                var certificateCompany = db.LegalEntities.Single(item => item.Code == values["company_code"]);
+                db.CompanyCertificates.Add(new CompanyCertificate
+                {
+                    LegalEntity = certificateCompany,
+                    CertificateType = values["certificate_type"]!,
+                    CertificateNumber = values.GetValueOrDefault("certificate_number"),
+                    IssuedOn = ParseDate(values.GetValueOrDefault("issued_on")),
+                    ExpiresOn = ParseDate(values.GetValueOrDefault("expires_on")),
+                    Notes = values.GetValueOrDefault("notes")
+                });
+                break;
             default:
                 throw new NotSupportedException($"暂不支持导入数据集：{dataset}");
         }
@@ -251,6 +363,27 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         return false;
     }
 
+    private static bool TryParseAccountType(string? value, out EngineeringManager.Domain.Finance.FinancialAccountType accountType)
+    {
+        if (value is "银行" or "Bank") { accountType = EngineeringManager.Domain.Finance.FinancialAccountType.Bank; return true; }
+        if (value is "现金" or "Cash") { accountType = EngineeringManager.Domain.Finance.FinancialAccountType.Cash; return true; }
+        if (value is "其他" or "Other") { accountType = EngineeringManager.Domain.Finance.FinancialAccountType.Other; return true; }
+        accountType = default;
+        return false;
+    }
+
+    private static bool ParseBoolean(string? value) => value is "是" or "true" or "True" or "1";
+
+    private static DateOnly? ParseDate(string? value) => DateOnly.TryParse(value, out var date) ? date : null;
+
+    private static void ValidateDate(string? value, int row, string column, List<ImportErrorDto> errors)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && !DateOnly.TryParse(value, out _))
+        {
+            errors.Add(new ImportErrorDto(row, column, "日期格式无效，应为 yyyy-MM-dd。", value));
+        }
+    }
+
     private static IReadOnlyList<ImportColumn> GetColumns(ExportDataset dataset) =>
         Columns.TryGetValue(dataset, out var columns) ? columns : throw new NotSupportedException($"暂不支持导入数据集：{dataset}");
 
@@ -261,6 +394,9 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         ExportDataset.Employees => "员工导入",
         ExportDataset.Partners => "合作单位导入",
         ExportDataset.Projects => "项目导入",
+        ExportDataset.Companies => "公司导入",
+        ExportDataset.CompanyAccounts => "公司账户导入",
+        ExportDataset.CompanyCertificates => "公司证照导入",
         _ => throw new NotSupportedException($"暂不支持导入数据集：{dataset}")
     };
 

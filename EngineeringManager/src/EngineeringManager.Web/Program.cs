@@ -30,6 +30,8 @@ using EngineeringManager.Application.Offline;
 using EngineeringManager.Infrastructure.Offline;
 using EngineeringManager.Application.Dashboard;
 using EngineeringManager.Infrastructure.Dashboard;
+using EngineeringManager.Application.Companies;
+using EngineeringManager.Infrastructure.Companies;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -83,6 +85,8 @@ public sealed class Program
             new LocalFileStore(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "attachments")));
         builder.Services.AddScoped<IOfflineStageResultService, OfflineStageResultService>();
         builder.Services.AddScoped<IDashboardService, DashboardService>();
+        builder.Services.AddScoped<ICompanyManagementService, CompanyManagementService>();
+        builder.Services.AddScoped<ICompanyActorService, CompanyActorService>();
         builder.Services
             .AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])

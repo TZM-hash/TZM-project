@@ -31,6 +31,9 @@ public static class PermissionKeys
     public const string ExportTemplatesManage = "data-export.templates.manage";
     public const string RemindersRead = "reminders.read";
     public const string RemindersManage = "reminders.manage";
+    public const string CompaniesRead = "companies.read";
+    public const string CompaniesManage = "companies.manage";
+    public const string CompanyCertificatesManage = "companies.certificates.manage";
 
     private static readonly HashSet<string> KnownPermissions = new(StringComparer.Ordinal)
     {
@@ -62,7 +65,10 @@ public static class PermissionKeys
         EmployeeLedgerManage,
         ExportTemplatesManage,
         RemindersRead,
-        RemindersManage
+        RemindersManage,
+        CompaniesRead,
+        CompaniesManage,
+        CompanyCertificatesManage
     };
 
     private static readonly Dictionary<string, IReadOnlySet<string>> RoleDefaults =
@@ -97,12 +103,15 @@ public static class PermissionKeys
                 EmployeeLedgerManage,
                 ExportTemplatesManage,
                 RemindersRead,
-                RemindersManage
+                RemindersManage,
+                CompaniesRead,
+                CompaniesManage,
+                CompanyCertificatesManage
             },
-            [SystemRoles.Finance] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, FinanceManage, FinancialAccountsManage, EmployeesRead, PayrollRead, PayrollManage, EmployeeLedgerRead, EmployeeLedgerManage, RemindersRead },
-            [SystemRoles.ProjectManager] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, ProjectsManage, ContractsManage, PartnersRead, PartnersManage, StageResultsRead, StageResultsCreate, StageResultsManage, EmployeesRead, RemindersRead },
+            [SystemRoles.Finance] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, FinanceManage, FinancialAccountsManage, EmployeesRead, PayrollRead, PayrollManage, EmployeeLedgerRead, EmployeeLedgerManage, RemindersRead, CompaniesRead },
+            [SystemRoles.ProjectManager] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, ProjectsManage, ContractsManage, PartnersRead, PartnersManage, StageResultsRead, StageResultsCreate, StageResultsManage, EmployeesRead, RemindersRead, CompaniesRead },
             [SystemRoles.SiteStaff] = new HashSet<string>(StringComparer.Ordinal) { ProjectsRead, PartnersRead, StageResultsRead, StageResultsCreate },
-            [SystemRoles.QueryOnly] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, EmployeesRead, PayrollRead, EmployeeLedgerRead, RemindersRead }
+            [SystemRoles.QueryOnly] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, EmployeesRead, PayrollRead, EmployeeLedgerRead, RemindersRead, CompaniesRead }
         };
 
     public static bool IsKnown(string permissionKey) => KnownPermissions.Contains(permissionKey);

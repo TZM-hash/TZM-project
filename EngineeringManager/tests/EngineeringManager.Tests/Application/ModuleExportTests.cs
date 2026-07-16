@@ -23,6 +23,9 @@ public sealed class ModuleExportTests
     [InlineData(ExportDataset.Payroll, "工资")]
     [InlineData(ExportDataset.Collections, "收款")]
     [InlineData(ExportDataset.Accounts, "资金账户")]
+    [InlineData(ExportDataset.Companies, "自有公司")]
+    [InlineData(ExportDataset.CompanyAccounts, "公司账户")]
+    [InlineData(ExportDataset.CompanyCertificates, "公司证照")]
     public async Task MainModulesCanBeExportedWithIndependentSelections(ExportDataset dataset, string expectedSheet)
     {
         await using var fixture = await ModuleExportFixture.CreateAsync();
@@ -69,7 +72,8 @@ public sealed class ModuleExportTests
             var account = new FinancialAccount { LegalEntity = legalEntity, AccountName = "模块导出账户", AccountType = FinancialAccountType.Bank, OpeningBalance = 100m };
             var batch = new PayrollBatch { BatchNumber = "MOD-PAY", Name = "模块工资", BatchType = PayrollBatchType.Monthly, StartDate = new DateOnly(2026, 7, 1), EndDate = new DateOnly(2026, 7, 31), LegalEntity = legalEntity };
             batch.Items.Add(new PayrollItem { Batch = batch, Employee = employee, ItemType = PayrollItemType.FixedSalary, Nature = PayrollItemNature.Earning, Amount = 5000m });
-            db.AddRange(legalEntity, partner, employee, project, account, batch);
+            var certificate = new CompanyCertificate { LegalEntity = legalEntity, CertificateType = "营业执照", CertificateNumber = "MOD-LIC" };
+            db.AddRange(legalEntity, partner, employee, project, account, batch, certificate);
             await db.SaveChangesAsync();
             var receivableId = await finance.AddReceivableAsync(new CreateReceivableRequest(project.Id, null, legalEntity.Id, partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, null), CancellationToken.None);
             await finance.RecordCollectionAsync(new RecordCollectionRequest(receivableId, project.Id, null, legalEntity.Id, partner.Id, account.Id, new DateOnly(2026, 7, 2), 60m, PaymentMethod.BankTransfer, null), CancellationToken.None);

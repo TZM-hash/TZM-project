@@ -35,7 +35,7 @@ public sealed class HomePageTests
         html.Should().Contain("/css/base.");
         html.Should().NotContain("https://cdn.");
         html.Should().Contain("/manifest.");
-        html.Should().Contain("阶段 0～7 已完成");
+        html.Should().Contain("阶段 0～8 已完成");
         html.Should().NotContain("阶段 7 开发中");
         manifest.Should().Contain("工程项目经营管理系统");
         serviceWorker.Should().Contain("engineering-manager-shell-v2");
@@ -61,8 +61,23 @@ public sealed class HomePageTests
         using var client = factory.CreateClient();
 
         using var response = await client.GetAsync("/Identity/Account/Login");
+        var html = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        html.Should().Contain("内部账号登录");
+        html.Should().NotContain("Register as a new user");
+        html.Should().NotContain("jquery-validation");
+    }
+
+    [Fact]
+    public async Task PublicRegistrationIsDisabled()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        using var response = await client.GetAsync("/Identity/Account/Register");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]

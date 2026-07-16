@@ -37,6 +37,7 @@ public sealed class ReminderServiceTests
         reminders.Should().Contain(item => item.Type == ReminderType.UnpaidPayroll);
         reminders.Should().Contain(item => item.Type == ReminderType.ImportFailed);
         reminders.Should().Contain(item => item.Type == ReminderType.BackupFailed);
+        reminders.Should().Contain(item => item.Type == ReminderType.CompanyCertificateExpiring);
         reminders.Select(item => item.DeduplicationKey).Should().OnlyHaveUniqueItems();
     }
 
@@ -126,6 +127,7 @@ public sealed class ReminderServiceTests
             project.Milestones.Add(new ProjectMilestone { Project = project, Name = "节点一", PlannedDate = new DateOnly(2026, 7, 15), IsCompleted = false });
             var employee = new Employee { EmployeeNumber = "REM-E", Name = "提醒员工", EmployeeType = EmployeeType.Formal };
             db.AddRange(legalEntity, partner, project, employee);
+            db.CompanyCertificates.Add(new CompanyCertificate { LegalEntity = legalEntity, CertificateType = "营业执照", CertificateNumber = "REM-LIC", ExpiresOn = new DateOnly(2026, 7, 20) });
             await db.SaveChangesAsync();
             await finance.AddReceivableAsync(new CreateReceivableRequest(project.Id, null, legalEntity.Id, partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, null), CancellationToken.None);
             await finance.AddPayableAsync(new CreatePayableRequest(project.Id, null, legalEntity.Id, partner.Id, PayableSourceType.Manual, new DateOnly(2026, 7, 1), null, 80m, null), CancellationToken.None);

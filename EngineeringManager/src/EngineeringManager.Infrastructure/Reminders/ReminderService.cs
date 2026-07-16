@@ -57,6 +57,17 @@ public sealed class ReminderService(
                 "工资批次存在未发工资", $"{batch.Batch.BatchNumber} · {batch.Batch.Name} 未发 {batch.Summary.UnpaidAmount:N2}", "PayrollBatch", batch.Batch.Id.ToString(), batch.Batch.EndDate, batch.Summary.UnpaidAmount, now);
         }
 
+        var expiringCertificates = await db.CompanyCertificates.AsNoTracking().Include(item => item.LegalEntity)
+            .Where(item => !item.IsDeleted && item.LegalEntity.IsActive && item.ExpiresOn.HasValue && item.ExpiresOn <= today.AddDays(30))
+            .ToListAsync(cancellationToken);
+        foreach (var certificate in expiringCertificates)
+        {
+            Upsert(existing, $"company-certificate:{certificate.Id}", ReminderType.CompanyCertificateExpiring,
+                certificate.ExpiresOn < today ? ReminderSeverity.Critical : ReminderSeverity.Warning,
+                "公司证照即将到期", $"{certificate.LegalEntity.ShortName} · {certificate.CertificateType} · {certificate.ExpiresOn:yyyy-MM-dd}",
+                nameof(CompanyCertificate), certificate.Id.ToString(), certificate.ExpiresOn, null, now);
+        }
+
         var failedImports = await db.ImportBatches.AsNoTracking().Where(item => item.Status == DataExchangeTaskStatus.Failed).ToListAsync(cancellationToken);
         foreach (var batch in failedImports)
         {

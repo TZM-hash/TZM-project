@@ -11,6 +11,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<LegalEntity> LegalEntities => Set<LegalEntity>();
 
+    public DbSet<CompanyCategory> CompanyCategories => Set<CompanyCategory>();
+
+    public DbSet<CompanyCertificate> CompanyCertificates => Set<CompanyCertificate>();
+
     public DbSet<UserOrganizationMembership> UserOrganizationMemberships => Set<UserOrganizationMembership>();
 
     public DbSet<UserLegalEntityAccess> UserLegalEntityAccesses => Set<UserLegalEntityAccess>();
@@ -111,8 +115,48 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(legalEntity => legalEntity.Name).HasMaxLength(200).IsRequired();
             entity.Property(legalEntity => legalEntity.ShortName).HasMaxLength(100).IsRequired();
             entity.Property(legalEntity => legalEntity.UnifiedSocialCreditCode).HasMaxLength(50);
+            entity.Property(legalEntity => legalEntity.LegalRepresentative).HasMaxLength(100);
+            entity.Property(legalEntity => legalEntity.RegisteredAddress).HasMaxLength(300);
+            entity.Property(legalEntity => legalEntity.BusinessAddress).HasMaxLength(300);
+            entity.Property(legalEntity => legalEntity.Phone).HasMaxLength(50);
+            entity.Property(legalEntity => legalEntity.InvoiceTitle).HasMaxLength(200);
+            entity.Property(legalEntity => legalEntity.Notes).HasMaxLength(1000);
+            entity.Property(legalEntity => legalEntity.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(legalEntity => legalEntity.Code).IsUnique();
             entity.HasIndex(legalEntity => legalEntity.UnifiedSocialCreditCode).IsUnique();
+            entity.HasOne(legalEntity => legalEntity.CompanyCategory)
+                .WithMany()
+                .HasForeignKey(legalEntity => legalEntity.CompanyCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CompanyCategory>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Code).HasMaxLength(50).IsRequired();
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => item.Code).IsUnique();
+            entity.HasIndex(item => new { item.SortOrder, item.Name });
+            var seededAt = new DateTimeOffset(2026, 7, 17, 0, 0, 0, TimeSpan.Zero);
+            entity.HasData(
+                new CompanyCategory { Id = CompanyCategoryDefaults.GeneralTaxpayerCompanyId, Code = "GENERAL_COMPANY", Name = "一般纳税人有限公司", SortOrder = 10, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000001"), CreatedAt = seededAt, UpdatedAt = seededAt },
+                new CompanyCategory { Id = CompanyCategoryDefaults.SmallScaleCompanyId, Code = "SMALL_COMPANY", Name = "小规模纳税人有限公司", SortOrder = 20, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000002"), CreatedAt = seededAt, UpdatedAt = seededAt },
+                new CompanyCategory { Id = CompanyCategoryDefaults.SmallScaleSoleProprietorId, Code = "SMALL_SOLE", Name = "小规模个体工商户", SortOrder = 30, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000003"), CreatedAt = seededAt, UpdatedAt = seededAt },
+                new CompanyCategory { Id = CompanyCategoryDefaults.OtherId, Code = "OTHER", Name = "其他主体", SortOrder = 90, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000004"), CreatedAt = seededAt, UpdatedAt = seededAt });
+        });
+
+        builder.Entity<CompanyCertificate>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.CertificateType).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.CertificateNumber).HasMaxLength(100);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.LegalEntityId, item.CertificateType, item.CertificateNumber });
+            entity.HasIndex(item => new { item.ExpiresOn, item.IsDeleted });
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<UserOrganizationMembership>(entity =>
@@ -410,6 +454,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.OpeningBalance).HasPrecision(18, 2);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.LegalEntityId, item.AccountName }).IsUnique();
+            entity.HasIndex(item => new { item.LegalEntityId, item.IsDefaultCollection })
+                .IsUnique()
+                .HasFilter("[IsDefaultCollection] = 1");
+            entity.HasIndex(item => new { item.LegalEntityId, item.IsDefaultPayment })
+                .IsUnique()
+                .HasFilter("[IsDefaultPayment] = 1");
+            entity.HasIndex(item => new { item.LegalEntityId, item.IsDefaultInvoice })
+                .IsUnique()
+                .HasFilter("[IsDefaultInvoice] = 1");
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
         });
     }
