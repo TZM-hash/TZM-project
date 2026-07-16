@@ -1,0 +1,27 @@
+:root {
+    --bg: #f4f7f6;
+    --surface: #ffffff;
+    --surface-soft: #edf7f4;
+    --text: #16302b;
+    --muted: #6a7f79;
+    --border: #d9e6e1;
+    --primary: #0f766e;
+    --primary-dark: #0b5c56;
+    --success: #15803d;
+    --warning: #b45309;
+    --space-1: .5rem;
+    --space-2: .75rem;
+    --space-3: 1rem;
+    --space-4: 1.5rem;
+    --space-5: 2rem;
+    --radius: 1rem;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: var(--bg); color: var(--text); }
+a { color: inherit; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }

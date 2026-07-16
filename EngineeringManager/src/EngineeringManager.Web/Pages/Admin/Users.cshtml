@@ -1,0 +1,42 @@
+@page
+@model EngineeringManager.Web.Pages.Admin.UsersModel
+@{
+    ViewData["Title"] = "用户管理";
+}
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">管理中心</p>
+        <h1>用户管理</h1>
+        <p class="page-lead">角色模板决定默认能力，后续可通过权限覆盖和数据范围对单个用户进行调整。</p>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">账号</p><h2>系统用户</h2></div></div>
+    @if (Model.Users.Count == 0)
+    {
+        <p class="panel-copy">尚未创建用户账号。生产管理员账号不会通过代码仓库保存密码。</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>姓名</th><th>账号</th><th>状态</th><th>角色</th><th>主部门</th><th>签约公司范围</th></tr></thead>
+                <tbody>
+                @foreach (var user in Model.Users)
+                {
+                    <tr>
+                        <td>@user.DisplayName</td>
+                        <td>@user.UserName</td>
+                        <td>@(user.IsEnabled ? "启用" : "停用")</td>
+                        <td>@string.Join("、", user.Roles)</td>
+                        <td>@(user.PrimaryOrganization ?? "未设置")</td>
+                        <td>@(user.LegalEntities.Count == 0 ? "未设置" : string.Join("、", user.LegalEntities))</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

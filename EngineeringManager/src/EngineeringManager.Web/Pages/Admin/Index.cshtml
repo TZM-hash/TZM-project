@@ -1,0 +1,26 @@
+@page
+@model EngineeringManager.Web.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "管理中心";
+}
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">身份与组织</p>
+        <h1>管理中心</h1>
+        <p class="page-lead">这里集中维护用户、组织、分支机构和我方签约公司。业务模块会按权限范围逐步接入。</p>
+    </div>
+</section>
+
+<section class="content-grid">
+    <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">组织</p><h2>组织与签约公司</h2></div></div>
+        <p class="panel-copy">维护部门、分支机构和我方签约公司的基础档案。</p>
+        <a class="button button--secondary" asp-page="/Admin/Organizations">进入组织管理</a>
+    </article>
+    <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">权限</p><h2>用户与角色</h2></div></div>
+        <p class="panel-copy">系统级管理员和应用级管理员可以按角色模板与用户覆盖调整权限。</p>
+        <a class="button button--secondary" asp-page="/Admin/Users">进入用户管理</a>
+    </article>
+</section>

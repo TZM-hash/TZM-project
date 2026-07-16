@@ -1,0 +1,10 @@
+# Workspace-local review cache
+/.codex-doc-review/
+
+# Existing reference project is maintained as an independent nested repository
+/Reference/
+
+# Operating-system metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

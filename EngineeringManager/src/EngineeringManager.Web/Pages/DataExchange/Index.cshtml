@@ -1,0 +1,45 @@
+@page
+@model EngineeringManager.Web.Pages.DataExchange.IndexModel
+@{
+    ViewData["Title"] = "导入导出";
+}
+
+<section class="page-heading"><div><p class="eyebrow">数据交换</p><h1>导入导出</h1><p class="page-lead">项目经营总览默认包含汇总和项目明细；字段选择、顺序和截止日会按用户保存。管理员可以预览导入错误后再确认。</p></div></section>
+<section class="content-grid">
+    <form method="post" asp-page-handler="Export" class="panel form-grid">
+        <div class="form-span"><p class="eyebrow">自由导出</p><h2>选择字段</h2></div>
+        <label>数据集<select asp-for="Dataset" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.DataExchange.ExportDataset>()"></select></label>
+        <label>统计截止日<input asp-for="CutoffDate" type="date" /></label>
+        <div class="form-span">
+        @foreach (var field in Model.Fields)
+        {
+            <label style="display:inline-flex;margin-right:1rem"><input type="checkbox" name="SelectedFields" value="@field.Key" checked="@(Model.SelectedFields.Contains(field.Key) || (Model.SelectedFields.Count == 0 && field.IsDefault))" /> @field.Label</label>
+        }
+        </div>
+        <button class="button button--secondary" type="submit">导出 Excel</button>
+    </form>
+    <form method="post" asp-page-handler="SaveTemplate" class="panel form-grid">
+        <div class="form-span"><p class="eyebrow">导出模板</p><h2>保存当前设置</h2></div>
+        <input type="hidden" asp-for="Dataset" />
+        <label>模板名称<input asp-for="TemplateName" /></label>
+        @if (Model.CanManage) { <label>发布共享模板<input asp-for="SharedTemplate" type="checkbox" /></label> }
+        @foreach (var field in Model.SelectedFields) { <input type="hidden" name="SelectedFields" value="@field" /> }
+        <button class="button button--secondary" type="submit">保存模板</button>
+        <p class="panel-copy form-span">可用模板：@(Model.Templates.Count == 0 ? "暂无" : string.Join("、", Model.Templates.Select(item => item.Name)))</p>
+    </form>
+</section>
+
+@if (Model.CanManage)
+{
+    <section class="panel" style="margin-top:var(--space-3)">
+        <div class="panel-heading"><div><p class="eyebrow">标准导入</p><h2>模板、预览与确认</h2></div></div>
+        <form method="post" asp-page-handler="DownloadTemplate" class="form-grid"><label>模板类型<select asp-for="ImportDataset"><option value="Employees">员工</option><option value="Partners">合作单位</option><option value="Projects">项目</option></select></label><button class="button button--secondary" type="submit">下载模板</button></form>
+        <form method="post" enctype="multipart/form-data" asp-page-handler="PreviewImport" class="form-grid" style="margin-top:var(--space-3)"><label>导入类型<select asp-for="ImportDataset"><option value="Employees">员工</option><option value="Partners">合作单位</option><option value="Projects">项目</option></select></label><label>Excel 文件<input asp-for="ImportFile" type="file" accept=".xlsx" /></label><button class="button button--secondary" type="submit">预览并校验</button></form>
+        @if (Model.Preview is not null)
+        {
+            <p class="panel-copy">总行数 @Model.Preview.TotalRows，有效 @Model.Preview.ValidRows，错误 @Model.Preview.ErrorRows。</p>
+            @if (Model.Preview.Errors.Count == 0) { <form method="post" asp-page-handler="ConfirmImport"><input type="hidden" name="batchId" value="@Model.Preview.BatchId" /><button class="button button--secondary" type="submit">确认导入</button></form> }
+            else { <div class="table-wrap"><table class="data-table"><thead><tr><th>行</th><th>列</th><th>错误</th></tr></thead><tbody>@foreach (var error in Model.Preview.Errors) { <tr><td>@error.RowNumber</td><td>@error.ColumnName</td><td>@error.Message</td></tr> }</tbody></table></div> }
+        }
+    </section>
+}

@@ -1,0 +1,39 @@
+.app-header { display: flex; align-items: center; justify-content: space-between; min-height: 4.5rem; padding: 0 var(--space-5); background: var(--surface); border-bottom: 1px solid var(--border); }
+.brand { display: inline-flex; align-items: center; gap: .75rem; font-weight: 700; text-decoration: none; }
+.brand-mark { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: .7rem; color: #fff; background: var(--primary); }
+.menu-toggle { display: none; border: 0; background: transparent; font-size: 1.5rem; color: var(--text); }
+.app-body { display: flex; min-height: calc(100vh - 4.5rem); }
+.sidebar { display: flex; width: 16rem; flex-direction: column; justify-content: space-between; padding: var(--space-4) var(--space-3); background: #123b35; color: #d9efeb; }
+.sidebar nav { display: grid; gap: .35rem; }
+.nav-link { display: flex; align-items: center; justify-content: space-between; padding: .8rem .9rem; border-radius: .7rem; color: inherit; text-decoration: none; }
+.nav-link:hover, .nav-link.is-active { background: rgba(255,255,255,.12); color: #fff; }
+.nav-status { font-size: .68rem; opacity: .65; }
+.sidebar-footer { display: flex; gap: .5rem; align-items: center; padding: .8rem; font-size: .78rem; color: #a8d4cc; }
+.status-dot { width: .55rem; height: .55rem; border-radius: 999px; background: #4ade80; }
+.main-content { width: min(100%, 82rem); margin: 0 auto; padding: var(--space-5); }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.metric-card, .panel { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 10px 28px rgba(18,59,53,.05); }
+.metric-label, .metric-hint, .eyebrow { display: block; color: var(--muted); font-size: .82rem; }
+.metric-value { display: block; margin: .55rem 0 .25rem; font-size: 1.55rem; }
+.metric-value--good { color: var(--success); }
+.content-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-3); margin-top: var(--space-3); }
+.panel--wide { min-height: 17rem; }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.panel h2 { margin: .2rem 0 0; font-size: 1.2rem; }
+.panel-copy { color: var(--muted); line-height: 1.7; }
+.check-list { display: grid; gap: .9rem; margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.check-list li::before { content: "✓"; display: inline-grid; place-items: center; width: 1.35rem; height: 1.35rem; margin-right: .55rem; border-radius: 999px; color: var(--success); background: #dcfce7; font-size: .8rem; }
+.pill { display: inline-flex; align-items: center; padding: .35rem .65rem; border-radius: 999px; font-size: .75rem; }
+.pill--success { color: var(--success); background: #dcfce7; }
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.7rem; padding: 0 1rem; border-radius: .7rem; text-decoration: none; font-weight: 600; }
+.button--secondary { color: var(--primary-dark); border: 1px solid #a9d3cb; background: var(--surface-soft); }
+.toast-region { position: fixed; right: 1rem; bottom: 1rem; color: var(--muted); font-size: .8rem; }
+.table-wrap { overflow-x: auto; margin-top: var(--space-3); }
+.data-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.data-table th, .data-table td { padding: .8rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.data-table th { color: var(--muted); font-size: .78rem; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.form-grid label { display: grid; gap: .45rem; color: var(--muted); font-size: .85rem; }
+.form-grid input, .form-grid select, .form-grid textarea { width: 100%; padding: .75rem; border: 1px solid var(--border); border-radius: .65rem; background: var(--surface); color: var(--text); font: inherit; }
+.form-span { grid-column: 1 / -1; }
+@media (max-width: 680px) { .form-grid { grid-template-columns: 1fr; } .form-span { grid-column: auto; } }

@@ -1,0 +1,32 @@
+@page
+@model EngineeringManager.Web.Pages.StageResults.IndexModel
+@{
+    ViewData["Title"] = "阶段成果";
+}
+
+<section class="page-heading">
+    <div><p class="eyebrow">阶段性记录</p><h1>阶段成果</h1><p class="page-lead">用于阶段完成、验收和完工资料，不建设高频施工日志。</p></div>
+    <a class="button button--secondary" asp-page="/StageResults/Create">提交阶段成果</a>
+</section>
+
+<section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">成果记录</p><h2>阶段成果列表</h2></div></div>
+    @if (Model.Results.Count == 0)
+    {
+        <p class="panel-copy">还没有阶段成果记录。</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>日期</th><th>名称</th><th>类型</th><th>状态</th><th>质量</th><th>工程量项</th><th>附件</th></tr></thead>
+                <tbody>
+                @foreach (var result in Model.Results)
+                {
+                    <tr><td>@result.ResultDate</td><td>@result.Title</td><td>@result.ResultType</td><td>@result.Status</td><td>@result.QualityResult</td><td>@result.Lines.Count</td><td>@result.Attachments.Count</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

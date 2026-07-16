@@ -1,0 +1,48 @@
+@page
+@model EngineeringManager.Web.Pages.Admin.OrganizationsModel
+@{
+    ViewData["Title"] = "组织管理";
+}
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">管理中心</p>
+        <h1>组织管理</h1>
+        <p class="page-lead">部门和分支机构用于数据范围；签约公司用于项目合同、收款、开票和后续经营台账的独立核算。</p>
+    </div>
+</section>
+
+<section class="content-grid">
+    <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">部门 / 分支</p><h2>组织单元</h2></div></div>
+        @if (Model.Overview.OrganizationUnits.Count == 0)
+        {
+            <p class="panel-copy">还没有组织单元。</p>
+        }
+        else
+        {
+            <ul class="check-list">
+                @foreach (var unit in Model.Overview.OrganizationUnits)
+                {
+                    <li>@unit.Code · @unit.Name · @(unit.UnitType == EngineeringManager.Domain.Organization.OrganizationUnitType.Branch ? "分支机构" : "部门")</li>
+                }
+            </ul>
+        }
+    </article>
+    <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">我方主体</p><h2>签约公司</h2></div></div>
+        @if (Model.Overview.LegalEntities.Count == 0)
+        {
+            <p class="panel-copy">还没有签约公司。</p>
+        }
+        else
+        {
+            <ul class="check-list">
+                @foreach (var entity in Model.Overview.LegalEntities)
+                {
+                    <li>@entity.Code · @entity.Name（@entity.ShortName）</li>
+                }
+            </ul>
+        }
+    </article>
+</section>

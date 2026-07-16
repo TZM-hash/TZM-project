@@ -1,0 +1,19 @@
+@page
+@model EngineeringManager.Web.Pages.Payroll.IndexModel
+@{
+    ViewData["Title"] = "工资台账";
+}
+
+<section class="page-heading"><div><p class="eyebrow">阶段工资</p><h1>工资台账</h1><p class="page-lead">工资批次支持自然月、任意区间、项目阶段、节点和临时结算；应付工资与实际支付分开保存。</p></div></section>
+<section class="metric-grid" aria-label="工资汇总">
+    <article class="metric-card"><span class="metric-label">工资收入项</span><strong class="metric-value">@Model.Overview.GrossEarnings.ToString("N2")</strong><span class="metric-hint">月薪、计日、计件、奖金等</span></article>
+    <article class="metric-card"><span class="metric-label">扣款项</span><strong class="metric-value">@Model.Overview.DeductionAmount.ToString("N2")</strong><span class="metric-hint">借支、请假、罚款等</span></article>
+    <article class="metric-card"><span class="metric-label">已发工资</span><strong class="metric-value metric-value--good">@Model.Overview.PaidAmount.ToString("N2")</strong><span class="metric-hint">实际多次支付合计</span></article>
+    <article class="metric-card"><span class="metric-label">未发工资</span><strong class="metric-value">@Model.Overview.UnpaidAmount.ToString("N2")</strong><span class="metric-hint">应发减已发</span></article>
+</section>
+<section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">工资批次</p><h2>批次汇总</h2></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>批次</th><th>区间</th><th>类型</th><th>应发</th><th>已发</th><th>未发</th><th>风险</th></tr></thead><tbody>
+@foreach (var item in Model.Overview.Batches)
+{
+    <tr><td>@item.Batch.BatchNumber · @item.Batch.Name</td><td>@item.Batch.StartDate 至 @item.Batch.EndDate</td><td>@item.Batch.BatchType</td><td>@item.Summary.PayableAmount.ToString("N2")</td><td>@item.Summary.PaidAmount.ToString("N2")</td><td>@item.Summary.UnpaidAmount.ToString("N2")</td><td>@(item.Summary.HasOverpaymentRisk || item.Summary.HasDeductionRisk ? "需关注" : "正常")</td></tr>
+}
+</tbody></table></div></section>

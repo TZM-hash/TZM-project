@@ -1,0 +1,7 @@
+@page
+@model EngineeringManager.Web.Pages.Backups.IndexModel
+@{
+    ViewData["Title"] = "备份管理";
+}
+<section class="page-heading"><div><p class="eyebrow">数据安全</p><h1>备份管理</h1><p class="page-lead">每次任务同时生成 SQL Server 数据库备份和附件 ZIP，任务失败会进入提醒中心。</p></div><form method="post"><button class="button button--secondary" type="submit">立即备份</button></form></section>
+<section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>时间</th><th>状态</th><th>数据库文件</th><th>附件文件</th><th>错误</th></tr></thead><tbody>@foreach (var item in Model.Tasks) { <tr><td>@item.CreatedAt.LocalDateTime</td><td>@item.Status</td><td>@item.DatabaseBackupPath</td><td>@item.AttachmentArchivePath</td><td>@item.ErrorMessage</td></tr> }</tbody></table></div></section>

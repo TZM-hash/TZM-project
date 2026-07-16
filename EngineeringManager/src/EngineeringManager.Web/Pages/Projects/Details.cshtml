@@ -1,0 +1,45 @@
+@page "{id:guid}"
+@model EngineeringManager.Web.Pages.Projects.DetailsModel
+@{
+    ViewData["Title"] = "项目详情";
+}
+
+@if (Model.Details is null)
+{
+    <section class="panel"><h1>项目不存在</h1><p class="panel-copy">项目可能已归档或不在当前授权范围内。</p></section>
+}
+else
+{
+    <section class="page-heading">
+        <div>
+            <p class="eyebrow">@Model.Details.Project.ProjectNumber</p>
+            <h1>@Model.Details.Project.Name</h1>
+            <p class="page-lead">@Model.Details.Project.GeneralContractorName</p>
+        </div>
+        <span class="pill pill--success">@Model.Details.Summary.SettlementStatus</span>
+    </section>
+    <section class="metric-grid" aria-label="项目金额摘要">
+        <article class="metric-card"><span class="metric-label">合同金额</span><strong class="metric-value">@Model.Details.Summary.ContractAmount.ToString("N2")</strong></article>
+        <article class="metric-card"><span class="metric-label">暂估金额</span><strong class="metric-value">@Model.Details.Summary.EstimatedAmount.ToString("N2")</strong></article>
+        <article class="metric-card"><span class="metric-label">结算金额</span><strong class="metric-value">@Model.Details.Summary.SettledAmount.ToString("N2")</strong></article>
+        <article class="metric-card"><span class="metric-label">当前工程金额</span><strong class="metric-value">@Model.Details.Summary.CurrentAmount.ToString("N2")</strong></article>
+    </section>
+    <section class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">合同与工程清单</p><h2>量价明细</h2></div></div>
+        @foreach (var contract in Model.Details.Contracts)
+        {
+            <h3>@contract.ContractNumber · @contract.Name（@contract.TotalAmount.ToString("N2")）</h3>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>编码</th><th>名称</th><th>单位</th><th>暂估金额</th><th>结算金额</th><th>状态</th></tr></thead>
+                    <tbody>
+                    @foreach (var line in contract.LineItems)
+                    {
+                        <tr><td>@line.Code</td><td>@line.Name</td><td>@line.Unit</td><td>@line.EstimatedAmount.ToString("N2")</td><td>@line.SettledAmount.ToString("N2")</td><td>@(line.IsSettlementConfirmed ? "结算" : "暂估")</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}

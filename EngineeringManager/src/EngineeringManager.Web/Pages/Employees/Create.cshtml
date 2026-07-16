@@ -1,0 +1,24 @@
+@page
+@model EngineeringManager.Web.Pages.Employees.CreateModel
+@{
+    ViewData["Title"] = "新增员工";
+}
+
+<section class="page-heading"><div><p class="eyebrow">员工主档</p><h1>新增员工</h1><p class="page-lead">录入基础和默认工资资料。归属历史、工资批次、报销和借支在保存主档后分别维护。</p></div><a class="button button--secondary" asp-page="/Employees/Index">返回员工列表</a></section>
+<form method="post" class="panel form-grid">
+    <div asp-validation-summary="All" class="panel-copy form-span"></div>
+    <label>员工编号<input asp-for="EmployeeNumber" /></label>
+    <label>姓名<input asp-for="Name" /></label>
+    <label>员工类型<select asp-for="EmployeeType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Employees.EmployeeType>()"></select></label>
+    <label>岗位<input asp-for="PositionTitle" /></label>
+    <label>电话<input asp-for="Phone" /></label>
+    <label>入职日期<input asp-for="HireDate" type="date" /></label>
+    <label>身份证号<input asp-for="IdentityNumber" /></label>
+    <label>银行卡号<input asp-for="BankAccountNumber" /></label>
+    <label>开户行<input asp-for="BankName" /></label>
+    <label>默认月薪<input asp-for="DefaultMonthlySalary" type="number" step="0.01" /></label>
+    <label>默认日薪<input asp-for="DefaultDailyRate" type="number" step="0.01" /></label>
+    <label>默认时薪<input asp-for="DefaultHourlyRate" type="number" step="0.01" /></label>
+    <label>默认计件单价<input asp-for="DefaultPieceworkRate" type="number" step="0.0001" /></label>
+    <button class="button button--secondary" type="submit">保存员工</button>
+</form>

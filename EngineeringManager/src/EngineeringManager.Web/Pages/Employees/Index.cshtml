@@ -1,0 +1,30 @@
+@page
+@model EngineeringManager.Web.Pages.Employees.IndexModel
+@{
+    ViewData["Title"] = "员工管理";
+}
+
+<section class="page-heading">
+    <div><p class="eyebrow">人员主档</p><h1>员工管理</h1><p class="page-lead">统一管理正式员工和劳务员工。部门、项目、班组和签约公司归属按时间段保存，历史工资和往来不会随主档复制。</p></div>
+    @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator"))
+    {
+        <a class="button button--secondary" asp-page="/Employees/Create">新增员工</a>
+    }
+</section>
+
+<section class="metric-grid" aria-label="员工统计">
+    <article class="metric-card"><span class="metric-label">员工总数</span><strong class="metric-value">@Model.Employees.Count</strong><span class="metric-hint">当前员工主档</span></article>
+    <article class="metric-card"><span class="metric-label">正式员工</span><strong class="metric-value">@Model.Employees.Count(item => item.EmployeeType == EngineeringManager.Domain.Employees.EmployeeType.Formal)</strong><span class="metric-hint">公司正式员工</span></article>
+    <article class="metric-card"><span class="metric-label">劳务员工</span><strong class="metric-value">@Model.Employees.Count(item => item.EmployeeType == EngineeringManager.Domain.Employees.EmployeeType.Labor)</strong><span class="metric-hint">直接聘用或班组归属</span></article>
+    <article class="metric-card"><span class="metric-label">在用员工</span><strong class="metric-value metric-value--good">@Model.Employees.Count(item => item.IsActive)</strong><span class="metric-hint">未停用主档</span></article>
+</section>
+
+<section class="panel" style="margin-top: var(--space-3)">
+    <div class="panel-heading"><div><p class="eyebrow">员工清单</p><h2>基础资料</h2></div></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>员工编号</th><th>姓名</th><th>类型</th><th>岗位</th><th>电话</th><th>主归属记录</th><th>状态</th></tr></thead><tbody>
+    @foreach (var item in Model.Employees)
+    {
+        <tr><td>@item.EmployeeNumber</td><td>@item.Name</td><td>@item.EmployeeType</td><td>@item.PositionTitle</td><td>@item.Phone</td><td>@item.Affiliations.Count</td><td>@(item.IsActive ? "启用" : "停用")</td></tr>
+    }
+    </tbody></table></div>
+</section>

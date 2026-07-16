@@ -1,0 +1,19 @@
+@page
+@model EngineeringManager.Web.Pages.EmployeeLedger.IndexModel
+@{
+    ViewData["Title"] = "员工往来";
+}
+
+<section class="page-heading"><div><p class="eyebrow">内部往来</p><h1>员工往来</h1><p class="page-lead">简单管理报销、借支、归还、工资抵扣、分红、利息和其他往来，不建立复杂审批或股权档案。</p></div></section>
+<section class="metric-grid" aria-label="员工往来汇总">
+    <article class="metric-card"><span class="metric-label">报销应付</span><strong class="metric-value">@Model.Overview.ExpensePayableAmount.ToString("N2")</strong><span class="metric-hint">有效报销记录</span></article>
+    <article class="metric-card"><span class="metric-label">报销未付</span><strong class="metric-value">@Model.Overview.ExpenseUnpaidAmount.ToString("N2")</strong><span class="metric-hint">应付减支付加退回</span></article>
+    <article class="metric-card"><span class="metric-label">借支未清</span><strong class="metric-value">@Model.Overview.AdvanceOutstandingAmount.ToString("N2")</strong><span class="metric-hint">发放减归还和工资抵扣</span></article>
+    <article class="metric-card"><span class="metric-label">其他未付</span><strong class="metric-value">@Model.Overview.OtherUnpaidAmount.ToString("N2")</strong><span class="metric-hint">分红、利息和其他往来</span></article>
+</section>
+<section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">员工维度</p><h2>往来余额</h2></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>员工</th><th>报销应付</th><th>报销已付</th><th>报销未付</th><th>借支未清</th><th>其他应付</th><th>其他已付</th><th>其他未付</th><th>风险</th></tr></thead><tbody>
+@foreach (var item in Model.Overview.EmployeeSummaries)
+{
+    <tr><td>@item.EmployeeNumber · @item.EmployeeName</td><td>@item.Summary.ExpensePayableAmount.ToString("N2")</td><td>@item.Summary.ExpensePaidAmount.ToString("N2")</td><td>@item.Summary.ExpenseUnpaidAmount.ToString("N2")</td><td>@item.Summary.AdvanceOutstandingAmount.ToString("N2")</td><td>@item.Summary.OtherPayableAmount.ToString("N2")</td><td>@item.Summary.OtherPaidAmount.ToString("N2")</td><td>@item.Summary.OtherUnpaidAmount.ToString("N2")</td><td>@(item.Summary.HasExpenseOverpaymentRisk || item.Summary.HasOtherOverpaymentRisk || item.Summary.HasAdvanceOverSettlementRisk ? "需关注" : "正常")</td></tr>
+}
+</tbody></table></div></section>

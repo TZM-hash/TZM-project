@@ -1,0 +1,65 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "系统总览";
+}
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">工程经营台账 · 阶段 0</p>
+        <h1>系统总览</h1>
+        <p class="page-lead">基础运行环境已经就绪，项目、合同、财务和员工模块将在后续阶段逐步启用。</p>
+    </div>
+    <div class="pwa-badge" data-pwa-badge>离线外壳检查中</div>
+</section>
+
+<section class="metric-grid" aria-label="系统基线状态">
+    <article class="metric-card">
+        <span class="metric-label">应用服务</span>
+        <strong class="metric-value metric-value--good">正常</strong>
+        <span class="metric-hint">/health/live</span>
+    </article>
+    <article class="metric-card">
+        <span class="metric-label">数据库迁移</span>
+        <strong class="metric-value metric-value--good">已完成</strong>
+        <span class="metric-hint">InitialIdentity</span>
+    </article>
+    <article class="metric-card">
+        <span class="metric-label">当前阶段</span>
+        <strong class="metric-value">0</strong>
+        <span class="metric-hint">项目基线</span>
+    </article>
+    <article class="metric-card">
+        <span class="metric-label">业务数据</span>
+        <strong class="metric-value">待启用</strong>
+        <span class="metric-hint">不会伪造统计数据</span>
+    </article>
+</section>
+
+<section class="content-grid">
+    <article class="panel panel--wide">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">阶段成果</p>
+                <h2>基线能力已准备</h2>
+            </div>
+            <span class="pill pill--success">可继续开发</span>
+        </div>
+        <ul class="check-list">
+            <li>ASP.NET Core 分层解决方案和 SQL Server 连接已建立</li>
+            <li>Identity 用户基础模型与 InitialIdentity 迁移已建立</li>
+            <li>健康检查、响应式页面和 PWA 外壳已接入</li>
+            <li>附件存储和质量门禁将在本阶段继续完成</li>
+        </ul>
+    </article>
+    <article class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">文档</p>
+                <h2>开发进度</h2>
+            </div>
+        </div>
+        <p class="panel-copy">所有阶段的完成情况、验证命令和下一步计划统一维护在开发进度文档中。</p>
+        <a class="button button--secondary" href="/docs/开发进度.md">查看进度说明</a>
+    </article>
+</section>

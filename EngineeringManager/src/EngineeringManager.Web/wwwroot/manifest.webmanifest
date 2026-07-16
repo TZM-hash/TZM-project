@@ -1,0 +1,10 @@
+{
+  "name": "工程项目经营管理系统",
+  "short_name": "工程管理",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#0f766e",
+  "icons": []
+}

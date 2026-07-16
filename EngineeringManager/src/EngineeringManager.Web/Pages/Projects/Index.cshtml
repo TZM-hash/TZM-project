@@ -1,0 +1,50 @@
+@page
+@model EngineeringManager.Web.Pages.Projects.IndexModel
+@{
+    ViewData["Title"] = "项目管理";
+}
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">项目经营台账</p>
+        <h1>项目管理</h1>
+        <p class="page-lead">项目是合同、工程清单、阶段成果和后续财务台账的最高管理单位。</p>
+    </div>
+    <a class="button button--secondary" href="#">新建项目（服务已就绪）</a>
+</section>
+
+<section class="metric-grid" aria-label="项目汇总">
+    <article class="metric-card"><span class="metric-label">项目数量</span><strong class="metric-value">@Model.Projects.Count</strong><span class="metric-hint">当前授权范围</span></article>
+    <article class="metric-card"><span class="metric-label">合同金额</span><strong class="metric-value">@Model.Projects.Sum(item => item.Summary.ContractAmount).ToString("N2")</strong><span class="metric-hint">合同明细汇总</span></article>
+    <article class="metric-card"><span class="metric-label">当前工程金额</span><strong class="metric-value">@Model.Projects.Sum(item => item.Summary.CurrentAmount).ToString("N2")</strong><span class="metric-hint">暂估/部分结算/结算口径</span></article>
+    <article class="metric-card"><span class="metric-label">已结算项目</span><strong class="metric-value">@Model.Projects.Count(item => item.Summary.SettlementStatus == EngineeringManager.Domain.Projects.ProjectSettlementStatus.Settled)</strong><span class="metric-hint">由清单项状态计算</span></article>
+</section>
+
+<section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">项目清单</p><h2>当前项目</h2></div></div>
+    @if (Model.Projects.Count == 0)
+    {
+        <p class="panel-copy">当前授权范围内还没有项目。项目新增入口将在下一轮页面交互中接入同一项目服务。</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>项目编号</th><th>项目名称</th><th>阶段</th><th>合同金额</th><th>当前工程金额</th><th>结算状态</th></tr></thead>
+                <tbody>
+                @foreach (var item in Model.Projects)
+                {
+                    <tr>
+                        <td><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.ProjectNumber</a></td>
+                        <td>@item.Project.Name</td>
+                        <td>@item.Project.Stage</td>
+                        <td>@item.Summary.ContractAmount.ToString("N2")</td>
+                        <td>@item.Summary.CurrentAmount.ToString("N2")</td>
+                        <td>@item.Summary.SettlementStatus</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

@@ -1,0 +1,37 @@
+@page
+@model EngineeringManager.Web.Pages.Partners.IndexModel
+@{
+    ViewData["Title"] = "合作单位";
+}
+
+<section class="page-heading">
+    <div><p class="eyebrow">统一档案</p><h1>合作单位</h1><p class="page-lead">同一家单位可以同时作为甲方/总包、施工班组、材料供应商或零星供应商。</p></div>
+    <a class="button button--secondary" asp-page="/Partners/Create">新增合作单位</a>
+</section>
+
+<section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">单位主档</p><h2>当前合作单位</h2></div></div>
+    @if (Model.Partners.Count == 0)
+    {
+        <p class="panel-copy">还没有合作单位档案。</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>编号</th><th>单位名称</th><th>角色</th><th>主要联系人</th><th>参与项目</th></tr></thead>
+                <tbody>
+                @foreach (var partner in Model.Partners)
+                {
+                    <tr>
+                        <td>@partner.PartnerNumber</td><td>@partner.Name</td>
+                        <td>@string.Join("、", partner.Roles.Select(role => role.RoleType))</td>
+                        <td>@(partner.Contacts.FirstOrDefault(contact => contact.IsPrimary)?.Name ?? "未设置")</td>
+                        <td>@partner.ProjectCount</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

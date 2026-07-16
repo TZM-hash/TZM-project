@@ -1,0 +1,4 @@
+@media (prefers-reduced-motion: no-preference) {
+    .button, .nav-link { transition: background-color .2s ease, color .2s ease, transform .2s ease; }
+    .button:hover { transform: translateY(-1px); }
+}
