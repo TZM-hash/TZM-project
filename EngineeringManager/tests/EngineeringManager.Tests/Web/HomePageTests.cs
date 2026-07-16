@@ -35,6 +35,8 @@ public sealed class HomePageTests
         html.Should().Contain("/css/base.");
         html.Should().NotContain("https://cdn.");
         html.Should().Contain("/manifest.");
+        html.Should().Contain("阶段 0～7 已完成");
+        html.Should().NotContain("阶段 7 开发中");
         manifest.Should().Contain("工程项目经营管理系统");
         serviceWorker.Should().Contain("engineering-manager-shell-v2");
         siteScript.Should().Contain("/service-worker.js");
@@ -50,6 +52,17 @@ public sealed class HomePageTests
 
         html.Should().NotContain("data-business-dashboard");
         html.Should().Contain("登录后查看经营数据");
+    }
+
+    [Fact]
+    public async Task LoginPageRendersWithoutServerError()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/Identity/Account/Login");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
