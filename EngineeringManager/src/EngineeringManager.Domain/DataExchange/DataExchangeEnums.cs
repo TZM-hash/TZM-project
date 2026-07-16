@@ -12,7 +12,15 @@ public enum ExportDataset
     Payments = 8,
     Invoices = 9,
     Accounts = 10,
-    StageResults = 11
+    StageResults = 11,
+    Companies = 12,
+    CompanyAccounts = 13,
+    CompanyCertificates = 14,
+    Equipment = 15,
+    EquipmentLeases = 16,
+    EquipmentUsages = 17,
+    EquipmentPeriods = 18,
+    EquipmentSettlements = 19
 }
 
 public enum ExportFieldDataType { Text = 1, Number = 2, Date = 3, Boolean = 4 }

@@ -28,4 +28,14 @@ public sealed class PermissionCatalogTests
         PermissionKeys.IsKnown("unknown.permission").Should().BeFalse();
         PermissionKeys.IsKnown(PermissionKeys.OrganizationManage).Should().BeTrue();
     }
+
+    [Fact]
+    public void CompanyPermissionsAreAvailableToExpectedRoles()
+    {
+        PermissionKeys.IsKnown(PermissionKeys.CompaniesRead).Should().BeTrue();
+        PermissionKeys.IsKnown(PermissionKeys.CompaniesManage).Should().BeTrue();
+        PermissionKeys.DefaultsForRole(SystemRoles.ApplicationAdministrator).Should().Contain(PermissionKeys.CompaniesManage);
+        PermissionKeys.DefaultsForRole(SystemRoles.Finance).Should().Contain(PermissionKeys.CompaniesRead);
+        PermissionKeys.DefaultsForRole(SystemRoles.QueryOnly).Should().Contain(PermissionKeys.CompaniesRead);
+    }
 }

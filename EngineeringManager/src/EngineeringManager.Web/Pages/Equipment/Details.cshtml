@@ -1,0 +1,4 @@
+@page "{id:guid}"
+@model EngineeringManager.Web.Pages.Equipment.DetailsModel
+@{ ViewData["Title"] = Model.Equipment.Name; }
+<section class="page-heading"><div><p class="eyebrow">设备详情</p><h1>@Model.Equipment.Name</h1><p class="page-lead">@Model.Equipment.EquipmentNumber · @Model.Equipment.Model · @Model.Equipment.Status</p></div><div class="button-row"><a class="button button--primary" asp-page="Usage" asp-route-equipmentId="@Model.Equipment.Id">登记进退场</a><a class="button button--secondary" asp-page="Edit" asp-route-copyFrom="@Model.Equipment.Id">复制设备</a></div></section><section class="metric-grid"><article class="metric-card"><span class="metric-label">权属</span><strong class="metric-value metric-value--small">@Model.Equipment.OwnershipType</strong></article><article class="metric-card"><span class="metric-label">内部参考日价</span><strong class="metric-value">@(Model.Equipment.InternalDailyRate?.ToString("N2") ?? "-")</strong></article></section>

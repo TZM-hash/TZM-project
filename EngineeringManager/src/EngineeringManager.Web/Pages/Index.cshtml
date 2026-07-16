@@ -4,62 +4,131 @@
     ViewData["Title"] = "系统总览";
 }
 
-<section class="page-heading">
-    <div>
-        <p class="eyebrow">工程经营台账 · 阶段 0</p>
-        <h1>系统总览</h1>
-        <p class="page-lead">基础运行环境已经就绪，项目、合同、财务和员工模块将在后续阶段逐步启用。</p>
+@if (Model.Dashboard is null)
+{
+    <section class="page-heading">
+        <div>
+            <p class="eyebrow">工程项目经营管理系统</p>
+            <h1>经营数据清晰，现场资料不断线</h1>
+            <p class="page-lead">项目、合同、工程量、财务、员工工资和阶段成果统一管理。登录后查看经营数据。</p>
+        </div>
+        <div class="pwa-badge" data-pwa-badge>正在检查应用状态</div>
+    </section>
+    <section class="content-grid public-home">
+        <article class="panel panel--wide">
+            <p class="eyebrow">当前能力</p>
+            <h2>项目经营与有限离线协同</h2>
+            <ul class="check-list">
+                <li>项目、合同、工程量和结算口径统一</li>
+                <li>应收、收款、发票、应付和付款内部台账</li>
+                <li>员工、工资、报销、借支和其他往来</li>
+                <li>现场阶段成果草稿和照片有限离线</li>
+            </ul>
+        </article>
+        <article class="panel login-panel">
+            <p class="eyebrow">安全访问</p>
+            <h2>登录后查看经营数据</h2>
+            <p class="panel-copy">首页不会向未登录人员显示项目金额、财务、工资或风险信息。</p>
+            <a class="button button--secondary" asp-area="Identity" asp-page="/Account/Login">登录系统</a>
+        </article>
+    </section>
+}
+else
+{
+    var dashboard = Model.Dashboard;
+    var receivable = dashboard.MoneyComparisons.Single(item => item.Key == "receivable");
+    <div data-business-dashboard>
+        <section class="page-heading">
+            <div>
+                <p class="eyebrow">经营驾驶舱 · 数据截至 @dashboard.GeneratedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</p>
+                <h1>系统总览</h1>
+                <p class="page-lead">先看风险和未完成金额，再进入项目、财务或现场资料处理明细。</p>
+            </div>
+            <div class="pwa-badge" data-pwa-badge>正在检查同步能力</div>
+        </section>
+
+        <section class="metric-grid dashboard-metrics" aria-label="关键经营指标">
+            <article class="metric-card"><span class="metric-label">在管项目</span><strong class="metric-value">@dashboard.ActiveProjectCount</strong><span class="metric-hint">当前有效项目</span></article>
+            <article class="metric-card"><span class="metric-label">当前工程金额</span><strong class="metric-value">@dashboard.CurrentProjectAmount.ToString("N2")</strong><span class="metric-hint">暂估与结算组合口径</span></article>
+            @if (dashboard.CanViewFinance)
+            {
+                <article class="metric-card"><span class="metric-label">未收款</span><strong class="metric-value metric-value--warning">@receivable.RemainingAmount.ToString("N2")</strong><span class="metric-hint">应收减已收</span></article>
+            }
+            @if (dashboard.CanViewPayroll)
+            {
+                <article class="metric-card"><span class="metric-label">未发工资</span><strong class="metric-value">@dashboard.UnpaidPayrollAmount.ToString("N2")</strong><span class="metric-hint">应发减实发</span></article>
+            }
+            <article class="metric-card"><span class="metric-label">未处理提醒</span><strong class="metric-value">@dashboard.OpenReminderCount</strong><span class="metric-hint">风险与失败任务</span></article>
+        </section>
+
+        <section class="dashboard-grid">
+            @if (dashboard.CanViewFinance)
+            {
+                <article class="panel" data-money-chart>
+                    <div class="panel-heading"><div><p class="eyebrow">经营金额对比</p><h2>收款、付款与开票进度</h2></div></div>
+                    <div class="comparison-chart">
+                        @foreach (var item in dashboard.MoneyComparisons)
+                        {
+                            <div class="comparison-row">
+                                <div class="chart-label"><strong>@item.Label</strong><span>@item.CompletionPercentage.ToString("N1")%</span></div>
+                                <div class="progress-track" role="img" aria-label="@item.Label，完成 @item.CompletedAmount.ToString("N2")，总额 @item.TotalAmount.ToString("N2")">
+                                    <span class="progress-fill" style="width:@item.CompletionPercentage.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                                </div>
+                                <div class="chart-values"><span>总额 @item.TotalAmount.ToString("N2")</span><span>已完成 @item.CompletedAmount.ToString("N2")</span><span>剩余 @item.RemainingAmount.ToString("N2")</span></div>
+                            </div>
+                        }
+                    </div>
+                </article>
+            }
+
+            <article class="panel" data-stage-chart>
+                <div class="panel-heading"><div><p class="eyebrow">项目分布</p><h2>当前项目阶段</h2></div></div>
+                @if (dashboard.StageDistribution.Count == 0)
+                {
+                    <p class="panel-copy">暂无有效项目。</p>
+                }
+                else
+                {
+                    <div class="stage-chart">
+                        @foreach (var item in dashboard.StageDistribution)
+                        {
+                            <div class="stage-row">
+                                <div class="chart-label"><span>@item.Label</span><strong>@item.Count 个</strong></div>
+                                <div class="progress-track progress-track--stage" role="img" aria-label="@item.Label @item.Count 个项目">
+                                    <span class="progress-fill progress-fill--stage" style="width:@item.Percentage.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </article>
+
+            <article class="panel" data-dashboard-risks>
+                <div class="panel-heading"><div><p class="eyebrow">优先处理</p><h2>经营风险与提醒</h2></div><a class="button button--secondary" asp-page="/Reminders/Index">全部提醒</a></div>
+                @if (dashboard.Risks.Count == 0)
+                {
+                    <p class="panel-copy">当前没有未处理提醒。</p>
+                }
+                else
+                {
+                    <ul class="risk-list">
+                        @foreach (var risk in dashboard.Risks)
+                        {
+                            <li><span class="risk-dot risk-dot--@risk.Severity.ToString().ToLowerInvariant()" aria-hidden="true"></span><div><strong>@risk.Title</strong><p>@risk.Message</p></div></li>
+                        }
+                    </ul>
+                }
+            </article>
+
+            <article class="panel" data-dashboard-offline data-user-id="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value">
+                <div class="panel-heading"><div><p class="eyebrow">本设备</p><h2>离线同步状态</h2></div><a class="button button--secondary" asp-page="/StageResults/Offline">管理草稿</a></div>
+                <dl class="status-list">
+                    <div><dt>待同步</dt><dd data-dashboard-pending>0</dd></div>
+                    <div><dt>失败</dt><dd data-dashboard-failed>0</dd></div>
+                    <div><dt>冲突</dt><dd data-dashboard-conflicts>0</dd></div>
+                </dl>
+                <p class="panel-copy">这里只统计当前浏览器中属于你的阶段成果草稿和照片。</p>
+            </article>
+        </section>
     </div>
-    <div class="pwa-badge" data-pwa-badge>离线外壳检查中</div>
-</section>
-
-<section class="metric-grid" aria-label="系统基线状态">
-    <article class="metric-card">
-        <span class="metric-label">应用服务</span>
-        <strong class="metric-value metric-value--good">正常</strong>
-        <span class="metric-hint">/health/live</span>
-    </article>
-    <article class="metric-card">
-        <span class="metric-label">数据库迁移</span>
-        <strong class="metric-value metric-value--good">已完成</strong>
-        <span class="metric-hint">InitialIdentity</span>
-    </article>
-    <article class="metric-card">
-        <span class="metric-label">当前阶段</span>
-        <strong class="metric-value">0</strong>
-        <span class="metric-hint">项目基线</span>
-    </article>
-    <article class="metric-card">
-        <span class="metric-label">业务数据</span>
-        <strong class="metric-value">待启用</strong>
-        <span class="metric-hint">不会伪造统计数据</span>
-    </article>
-</section>
-
-<section class="content-grid">
-    <article class="panel panel--wide">
-        <div class="panel-heading">
-            <div>
-                <p class="eyebrow">阶段成果</p>
-                <h2>基线能力已准备</h2>
-            </div>
-            <span class="pill pill--success">可继续开发</span>
-        </div>
-        <ul class="check-list">
-            <li>ASP.NET Core 分层解决方案和 SQL Server 连接已建立</li>
-            <li>Identity 用户基础模型与 InitialIdentity 迁移已建立</li>
-            <li>健康检查、响应式页面和 PWA 外壳已接入</li>
-            <li>附件存储和质量门禁将在本阶段继续完成</li>
-        </ul>
-    </article>
-    <article class="panel">
-        <div class="panel-heading">
-            <div>
-                <p class="eyebrow">文档</p>
-                <h2>开发进度</h2>
-            </div>
-        </div>
-        <p class="panel-copy">所有阶段的完成情况、验证命令和下一步计划统一维护在开发进度文档中。</p>
-        <a class="button button--secondary" href="/docs/开发进度.md">查看进度说明</a>
-    </article>
-</section>
+}

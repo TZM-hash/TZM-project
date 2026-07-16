@@ -1,0 +1,6 @@
+@page
+@using EngineeringManager.Domain.Equipment
+@model EngineeringManager.Web.Pages.Equipment.EditModel
+@{ ViewData["Title"] = "设备档案"; }
+<section class="page-heading"><div><p class="eyebrow">逐台建档</p><h1>设备档案</h1><p class="page-lead">复制时会清空设备编号，保存前填写新的唯一编号。</p></div></section>
+<form method="post" class="panel form-grid"><input asp-for="Input.Id" type="hidden" /><input asp-for="Input.ConcurrencyStamp" type="hidden" /><label>设备编号<input asp-for="Input.EquipmentNumber" required /></label><label>名称<input asp-for="Input.Name" required /></label><label>型号<input asp-for="Input.Model" /></label><label>分类<input asp-for="Input.Category" /></label><label>权属<select asp-for="Input.OwnershipType" asp-items="Html.GetEnumSelectList<EquipmentOwnershipType>()"></select></label><label>所属自有公司 ID<input asp-for="Input.OwnerLegalEntityId" /></label><label>出租方 ID<input asp-for="Input.LessorBusinessPartnerId" /></label><label>内部日参考价<input asp-for="Input.InternalDailyRate" type="number" step="0.01" /></label><label class="field-span">修改原因<input asp-for="Input.Reason" required /></label><div class="field-span button-row"><button class="button button--primary">保存</button><a class="button button--secondary" asp-page="Index">返回</a></div></form>

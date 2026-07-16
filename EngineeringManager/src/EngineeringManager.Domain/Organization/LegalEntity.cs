@@ -12,7 +12,25 @@ public sealed class LegalEntity
 
     public string? UnifiedSocialCreditCode { get; set; }
 
+    public Guid? CompanyCategoryId { get; set; }
+
+    public CompanyCategory? CompanyCategory { get; set; }
+
+    public string? LegalRepresentative { get; set; }
+
+    public string? RegisteredAddress { get; set; }
+
+    public string? BusinessAddress { get; set; }
+
+    public string? Phone { get; set; }
+
+    public string? InvoiceTitle { get; set; }
+
+    public string? Notes { get; set; }
+
     public bool IsActive { get; set; } = true;
+
+    public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

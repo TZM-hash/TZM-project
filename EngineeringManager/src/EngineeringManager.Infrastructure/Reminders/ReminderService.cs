@@ -2,6 +2,7 @@ using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Application.Reminders;
 using EngineeringManager.Domain.DataExchange;
+using EngineeringManager.Domain.Offline;
 using EngineeringManager.Domain.Reminders;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -56,6 +57,39 @@ public sealed class ReminderService(
                 "工资批次存在未发工资", $"{batch.Batch.BatchNumber} · {batch.Batch.Name} 未发 {batch.Summary.UnpaidAmount:N2}", "PayrollBatch", batch.Batch.Id.ToString(), batch.Batch.EndDate, batch.Summary.UnpaidAmount, now);
         }
 
+        var expiringCertificates = await db.CompanyCertificates.AsNoTracking().Include(item => item.LegalEntity)
+            .Where(item => !item.IsDeleted && item.LegalEntity.IsActive && item.ExpiresOn.HasValue && item.ExpiresOn <= today.AddDays(30))
+            .ToListAsync(cancellationToken);
+        foreach (var certificate in expiringCertificates)
+        {
+            Upsert(existing, $"company-certificate:{certificate.Id}", ReminderType.CompanyCertificateExpiring,
+                certificate.ExpiresOn < today ? ReminderSeverity.Critical : ReminderSeverity.Warning,
+                "公司证照即将到期", $"{certificate.LegalEntity.ShortName} · {certificate.CertificateType} · {certificate.ExpiresOn:yyyy-MM-dd}",
+                nameof(CompanyCertificate), certificate.Id.ToString(), certificate.ExpiresOn, null, now);
+        }
+
+        var expiringLeases = await db.EquipmentLeaseAgreements.AsNoTracking().Include(item => item.Equipment)
+            .Where(item => item.Equipment.IsActive && item.EndDate.HasValue && item.EndDate <= today.AddDays(30))
+            .ToListAsync(cancellationToken);
+        foreach (var lease in expiringLeases)
+        {
+            Upsert(existing, $"equipment-lease:{lease.Id}", ReminderType.EquipmentLeaseExpiring,
+                lease.EndDate < today ? ReminderSeverity.Critical : ReminderSeverity.Warning,
+                "设备租赁即将到期", $"{lease.Equipment.EquipmentNumber} · {lease.Equipment.Name} · {lease.EndDate:yyyy-MM-dd}",
+                nameof(EquipmentLeaseAgreement), lease.Id.ToString(), lease.EndDate, null, now);
+        }
+
+        var maintenanceDue = await db.EquipmentMaintenanceRecords.AsNoTracking().Include(item => item.Equipment)
+            .Where(item => item.Equipment.IsActive && item.NextDueDate.HasValue && item.NextDueDate <= today.AddDays(30))
+            .ToListAsync(cancellationToken);
+        foreach (var maintenance in maintenanceDue)
+        {
+            Upsert(existing, $"equipment-maintenance:{maintenance.Id}", ReminderType.EquipmentMaintenanceDue,
+                maintenance.NextDueDate < today ? ReminderSeverity.Critical : ReminderSeverity.Warning,
+                "设备维保即将到期", $"{maintenance.Equipment.EquipmentNumber} · {maintenance.Equipment.Name} · {maintenance.NextDueDate:yyyy-MM-dd}",
+                nameof(EquipmentMaintenanceRecord), maintenance.Id.ToString(), maintenance.NextDueDate, null, now);
+        }
+
         var failedImports = await db.ImportBatches.AsNoTracking().Where(item => item.Status == DataExchangeTaskStatus.Failed).ToListAsync(cancellationToken);
         foreach (var batch in failedImports)
         {
@@ -68,6 +102,27 @@ public sealed class ReminderService(
         {
             Upsert(existing, $"backup-failed:{task.Id}", ReminderType.BackupFailed, ReminderSeverity.Critical,
                 "备份任务失败", task.ErrorMessage ?? "备份任务执行失败。", "BackupTask", task.Id.ToString(), null, null, now);
+        }
+
+        var failedSyncs = await db.OfflineDraftSyncs.AsNoTracking()
+            .Where(item => item.Status == OfflineSyncStatus.Failed || item.Status == OfflineSyncStatus.Conflict)
+            .ToListAsync(cancellationToken);
+        var activeOfflineKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var sync in failedSyncs)
+        {
+            var key = $"offline-sync:{sync.Id}";
+            activeOfflineKeys.Add(key);
+            var conflict = sync.Status == OfflineSyncStatus.Conflict;
+            Upsert(existing, key, ReminderType.OfflineSyncFailed, conflict ? ReminderSeverity.Warning : ReminderSeverity.Critical,
+                conflict ? "离线草稿存在版本冲突" : "离线草稿同步失败",
+                sync.LastError ?? (conflict ? "服务器草稿已变化，请比较后处理。" : "离线草稿同步失败。"),
+                "OfflineDraftSync", sync.Id.ToString(), null, null, now);
+        }
+
+        foreach (var reminder in existing.Values.Where(item => item.Type == ReminderType.OfflineSyncFailed && !activeOfflineKeys.Contains(item.DeduplicationKey)))
+        {
+            reminder.Status = ReminderStatus.Resolved;
+            reminder.ResolvedAt = now;
         }
 
         await db.SaveChangesAsync(cancellationToken);

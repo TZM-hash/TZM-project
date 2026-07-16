@@ -15,7 +15,11 @@ using EngineeringManager.Infrastructure.StageResults;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Infrastructure.Finance;
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Application.Equipment;
+using EngineeringManager.Application.EquipmentOffline;
 using EngineeringManager.Infrastructure.Employees;
+using EngineeringManager.Infrastructure.Equipment;
+using EngineeringManager.Infrastructure.EquipmentOffline;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Infrastructure.Payroll;
 using EngineeringManager.Application.EmployeeLedger;
@@ -26,6 +30,14 @@ using EngineeringManager.Application.Backups;
 using EngineeringManager.Infrastructure.Backups;
 using EngineeringManager.Application.Reminders;
 using EngineeringManager.Infrastructure.Reminders;
+using EngineeringManager.Application.Offline;
+using EngineeringManager.Infrastructure.Offline;
+using EngineeringManager.Application.Dashboard;
+using EngineeringManager.Infrastructure.Dashboard;
+using EngineeringManager.Application.Companies;
+using EngineeringManager.Infrastructure.Companies;
+using EngineeringManager.Application.Development;
+using EngineeringManager.Infrastructure.Development;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -77,6 +89,14 @@ public sealed class Program
         builder.Services.AddScoped<IReminderService, ReminderService>();
         builder.Services.AddSingleton<IFileStore>(_ =>
             new LocalFileStore(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "attachments")));
+        builder.Services.AddScoped<IOfflineStageResultService, OfflineStageResultService>();
+        builder.Services.AddScoped<IDashboardService, DashboardService>();
+        builder.Services.AddScoped<ICompanyManagementService, CompanyManagementService>();
+        builder.Services.AddScoped<ICompanyActorService, CompanyActorService>();
+        builder.Services.AddScoped<IEquipmentService, EquipmentService>();
+        builder.Services.AddScoped<IEquipmentSettlementService, EquipmentSettlementService>();
+        builder.Services.AddScoped<IEquipmentOfflineService, EquipmentOfflineService>();
+        builder.Services.AddScoped<IDevelopmentSampleDataSeeder, DevelopmentSampleDataSeeder>();
         builder.Services
             .AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
@@ -91,6 +111,11 @@ public sealed class Program
         if (app.Configuration.GetValue<bool>("Identity:SeedRoles"))
         {
             await IdentitySeed.EnsureRolesAsync(app.Services);
+        }
+        if (app.Configuration.GetValue<bool>("DevelopmentSampleData:Enabled"))
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<IDevelopmentSampleDataSeeder>().SeedAsync(app.Environment.EnvironmentName, app.Environment.ContentRootPath, CancellationToken.None);
         }
 
         if (app.Environment.IsDevelopment())

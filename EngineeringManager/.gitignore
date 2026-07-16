@@ -6,6 +6,7 @@ bin/
 obj/
 TestResults/
 coverage/
+artifacts/
 *.user
 *.suo
 *.cache

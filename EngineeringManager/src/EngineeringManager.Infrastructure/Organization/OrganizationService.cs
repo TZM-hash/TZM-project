@@ -67,6 +67,7 @@ public sealed class OrganizationService(ApplicationDbContext db) : IOrganization
             Code = code,
             Name = name,
             ShortName = shortName,
+            CompanyCategoryId = CompanyCategoryDefaults.OtherId,
             UnifiedSocialCreditCode = string.IsNullOrWhiteSpace(request.UnifiedSocialCreditCode)
                 ? null
                 : request.UnifiedSocialCreditCode.Trim()

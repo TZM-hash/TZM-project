@@ -11,6 +11,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<LegalEntity> LegalEntities => Set<LegalEntity>();
 
+    public DbSet<CompanyCategory> CompanyCategories => Set<CompanyCategory>();
+
+    public DbSet<CompanyCertificate> CompanyCertificates => Set<CompanyCertificate>();
+
     public DbSet<UserOrganizationMembership> UserOrganizationMemberships => Set<UserOrganizationMembership>();
 
     public DbSet<UserLegalEntityAccess> UserLegalEntityAccesses => Set<UserLegalEntityAccess>();
@@ -79,6 +83,19 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ImportError> ImportErrors => Set<ImportError>();
     public DbSet<BackupTask> BackupTasks => Set<BackupTask>();
     public DbSet<ReminderItem> ReminderItems => Set<ReminderItem>();
+    public DbSet<OfflineDraftSync> OfflineDraftSyncs => Set<OfflineDraftSync>();
+    public DbSet<OfflineAttachmentSync> OfflineAttachmentSyncs => Set<OfflineAttachmentSync>();
+    public DbSet<Equipment> Equipment => Set<Equipment>();
+    public DbSet<EquipmentLeaseAgreement> EquipmentLeaseAgreements => Set<EquipmentLeaseAgreement>();
+    public DbSet<EquipmentProjectUsage> EquipmentProjectUsages => Set<EquipmentProjectUsage>();
+    public DbSet<EquipmentWorkPeriod> EquipmentWorkPeriods => Set<EquipmentWorkPeriod>();
+    public DbSet<EquipmentSettlement> EquipmentSettlements => Set<EquipmentSettlement>();
+    public DbSet<EquipmentSettlementAdjustment> EquipmentSettlementAdjustments => Set<EquipmentSettlementAdjustment>();
+    public DbSet<EquipmentAdvancePayment> EquipmentAdvancePayments => Set<EquipmentAdvancePayment>();
+    public DbSet<EquipmentOwnershipHistory> EquipmentOwnershipHistories => Set<EquipmentOwnershipHistory>();
+    public DbSet<EquipmentMaintenanceRecord> EquipmentMaintenanceRecords => Set<EquipmentMaintenanceRecord>();
+    public DbSet<OfflineEquipmentUsageSync> OfflineEquipmentUsageSyncs => Set<OfflineEquipmentUsageSync>();
+    public DbSet<OfflineEquipmentAttachmentSync> OfflineEquipmentAttachmentSyncs => Set<OfflineEquipmentAttachmentSync>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -109,8 +126,48 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(legalEntity => legalEntity.Name).HasMaxLength(200).IsRequired();
             entity.Property(legalEntity => legalEntity.ShortName).HasMaxLength(100).IsRequired();
             entity.Property(legalEntity => legalEntity.UnifiedSocialCreditCode).HasMaxLength(50);
+            entity.Property(legalEntity => legalEntity.LegalRepresentative).HasMaxLength(100);
+            entity.Property(legalEntity => legalEntity.RegisteredAddress).HasMaxLength(300);
+            entity.Property(legalEntity => legalEntity.BusinessAddress).HasMaxLength(300);
+            entity.Property(legalEntity => legalEntity.Phone).HasMaxLength(50);
+            entity.Property(legalEntity => legalEntity.InvoiceTitle).HasMaxLength(200);
+            entity.Property(legalEntity => legalEntity.Notes).HasMaxLength(1000);
+            entity.Property(legalEntity => legalEntity.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(legalEntity => legalEntity.Code).IsUnique();
             entity.HasIndex(legalEntity => legalEntity.UnifiedSocialCreditCode).IsUnique();
+            entity.HasOne(legalEntity => legalEntity.CompanyCategory)
+                .WithMany()
+                .HasForeignKey(legalEntity => legalEntity.CompanyCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CompanyCategory>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Code).HasMaxLength(50).IsRequired();
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => item.Code).IsUnique();
+            entity.HasIndex(item => new { item.SortOrder, item.Name });
+            var seededAt = new DateTimeOffset(2026, 7, 17, 0, 0, 0, TimeSpan.Zero);
+            entity.HasData(
+                new CompanyCategory { Id = CompanyCategoryDefaults.GeneralTaxpayerCompanyId, Code = "GENERAL_COMPANY", Name = "一般纳税人有限公司", SortOrder = 10, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000001"), CreatedAt = seededAt, UpdatedAt = seededAt },
+                new CompanyCategory { Id = CompanyCategoryDefaults.SmallScaleCompanyId, Code = "SMALL_COMPANY", Name = "小规模纳税人有限公司", SortOrder = 20, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000002"), CreatedAt = seededAt, UpdatedAt = seededAt },
+                new CompanyCategory { Id = CompanyCategoryDefaults.SmallScaleSoleProprietorId, Code = "SMALL_SOLE", Name = "小规模个体工商户", SortOrder = 30, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000003"), CreatedAt = seededAt, UpdatedAt = seededAt },
+                new CompanyCategory { Id = CompanyCategoryDefaults.OtherId, Code = "OTHER", Name = "其他主体", SortOrder = 90, ConcurrencyStamp = Guid.Parse("20000000-0000-0000-0000-000000000004"), CreatedAt = seededAt, UpdatedAt = seededAt });
+        });
+
+        builder.Entity<CompanyCertificate>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.CertificateType).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.CertificateNumber).HasMaxLength(100);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.LegalEntityId, item.CertificateType, item.CertificateNumber });
+            entity.HasIndex(item => new { item.ExpiresOn, item.IsDeleted });
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<UserOrganizationMembership>(entity =>
@@ -182,6 +239,154 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         ConfigurePayrollModel(builder);
         ConfigureEmployeeLedgerModel(builder);
         ConfigureDataExchangeModel(builder);
+        ConfigureOfflineModel(builder);
+        ConfigureEquipmentModel(builder);
+    }
+
+    private static void ConfigureEquipmentModel(ModelBuilder builder)
+    {
+        builder.Entity<Equipment>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.EquipmentNumber).HasMaxLength(60).IsRequired();
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Model).HasMaxLength(100);
+            entity.Property(item => item.Category).HasMaxLength(100);
+            entity.Property(item => item.PurchaseAmount).HasPrecision(18, 2);
+            entity.Property(item => item.InternalDailyRate).HasPrecision(18, 2);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => item.EquipmentNumber).IsUnique();
+            entity.HasOne(item => item.OwnerLegalEntity).WithMany().HasForeignKey(item => item.OwnerLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.LessorBusinessPartner).WithMany().HasForeignKey(item => item.LessorBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EquipmentLeaseAgreement>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ContractNumber).HasMaxLength(100);
+            entity.Property(item => item.UnitRate).HasPrecision(18, 2);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.EquipmentId, item.StartDate });
+            entity.HasOne(item => item.Equipment).WithMany(item => item.LeaseAgreements).HasForeignKey(item => item.EquipmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.LessorBusinessPartner).WithMany().HasForeignKey(item => item.LessorBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EquipmentProjectUsage>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.UnitRate).HasPrecision(18, 2);
+            entity.Property(item => item.SharedUsageReason).HasMaxLength(500);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.EquipmentId, item.EntryDate, item.ExitDate });
+            entity.HasOne(item => item.Equipment).WithMany(item => item.ProjectUsages).HasForeignKey(item => item.EquipmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.LeaseAgreement).WithMany().HasForeignKey(item => item.LeaseAgreementId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EquipmentWorkPeriod>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Notes).HasMaxLength(500);
+            entity.HasIndex(item => new { item.UsageId, item.StartDate, item.EndDate });
+            entity.HasOne(item => item.Usage).WithMany(item => item.Periods).HasForeignKey(item => item.UsageId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<EquipmentSettlement>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.BaseAmount).HasPrecision(18, 2);
+            entity.Property(item => item.TotalAmount).HasPrecision(18, 2);
+            entity.Property(item => item.OffsetAmount).HasPrecision(18, 2);
+            entity.Property(item => item.ModificationReason).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.PreviousSnapshotJson).HasMaxLength(8000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => item.UsageId).IsUnique();
+            entity.HasIndex(item => item.PayableEntryId).IsUnique();
+            entity.HasOne(item => item.Usage).WithOne(item => item.Settlement).HasForeignKey<EquipmentSettlement>(item => item.UsageId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.PayableEntry).WithMany().HasForeignKey(item => item.PayableEntryId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EquipmentSettlementAdjustment>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.AdjustmentType).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.Reason).HasMaxLength(500);
+            entity.HasOne(item => item.Settlement).WithMany(item => item.Adjustments).HasForeignKey(item => item.SettlementId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<EquipmentAdvancePayment>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.Notes).HasMaxLength(500);
+            entity.HasOne(item => item.Usage).WithMany(item => item.AdvancePayments).HasForeignKey(item => item.UsageId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.PaymentEntry).WithMany().HasForeignKey(item => item.PaymentEntryId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EquipmentOwnershipHistory>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ExternalRecipientName).HasMaxLength(200);
+            entity.Property(item => item.TransferAmount).HasPrecision(18, 2);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.HasOne(item => item.Equipment).WithMany(item => item.OwnershipHistory).HasForeignKey(item => item.EquipmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.FromLegalEntity).WithMany().HasForeignKey(item => item.FromLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ToLegalEntity).WithMany().HasForeignKey(item => item.ToLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EquipmentMaintenanceRecord>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.MaintenanceType).HasMaxLength(100);
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.Provider).HasMaxLength(200);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.HasIndex(item => new { item.NextDueDate, item.EquipmentId });
+            entity.HasOne(item => item.Equipment).WithMany(item => item.MaintenanceRecords).HasForeignKey(item => item.EquipmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<OfflineEquipmentUsageSync>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(item => item.Status).HasMaxLength(30).IsRequired();
+            entity.Property(item => item.LastError).HasMaxLength(2000);
+            entity.HasIndex(item => new { item.UserId, item.ClientDraftId }).IsUnique();
+            entity.HasOne(item => item.User).WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.EquipmentProjectUsage).WithMany().HasForeignKey(item => item.EquipmentProjectUsageId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<OfflineEquipmentAttachmentSync>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => new { item.OfflineEquipmentUsageSyncId, item.ClientAttachmentId }).IsUnique();
+            entity.HasOne(item => item.UsageSync).WithMany(item => item.Attachments).HasForeignKey(item => item.OfflineEquipmentUsageSyncId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureOfflineModel(ModelBuilder builder)
+    {
+        builder.Entity<OfflineDraftSync>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(item => item.LastError).HasMaxLength(2000);
+            entity.HasIndex(item => new { item.UserId, item.ClientDraftId }).IsUnique();
+            entity.HasIndex(item => new { item.Status, item.UpdatedAt });
+            entity.HasOne(item => item.User).WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.StageResult).WithMany().HasForeignKey(item => item.StageResultId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<OfflineAttachmentSync>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => new { item.OfflineDraftSyncId, item.ClientAttachmentId }).IsUnique();
+            entity.HasOne(item => item.DraftSync).WithMany(sync => sync.Attachments).HasForeignKey(item => item.OfflineDraftSyncId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureDataExchangeModel(ModelBuilder builder)
@@ -386,6 +591,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.OpeningBalance).HasPrecision(18, 2);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.LegalEntityId, item.AccountName }).IsUnique();
+            entity.HasIndex(item => new { item.LegalEntityId, item.IsDefaultCollection })
+                .IsUnique()
+                .HasFilter("[IsDefaultCollection] = 1");
+            entity.HasIndex(item => new { item.LegalEntityId, item.IsDefaultPayment })
+                .IsUnique()
+                .HasFilter("[IsDefaultPayment] = 1");
+            entity.HasIndex(item => new { item.LegalEntityId, item.IsDefaultInvoice })
+                .IsUnique()
+                .HasFilter("[IsDefaultInvoice] = 1");
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
         });
     }

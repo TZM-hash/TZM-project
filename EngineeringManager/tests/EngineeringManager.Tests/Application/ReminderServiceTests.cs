@@ -3,10 +3,13 @@ using EngineeringManager.Application.Payroll;
 using EngineeringManager.Application.Reminders;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
+using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Offline;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Reminders;
+using EngineeringManager.Domain.StageResults;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Finance;
 using EngineeringManager.Infrastructure.Payroll;
@@ -35,6 +38,9 @@ public sealed class ReminderServiceTests
         reminders.Should().Contain(item => item.Type == ReminderType.UnpaidPayroll);
         reminders.Should().Contain(item => item.Type == ReminderType.ImportFailed);
         reminders.Should().Contain(item => item.Type == ReminderType.BackupFailed);
+        reminders.Should().Contain(item => item.Type == ReminderType.CompanyCertificateExpiring);
+        reminders.Should().Contain(item => item.Type == ReminderType.EquipmentLeaseExpiring);
+        reminders.Should().Contain(item => item.Type == ReminderType.EquipmentMaintenanceDue);
         reminders.Select(item => item.DeduplicationKey).Should().OnlyHaveUniqueItems();
     }
 
@@ -47,6 +53,48 @@ public sealed class ReminderServiceTests
 
         await fixture.Service.MarkReadAsync(reminder.Id, CancellationToken.None);
         await fixture.Service.ResolveAsync(reminder.Id, CancellationToken.None);
+
+        (await fixture.Service.ListAsync(false, CancellationToken.None)).Should().NotContain(item => item.Id == reminder.Id);
+        (await fixture.Service.ListAsync(true, CancellationToken.None)).Single(item => item.Id == reminder.Id).Status.Should().Be(ReminderStatus.Resolved);
+    }
+
+    [Fact]
+    public async Task OfflineFailureCreatesReminderAndSuccessfulSyncResolvesIt()
+    {
+        await using var fixture = await ReminderFixture.CreateAsync();
+        var project = await fixture.Db.Projects.SingleAsync();
+        var user = new ApplicationUser { UserName = "offline-reminder", NormalizedUserName = "OFFLINE-REMINDER", DisplayName = "离线提醒用户" };
+        var result = new StageResult
+        {
+            Project = project,
+            Title = "失败草稿",
+            ResultType = StageResultType.Progress,
+            Status = StageResultStatus.Draft,
+            ResultDate = new DateOnly(2026, 7, 16),
+            SubmittedByUser = user,
+            IsOfflineDraft = true
+        };
+        var sync = new OfflineDraftSync
+        {
+            User = user,
+            ClientDraftId = Guid.NewGuid(),
+            LastOperationId = Guid.NewGuid(),
+            StageResult = result,
+            LastServerVersion = result.ConcurrencyStamp,
+            Status = OfflineSyncStatus.Failed,
+            LastError = "照片上传失败"
+        };
+        fixture.Db.Add(sync);
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Service.RefreshAsync(new DateOnly(2026, 7, 16), CancellationToken.None);
+        var reminder = (await fixture.Service.ListAsync(false, CancellationToken.None)).Single(item => item.Type == ReminderType.OfflineSyncFailed);
+        reminder.Message.Should().Contain("照片上传失败");
+
+        sync.Status = OfflineSyncStatus.Synced;
+        sync.LastError = null;
+        await fixture.Db.SaveChangesAsync();
+        await fixture.Service.RefreshAsync(new DateOnly(2026, 7, 16), CancellationToken.None);
 
         (await fixture.Service.ListAsync(false, CancellationToken.None)).Should().NotContain(item => item.Id == reminder.Id);
         (await fixture.Service.ListAsync(true, CancellationToken.None)).Single(item => item.Id == reminder.Id).Status.Should().Be(ReminderStatus.Resolved);
@@ -82,6 +130,11 @@ public sealed class ReminderServiceTests
             project.Milestones.Add(new ProjectMilestone { Project = project, Name = "节点一", PlannedDate = new DateOnly(2026, 7, 15), IsCompleted = false });
             var employee = new Employee { EmployeeNumber = "REM-E", Name = "提醒员工", EmployeeType = EmployeeType.Formal };
             db.AddRange(legalEntity, partner, project, employee);
+            var rentedEquipment = new Equipment { EquipmentNumber = "REM-EQ", Name = "提醒租赁设备", OwnershipType = EquipmentOwnershipType.Rented, LessorBusinessPartner = partner };
+            rentedEquipment.LeaseAgreements.Add(new EquipmentLeaseAgreement { Equipment = rentedEquipment, LessorBusinessPartner = partner, StartDate = new DateOnly(2026, 6, 1), EndDate = new DateOnly(2026, 7, 20), RentMode = RentMode.Daily, UnitRate = 100m });
+            rentedEquipment.MaintenanceRecords.Add(new EquipmentMaintenanceRecord { Equipment = rentedEquipment, NextDueDate = new DateOnly(2026, 7, 18) });
+            db.Add(rentedEquipment);
+            db.CompanyCertificates.Add(new CompanyCertificate { LegalEntity = legalEntity, CertificateType = "营业执照", CertificateNumber = "REM-LIC", ExpiresOn = new DateOnly(2026, 7, 20) });
             await db.SaveChangesAsync();
             await finance.AddReceivableAsync(new CreateReceivableRequest(project.Id, null, legalEntity.Id, partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, null), CancellationToken.None);
             await finance.AddPayableAsync(new CreatePayableRequest(project.Id, null, legalEntity.Id, partner.Id, PayableSourceType.Manual, new DateOnly(2026, 7, 1), null, 80m, null), CancellationToken.None);

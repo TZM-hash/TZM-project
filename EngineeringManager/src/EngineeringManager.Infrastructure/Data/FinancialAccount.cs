@@ -13,6 +13,9 @@ public sealed class FinancialAccount
     public string? BankName { get; set; }
     public FinancialAccountType AccountType { get; set; }
     public decimal OpeningBalance { get; set; }
+    public bool IsDefaultCollection { get; set; }
+    public bool IsDefaultPayment { get; set; }
+    public bool IsDefaultInvoice { get; set; }
     public bool IsActive { get; set; } = true;
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();
 }

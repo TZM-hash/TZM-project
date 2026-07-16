@@ -22,7 +22,7 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("EngineeringManager.Domain.Organization.LegalEntity", b =>
+            modelBuilder.Entity("EngineeringManager.Domain.Organization.CompanyCategory", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -33,6 +33,10 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -41,8 +45,123 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("SortOrder", "Name");
+
+                    b.ToTable("CompanyCategories");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("10000000-0000-0000-0000-000000000001"),
+                            Code = "GENERAL_COMPANY",
+                            ConcurrencyStamp = new Guid("20000000-0000-0000-0000-000000000001"),
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "一般纳税人有限公司",
+                            SortOrder = 10,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("10000000-0000-0000-0000-000000000002"),
+                            Code = "SMALL_COMPANY",
+                            ConcurrencyStamp = new Guid("20000000-0000-0000-0000-000000000002"),
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "小规模纳税人有限公司",
+                            SortOrder = 20,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("10000000-0000-0000-0000-000000000003"),
+                            Code = "SMALL_SOLE",
+                            ConcurrencyStamp = new Guid("20000000-0000-0000-0000-000000000003"),
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "小规模个体工商户",
+                            SortOrder = 30,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("10000000-0000-0000-0000-000000000004"),
+                            Code = "OTHER",
+                            ConcurrencyStamp = new Guid("20000000-0000-0000-0000-000000000004"),
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "其他主体",
+                            SortOrder = 90,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        });
+                });
+
+            modelBuilder.Entity("EngineeringManager.Domain.Organization.LegalEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BusinessAddress")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid?>("CompanyCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("InvoiceTitle")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LegalRepresentative")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("RegisteredAddress")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("ShortName")
                         .IsRequired()
@@ -60,6 +179,8 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.HasIndex("Code")
                         .IsUnique();
+
+                    b.HasIndex("CompanyCategoryId");
 
                     b.HasIndex("UnifiedSocialCreditCode")
                         .IsUnique()
@@ -583,6 +704,61 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.ToTable("CollectionEntries");
                 });
 
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.CompanyCertificate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AttachmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CertificateNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CertificateType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateOnly?>("ExpiresOn")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateOnly?>("IssuedOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttachmentId");
+
+                    b.HasIndex("ExpiresOn", "IsDeleted");
+
+                    b.HasIndex("LegalEntityId", "CertificateType", "CertificateNumber");
+
+                    b.ToTable("CompanyCertificates");
+                });
+
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.Contract", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1065,6 +1241,434 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.ToTable("EmployeeOtherPayments");
                 });
 
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.Equipment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("EquipmentNumber")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<decimal?>("InternalDailyRate")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("LessorBusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("OwnerLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("OwnershipType")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("PurchaseAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly?>("PurchaseDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EquipmentNumber")
+                        .IsUnique();
+
+                    b.HasIndex("LessorBusinessPartnerId");
+
+                    b.HasIndex("OwnerLegalEntityId");
+
+                    b.ToTable("Equipment");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentAdvancePayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("PaymentDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("PaymentEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("PaymentType")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UsageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentEntryId");
+
+                    b.HasIndex("UsageId");
+
+                    b.ToTable("EquipmentAdvancePayments");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentLeaseAgreement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContractNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("EquipmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LessorBusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("MonthlyProrationMode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("RentMode")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("UnitRate")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LessorBusinessPartnerId");
+
+                    b.HasIndex("EquipmentId", "StartDate");
+
+                    b.ToTable("EquipmentLeaseAgreements");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentMaintenanceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("EquipmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly?>("MaintenanceDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("MaintenanceType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateOnly?>("NextDueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EquipmentId");
+
+                    b.HasIndex("NextDueDate", "EquipmentId");
+
+                    b.ToTable("EquipmentMaintenanceRecords");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentOwnershipHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("EquipmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ExternalRecipientName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid?>("FromLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("ToLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("TransferAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("TransferDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("TransferType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EquipmentId");
+
+                    b.HasIndex("FromLegalEntityId");
+
+                    b.HasIndex("ToLegalEntityId");
+
+                    b.ToTable("EquipmentOwnershipHistories");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentProjectUsage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("EntryDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("EquipmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly?>("ExitDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("LeaseAgreementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("MonthlyProrationMode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("RentMode")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("SharedUsageOverride")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("SharedUsageReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("UnitRate")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeaseAgreementId");
+
+                    b.HasIndex("LegalEntityId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("EquipmentId", "EntryDate", "ExitDate");
+
+                    b.ToTable("EquipmentProjectUsages");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentSettlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("BaseAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ModificationReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("OffsetAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("PayableEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PreviousSnapshotJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateOnly>("SettlementDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("UsageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PayableEntryId")
+                        .IsUnique()
+                        .HasFilter("[PayableEntryId] IS NOT NULL");
+
+                    b.HasIndex("UsageId")
+                        .IsUnique();
+
+                    b.ToTable("EquipmentSettlements");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentSettlementAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AdjustmentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("EquipmentSettlementAdjustments");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentWorkPeriod", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsChargeable")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PeriodType")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("UsageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsageId", "StartDate", "EndDate");
+
+                    b.ToTable("EquipmentWorkPeriods");
+                });
+
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.ExpensePayment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1242,6 +1846,15 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsDefaultCollection")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDefaultInvoice")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDefaultPayment")
+                        .HasColumnType("bit");
+
                     b.Property<Guid>("LegalEntityId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1253,6 +1866,18 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.HasIndex("LegalEntityId", "AccountName")
                         .IsUnique();
+
+                    b.HasIndex("LegalEntityId", "IsDefaultCollection")
+                        .IsUnique()
+                        .HasFilter("[IsDefaultCollection] = 1");
+
+                    b.HasIndex("LegalEntityId", "IsDefaultInvoice")
+                        .IsUnique()
+                        .HasFilter("[IsDefaultInvoice] = 1");
+
+                    b.HasIndex("LegalEntityId", "IsDefaultPayment")
+                        .IsUnique()
+                        .HasFilter("[IsDefaultPayment] = 1");
 
                     b.ToTable("FinancialAccounts");
                 });
@@ -1463,6 +2088,158 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("InvoiceReceivableLinks");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineAttachmentSync", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AttachmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClientAttachmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("OfflineDraftSyncId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttachmentId");
+
+                    b.HasIndex("OfflineDraftSyncId", "ClientAttachmentId")
+                        .IsUnique();
+
+                    b.ToTable("OfflineAttachmentSyncs");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineDraftSync", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClientDraftId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<Guid>("LastOperationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LastServerVersion")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("StageResultId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StageResultId");
+
+                    b.HasIndex("Status", "UpdatedAt");
+
+                    b.HasIndex("UserId", "ClientDraftId")
+                        .IsUnique();
+
+                    b.ToTable("OfflineDraftSyncs");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineEquipmentAttachmentSync", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AttachmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClientAttachmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("OfflineEquipmentUsageSyncId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttachmentId");
+
+                    b.HasIndex("OfflineEquipmentUsageSyncId", "ClientAttachmentId")
+                        .IsUnique();
+
+                    b.ToTable("OfflineEquipmentAttachmentSyncs");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineEquipmentUsageSync", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClientDraftId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("EquipmentProjectUsageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<Guid>("LastOperationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LastServerVersion")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EquipmentProjectUsageId");
+
+                    b.HasIndex("UserId", "ClientDraftId")
+                        .IsUnique();
+
+                    b.ToTable("OfflineEquipmentUsageSyncs");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.PartnerContact", b =>
@@ -2595,6 +3372,16 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("EngineeringManager.Domain.Organization.LegalEntity", b =>
+                {
+                    b.HasOne("EngineeringManager.Domain.Organization.CompanyCategory", "CompanyCategory")
+                        .WithMany()
+                        .HasForeignKey("CompanyCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CompanyCategory");
+                });
+
             modelBuilder.Entity("EngineeringManager.Domain.Organization.OrganizationUnit", b =>
                 {
                     b.HasOne("EngineeringManager.Domain.Organization.OrganizationUnit", "Parent")
@@ -2723,6 +3510,24 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Navigation("Project");
 
                     b.Navigation("Receivable");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.CompanyCertificate", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Attachment", "Attachment")
+                        .WithMany()
+                        .HasForeignKey("AttachmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "LegalEntity")
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Attachment");
+
+                    b.Navigation("LegalEntity");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.Contract", b =>
@@ -2949,6 +3754,170 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Navigation("RelatedPayable");
                 });
 
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.Equipment", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.BusinessPartner", "LessorBusinessPartner")
+                        .WithMany()
+                        .HasForeignKey("LessorBusinessPartnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "OwnerLegalEntity")
+                        .WithMany()
+                        .HasForeignKey("OwnerLegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("LessorBusinessPartner");
+
+                    b.Navigation("OwnerLegalEntity");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentAdvancePayment", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.PaymentEntry", "PaymentEntry")
+                        .WithMany()
+                        .HasForeignKey("PaymentEntryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.EquipmentProjectUsage", "Usage")
+                        .WithMany("AdvancePayments")
+                        .HasForeignKey("UsageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PaymentEntry");
+
+                    b.Navigation("Usage");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentLeaseAgreement", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Equipment", "Equipment")
+                        .WithMany("LeaseAgreements")
+                        .HasForeignKey("EquipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.BusinessPartner", "LessorBusinessPartner")
+                        .WithMany()
+                        .HasForeignKey("LessorBusinessPartnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Equipment");
+
+                    b.Navigation("LessorBusinessPartner");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentMaintenanceRecord", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Equipment", "Equipment")
+                        .WithMany("MaintenanceRecords")
+                        .HasForeignKey("EquipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Equipment");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentOwnershipHistory", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Equipment", "Equipment")
+                        .WithMany("OwnershipHistory")
+                        .HasForeignKey("EquipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "FromLegalEntity")
+                        .WithMany()
+                        .HasForeignKey("FromLegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "ToLegalEntity")
+                        .WithMany()
+                        .HasForeignKey("ToLegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Equipment");
+
+                    b.Navigation("FromLegalEntity");
+
+                    b.Navigation("ToLegalEntity");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentProjectUsage", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Equipment", "Equipment")
+                        .WithMany("ProjectUsages")
+                        .HasForeignKey("EquipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.EquipmentLeaseAgreement", "LeaseAgreement")
+                        .WithMany()
+                        .HasForeignKey("LeaseAgreementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "LegalEntity")
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Equipment");
+
+                    b.Navigation("LeaseAgreement");
+
+                    b.Navigation("LegalEntity");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentSettlement", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.PayableEntry", "PayableEntry")
+                        .WithMany()
+                        .HasForeignKey("PayableEntryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.EquipmentProjectUsage", "Usage")
+                        .WithOne("Settlement")
+                        .HasForeignKey("EngineeringManager.Infrastructure.Data.EquipmentSettlement", "UsageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PayableEntry");
+
+                    b.Navigation("Usage");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentSettlementAdjustment", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.EquipmentSettlement", "Settlement")
+                        .WithMany("Adjustments")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentWorkPeriod", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.EquipmentProjectUsage", "Usage")
+                        .WithMany("Periods")
+                        .HasForeignKey("UsageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usage");
+                });
+
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.ExpensePayment", b =>
                 {
                     b.HasOne("EngineeringManager.Infrastructure.Data.FinancialAccount", "Account")
@@ -3092,6 +4061,82 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Navigation("Invoice");
 
                     b.Navigation("Receivable");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineAttachmentSync", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Attachment", "Attachment")
+                        .WithMany()
+                        .HasForeignKey("AttachmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.OfflineDraftSync", "DraftSync")
+                        .WithMany("Attachments")
+                        .HasForeignKey("OfflineDraftSyncId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Attachment");
+
+                    b.Navigation("DraftSync");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineDraftSync", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.StageResult", "StageResult")
+                        .WithMany()
+                        .HasForeignKey("StageResultId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("StageResult");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineEquipmentAttachmentSync", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Attachment", "Attachment")
+                        .WithMany()
+                        .HasForeignKey("AttachmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.OfflineEquipmentUsageSync", "UsageSync")
+                        .WithMany("Attachments")
+                        .HasForeignKey("OfflineEquipmentUsageSyncId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Attachment");
+
+                    b.Navigation("UsageSync");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineEquipmentUsageSync", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.EquipmentProjectUsage", "EquipmentProjectUsage")
+                        .WithMany()
+                        .HasForeignKey("EquipmentProjectUsageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("EquipmentProjectUsage");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.PartnerContact", b =>
@@ -3658,6 +4703,31 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Navigation("AffiliationHistory");
                 });
 
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.Equipment", b =>
+                {
+                    b.Navigation("LeaseAgreements");
+
+                    b.Navigation("MaintenanceRecords");
+
+                    b.Navigation("OwnershipHistory");
+
+                    b.Navigation("ProjectUsages");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentProjectUsage", b =>
+                {
+                    b.Navigation("AdvancePayments");
+
+                    b.Navigation("Periods");
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.EquipmentSettlement", b =>
+                {
+                    b.Navigation("Adjustments");
+                });
+
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.ExpenseRecord", b =>
                 {
                     b.Navigation("Payments");
@@ -3673,6 +4743,16 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Navigation("LineItemLinks");
 
                     b.Navigation("ReceivableLinks");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineDraftSync", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.OfflineEquipmentUsageSync", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.PayrollBatch", b =>

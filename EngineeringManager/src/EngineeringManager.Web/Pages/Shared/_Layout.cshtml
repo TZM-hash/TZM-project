@@ -28,8 +28,14 @@
                 <nav aria-label="主导航">
                     <a class="nav-link is-active" asp-page="/Index">总览</a>
                     <a class="nav-link" asp-page="/Projects/Index">项目管理<span class="nav-status">阶段 2</span></a>
+                    <a class="nav-link" asp-page="/Companies/Index">自有公司<span class="nav-status">阶段 8</span></a>
+                    <a class="nav-link" asp-page="/Equipment/Index">设备管理<span class="nav-status">阶段 9</span></a>
                     <a class="nav-link" asp-page="/Partners/Index">合作单位<span class="nav-status">阶段 3</span></a>
                     <a class="nav-link" asp-page="/StageResults/Index">阶段成果<span class="nav-status">阶段 3</span></a>
+                    @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager") || User.IsInRole("SiteStaff"))
+                    {
+                        <a class="nav-link" asp-page="/StageResults/Offline">现场离线<span class="nav-status">阶段 7</span></a>
+                    }
                     <a class="nav-link" asp-page="/Finance/Index">经营台账<span class="nav-status">阶段 4</span></a>
                     <a class="nav-link" asp-page="/Employees/Index">员工管理<span class="nav-status">阶段 5</span></a>
                     <a class="nav-link" asp-page="/Payroll/Index">工资台账<span class="nav-status">阶段 5</span></a>
@@ -43,7 +49,7 @@
                 </nav>
                 <div class="sidebar-footer">
                     <span class="status-dot" aria-hidden="true"></span>
-                    <span>阶段 0 基线运行中</span>
+                    <span>阶段 0～10 已完成</span>
                 </div>
             </aside>
             <main class="main-content" role="main">
