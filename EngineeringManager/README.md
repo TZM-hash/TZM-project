@@ -1,6 +1,6 @@
 # EngineeringManager
 
-工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。当前已完成阶段 0～8，后续设备和集成交付会按 `docs/开发进度.md` 的阶段路线图连续实现。
+工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。当前已完成阶段 0～9，正在按 `docs/开发进度.md` 进入阶段 10 集成验收与交付。
 
 ## 本地工具
 
@@ -34,7 +34,7 @@ $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 & .\.tools\dotnet-tools\dotnet-ef.exe database update --project .\src\EngineeringManager.Infrastructure\EngineeringManager.Infrastructure.csproj --startup-project .\src\EngineeringManager.Web\EngineeringManager.Web.csproj
 ```
 
-阶段 0～7 的历史迁移和阶段 8 的 `CompanyManagement` 已应用到 `EngineeringManager_Test`。该测试库会保留到未来实际生产部署并确认正式系统可用后再删除；自动开发不操作生产数据库。
+阶段 0～8 的历史迁移、阶段 9 的 `EquipmentManagement` 和 `EquipmentOfflinePhotos` 已应用到 `EngineeringManager_Test`。该测试库会保留到未来实际生产部署并确认正式系统可用后再删除；自动开发不操作生产数据库。
 
 阶段 1 的角色模板可以通过一次性环境变量启用幂等种子；系统不会自动生成带密码的管理员账号：
 
@@ -65,8 +65,9 @@ $ErrorActionPreference = 'Stop'
 - 日志预留目录为 `src/EngineeringManager.Web/App_Data/logs`；ASP.NET Core 结构化日志仍由宿主配置决定。
 - PWA Service Worker 只缓存页面外壳、CSS、JS 和 Manifest，不缓存财务、工资、合同或其他业务 API 数据。
 - 阶段成果、工程量草稿、备注和照片已支持有限离线、幂等同步、版本冲突、失败重试和本机清理。
+- 设备进退场、施工/停工日期段、备注和照片使用同一 IndexedDB 按用户隔离，支持幂等同步、版本冲突、照片独立重试和本机清理；租金、结算与财务端点不进入离线缓存。
 - 离线照片保存前压缩到最长边约 1920 像素、目标不超过 3 MB，每份草稿最多 20 张。
 
 ## 当前范围边界
 
-阶段 8 已扩展现有 `LegalEntity` 为轻量自有公司管理：组合分类、多账户默认用途、证照、公司/项目数据范围、合同/财务/工资/账户汇总、指标卡和 Excel 导入导出。公开注册已关闭，登录页使用公司内部中文入口。系统不建设公司内部往来台账，公司间资金只记录真实账户转账。设备和最终集成交付进入阶段 9～10。
+阶段 8 已扩展现有 `LegalEntity` 为轻量自有公司管理。阶段 9 已交付逐台设备档案、自有/租赁权属、项目进退场、多段施工/停工日期、租金计算、押金预付款、单次最终结算、应付关联、转让、非必填维保、两类到期提醒、Excel 导入导出以及设备现场有限离线。公开注册已关闭；系统不建设公司内部往来台账。阶段 10 负责全模块回归、性能、备份恢复、发布包和部署手册，不实际部署生产环境。

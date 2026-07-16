@@ -5,7 +5,7 @@
     if (!root || !('indexedDB' in window)) return;
 
     const DB_NAME = 'engineering-manager-offline';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const MAX_PHOTOS = 20;
     const MAX_EDGE = 1920;
     const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
@@ -57,6 +57,9 @@
                 }
                 if (!database.objectStoreNames.contains('queue')) database.createObjectStore('queue', { keyPath: 'id' });
                 if (!database.objectStoreNames.contains('metadata')) database.createObjectStore('metadata', { keyPath: ['userId', 'key'] });
+                if (!database.objectStoreNames.contains('equipmentDrafts')) database.createObjectStore('equipmentDrafts', { keyPath: ['userId', 'clientDraftId'] });
+                if (!database.objectStoreNames.contains('equipmentPhotos')) database.createObjectStore('equipmentPhotos', { keyPath: ['userId', 'clientAttachmentId'] });
+                if (!database.objectStoreNames.contains('equipmentQueue')) database.createObjectStore('equipmentQueue', { keyPath: 'id' });
             };
             request.onsuccess = function () { resolve(request.result); };
             request.onerror = function () { reject(request.error); };

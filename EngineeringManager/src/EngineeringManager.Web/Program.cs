@@ -15,7 +15,11 @@ using EngineeringManager.Infrastructure.StageResults;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Infrastructure.Finance;
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Application.Equipment;
+using EngineeringManager.Application.EquipmentOffline;
 using EngineeringManager.Infrastructure.Employees;
+using EngineeringManager.Infrastructure.Equipment;
+using EngineeringManager.Infrastructure.EquipmentOffline;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Infrastructure.Payroll;
 using EngineeringManager.Application.EmployeeLedger;
@@ -87,6 +91,9 @@ public sealed class Program
         builder.Services.AddScoped<IDashboardService, DashboardService>();
         builder.Services.AddScoped<ICompanyManagementService, CompanyManagementService>();
         builder.Services.AddScoped<ICompanyActorService, CompanyActorService>();
+        builder.Services.AddScoped<IEquipmentService, EquipmentService>();
+        builder.Services.AddScoped<IEquipmentSettlementService, EquipmentSettlementService>();
+        builder.Services.AddScoped<IEquipmentOfflineService, EquipmentOfflineService>();
         builder.Services
             .AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])

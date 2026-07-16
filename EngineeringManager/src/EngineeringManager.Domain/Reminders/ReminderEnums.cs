@@ -11,7 +11,9 @@ public enum ReminderType
     ImportFailed = 7,
     ExportFailed = 8,
     BackupFailed = 9,
-    CompanyCertificateExpiring = 10
+    CompanyCertificateExpiring = 10,
+    EquipmentLeaseExpiring = 11,
+    EquipmentMaintenanceDue = 12
 }
 
 public enum ReminderSeverity { Info = 1, Warning = 2, Critical = 3 }

@@ -1,6 +1,6 @@
 const CACHE_NAME = 'engineering-manager-shell-v2';
-const SHELL = ['/css/base.css', '/css/components.css', '/css/pages.css', '/css/themes.css', '/js/site.js', '/js/offline-stage-results.js', '/manifest.webmanifest'];
-const SENSITIVE_PREFIXES = ['/api/', '/Finance', '/Payroll', '/EmployeeLedger', '/DataExchange', '/Backups', '/Reminders', '/Projects/Contracts'];
+const SHELL = ['/css/base.css', '/css/components.css', '/css/pages.css', '/css/themes.css', '/js/site.js', '/js/offline-stage-results.js', '/js/offline-equipment.js', '/manifest.webmanifest'];
+const SENSITIVE_PREFIXES = ['/api/', '/Finance', '/Payroll', '/EmployeeLedger', '/DataExchange', '/Backups', '/Reminders', '/Projects/Contracts', '/Equipment/Settlement'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -43,7 +43,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (url.pathname === '/StageResults/Offline') {
+  if (url.pathname === '/StageResults/Offline' || url.pathname === '/Equipment/Offline') {
     event.respondWith(networkFirst(request, true));
     return;
   }

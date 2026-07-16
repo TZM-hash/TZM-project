@@ -133,6 +133,34 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("issued_on", "签发日期", ExportFieldDataType.Date, false),
                 new("expires_on", "有效期", ExportFieldDataType.Date, false),
                 new("notes", "备注", ExportFieldDataType.Text, false)
+            ],
+            [ExportDataset.Equipment] =
+            [
+                new("equipment_number", "设备编号", ExportFieldDataType.Text, true),
+                new("name", "设备名称", ExportFieldDataType.Text, true),
+                new("model", "型号", ExportFieldDataType.Text, true),
+                new("category", "分类", ExportFieldDataType.Text, true),
+                new("ownership", "权属", ExportFieldDataType.Text, true),
+                new("owner_company", "所属公司", ExportFieldDataType.Text, true),
+                new("lessor", "出租方", ExportFieldDataType.Text, true),
+                new("status", "状态", ExportFieldDataType.Text, true),
+                new("internal_daily_rate", "内部参考日价", ExportFieldDataType.Number, false)
+            ],
+            [ExportDataset.EquipmentLeases] =
+            [
+                new("equipment_number", "设备编号", ExportFieldDataType.Text, true), new("contract_number", "租赁合同号", ExportFieldDataType.Text, true), new("lessor", "出租方", ExportFieldDataType.Text, true), new("start_date", "开始日期", ExportFieldDataType.Date, true), new("end_date", "结束日期", ExportFieldDataType.Date, true), new("rent_mode", "计租方式", ExportFieldDataType.Text, true), new("unit_rate", "基础单价", ExportFieldDataType.Number, true)
+            ],
+            [ExportDataset.EquipmentUsages] =
+            [
+                new("equipment_number", "设备编号", ExportFieldDataType.Text, true), new("project_number", "项目编号", ExportFieldDataType.Text, true), new("company", "签约公司", ExportFieldDataType.Text, true), new("entry_date", "进场日期", ExportFieldDataType.Date, true), new("exit_date", "退场日期", ExportFieldDataType.Date, true), new("rent_mode", "计租方式", ExportFieldDataType.Text, true), new("unit_rate", "基础单价", ExportFieldDataType.Number, true)
+            ],
+            [ExportDataset.EquipmentPeriods] =
+            [
+                new("equipment_number", "设备编号", ExportFieldDataType.Text, true), new("project_number", "项目编号", ExportFieldDataType.Text, true), new("start_date", "开始日期", ExportFieldDataType.Date, true), new("end_date", "结束日期", ExportFieldDataType.Date, true), new("period_type", "日期段类型", ExportFieldDataType.Text, true), new("chargeable", "是否计租", ExportFieldDataType.Boolean, true)
+            ],
+            [ExportDataset.EquipmentSettlements] =
+            [
+                new("equipment_number", "设备编号", ExportFieldDataType.Text, true), new("project_number", "项目编号", ExportFieldDataType.Text, true), new("settlement_date", "结算日期", ExportFieldDataType.Date, true), new("base_amount", "基础租金", ExportFieldDataType.Number, true), new("total_amount", "结算总额", ExportFieldDataType.Number, true), new("offset_amount", "抵扣金额", ExportFieldDataType.Number, true), new("payable_id", "应付记录", ExportFieldDataType.Text, false)
             ]
         };
 
@@ -157,6 +185,11 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ExportDataset.Companies => await ExportCompaniesAsync(fields, cancellationToken),
             ExportDataset.CompanyAccounts => await ExportCompanyAccountsAsync(fields, cancellationToken),
             ExportDataset.CompanyCertificates => await ExportCompanyCertificatesAsync(fields, cancellationToken),
+            ExportDataset.Equipment => await ExportEquipmentAsync(fields, cancellationToken),
+            ExportDataset.EquipmentLeases => await ExportEquipmentLeasesAsync(fields, cancellationToken),
+            ExportDataset.EquipmentUsages => await ExportEquipmentUsagesAsync(fields, cancellationToken),
+            ExportDataset.EquipmentPeriods => await ExportEquipmentPeriodsAsync(fields, cancellationToken),
+            ExportDataset.EquipmentSettlements => await ExportEquipmentSettlementsAsync(fields, cancellationToken),
             _ => throw new NotSupportedException($"暂不支持导出数据集：{request.Dataset}")
         };
         await SaveLastSelectionAsync(userId, request.Dataset, fields.Select(item => item.Key).ToArray(), request.CutoffDate, cancellationToken);
@@ -448,6 +481,36 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["expires_on"] = item.ExpiresOn,
             ["notes"] = item.Notes
         })), "公司证照");
+    }
+
+    private async Task<ExportFileResult> ExportEquipmentAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
+    {
+        var items = await db.Equipment.AsNoTracking().Include(item => item.OwnerLegalEntity).Include(item => item.LessorBusinessPartner).OrderBy(item => item.EquipmentNumber).ToListAsync(token);
+        return CreateSingleSheet("设备档案", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.EquipmentNumber, ["name"] = item.Name, ["model"] = item.Model, ["category"] = item.Category, ["ownership"] = item.OwnershipType.ToString(), ["owner_company"] = item.OwnerLegalEntity?.Name, ["lessor"] = item.LessorBusinessPartner?.Name, ["status"] = item.Status.ToString(), ["internal_daily_rate"] = item.InternalDailyRate })), "设备档案");
+    }
+
+    private async Task<ExportFileResult> ExportEquipmentLeasesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
+    {
+        var items = await db.EquipmentLeaseAgreements.AsNoTracking().Include(item => item.Equipment).Include(item => item.LessorBusinessPartner).OrderBy(item => item.Equipment.EquipmentNumber).ToListAsync(token);
+        return CreateSingleSheet("租赁约定", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Equipment.EquipmentNumber, ["contract_number"] = item.ContractNumber, ["lessor"] = item.LessorBusinessPartner.Name, ["start_date"] = item.StartDate, ["end_date"] = item.EndDate, ["rent_mode"] = item.RentMode.ToString(), ["unit_rate"] = item.UnitRate })), "设备租赁");
+    }
+
+    private async Task<ExportFileResult> ExportEquipmentUsagesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
+    {
+        var items = await db.EquipmentProjectUsages.AsNoTracking().Include(item => item.Equipment).Include(item => item.Project).Include(item => item.LegalEntity).OrderBy(item => item.EntryDate).ToListAsync(token);
+        return CreateSingleSheet("设备使用", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Equipment.EquipmentNumber, ["project_number"] = item.Project.ProjectNumber, ["company"] = item.LegalEntity.Name, ["entry_date"] = item.EntryDate, ["exit_date"] = item.ExitDate, ["rent_mode"] = item.RentMode.ToString(), ["unit_rate"] = item.UnitRate })), "设备使用");
+    }
+
+    private async Task<ExportFileResult> ExportEquipmentPeriodsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
+    {
+        var items = await db.EquipmentWorkPeriods.AsNoTracking().Include(item => item.Usage).ThenInclude(item => item.Equipment).Include(item => item.Usage).ThenInclude(item => item.Project).OrderBy(item => item.StartDate).ToListAsync(token);
+        return CreateSingleSheet("设备日期段", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Usage.Equipment.EquipmentNumber, ["project_number"] = item.Usage.Project.ProjectNumber, ["start_date"] = item.StartDate, ["end_date"] = item.EndDate, ["period_type"] = item.PeriodType.ToString(), ["chargeable"] = item.IsChargeable })), "设备日期段");
+    }
+
+    private async Task<ExportFileResult> ExportEquipmentSettlementsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
+    {
+        var items = await db.EquipmentSettlements.AsNoTracking().Include(item => item.Usage).ThenInclude(item => item.Equipment).Include(item => item.Usage).ThenInclude(item => item.Project).OrderBy(item => item.SettlementDate).ToListAsync(token);
+        return CreateSingleSheet("设备结算", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Usage.Equipment.EquipmentNumber, ["project_number"] = item.Usage.Project.ProjectNumber, ["settlement_date"] = item.SettlementDate, ["base_amount"] = item.BaseAmount, ["total_amount"] = item.TotalAmount, ["offset_amount"] = item.OffsetAmount, ["payable_id"] = item.PayableEntryId?.ToString() })), "设备结算");
     }
 
     private static object?[] Project(IReadOnlyList<ExportFieldDefinition> fields, Dictionary<string, object?> values) =>

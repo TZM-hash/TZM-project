@@ -35,7 +35,7 @@ public sealed class HomePageTests
         html.Should().Contain("/css/base.");
         html.Should().NotContain("https://cdn.");
         html.Should().Contain("/manifest.");
-        html.Should().Contain("阶段 0～8 已完成");
+        html.Should().Contain("阶段 0～9 已完成");
         html.Should().NotContain("阶段 7 开发中");
         manifest.Should().Contain("工程项目经营管理系统");
         serviceWorker.Should().Contain("engineering-manager-shell-v2");

@@ -68,6 +68,28 @@ public sealed class ReminderService(
                 nameof(CompanyCertificate), certificate.Id.ToString(), certificate.ExpiresOn, null, now);
         }
 
+        var expiringLeases = await db.EquipmentLeaseAgreements.AsNoTracking().Include(item => item.Equipment)
+            .Where(item => item.Equipment.IsActive && item.EndDate.HasValue && item.EndDate <= today.AddDays(30))
+            .ToListAsync(cancellationToken);
+        foreach (var lease in expiringLeases)
+        {
+            Upsert(existing, $"equipment-lease:{lease.Id}", ReminderType.EquipmentLeaseExpiring,
+                lease.EndDate < today ? ReminderSeverity.Critical : ReminderSeverity.Warning,
+                "设备租赁即将到期", $"{lease.Equipment.EquipmentNumber} · {lease.Equipment.Name} · {lease.EndDate:yyyy-MM-dd}",
+                nameof(EquipmentLeaseAgreement), lease.Id.ToString(), lease.EndDate, null, now);
+        }
+
+        var maintenanceDue = await db.EquipmentMaintenanceRecords.AsNoTracking().Include(item => item.Equipment)
+            .Where(item => item.Equipment.IsActive && item.NextDueDate.HasValue && item.NextDueDate <= today.AddDays(30))
+            .ToListAsync(cancellationToken);
+        foreach (var maintenance in maintenanceDue)
+        {
+            Upsert(existing, $"equipment-maintenance:{maintenance.Id}", ReminderType.EquipmentMaintenanceDue,
+                maintenance.NextDueDate < today ? ReminderSeverity.Critical : ReminderSeverity.Warning,
+                "设备维保即将到期", $"{maintenance.Equipment.EquipmentNumber} · {maintenance.Equipment.Name} · {maintenance.NextDueDate:yyyy-MM-dd}",
+                nameof(EquipmentMaintenanceRecord), maintenance.Id.ToString(), maintenance.NextDueDate, null, now);
+        }
+
         var failedImports = await db.ImportBatches.AsNoTracking().Where(item => item.Status == DataExchangeTaskStatus.Failed).ToListAsync(cancellationToken);
         foreach (var batch in failedImports)
         {

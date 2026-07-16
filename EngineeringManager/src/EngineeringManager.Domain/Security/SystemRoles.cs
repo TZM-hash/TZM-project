@@ -8,6 +8,7 @@ public static class SystemRoles
     public const string ProjectManager = "ProjectManager";
     public const string SiteStaff = "SiteStaff";
     public const string QueryOnly = "QueryOnly";
+    public const string EquipmentManager = "EquipmentManager";
 
     public static IReadOnlyList<string> All { get; } =
     [
@@ -16,6 +17,7 @@ public static class SystemRoles
         Finance,
         ProjectManager,
         SiteStaff,
-        QueryOnly
+        QueryOnly,
+        EquipmentManager
     ];
 }

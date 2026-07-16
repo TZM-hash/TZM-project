@@ -17,6 +17,11 @@ public sealed class StandardImportTests
     [InlineData(ExportDataset.Companies, "公司编码")]
     [InlineData(ExportDataset.CompanyAccounts, "公司编码")]
     [InlineData(ExportDataset.CompanyCertificates, "公司编码")]
+    [InlineData(ExportDataset.Equipment, "设备编号")]
+    [InlineData(ExportDataset.EquipmentLeases, "设备编号")]
+    [InlineData(ExportDataset.EquipmentUsages, "设备编号")]
+    [InlineData(ExportDataset.EquipmentPeriods, "设备编号")]
+    [InlineData(ExportDataset.EquipmentSettlements, "设备编号")]
     public async Task StandardTemplatesContainExpectedHeaders(ExportDataset dataset, string expectedHeader)
     {
         await using var fixture = await ImportFixture.CreateAsync();
@@ -95,6 +100,21 @@ public sealed class StandardImportTests
         company.CompanyCategoryId.Should().NotBeNull();
         (await fixture.Db.FinancialAccounts.SingleAsync()).IsDefaultInvoice.Should().BeTrue();
         (await fixture.Db.CompanyCertificates.SingleAsync()).ExpiresOn.Should().Be(new DateOnly(2030, 12, 31));
+    }
+
+    [Fact]
+    public async Task EquipmentImportResolvesOwnerCompany()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        fixture.Db.LegalEntities.Add(new EngineeringManager.Domain.Organization.LegalEntity { Code = "EQ-OWNER", Name = "设备所属公司", ShortName = "设备公司" });
+        await fixture.Db.SaveChangesAsync();
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet("设备导入", ["设备编号", "设备名称", "权属", "所属公司编码", "型号"], [["IMP-EQ", "导入挖掘机", "自有", "EQ-OWNER", "X100"]]);
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("user", ExportDataset.Equipment, "设备.xlsx", workbook.ToArray(), null), default);
+        await fixture.Service.ConfirmAsync(preview.BatchId, default);
+        var equipment = await fixture.Db.Equipment.SingleAsync();
+        equipment.EquipmentNumber.Should().Be("IMP-EQ");
+        equipment.OwnerLegalEntityId.Should().NotBeNull();
     }
 
     private sealed class ImportFixture : IAsyncDisposable
