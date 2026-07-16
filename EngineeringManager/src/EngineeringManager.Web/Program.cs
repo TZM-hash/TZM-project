@@ -36,6 +36,8 @@ using EngineeringManager.Application.Dashboard;
 using EngineeringManager.Infrastructure.Dashboard;
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Infrastructure.Companies;
+using EngineeringManager.Application.Development;
+using EngineeringManager.Infrastructure.Development;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -94,6 +96,7 @@ public sealed class Program
         builder.Services.AddScoped<IEquipmentService, EquipmentService>();
         builder.Services.AddScoped<IEquipmentSettlementService, EquipmentSettlementService>();
         builder.Services.AddScoped<IEquipmentOfflineService, EquipmentOfflineService>();
+        builder.Services.AddScoped<IDevelopmentSampleDataSeeder, DevelopmentSampleDataSeeder>();
         builder.Services
             .AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
@@ -108,6 +111,11 @@ public sealed class Program
         if (app.Configuration.GetValue<bool>("Identity:SeedRoles"))
         {
             await IdentitySeed.EnsureRolesAsync(app.Services);
+        }
+        if (app.Configuration.GetValue<bool>("DevelopmentSampleData:Enabled"))
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<IDevelopmentSampleDataSeeder>().SeedAsync(app.Environment.EnvironmentName, app.Environment.ContentRootPath, CancellationToken.None);
         }
 
         if (app.Environment.IsDevelopment())

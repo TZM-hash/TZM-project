@@ -1,6 +1,6 @@
 # EngineeringManager
 
-工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。当前已完成阶段 0～9，正在按 `docs/开发进度.md` 进入阶段 10 集成验收与交付。
+工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。阶段 0～10 已完成，本地测试库、发布包、性能基线、备份恢复演练和部署手册均已形成；尚未实际部署生产环境。
 
 ## 本地工具
 
@@ -53,6 +53,17 @@ $ErrorActionPreference = 'Stop'
 & .\.tools\pwsh\pwsh.exe -NoLogo -NoProfile -File .\scripts\quality-gate.ps1
 ```
 
+Development 测试管理员与样例数据默认关闭，必须显式开启，且服务会再次校验数据库名以 `_Test` 结尾：
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$env:Identity__SeedRoles = 'true'
+$env:DevelopmentSampleData__Enabled = 'true'
+& .\scripts\dotnet.ps1 run --project .\src\EngineeringManager.Web\EngineeringManager.Web.csproj --configuration Release
+```
+
+账号密码写入 Git 忽略的 `src/EngineeringManager.Web/App_Data/local-test-credentials.txt`，不得复制到生产环境。
+
 健康端点：
 
 - `/health/live`：进程存活检查，不访问数据库。
@@ -70,4 +81,4 @@ $ErrorActionPreference = 'Stop'
 
 ## 当前范围边界
 
-阶段 8 已扩展现有 `LegalEntity` 为轻量自有公司管理。阶段 9 已交付逐台设备档案、自有/租赁权属、项目进退场、多段施工/停工日期、租金计算、押金预付款、单次最终结算、应付关联、转让、非必填维保、两类到期提醒、Excel 导入导出以及设备现场有限离线。公开注册已关闭；系统不建设公司内部往来台账。阶段 10 负责全模块回归、性能、备份恢复、发布包和部署手册，不实际部署生产环境。
+阶段 8 已扩展现有 `LegalEntity` 为轻量自有公司管理。阶段 9 已交付完整设备管理与现场有限离线。阶段 10 已交付幂等测试样例、最终权限/业务回归、代表性性能基线、SQL Server + 附件备份恢复演练、Release 发布包和 Windows Server + IIS 部署手册。公开注册已关闭；系统不建设公司内部往来台账。生产服务器、域名、TLS 和正式数据导入须在实际部署窗口按发布清单执行。
