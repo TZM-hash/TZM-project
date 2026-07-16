@@ -16,6 +16,7 @@
 .metric-label, .metric-hint, .eyebrow { display: block; color: var(--muted); font-size: .82rem; }
 .metric-value { display: block; margin: .55rem 0 .25rem; font-size: 1.55rem; }
 .metric-value--good { color: var(--success); }
+.metric-value--warning { color: #b45309; }
 .content-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-3); margin-top: var(--space-3); }
 .panel--wide { min-height: 17rem; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
@@ -39,6 +40,22 @@
 .offline-line-row small { margin-top: .25rem; color: var(--muted); }
 .offline-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 .pwa-badge.is-offline { color: #92400e; border-color: #fcd34d; background: #fffbeb; }
+.comparison-chart, .stage-chart { display: grid; gap: 1.1rem; margin-top: var(--space-4); }
+.comparison-row, .stage-row { display: grid; gap: .5rem; }
+.chart-label, .chart-values { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.chart-label span, .chart-values { color: var(--muted); font-size: .78rem; }
+.chart-values { flex-wrap: wrap; justify-content: flex-start; }
+.progress-track { overflow: hidden; height: .85rem; border-radius: 999px; background: #e8efed; }
+.progress-fill { display: block; min-width: 0; height: 100%; border-radius: inherit; background: var(--primary); }
+.progress-track--stage { height: .65rem; }
+.progress-fill--stage { background: #38a89d; }
+.risk-list { display: grid; gap: .85rem; margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.risk-list li { display: grid; grid-template-columns: .75rem 1fr; gap: .7rem; align-items: start; }
+.risk-list p { margin: .25rem 0 0; color: var(--muted); line-height: 1.5; }
+.risk-dot { width: .65rem; height: .65rem; margin-top: .35rem; border-radius: 999px; background: #64748b; }
+.risk-dot--warning { background: #f59e0b; }
+.risk-dot--critical { background: #dc2626; }
+.risk-dot--info { background: #0ea5e9; }
 .toast-region { position: fixed; right: 1rem; bottom: 1rem; color: var(--muted); font-size: .8rem; }
 .table-wrap { overflow-x: auto; margin-top: var(--space-3); }
 .data-table { width: 100%; border-collapse: collapse; font-size: .9rem; }

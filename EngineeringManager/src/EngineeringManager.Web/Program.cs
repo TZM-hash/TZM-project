@@ -28,6 +28,8 @@ using EngineeringManager.Application.Reminders;
 using EngineeringManager.Infrastructure.Reminders;
 using EngineeringManager.Application.Offline;
 using EngineeringManager.Infrastructure.Offline;
+using EngineeringManager.Application.Dashboard;
+using EngineeringManager.Infrastructure.Dashboard;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -80,6 +82,7 @@ public sealed class Program
         builder.Services.AddSingleton<IFileStore>(_ =>
             new LocalFileStore(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "attachments")));
         builder.Services.AddScoped<IOfflineStageResultService, OfflineStageResultService>();
+        builder.Services.AddScoped<IDashboardService, DashboardService>();
         builder.Services
             .AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])

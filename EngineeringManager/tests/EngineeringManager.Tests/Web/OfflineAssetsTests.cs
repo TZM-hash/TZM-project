@@ -32,4 +32,23 @@ public sealed class OfflineAssetsTests
         script.Should().Contain("data-offline-conflict-panel");
         script.Should().Contain("clearUserData");
     }
+
+    [Fact]
+    public async Task ServiceWorkerExcludesSensitiveBusinessRoutesFromCaching()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var script = await client.GetStringAsync("/service-worker.js");
+
+        script.Should().Contain("engineering-manager-shell-v2");
+        script.Should().Contain("SENSITIVE_PREFIXES");
+        script.Should().Contain("'/api/'");
+        script.Should().Contain("'/Finance'");
+        script.Should().Contain("'/Payroll'");
+        script.Should().Contain("'/DataExchange'");
+        script.Should().Contain("request.method !== 'GET'");
+        script.Should().Contain("cacheFirst");
+        script.Should().Contain("networkFirst");
+    }
 }

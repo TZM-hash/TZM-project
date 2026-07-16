@@ -2,6 +2,7 @@ using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Application.Reminders;
 using EngineeringManager.Domain.DataExchange;
+using EngineeringManager.Domain.Offline;
 using EngineeringManager.Domain.Reminders;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -68,6 +69,27 @@ public sealed class ReminderService(
         {
             Upsert(existing, $"backup-failed:{task.Id}", ReminderType.BackupFailed, ReminderSeverity.Critical,
                 "备份任务失败", task.ErrorMessage ?? "备份任务执行失败。", "BackupTask", task.Id.ToString(), null, null, now);
+        }
+
+        var failedSyncs = await db.OfflineDraftSyncs.AsNoTracking()
+            .Where(item => item.Status == OfflineSyncStatus.Failed || item.Status == OfflineSyncStatus.Conflict)
+            .ToListAsync(cancellationToken);
+        var activeOfflineKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var sync in failedSyncs)
+        {
+            var key = $"offline-sync:{sync.Id}";
+            activeOfflineKeys.Add(key);
+            var conflict = sync.Status == OfflineSyncStatus.Conflict;
+            Upsert(existing, key, ReminderType.OfflineSyncFailed, conflict ? ReminderSeverity.Warning : ReminderSeverity.Critical,
+                conflict ? "离线草稿存在版本冲突" : "离线草稿同步失败",
+                sync.LastError ?? (conflict ? "服务器草稿已变化，请比较后处理。" : "离线草稿同步失败。"),
+                "OfflineDraftSync", sync.Id.ToString(), null, null, now);
+        }
+
+        foreach (var reminder in existing.Values.Where(item => item.Type == ReminderType.OfflineSyncFailed && !activeOfflineKeys.Contains(item.DeduplicationKey)))
+        {
+            reminder.Status = ReminderStatus.Resolved;
+            reminder.ResolvedAt = now;
         }
 
         await db.SaveChangesAsync(cancellationToken);

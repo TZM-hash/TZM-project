@@ -365,6 +365,11 @@
         root.querySelector('[data-offline-pending]').textContent = queue.filter(function (item) { return item.status === 'pending'; }).length + photos.filter(function (item) { return item.status === 'pending'; }).length;
         root.querySelector('[data-offline-failed]').textContent = queue.filter(function (item) { return item.status === 'failed'; }).length + photos.filter(function (item) { return item.status === 'failed'; }).length;
         root.querySelector('[data-offline-conflicts]').textContent = queue.filter(function (item) { return item.status === 'conflict'; }).length;
+        localStorage.setItem('engineering-manager-offline-counts:' + userId, JSON.stringify({
+            pending: queue.filter(function (item) { return item.status === 'pending'; }).length + photos.filter(function (item) { return item.status === 'pending'; }).length,
+            failed: queue.filter(function (item) { return item.status === 'failed'; }).length + photos.filter(function (item) { return item.status === 'failed'; }).length,
+            conflicts: queue.filter(function (item) { return item.status === 'conflict'; }).length
+        }));
     }
 
     async function clearUserData() {
