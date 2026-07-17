@@ -144,6 +144,7 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .empty-state p { margin: 0; font-size: .78rem; }
 .chart-canvas-shell { min-height: 12rem; margin-top: 1rem; border: 1px solid var(--app-border); border-radius: 9px; background: linear-gradient(180deg, rgba(239,246,255,.6), transparent); }
 .chart-data-table { width: 100%; border-collapse: collapse; }
+.chart-data-table.sr-only { display: block; width: 1px; max-width: 1px; table-layout: fixed; contain: strict; }
 .chart-canvas-shell canvas, .chart-canvas-shell svg { display: block; max-width: 100%; }
 .chart-empty-state { display: grid; min-height: 12rem; place-content: center; gap: .35rem; color: var(--app-muted); text-align: center; }
 .chart-empty-state strong { color: var(--app-text); }

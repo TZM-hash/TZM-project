@@ -21,7 +21,7 @@ if ([string]::IsNullOrWhiteSpace($connectionString)) {
 }
 
 $connectionBuilder = [System.Data.Common.DbConnectionStringBuilder]::new()
-$connectionBuilder.ConnectionString = $connectionString
+$connectionBuilder.set_ConnectionString($connectionString)
 $actualDatabase = if ($connectionBuilder.ContainsKey('Database')) {
     [string]$connectionBuilder['Database']
 } elseif ($connectionBuilder.ContainsKey('Initial Catalog')) {
@@ -42,6 +42,18 @@ $env:Identity__SeedRoles = 'true'
 $env:DevelopmentSampleData__Enabled = 'true'
 
 $dotnetScript = Join-Path $PSScriptRoot 'dotnet.ps1'
+$localDotnetDirectory = Join-Path $projectRoot '.dotnet'
+$localDotnetPath = Join-Path $localDotnetDirectory 'dotnet.exe'
+if (-not (Test-Path -LiteralPath $localDotnetPath)) {
+    throw "项目本地 .NET SDK 不存在：$localDotnetPath"
+}
+$dotnetToolDirectory = Join-Path $projectRoot '.tools\dotnet-tools'
+$dotnetEfPath = Join-Path $dotnetToolDirectory 'dotnet-ef.exe'
+if (-not (Test-Path -LiteralPath $dotnetEfPath)) {
+    throw "本地 EF 工具不存在：$dotnetEfPath"
+}
+$env:DOTNET_ROOT = $localDotnetDirectory
+$env:PATH = "$localDotnetDirectory$([IO.Path]::PathSeparator)$dotnetToolDirectory$([IO.Path]::PathSeparator)$env:PATH"
 $infrastructureProject = Join-Path $projectRoot 'src\EngineeringManager.Infrastructure\EngineeringManager.Infrastructure.csproj'
 $webProject = Join-Path $projectRoot 'src\EngineeringManager.Web\EngineeringManager.Web.csproj'
 

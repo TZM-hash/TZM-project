@@ -100,6 +100,12 @@ public sealed class DevelopmentSampleDataSeederTests
 
         script.Should().Contain("$ErrorActionPreference = 'Stop'");
         script.Should().Contain("-notmatch '_Test$'");
+        script.Should().Contain("set_ConnectionString");
+        script.Should().NotContain("$connectionBuilder.ConnectionString =");
+        script.Should().Contain(".tools\\dotnet-tools");
+        script.Should().Contain("[IO.Path]::PathSeparator");
+        script.Should().Contain("$env:DOTNET_ROOT");
+        script.Should().Contain(".dotnet");
         script.Should().Contain("$env:ASPNETCORE_ENVIRONMENT = 'Development'");
         script.Should().Contain("DevelopmentSampleData__Enabled");
         script.Should().NotContain("EngineeringManager_Production");

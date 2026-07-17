@@ -15,6 +15,8 @@ public sealed class ResponsiveUiAssetTests
         css.Should().Contain("overflow-x: auto");
         css.Should().Contain(".sticky-actions");
         css.Should().Contain(".detail-grid");
+        css.Should().Contain(".chart-data-table.sr-only");
+        css.Should().Contain("contain: strict");
         login.Should().Contain("auth-page").And.Contain("auth-card");
     }
 
