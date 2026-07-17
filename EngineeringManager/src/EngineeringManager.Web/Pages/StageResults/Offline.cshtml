@@ -22,16 +22,10 @@
             <span class="pill" data-offline-save-state>尚未保存</span>
         </div>
         <input type="hidden" name="clientDraftId" data-client-draft-id />
-        <label>项目<select name="projectId" data-offline-project required><option value="">请选择项目</option></select></label>
-        <label>合同<select name="contractId" data-offline-contract><option value="">不关联合同</option></select></label>
-        <label>阶段名称<input name="title" required maxlength="200" /></label>
-        <label>成果日期<input name="resultDate" type="date" required /></label>
-        <label>成果类型<select name="resultType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.StageResultType>()"></select></label>
-        <label>质量情况<select name="qualityResult" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.QualityResult>()"></select></label>
-        <label class="form-span">备注<textarea name="description" rows="4" maxlength="3000"></textarea></label>
-        <div class="form-span" data-offline-lines></div>
-        <label class="form-span">现场照片（最多 20 张）<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple data-offline-photos /></label>
-        <div class="form-span offline-actions">
+        <section class="form-section"><h2 class="section-heading">成果归属</h2><label>项目<select name="projectId" data-offline-project required><option value="">请选择项目</option></select></label><label>合同<select name="contractId" data-offline-contract><option value="">不关联合同</option></select></label><label>阶段名称<input name="title" required maxlength="200" /></label><label>成果日期<input name="resultDate" type="date" required /></label></section>
+        <section class="form-section"><h2 class="section-heading">成果内容</h2><label>成果类型<select name="resultType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.StageResultType>()"></select></label><label>质量情况<select name="qualityResult" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.QualityResult>()"></select></label><label class="form-span">备注<textarea name="description" rows="4" maxlength="3000"></textarea></label><div class="form-span" data-offline-lines></div></section>
+        <section class="form-section"><h2 class="section-heading">现场附件</h2><label class="form-span">现场照片（最多 20 张）<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple data-offline-photos /></label></section>
+        <div class="form-span offline-actions sticky-actions">
             <button class="button button--secondary" type="submit">保存到本机</button>
             <button class="button button--secondary" type="button" data-offline-sync-now>立即同步</button>
             <button class="button button--danger" type="button" data-offline-clear>清除此设备离线数据</button>

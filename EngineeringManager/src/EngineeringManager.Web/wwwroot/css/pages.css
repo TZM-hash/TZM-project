@@ -19,4 +19,8 @@
   .page-heading { display: block; }
   .page-heading .button, .page-heading > div:last-child { margin-top: .8rem; }
   .pwa-badge { margin-top: .8rem; }
+  [data-dashboard-risks] { order: -5; }
+  [data-money-chart] { order: -3; }
+  [data-stage-chart] { order: -2; }
+  [data-dashboard-equipment], [data-dashboard-payroll] { order: -1; }
 }

@@ -6,13 +6,7 @@
 
 <section class="page-heading"><div><p class="eyebrow">阶段成果</p><h1>提交阶段成果</h1><p class="page-lead">本入口支持先保存草稿；工程量明细和照片文件会继续接入同一阶段成果服务。</p></div></section>
 <form method="post" class="panel form-grid">
-    <label>项目 ID<input asp-for="ProjectId" /></label>
-    <label>合同 ID（可选）<input asp-for="ContractId" /></label>
-    <label>阶段名称<input asp-for="Title" /></label>
-    <label>成果日期<input asp-for="ResultDate" type="date" /></label>
-    <label>成果类型<select asp-for="ResultType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.StageResultType>()"></select></label>
-    <label>状态<select asp-for="Status" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.StageResultStatus>()"></select></label>
-    <label>质量情况<select asp-for="QualityResult" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.QualityResult>()"></select></label>
-    <label class="form-span">说明<textarea asp-for="Description" rows="4"></textarea></label>
-    <button class="button button--secondary" type="submit">保存阶段成果</button>
+    <section class="form-section"><h2 class="section-heading">成果归属</h2><label>项目 ID<input asp-for="ProjectId" /></label><label>合同 ID（可选）<input asp-for="ContractId" /></label><label>阶段名称<input asp-for="Title" /></label><label>成果日期<input asp-for="ResultDate" type="date" /></label></section>
+    <section class="form-section"><h2 class="section-heading">成果状态</h2><label>成果类型<select asp-for="ResultType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.StageResultType>()"></select></label><label>状态<select asp-for="Status" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.StageResultStatus>()"></select></label><label>质量情况<select asp-for="QualityResult" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.StageResults.QualityResult>()"></select></label><label class="form-span">说明<textarea asp-for="Description" rows="4"></textarea></label></section>
+    <div class="sticky-actions form-span"><button class="button button--secondary" type="submit">保存阶段成果</button></div>
 </form>

@@ -10,17 +10,13 @@
     <div class="panel-heading"><div><p class="eyebrow">新建账户</p><h2>账户资料</h2></div></div>
     <div asp-validation-summary="All" class="panel-copy"></div>
     <form method="post" class="form-grid">
-        <label>签约公司<select asp-for="LegalEntityId"><option value="">请选择</option>@foreach (var item in Model.LegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
-        <label>账户名称<input asp-for="AccountName" /></label>
-        <label>账户类型<select asp-for="AccountType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Finance.FinancialAccountType>()"></select></label>
-        <label>期初余额<input asp-for="OpeningBalance" type="number" step="0.01" /></label>
-        <label>开户行<input asp-for="BankName" /></label>
-        <label>账号<input asp-for="AccountNumber" /></label>
-        <button class="button button--secondary" type="submit">保存账户</button>
+        <section class="form-section"><h3 class="section-heading">账户归属</h3><label>签约公司<select asp-for="LegalEntityId"><option value="">请选择</option>@foreach (var item in Model.LegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label><label>账户名称<input asp-for="AccountName" /></label><label>账户类型<select asp-for="AccountType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Finance.FinancialAccountType>()"></select></label></section>
+        <section class="form-section"><h3 class="section-heading">开户与期初数据</h3><label>期初余额<input asp-for="OpeningBalance" type="number" step="0.01" /></label><label>开户行<input asp-for="BankName" /></label><label>账号<input asp-for="AccountNumber" /></label></section>
+        <div class="sticky-actions form-span"><button class="button button--secondary" type="submit">保存账户</button></div>
     </form>
 </section>
 
-<section class="panel" style="margin-top: var(--space-3)">
+<section class="panel page-section">
     <div class="panel-heading"><div><p class="eyebrow">账户清单</p><h2>当前余额</h2></div></div>
     <div class="table-wrap"><table class="data-table"><thead><tr><th>签约公司</th><th>账户</th><th>类型</th><th>期初余额</th><th>当前余额</th><th>状态</th></tr></thead><tbody>
     @foreach (var item in Model.Accounts)

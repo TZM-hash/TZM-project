@@ -46,6 +46,10 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus, .filter-bar input:focus, .filter-bar select:focus, .settings-select-card select:focus { border-color: var(--app-primary); outline: 0; box-shadow: 0 0 0 3px rgba(37,99,235,.11); }
 .form-grid textarea { min-height: 7rem; resize: vertical; }
 .form-span { grid-column: 1 / -1; }
+.form-section { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1rem; border: 1px solid var(--app-border); border-radius: 10px; background: color-mix(in srgb, var(--app-surface-raised) 74%, transparent); }
+.form-section > .section-heading { grid-column: 1 / -1; margin: 0; color: var(--app-text); font-size: .95rem; }
+.form-section > .section-help { grid-column: 1 / -1; margin: -.4rem 0 0; color: var(--app-muted); font-size: .78rem; line-height: 1.55; }
+.form-section > label { min-width: 0; }
 .form-section { padding: 1.25rem; margin-bottom: 1rem; }
 .form-section-heading { padding-bottom: 1rem; border-bottom: 1px solid var(--app-border); }
 .form-section-heading > p { max-width: 32rem; margin: 0; font-size: .78rem; }
@@ -144,6 +148,20 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .chart-empty-state { display: grid; min-height: 12rem; place-content: center; gap: .35rem; color: var(--app-muted); text-align: center; }
 .chart-empty-state strong { color: var(--app-text); }
 .chart-empty-state span { font-size: .74rem; }
+.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.detail-grid > div { padding: .8rem; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface-raised); }
+.detail-grid dt { color: var(--app-muted); font-size: .72rem; }
+.detail-grid dd { margin: .3rem 0 0; color: var(--app-text); font-weight: 650; }
+.sticky-actions { position: sticky; bottom: .75rem; z-index: 20; display: flex; justify-content: flex-end; gap: .65rem; padding: .7rem; border: 1px solid var(--app-border); border-radius: 10px; background: rgba(255,255,255,.92); backdrop-filter: blur(12px); box-shadow: var(--app-shadow); }
+.auth-page { display: grid; grid-template-columns: minmax(18rem, 1fr) minmax(22rem, .72fr); min-height: calc(100vh - 10rem); gap: 1.25rem; align-items: center; }
+.auth-brand-panel { padding: clamp(1.5rem, 5vw, 4rem); }
+.auth-brand-panel .brand-mark { margin-bottom: 1.4rem; }
+.auth-brand-panel h1 { max-width: 38rem; margin: .45rem 0 1rem; font-size: clamp(2rem, 5vw, 4.2rem); line-height: 1.08; letter-spacing: -.055em; }
+.auth-brand-panel > p:last-child, .auth-help { color: var(--app-muted); line-height: 1.65; }
+.auth-card { width: min(100%, 30rem); padding: 1.5rem; }
+.auth-card .form-stack { display: grid; gap: .7rem; margin-top: 1.2rem; }
+.auth-card input:not([type="checkbox"]) { width: 100%; min-height: 3rem; padding: .65rem .75rem; border: 1px solid var(--app-border-strong); border-radius: 8px; }
+.auth-card .button { width: 100%; }
 
 @media (max-width: 900px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .option-card-grid--three { grid-template-columns: 1fr; } }
 @media (max-width: 680px) {
@@ -159,4 +177,12 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
   .workbench-view-picker select { flex: 1; min-width: 0; }
   .workbench-filter-grid { grid-template-columns: 1fr; }
   .workbench-drawer { width: 100vw; border-radius: 0; }
+  .form-section { grid-template-columns: 1fr; padding: .8rem; }
+  .detail-grid { grid-template-columns: 1fr; }
+  .sticky-actions { bottom: 0; margin-inline: -.8rem; border-radius: 0; }
+  .button, button, input, select, textarea, .nav-link, .menu-toggle, .header-icon-button { min-height: 44px; }
+  .auth-page { grid-template-columns: 1fr; min-height: auto; }
+  .auth-brand-panel { padding: 1.2rem .2rem; }
+  .auth-brand-panel h1 { font-size: 2.15rem; }
+  .auth-card { width: 100%; padding: 1.1rem; }
 }

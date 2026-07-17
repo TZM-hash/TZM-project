@@ -6,12 +6,7 @@
 
 <section class="page-heading"><div><p class="eyebrow">合作单位</p><h1>新增合作单位</h1><p class="page-lead">首次创建基础主档和一个业务角色，其他角色可以在同一主档上继续增加。</p></div></section>
 <form method="post" class="panel form-grid">
-    <label>单位编号<input asp-for="PartnerNumber" /></label>
-    <label>单位全称<input asp-for="Name" /></label>
-    <label>单位简称<input asp-for="ShortName" /></label>
-    <label>业务角色<select asp-for="RoleType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Partners.BusinessPartnerRoleType>()"></select></label>
-    <label>行业/工种<input asp-for="TradeCategory" /></label>
-    <label>主要联系人<input asp-for="ContactName" /></label>
-    <label>联系电话<input asp-for="ContactPhone" /></label>
-    <button class="button button--secondary" type="submit">保存合作单位</button>
+    <section class="form-section"><h2 class="section-heading">单位资料</h2><label>单位编号<input asp-for="PartnerNumber" /></label><label>单位全称<input asp-for="Name" /></label><label>单位简称<input asp-for="ShortName" /></label><label>业务角色<select asp-for="RoleType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Partners.BusinessPartnerRoleType>()"></select></label></section>
+    <section class="form-section"><h2 class="section-heading">联系信息</h2><label>行业/工种<input asp-for="TradeCategory" /></label><label>主要联系人<input asp-for="ContactName" /></label><label>联系电话<input asp-for="ContactPhone" /></label></section>
+    <div class="sticky-actions form-span"><button class="button button--secondary" type="submit">保存合作单位</button></div>
 </form>

@@ -2,4 +2,19 @@
 @model EngineeringManager.Web.Pages.Companies.EditModel
 @{ ViewData["Title"] = Model.Input.Id.HasValue ? "编辑公司" : "新增公司"; }
 <section class="page-heading"><div><p class="eyebrow">公司档案</p><h1>@ViewData["Title"]</h1><p class="page-lead">组合分类、法人/经营者、税务、地址和开票资料只保存当前有效值，历史由审计日志保留。</p></div></section>
-<form method="post" class="panel form-grid"><input asp-for="Input.Id" type="hidden" /><input asp-for="Input.ConcurrencyStamp" type="hidden" /><label>公司编码<input asp-for="Input.Code" /></label><label>公司全称<input asp-for="Input.Name" /></label><label>公司简称<input asp-for="Input.ShortName" /></label><label>组合分类<select asp-for="Input.CompanyCategoryId"><option value="">请选择</option>@foreach (var category in Model.Categories.Where(x => x.IsActive)) { <option value="@category.Id">@category.Name</option> }</select></label><label>法人/经营者<input asp-for="Input.LegalRepresentative" /></label><label>统一社会信用代码/税号<input asp-for="Input.UnifiedSocialCreditCode" /></label><label>注册地址<input asp-for="Input.RegisteredAddress" /></label><label>经营地址<input asp-for="Input.BusinessAddress" /></label><label>电话<input asp-for="Input.Phone" /></label><label>开票抬头<input asp-for="Input.InvoiceTitle" /></label><label class="field-span">备注<textarea asp-for="Input.Notes"></textarea></label><label class="field-span">修改原因<input asp-for="Input.Reason" /></label><div asp-validation-summary="All" class="field-span validation-summary"></div><div class="field-span button-row"><button class="button button--primary" type="submit">保存</button><a class="button button--secondary" asp-page="Index">返回</a></div></form>
+<form method="post" class="panel form-grid"><input asp-for="Input.Id" type="hidden" /><input asp-for="Input.ConcurrencyStamp" type="hidden" /><div asp-validation-summary="All" class="form-span validation-summary"></div>
+    <section class="form-section">
+        <h2 class="section-heading">主体资料</h2>
+        <p class="section-help">组合分类沿用已确认的轻量公司主体方案，历史修改由审计日志保留。</p>
+        <label>公司编码<input asp-for="Input.Code" /></label><label>公司全称<input asp-for="Input.Name" /></label><label>公司简称<input asp-for="Input.ShortName" /></label><label>组合分类<select asp-for="Input.CompanyCategoryId"><option value="">请选择</option>@foreach (var category in Model.Categories.Where(x => x.IsActive)) { <option value="@category.Id">@category.Name</option> }</select></label><label>法人/经营者<input asp-for="Input.LegalRepresentative" /></label><label>统一社会信用代码/税号<input asp-for="Input.UnifiedSocialCreditCode" /></label>
+    </section>
+    <section class="form-section">
+        <h2 class="section-heading">地址与开票</h2>
+        <label>注册地址<input asp-for="Input.RegisteredAddress" /></label><label>经营地址<input asp-for="Input.BusinessAddress" /></label><label>电话<input asp-for="Input.Phone" /></label><label>开票抬头<input asp-for="Input.InvoiceTitle" /></label><label class="form-span">备注<textarea asp-for="Input.Notes"></textarea></label>
+    </section>
+    <section class="form-section">
+        <h2 class="section-heading">修改记录</h2>
+        <label class="form-span">修改原因<input asp-for="Input.Reason" /></label>
+    </section>
+    <div class="sticky-actions form-span"><button class="button button--primary" type="submit">保存</button><a class="button button--secondary" asp-page="Index">返回</a></div>
+</form>
