@@ -16,6 +16,9 @@ if (document.querySelector("[data-workbench]")) {
     filters.initFilterDrawers();
   }));
 }
+if (document.querySelector("[data-chart]")) {
+  jobs.push(import("./components/charts.js").then((module) => module.initCharts()));
+}
 await Promise.all(jobs);
 
 async function initPwaStatus() {

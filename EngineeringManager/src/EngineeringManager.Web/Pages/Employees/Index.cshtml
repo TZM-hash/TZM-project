@@ -19,6 +19,8 @@
     <article class="metric-card"><span class="metric-label">在用员工</span><strong class="metric-value metric-value--good">@Model.Employees.Count(item => item.IsActive)</strong><span class="metric-hint">未停用主档</span></article>
 </section>
 
+<section class="panel chart-summary" data-chart data-chart-kind="progress-ring" data-chart-value="@(Model.Employees.Count == 0 ? 0 : (decimal)Model.Employees.Count(item => item.IsActive) / Model.Employees.Count * 100m)" data-chart-label="在用员工比例"><div class="panel-heading"><div><p class="eyebrow">图形摘要</p><h2>在用员工比例</h2></div></div><div data-chart-canvas></div></section>
+
 <section class="panel" style="margin-top: var(--space-3)">
     <div class="panel-heading"><div><p class="eyebrow">员工清单</p><h2>基础资料</h2></div></div>
     <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Employees" />

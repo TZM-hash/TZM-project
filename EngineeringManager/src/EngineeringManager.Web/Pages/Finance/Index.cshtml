@@ -23,6 +23,8 @@
     <article class="metric-card"><span class="metric-label">未开票</span><strong class="metric-value">@Model.Result.Total.UninvoicedAmount.ToString("N2")</strong><span class="metric-hint">应收减有效销项发票</span></article>
 </section>
 
+<section class="panel chart-summary" data-chart data-chart-kind="progress-ring" data-chart-value="@(Model.Result.Total.ReceivableAmount == 0 ? 0 : Model.Result.Total.CollectedAmount / Model.Result.Total.ReceivableAmount * 100m)" data-chart-label="收款完成率"><div class="panel-heading"><div><p class="eyebrow">图形摘要</p><h2>收款完成率</h2></div></div><div data-chart-canvas></div></section>
+
 <section class="panel data-work-surface">
     <div class="panel-heading"><div><p class="eyebrow">项目维度</p><h2>项目经营明细</h2></div><span class="result-count">共 @Model.Result.TotalCount 个项目</span></div>
     <partial name="_DataWorkbench" model="Model.Workbench" />

@@ -23,6 +23,8 @@
     <article class="metric-card"><span class="metric-label">已结算项目</span><strong class="metric-value">@Model.Result.Aggregate.SettledProjectCount</strong><span class="metric-hint">由工程量清单状态计算</span></article>
 </section>
 
+<section class="panel chart-summary" data-chart data-chart-kind="progress-ring" data-chart-value="@(Model.Result.Aggregate.ProjectCount == 0 ? 0 : (decimal)Model.Result.Aggregate.SettledProjectCount / Model.Result.Aggregate.ProjectCount * 100m)" data-chart-label="项目结算完成率"><div class="panel-heading"><div><p class="eyebrow">图形摘要</p><h2>项目结算完成率</h2></div></div><div data-chart-canvas></div></section>
+
 <section class="panel data-work-surface">
     <div class="panel-heading"><div><p class="eyebrow">项目清单</p><h2>当前项目</h2></div><span class="result-count">共 @Model.Result.TotalCount 个项目</span></div>
     <partial name="_DataWorkbench" model="Model.Workbench" />

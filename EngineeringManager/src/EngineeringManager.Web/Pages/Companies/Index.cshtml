@@ -53,6 +53,7 @@
             }
         </article>
     </section>
+    <section class="panel chart-summary" data-chart data-chart-kind="progress-ring" data-chart-value="@(dashboard.ReceivableAmount == 0 ? 0 : dashboard.CollectedAmount / dashboard.ReceivableAmount * 100m)" data-chart-label="公司收款完成率"><div class="panel-heading"><div><p class="eyebrow">图形摘要</p><h2>公司收款完成率</h2></div></div><div data-chart-canvas></div></section>
     @if (Model.CanManage)
     {
         <section class="panel" data-company-categories>

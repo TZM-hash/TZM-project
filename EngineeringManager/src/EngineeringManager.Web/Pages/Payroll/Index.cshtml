@@ -11,6 +11,7 @@
     <article class="metric-card"><span class="metric-label">已发工资</span><strong class="metric-value metric-value--good">@Model.Overview.PaidAmount.ToString("N2")</strong><span class="metric-hint">实际多次支付合计</span></article>
     <article class="metric-card"><span class="metric-label">未发工资</span><strong class="metric-value">@Model.Overview.UnpaidAmount.ToString("N2")</strong><span class="metric-hint">应发减已发</span></article>
 </section>
+<section class="panel chart-summary" data-chart data-chart-kind="progress-ring" data-chart-value="@(Model.Overview.PayableAmount == 0 ? 0 : Model.Overview.PaidAmount / Model.Overview.PayableAmount * 100m)" data-chart-label="工资支付完成率"><div class="panel-heading"><div><p class="eyebrow">图形摘要</p><h2>工资支付完成率</h2></div></div><div data-chart-canvas></div></section>
 <section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">工资批次</p><h2>批次汇总</h2></div></div><partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Payroll" /><div class="table-wrap"><table class="data-table" id="payroll-table"><thead><tr><th data-column-key="batch">批次</th><th data-column-key="period">区间</th><th data-column-key="type">类型</th><th data-column-key="payable">应发</th><th data-column-key="paid">已发</th><th data-column-key="unpaid">未发</th><th data-column-key="risk">风险</th></tr></thead><tbody>
 @foreach (var item in Model.Overview.Batches)
 {
