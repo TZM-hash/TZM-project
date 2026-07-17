@@ -1,9 +1,16 @@
+@using EngineeringManager.Application.Settings
+@inject ISystemSettingsService SystemSettingsService
+@{
+    var displaySettings = await SystemSettingsService.GetAsync(Context.RequestAborted);
+    var currentPage = Context.Request.Path.Value ?? string.Empty;
+    string Nav(string prefix) => currentPage.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? "nav-link is-active" : "nav-link";
+}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f766e" />
+    <meta name="theme-color" content="#2563eb" />
     <title>@ViewData["Title"] - 工程项目经营管理系统</title>
     <link rel="manifest" href="~/manifest.webmanifest" />
     <link rel="stylesheet" href="~/css/base.css" asp-append-version="true" />
@@ -11,51 +18,48 @@
     <link rel="stylesheet" href="~/css/pages.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/themes.css" asp-append-version="true" />
 </head>
-<body>
-    <div class="app-shell">
+<body class="app-shell @displaySettings.ThemeCssClass @displaySettings.MotionCssClass @displaySettings.EffectsCssClass @displaySettings.FontCssClass @displaySettings.DensityCssClass">
+    <div class="app-bg-fx" aria-hidden="true"><span></span><span></span><span></span></div>
+    <aside class="app-sidebar" id="primary-nav" data-navigation>
+        <a class="app-sidebar-brand" asp-page="/Index"><span class="brand-mark" aria-hidden="true">工</span><span>工程项目经营管理系统</span></a>
+        <nav class="app-sidebar-nav" aria-label="主导航">
+            <div class="nav-group"><span class="nav-group-label">经营总览</span><a class="@(currentPage == "/" ? "nav-link is-active" : "nav-link")" asp-page="/Index"><svg><use href="/img/icons.svg#home"></use></svg><span>系统总览</span></a></div>
+            <div class="nav-group"><span class="nav-group-label">项目经营</span>
+                <a class='@Nav("/Projects")' asp-page="/Projects/Index"><svg><use href="/img/icons.svg#projects"></use></svg><span>项目管理</span></a>
+                <a class='@Nav("/StageResults")' asp-page="/StageResults/Index"><svg><use href="/img/icons.svg#results"></use></svg><span>阶段成果</span></a>
+                <a class='@Nav("/Finance")' asp-page="/Finance/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>经营台账</span></a>
+            </div>
+            <div class="nav-group"><span class="nav-group-label">人员与合作方</span>
+                <a class='@Nav("/Employees")' asp-page="/Employees/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>员工管理</span></a>
+                <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#payroll"></use></svg><span>工资台账</span></a>
+                <a class='@Nav("/EmployeeLedger")' asp-page="/EmployeeLedger/Index"><svg><use href="/img/icons.svg#ledger"></use></svg><span>员工往来</span></a>
+                <a class='@Nav("/Partners")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
+            </div>
+            <div class="nav-group"><span class="nav-group-label">公司与设备</span>
+                <a class='@Nav("/Companies")' asp-page="/Companies/Index"><svg><use href="/img/icons.svg#company"></use></svg><span>自有公司</span></a>
+                <a class='@Nav("/Equipment")' asp-page="/Equipment/Index"><svg><use href="/img/icons.svg#equipment"></use></svg><span>设备管理</span></a>
+            </div>
+            <div class="nav-group"><span class="nav-group-label">数据与系统</span>
+                <a class='@Nav("/DataExchange")' asp-page="/DataExchange/Index"><svg><use href="/img/icons.svg#exchange"></use></svg><span>导入导出</span></a>
+                <a class='@Nav("/Reminders")' asp-page="/Reminders/Index"><svg><use href="/img/icons.svg#reminder"></use></svg><span>提醒中心</span></a>
+                @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator"))
+                {
+                    <a class='@Nav("/Admin")' asp-page="/Admin/Index"><svg><use href="/img/icons.svg#settings"></use></svg><span>系统管理</span></a>
+                }
+            </div>
+        </nav>
+        <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span><span>阶段 0～10 已完成 · 体验优化迭代</span></div>
+    </aside>
+    <div class="app-content">
         <header class="app-header">
-            <a class="brand" asp-page="/Index">
-                <span class="brand-mark" aria-hidden="true">工</span>
-                <span>工程项目经营管理系统</span>
-            </a>
-            <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" data-menu-toggle>
-                <span class="sr-only">打开导航菜单</span>
-                <span aria-hidden="true">☰</span>
-            </button>
+            <div class="app-header-content">
+                <button class="menu-toggle" type="button" aria-expanded="true" aria-controls="primary-nav" data-menu-toggle><span class="sr-only">收起或打开导航菜单</span><svg aria-hidden="true"><use href="/img/icons.svg#menu"></use></svg></button>
+                <div class="app-header-title"><span>@ViewData["Title"]</span><small data-network-status>在线</small></div>
+                <div class="app-header-tools"><a class="header-icon-button" asp-page="/Reminders/Index" aria-label="提醒中心"><svg><use href="/img/icons.svg#reminder"></use></svg></a><partial name="_LoginPartial" /></div>
+            </div>
         </header>
-        <div class="app-body">
-            <aside class="sidebar" id="primary-nav" data-navigation>
-                <nav aria-label="主导航">
-                    <a class="nav-link is-active" asp-page="/Index">总览</a>
-                    <a class="nav-link" asp-page="/Projects/Index">项目管理<span class="nav-status">阶段 2</span></a>
-                    <a class="nav-link" asp-page="/Companies/Index">自有公司<span class="nav-status">阶段 8</span></a>
-                    <a class="nav-link" asp-page="/Equipment/Index">设备管理<span class="nav-status">阶段 9</span></a>
-                    <a class="nav-link" asp-page="/Partners/Index">合作单位<span class="nav-status">阶段 3</span></a>
-                    <a class="nav-link" asp-page="/StageResults/Index">阶段成果<span class="nav-status">阶段 3</span></a>
-                    @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager") || User.IsInRole("SiteStaff"))
-                    {
-                        <a class="nav-link" asp-page="/StageResults/Offline">现场离线<span class="nav-status">阶段 7</span></a>
-                    }
-                    <a class="nav-link" asp-page="/Finance/Index">经营台账<span class="nav-status">阶段 4</span></a>
-                    <a class="nav-link" asp-page="/Employees/Index">员工管理<span class="nav-status">阶段 5</span></a>
-                    <a class="nav-link" asp-page="/Payroll/Index">工资台账<span class="nav-status">阶段 5</span></a>
-                    <a class="nav-link" asp-page="/EmployeeLedger/Index">员工往来<span class="nav-status">阶段 5</span></a>
-                    <a class="nav-link" asp-page="/DataExchange/Index">导入导出<span class="nav-status">阶段 6</span></a>
-                    <a class="nav-link" asp-page="/Reminders/Index">提醒中心<span class="nav-status">阶段 6</span></a>
-                    @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator"))
-                    {
-                        <a class="nav-link" asp-page="/Backups/Index">备份管理<span class="nav-status">阶段 6</span></a>
-                    }
-                </nav>
-                <div class="sidebar-footer">
-                    <span class="status-dot" aria-hidden="true"></span>
-                    <span>阶段 0～10 已完成</span>
-                </div>
-            </aside>
-            <main class="main-content" role="main">
-                @RenderBody()
-            </main>
-        </div>
+        <main class="main-content app-main" role="main">@RenderBody()</main>
+        <footer class="app-footer">工程项目经营管理系统 · 内部经营管理</footer>
     </div>
     <div class="toast-region" aria-live="polite" data-pwa-status></div>
     <script src="~/js/site.js" asp-append-version="true"></script>

@@ -2,19 +2,15 @@
 @using Microsoft.AspNetCore.Identity
 @inject SignInManager<ApplicationUser> SignInManager
 
-<ul class="navbar-nav">
+<div class="account-menu">
     @if (SignInManager.IsSignedIn(User))
     {
-        <li class="nav-item">
-            <form asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="/" method="post">
-                <button class="nav-link btn btn-link" type="submit">退出登录</button>
-            </form>
-        </li>
+        <span class="account-avatar" aria-hidden="true">@(User.Identity?.Name?.FirstOrDefault() ?? '用')</span>
+        <span class="account-name">@(User.Identity?.Name ?? "内部用户")</span>
+        <form asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="/" method="post"><button class="account-action" type="submit">退出</button></form>
     }
     else
     {
-        <li class="nav-item">
-            <a class="nav-link" asp-area="Identity" asp-page="/Account/Login">登录</a>
-        </li>
+        <a class="button button--primary" asp-area="Identity" asp-page="/Account/Login">登录</a>
     }
-</ul>
+</div>

@@ -1,0 +1,87 @@
+@page
+@model EngineeringManager.Web.Pages.Admin.Settings.IndexModel
+@{
+    ViewData["Title"] = "显示与交互设置";
+}
+
+<section class="page-heading settings-page-heading">
+    <div>
+        <p class="eyebrow">系统级全局设置</p>
+        <h1>显示与交互设置</h1>
+        <p class="page-lead">统一管理全站主题、动效、字体和表格密度。所有设置都会自动尊重设备的“减少动态效果”偏好。</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="alert alert--success" role="status">@Model.StatusMessage</div>
+}
+
+@if (Model.IsReadOnly)
+{
+    <div class="alert alert--info" data-settings-readonly>应用级管理员可以查看当前设置；只有系统级管理员可以修改。</div>
+}
+
+<form method="post" class="settings-form" data-settings-preview>
+    <section class="form-section">
+        <div class="form-section-heading"><div><p class="eyebrow">显示主题</p><h2>选择界面材质</h2></div><p>保存前可直接预览页面背景、侧栏和卡片层次。</p></div>
+        <div class="option-card-grid" role="radiogroup" aria-label="显示主题">
+            <label class="option-card" data-theme-option="theme-default">
+                <input asp-for="Input.Theme" type="radio" value="Default" disabled="@Model.IsReadOnly" />
+                <span class="option-preview option-preview--technology" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span><strong>科技商务</strong><small>清晰、稳重的数据工作区，适合日常高频使用。</small></span>
+            </label>
+            <label class="option-card" data-theme-option="theme-clear-glass">
+                <input asp-for="Input.Theme" type="radio" value="ClearGlass" disabled="@Model.IsReadOnly" />
+                <span class="option-preview option-preview--glass" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span><strong>清透毛玻璃</strong><small>半透明材质、柔和高光和更明显的空间层次。</small></span>
+            </label>
+        </div>
+    </section>
+
+    <section class="form-section">
+        <div class="form-section-heading"><div><p class="eyebrow">动效风格</p><h2>选择交互节奏</h2></div></div>
+        <div class="option-card-grid" role="radiogroup" aria-label="动效风格">
+            <label class="option-card" data-motion-option="motion-technology"><input asp-for="Input.Motion" type="radio" value="Technology" disabled="@Model.IsReadOnly" /><span><strong>科技商务动效</strong><small>线性转场、图表展开和克制的按钮反馈。</small></span></label>
+            <label class="option-card" data-motion-option="motion-apple"><input asp-for="Input.Motion" type="radio" value="Apple" disabled="@Model.IsReadOnly" /><span><strong>Apple 弹性动效</strong><small>柔焦入场、弹性缓动和按压缩放反馈。</small></span></label>
+        </div>
+    </section>
+
+    <section class="form-section">
+        <div class="form-section-heading"><div><p class="eyebrow">特效等级</p><h2>控制全站动画强度</h2></div></div>
+        <div class="option-card-grid option-card-grid--three" role="radiogroup" aria-label="特效等级">
+            <label class="option-card" data-effects-option="ui-effects-low"><input asp-for="Input.Effects" type="radio" value="Low" disabled="@Model.IsReadOnly" /><span><strong>轻度</strong><small>只保留基础 hover、focus 和按压反馈。</small></span></label>
+            <label class="option-card" data-effects-option="ui-effects-medium"><input asp-for="Input.Effects" type="radio" value="Medium" disabled="@Model.IsReadOnly" /><span><strong>中度（推荐）</strong><small>启用柔和入场、数字滚动和图表展开。</small></span></label>
+            <label class="option-card" data-effects-option="ui-effects-high"><input asp-for="Input.Effects" type="radio" value="High" disabled="@Model.IsReadOnly" /><span><strong>高度</strong><small>启用完整转场、背景呼吸和强化弹性反馈。</small></span></label>
+        </div>
+    </section>
+
+    <section class="form-section settings-select-grid">
+        <label class="settings-select-card" data-global-font-picker>
+            <span><strong>全局字体</strong><small>使用本机字体栈，不连接外部字体服务。</small></span>
+            <select asp-for="Input.Font" disabled="@Model.IsReadOnly" data-global-font-select>
+                <option value="SystemDefault">系统默认</option>
+                <option value="MicrosoftYaHei">微软雅黑</option>
+                <option value="MicrosoftJhengHei">微软正黑</option>
+                <option value="ChineseSerif">宋体／明体</option>
+                <option value="ChineseKai">楷体</option>
+            </select>
+        </label>
+        <label class="settings-select-card">
+            <span><strong>表格密度</strong><small>设置全站业务表格的默认行高。</small></span>
+            <select asp-for="Input.Density" disabled="@Model.IsReadOnly" data-table-density>
+                <option value="Compact">紧凑</option>
+                <option value="Standard">标准</option>
+                <option value="Spacious">宽松</option>
+            </select>
+        </label>
+    </section>
+
+    @if (!Model.IsReadOnly)
+    {
+        <div class="page-actions">
+            <button class="button button--primary" type="submit">保存全局设置</button>
+            <a class="button button--secondary" asp-page="/Admin/Index">返回管理中心</a>
+        </div>
+    }
+</form>
