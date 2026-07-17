@@ -25,6 +25,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<ProjectAssignment> ProjectAssignments => Set<ProjectAssignment>();
@@ -105,6 +107,18 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         {
             entity.Property(user => user.DisplayName)
                 .HasMaxLength(100);
+        });
+
+        builder.Entity<SystemSetting>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Key).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.Value).HasMaxLength(500).IsRequired();
+            entity.HasIndex(item => item.Key).IsUnique();
+            entity.HasOne(item => item.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(item => item.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<OrganizationUnit>(entity =>

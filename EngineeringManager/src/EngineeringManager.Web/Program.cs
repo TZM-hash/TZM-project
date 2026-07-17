@@ -38,6 +38,8 @@ using EngineeringManager.Application.Companies;
 using EngineeringManager.Infrastructure.Companies;
 using EngineeringManager.Application.Development;
 using EngineeringManager.Infrastructure.Development;
+using EngineeringManager.Application.Settings;
+using EngineeringManager.Infrastructure.Settings;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -69,6 +71,7 @@ public sealed class Program
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         builder.Services.AddRazorPages();
+        builder.Services.AddMemoryCache();
         builder.Services.AddScoped<IOrganizationService, OrganizationService>();
         builder.Services.AddScoped<IUserAdministrationService, UserAdministrationService>();
         builder.Services.AddScoped<IProjectService, ProjectService>();
@@ -97,6 +100,7 @@ public sealed class Program
         builder.Services.AddScoped<IEquipmentSettlementService, EquipmentSettlementService>();
         builder.Services.AddScoped<IEquipmentOfflineService, EquipmentOfflineService>();
         builder.Services.AddScoped<IDevelopmentSampleDataSeeder, DevelopmentSampleDataSeeder>();
+        builder.Services.AddScoped<ISystemSettingsService, SystemSettingsService>();
         builder.Services
             .AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
