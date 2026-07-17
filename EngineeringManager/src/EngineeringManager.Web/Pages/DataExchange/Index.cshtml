@@ -6,6 +6,7 @@
 
 <section class="page-heading"><div><p class="eyebrow">数据交换</p><h1>导入导出</h1><p class="page-lead">项目经营总览默认包含汇总和项目明细；字段选择、顺序和截止日会按用户保存。管理员可以预览导入错误后再确认。</p></div></section>
 <section class="content-grid">
+    <section class="panel form-span"><div class="panel-heading"><div><p class="eyebrow">字段目录</p><h2>当前数据集可导出字段</h2></div></div><partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.DataExchange" /><div class="table-wrap"><table class="data-table" id="data-exchange-table"><thead><tr><th data-column-key="key">字段键</th><th data-column-key="label">字段名称</th><th data-column-key="type">数据类型</th><th data-column-key="default">默认导出</th></tr></thead><tbody>@foreach (var field in Model.Fields) { <tr><td data-column-key="key">@field.Key</td><td data-column-key="label">@field.Label</td><td data-column-key="type">@field.DataType</td><td data-column-key="default">@(field.IsDefault ? "是" : "否")</td></tr> }</tbody></table></div></section>
     <form method="post" asp-page-handler="Export" class="panel form-grid">
         <div class="form-span"><p class="eyebrow">自由导出</p><h2>选择字段</h2></div>
         <label>数据集<select asp-for="Dataset" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.DataExchange.ExportDataset>()"></select></label>

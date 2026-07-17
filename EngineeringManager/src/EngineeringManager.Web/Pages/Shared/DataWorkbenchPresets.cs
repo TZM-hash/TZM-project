@@ -10,6 +10,10 @@ public static class DataWorkbenchPresets
     public static DataWorkbenchViewModel Companies => Create("companies", "companies-table", [("code", "编码"), ("company", "公司"), ("category", "分类"), ("representative", "法人/经营者"), ("status", "状态")]);
     public static DataWorkbenchViewModel Equipment => Create("equipment", "equipment-table", [("number", "编号"), ("name", "名称"), ("model", "型号"), ("ownership", "权属"), ("status", "状态"), ("actions", "操作")]);
     public static DataWorkbenchViewModel Reminders => Create("reminders", "reminders-table", [("severity", "级别"), ("type", "类型"), ("title", "标题"), ("message", "说明"), ("actions", "操作")]);
+    public static DataWorkbenchViewModel Users => Create("users", "users-table", [("display_name", "姓名"), ("user_name", "账号"), ("status", "状态"), ("roles", "角色"), ("department", "主部门"), ("companies", "签约公司范围")]);
+    public static DataWorkbenchViewModel Organizations => Create("organizations", "organizations-table", [("code", "编码"), ("name", "名称"), ("type", "类型"), ("status", "状态")]);
+    public static DataWorkbenchViewModel DataExchange => Create("data-exchange", "data-exchange-table", [("key", "字段键"), ("label", "字段名称"), ("type", "数据类型"), ("default", "默认导出")]);
+    public static DataWorkbenchViewModel Backups => Create("backups", "backups-table", [("created", "时间"), ("status", "状态"), ("database", "数据库文件"), ("attachments", "附件文件"), ("error", "错误")]);
 
     private static DataWorkbenchViewModel Create(string pageKey, string tableId, IReadOnlyList<(string Key, string Label)> columns) =>
         new(pageKey, tableId, columns.Select((item, index) => new DataWorkbenchColumn(item.Key, item.Label, true, index == 0)).ToArray(), [], [], [], CanExport: false, CanSaveViews: false, CanChangePageSize: false);

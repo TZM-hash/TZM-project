@@ -15,18 +15,19 @@
 <section class="content-grid">
     <article class="panel">
         <div class="panel-heading"><div><p class="eyebrow">部门 / 分支</p><h2>组织单元</h2></div></div>
+        <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Organizations" />
         @if (Model.Overview.OrganizationUnits.Count == 0)
         {
             <p class="panel-copy">还没有组织单元。</p>
         }
         else
         {
-            <ul class="check-list">
+            <div class="table-wrap"><table class="data-table" id="organizations-table"><thead><tr><th data-column-key="code">编码</th><th data-column-key="name">名称</th><th data-column-key="type">类型</th><th data-column-key="status">状态</th></tr></thead><tbody>
                 @foreach (var unit in Model.Overview.OrganizationUnits)
                 {
-                    <li>@unit.Code · @unit.Name · @(unit.UnitType == EngineeringManager.Domain.Organization.OrganizationUnitType.Branch ? "分支机构" : "部门")</li>
+                    <tr><td data-column-key="code">@unit.Code</td><td data-column-key="name">@unit.Name</td><td data-column-key="type">@(unit.UnitType == EngineeringManager.Domain.Organization.OrganizationUnitType.Branch ? "分支机构" : "部门")</td><td data-column-key="status">@(unit.IsActive ? "启用" : "停用")</td></tr>
                 }
-            </ul>
+            </tbody></table></div>
         }
     </article>
     <article class="panel">

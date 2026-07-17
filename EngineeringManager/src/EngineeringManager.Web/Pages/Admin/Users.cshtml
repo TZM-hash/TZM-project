@@ -14,6 +14,7 @@
 
 <section class="panel">
     <div class="panel-heading"><div><p class="eyebrow">账号</p><h2>系统用户</h2></div></div>
+    <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Users" />
     @if (Model.Users.Count == 0)
     {
         <p class="panel-copy">尚未创建用户账号。生产管理员账号不会通过代码仓库保存密码。</p>
@@ -21,18 +22,18 @@
     else
     {
         <div class="table-wrap">
-            <table class="data-table">
-                <thead><tr><th>姓名</th><th>账号</th><th>状态</th><th>角色</th><th>主部门</th><th>签约公司范围</th></tr></thead>
+            <table class="data-table" id="users-table">
+                <thead><tr><th data-column-key="display_name">姓名</th><th data-column-key="user_name">账号</th><th data-column-key="status">状态</th><th data-column-key="roles">角色</th><th data-column-key="department">主部门</th><th data-column-key="companies">签约公司范围</th></tr></thead>
                 <tbody>
                 @foreach (var user in Model.Users)
                 {
                     <tr>
-                        <td>@user.DisplayName</td>
-                        <td>@user.UserName</td>
-                        <td>@(user.IsEnabled ? "启用" : "停用")</td>
-                        <td>@string.Join("、", user.Roles)</td>
-                        <td>@(user.PrimaryOrganization ?? "未设置")</td>
-                        <td>@(user.LegalEntities.Count == 0 ? "未设置" : string.Join("、", user.LegalEntities))</td>
+                        <td data-column-key="display_name">@user.DisplayName</td>
+                        <td data-column-key="user_name">@user.UserName</td>
+                        <td data-column-key="status">@(user.IsEnabled ? "启用" : "停用")</td>
+                        <td data-column-key="roles">@string.Join("、", user.Roles)</td>
+                        <td data-column-key="department">@(user.PrimaryOrganization ?? "未设置")</td>
+                        <td data-column-key="companies">@(user.LegalEntities.Count == 0 ? "未设置" : string.Join("、", user.LegalEntities))</td>
                     </tr>
                 }
                 </tbody>

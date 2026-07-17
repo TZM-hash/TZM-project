@@ -13,9 +13,13 @@ public sealed class ModuleDataWorkbenchTests
     [InlineData("Companies", "companies-table")]
     [InlineData("Equipment", "equipment-table")]
     [InlineData("Reminders", "reminders-table")]
+    [InlineData("DataExchange", "data-exchange-table")]
+    [InlineData("Backups", "backups-table")]
+    [InlineData("Admin/Users", "users-table")]
+    [InlineData("Admin/Organizations", "organizations-table")]
     public void MajorListUsesSharedWorkbench(string module, string tableId)
     {
-        var html = ReadFile("src", "EngineeringManager.Web", "Pages", module, "Index.cshtml");
+        var html = ReadModuleFile(module);
 
         html.Should().Contain("_DataWorkbench")
             .And.Contain($"id=\"{tableId}\"")
@@ -23,6 +27,13 @@ public sealed class ModuleDataWorkbenchTests
     }
 
     private static string ReadFile(params string[] parts) => File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()));
+
+    private static string ReadModuleFile(string module)
+    {
+        var parts = module.Split('/');
+        var fileName = parts.Length == 1 ? "Index.cshtml" : $"{parts[^1]}.cshtml";
+        return File.ReadAllText(Path.Combine(new[] { RepositoryRoot(), "src", "EngineeringManager.Web", "Pages" }.Concat(parts.Take(parts.Length - (parts.Length == 1 ? 0 : 1))).Append(fileName).ToArray()));
+    }
 
     private static string RepositoryRoot()
     {
