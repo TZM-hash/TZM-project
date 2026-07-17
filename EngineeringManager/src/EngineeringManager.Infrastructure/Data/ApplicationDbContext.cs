@@ -27,6 +27,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
+    public DbSet<SavedDataView> SavedDataViews => Set<SavedDataView>();
+
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<ProjectAssignment> ProjectAssignments => Set<ProjectAssignment>();
@@ -119,6 +121,22 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
                 .WithMany()
                 .HasForeignKey(item => item.UpdatedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<SavedDataView>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.PageKey).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.FilterJson).HasMaxLength(8000).IsRequired();
+            entity.Property(item => item.ColumnJson).HasMaxLength(8000).IsRequired();
+            entity.Property(item => item.SortKey).HasMaxLength(100);
+            entity.HasIndex(item => new { item.UserId, item.PageKey, item.Name }).IsUnique();
+            entity.HasIndex(item => new { item.UserId, item.PageKey, item.IsDefault });
+            entity.HasOne(item => item.User)
+                .WithMany(user => user.SavedDataViews)
+                .HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<OrganizationUnit>(entity =>

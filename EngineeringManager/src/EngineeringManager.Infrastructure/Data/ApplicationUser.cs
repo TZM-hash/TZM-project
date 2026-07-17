@@ -19,4 +19,6 @@ public sealed class ApplicationUser : IdentityUser
     public ICollection<UserPermissionOverride> PermissionOverrides { get; set; } = [];
 
     public ICollection<UserDataScope> DataScopes { get; set; } = [];
+
+    public ICollection<SavedDataView> SavedDataViews { get; set; } = [];
 }

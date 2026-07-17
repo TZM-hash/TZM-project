@@ -40,6 +40,8 @@ using EngineeringManager.Application.Development;
 using EngineeringManager.Infrastructure.Development;
 using EngineeringManager.Application.Settings;
 using EngineeringManager.Infrastructure.Settings;
+using EngineeringManager.Application.DataViews;
+using EngineeringManager.Infrastructure.DataViews;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -101,6 +103,7 @@ public sealed class Program
         builder.Services.AddScoped<IEquipmentOfflineService, EquipmentOfflineService>();
         builder.Services.AddScoped<IDevelopmentSampleDataSeeder, DevelopmentSampleDataSeeder>();
         builder.Services.AddScoped<ISystemSettingsService, SystemSettingsService>();
+        builder.Services.AddScoped<ISavedDataViewService, SavedDataViewService>();
         builder.Services
             .AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
