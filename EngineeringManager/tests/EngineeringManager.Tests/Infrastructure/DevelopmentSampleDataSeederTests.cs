@@ -5,6 +5,16 @@ namespace EngineeringManager.Tests.Infrastructure;
 
 public sealed class DevelopmentSampleDataSeederTests
 {
+    [Fact]
+    public void CatalogUsesConfirmedMediumScenario()
+    {
+        SampleDataCatalog.CompanyCount.Should().Be(5);
+        SampleDataCatalog.ProjectCount.Should().Be(15);
+        SampleDataCatalog.EmployeeCount.Should().Be(30);
+        SampleDataCatalog.PartnerCount.Should().Be(12);
+        SampleDataCatalog.EquipmentCount.Should().Be(15);
+    }
+
     [Theory]
     [InlineData("Production", "EngineeringManager_Test")]
     [InlineData("Development", "EngineeringManager")]
