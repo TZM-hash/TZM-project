@@ -40,13 +40,14 @@
         </article>
         <article class="panel">
             <div class="panel-heading"><div><p class="eyebrow">公司档案</p><h2>公司列表</h2></div></div>
+            <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Companies" />
             @if (Model.Companies.Count == 0) { <p class="panel-copy">当前权限范围内没有自有公司。</p> }
             else
             {
-                <div class="table-wrap"><table><thead><tr><th>编码</th><th>公司</th><th>分类</th><th>法人/经营者</th><th>状态</th></tr></thead><tbody>
+                <div class="table-wrap"><table class="data-table" id="companies-table"><thead><tr><th data-column-key="code">编码</th><th data-column-key="company">公司</th><th data-column-key="category">分类</th><th data-column-key="representative">法人/经营者</th><th data-column-key="status">状态</th></tr></thead><tbody>
                 @foreach (var company in Model.Companies)
                 {
-                    <tr><td>@company.Code</td><td><a asp-page="Details" asp-route-id="@company.Id">@company.Name</a></td><td>@(company.CategoryName ?? "未分类")</td><td>@company.LegalRepresentative</td><td>@(company.IsActive ? "启用" : "停用")</td></tr>
+                    <tr><td data-column-key="code">@company.Code</td><td data-column-key="company"><a asp-page="Details" asp-route-id="@company.Id">@company.Name</a></td><td data-column-key="category">@(company.CategoryName ?? "未分类")</td><td data-column-key="representative">@company.LegalRepresentative</td><td data-column-key="status">@(company.IsActive ? "启用" : "停用")</td></tr>
                 }
                 </tbody></table></div>
             }

@@ -11,6 +11,7 @@
 
 <section class="panel">
     <div class="panel-heading"><div><p class="eyebrow">成果记录</p><h2>阶段成果列表</h2></div></div>
+    <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.StageResults" />
     @if (Model.Results.Count == 0)
     {
         <p class="panel-copy">还没有阶段成果记录。</p>
@@ -18,12 +19,12 @@
     else
     {
         <div class="table-wrap">
-            <table class="data-table">
-                <thead><tr><th>日期</th><th>名称</th><th>类型</th><th>状态</th><th>质量</th><th>工程量项</th><th>附件</th></tr></thead>
+            <table class="data-table" id="stage-results-table">
+                <thead><tr><th data-column-key="date">日期</th><th data-column-key="name">名称</th><th data-column-key="type">类型</th><th data-column-key="status">状态</th><th data-column-key="quality">质量</th><th data-column-key="lines">工程量项</th><th data-column-key="attachments">附件</th></tr></thead>
                 <tbody>
                 @foreach (var result in Model.Results)
                 {
-                    <tr><td>@result.ResultDate</td><td>@result.Title</td><td>@result.ResultType</td><td>@result.Status</td><td>@result.QualityResult</td><td>@result.Lines.Count</td><td>@result.Attachments.Count</td></tr>
+                    <tr><td data-column-key="date">@result.ResultDate</td><td data-column-key="name">@result.Title</td><td data-column-key="type">@result.ResultType</td><td data-column-key="status">@result.Status</td><td data-column-key="quality">@result.QualityResult</td><td data-column-key="lines">@result.Lines.Count</td><td data-column-key="attachments">@result.Attachments.Count</td></tr>
                 }
                 </tbody>
             </table>

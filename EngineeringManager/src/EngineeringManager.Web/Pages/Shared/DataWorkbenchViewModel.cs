@@ -55,4 +55,6 @@ public sealed record DataWorkbenchViewModel(
     string? CurrentSortKey = null,
     bool SortDescending = false,
     Guid? CurrentSavedViewId = null,
-    bool CanExport = false);
+    bool CanExport = false,
+    bool CanSaveViews = true,
+    bool CanChangePageSize = true);
