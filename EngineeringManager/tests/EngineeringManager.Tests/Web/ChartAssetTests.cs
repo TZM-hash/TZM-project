@@ -12,6 +12,7 @@ public sealed class ChartAssetTests
         File.Exists(partialPath).Should().BeTrue();
         var partial = File.Exists(partialPath) ? File.ReadAllText(partialPath) : string.Empty;
         var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
+        var css = ReadCss();
 
         js.Should().Contain("renderLineChart")
             .And.Contain("renderGroupedBars")
@@ -19,6 +20,8 @@ public sealed class ChartAssetTests
             .And.Contain("ResizeObserver")
             .And.Contain("prefers-reduced-motion");
         partial.Should().Contain("data-chart-empty");
+        css.Should().Contain(".chart-summary [data-chart-canvas]")
+            .And.Contain("width: 8rem");
         layout.Should().NotContain("cdn").And.NotContain("echarts").And.NotContain("chart.js");
     }
 
@@ -39,6 +42,12 @@ public sealed class ChartAssetTests
     {
         var directory = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "wwwroot", "js");
         return string.Join('\n', Directory.EnumerateFiles(directory, "*.js", SearchOption.AllDirectories).Select(File.ReadAllText));
+    }
+
+    private static string ReadCss()
+    {
+        var directory = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "wwwroot", "css");
+        return string.Join('\n', Directory.EnumerateFiles(directory, "*.css", SearchOption.TopDirectoryOnly).Select(File.ReadAllText));
     }
 
     private static string ReadFile(params string[] parts) => File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()));
