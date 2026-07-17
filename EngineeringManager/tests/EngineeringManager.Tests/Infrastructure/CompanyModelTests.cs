@@ -72,6 +72,23 @@ public sealed class CompanyModelTests
         await action.Should().ThrowAsync<DbUpdateException>();
     }
 
+    [Fact]
+    public async Task CompanyCanHaveMultipleCertificatesOfTheSameType()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateContext(connection);
+        await db.Database.EnsureCreatedAsync();
+        var company = new LegalEntity { Code = "COMP-CERT", Name = "多资质公司", ShortName = "多资质" };
+        db.CompanyCertificates.AddRange(
+            new CompanyCertificate { LegalEntity = company, CertificateType = "资质证书", CertificateNumber = "ZZ-01", SpecialtyLevelScope = "建筑工程施工总承包二级", IssuingAuthority = "省住建厅" },
+            new CompanyCertificate { LegalEntity = company, CertificateType = "资质证书", CertificateNumber = "ZZ-02", SpecialtyLevelScope = "市政公用工程施工总承包二级", IssuingAuthority = "省住建厅" });
+
+        await db.SaveChangesAsync();
+
+        (await db.CompanyCertificates.CountAsync()).Should().Be(2);
+    }
+
     private static ApplicationDbContext CreateContext(SqliteConnection connection) =>
         new(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
 }

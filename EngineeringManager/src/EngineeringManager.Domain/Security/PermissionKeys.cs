@@ -24,6 +24,7 @@ public static class PermissionKeys
     public const string FinancialAccountsManage = "finance.accounts.manage";
     public const string EmployeesRead = "employees.read";
     public const string EmployeesManage = "employees.manage";
+    public const string EmployeeCertificatesManage = "employees.certificates.manage";
     public const string PayrollRead = "payroll.read";
     public const string PayrollManage = "payroll.manage";
     public const string EmployeeLedgerRead = "employee-ledger.read";
@@ -64,6 +65,7 @@ public static class PermissionKeys
         FinancialAccountsManage,
         EmployeesRead,
         EmployeesManage,
+        EmployeeCertificatesManage,
         PayrollRead,
         PayrollManage,
         EmployeeLedgerRead,
@@ -107,6 +109,7 @@ public static class PermissionKeys
                 FinancialAccountsManage,
                 EmployeesRead,
                 EmployeesManage,
+                EmployeeCertificatesManage,
                 PayrollRead,
                 PayrollManage,
                 EmployeeLedgerRead,

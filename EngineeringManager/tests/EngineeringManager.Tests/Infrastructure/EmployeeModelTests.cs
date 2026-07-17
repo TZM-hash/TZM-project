@@ -12,6 +12,26 @@ namespace EngineeringManager.Tests.Infrastructure;
 public sealed class EmployeeModelTests
 {
     [Fact]
+    public async Task EmployeeCanHaveNoCertificateOrMultipleCertificatesIncludingLongTerm()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var withoutCertificate = new Employee { EmployeeNumber = "E-NONE", Name = "无证员工", EmployeeType = EmployeeType.Labor };
+        var employee = new Employee { EmployeeNumber = "E-CERT", Name = "持证员工", EmployeeType = EmployeeType.Formal };
+        employee.Certificates.Add(new EmployeeCertificate { Employee = employee, CertificateType = "建造师证", CertificateNumber = "JZS-01", ExpiresOn = new DateOnly(2028, 6, 30) });
+        employee.Certificates.Add(new EmployeeCertificate { Employee = employee, CertificateType = "安全员证", CertificateNumber = "AQY-01", ExpiresOn = null });
+        db.AddRange(withoutCertificate, employee);
+
+        await db.SaveChangesAsync();
+
+        (await db.EmployeeCertificates.CountAsync()).Should().Be(2);
+        (await db.EmployeeCertificates.SingleAsync(item => item.CertificateNumber == "AQY-01")).ExpiresOn.Should().BeNull();
+        (await db.Employees.Include(item => item.Certificates).SingleAsync(item => item.Id == withoutCertificate.Id)).Certificates.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task FormalAndLaborEmployeesWithAffiliationHistoryCanBePersisted()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

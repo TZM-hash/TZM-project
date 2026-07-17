@@ -68,6 +68,7 @@ public sealed class SampleDataBuilder(
     public async Task<SampleDataContext> BuildCompleteAsync(string contentRootPath, CancellationToken token)
     {
         var context = await BuildCoreAsync(token);
+        await EnsureCertificatesAsync(context, token);
         var accounts = await EnsureFinancialAccountsAsync(context, token);
         await EnsureFinanceAsync(context, accounts, token);
         await EnsurePayrollAndEmployeeLedgerAsync(context, accounts, token);
@@ -76,6 +77,66 @@ public sealed class SampleDataBuilder(
         await EnsureRemindersAsync(context, token);
         await ValidateCompleteScenarioAsync(token);
         return context;
+    }
+
+    private async Task EnsureCertificatesAsync(SampleDataContext context, CancellationToken token)
+    {
+        if (!await db.EmployeeCertificates.AnyAsync(item => item.CertificateNumber != null && item.CertificateNumber.StartsWith("DEMO-EMP-CERT-"), token))
+        {
+            var employeeTypes = new[] { "建造师证", "安全员证", "特种作业证", "操作员证", "职业资格证" };
+            for (var index = 0; index < Math.Min(18, context.Employees.Count); index++)
+            {
+                DateOnly? expiresOn = (index % 6) switch
+                {
+                    0 => context.AnchorDate.AddDays(-12),
+                    1 => context.AnchorDate.AddDays(18),
+                    2 => context.AnchorDate.AddMonths(1).AddDays(8),
+                    3 => context.AnchorDate.AddMonths(2).AddDays(8),
+                    4 => context.AnchorDate.AddMonths(8),
+                    _ => null
+                };
+                db.EmployeeCertificates.Add(new EmployeeCertificate
+                {
+                    Employee = context.Employees[index],
+                    CertificateType = employeeTypes[index % employeeTypes.Length],
+                    CertificateNumber = $"DEMO-EMP-CERT-{index + 1:000}",
+                    SpecialtyLevelScope = index % 3 == 0 ? "建筑工程 / 一级" : index % 3 == 1 ? "安全生产考核 C 证" : "设备操作资格",
+                    IssuingAuthority = index % 2 == 0 ? "云南省住房和城乡建设主管部门" : "昆明市行业主管部门",
+                    IssuedOn = context.AnchorDate.AddYears(-2).AddDays(index),
+                    ExpiresOn = expiresOn,
+                    Notes = "测试证书，仅用于 EngineeringManager_Test。"
+                });
+            }
+        }
+
+        if (!await db.CompanyCertificates.AnyAsync(item => item.CertificateNumber != null && item.CertificateNumber.StartsWith("DEMO-COMP-CERT-"), token))
+        {
+            var companyTypes = new[] { "营业执照", "安全生产许可证", "资质证书", "资质证书" };
+            for (var index = 0; index < context.Companies.Count * 2; index++)
+            {
+                var company = context.Companies[index % context.Companies.Count];
+                var type = companyTypes[index % companyTypes.Length];
+                db.CompanyCertificates.Add(new CompanyCertificate
+                {
+                    LegalEntity = company,
+                    CertificateType = type,
+                    CertificateNumber = $"DEMO-COMP-CERT-{index + 1:000}",
+                    SpecialtyLevelScope = type == "资质证书" ? (index % 2 == 0 ? "建筑工程施工总承包二级" : "市政公用工程施工总承包二级") : null,
+                    IssuingAuthority = "云南省住房和城乡建设主管部门",
+                    IssuedOn = context.AnchorDate.AddYears(-3).AddDays(index),
+                    ExpiresOn = (index % 5) switch
+                    {
+                        0 => (DateOnly?)context.AnchorDate.AddDays(25),
+                        1 => context.AnchorDate.AddMonths(1).AddDays(10),
+                        2 => context.AnchorDate.AddMonths(2).AddDays(10),
+                        3 => context.AnchorDate.AddMonths(10),
+                        _ => null
+                    },
+                    Notes = "测试公司证书，仅用于 EngineeringManager_Test。"
+                });
+            }
+        }
+        await db.SaveChangesAsync(token);
     }
 
     private async Task<(IReadOnlyList<ApplicationUser> Users, IReadOnlyList<SampleCredential> Credentials)> EnsureUsersAsync(CancellationToken token)

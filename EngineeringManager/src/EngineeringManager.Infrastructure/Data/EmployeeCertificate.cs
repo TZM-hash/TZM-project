@@ -1,12 +1,10 @@
-using EngineeringManager.Domain.Organization;
-
 namespace EngineeringManager.Infrastructure.Data;
 
-public sealed class CompanyCertificate
+public sealed class EmployeeCertificate
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid LegalEntityId { get; set; }
-    public LegalEntity LegalEntity { get; set; } = null!;
+    public Guid EmployeeId { get; set; }
+    public Employee Employee { get; set; } = null!;
     public string CertificateType { get; set; } = string.Empty;
     public string? CertificateNumber { get; set; }
     public string? SpecialtyLevelScope { get; set; }

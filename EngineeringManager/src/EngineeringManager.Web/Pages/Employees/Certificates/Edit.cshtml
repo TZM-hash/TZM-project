@@ -1,0 +1,17 @@
+@page
+@model EngineeringManager.Web.Pages.Employees.Certificates.EditModel
+@{ ViewData["Title"] = Model.Input.Id.HasValue ? "编辑员工证书" : "新增员工证书"; }
+<datalist id="employee-certificate-types"><option value="建造师证"></option><option value="安全员证"></option><option value="特种作业证"></option><option value="操作员证"></option><option value="职业资格证"></option></datalist>
+<section class="page-heading"><div><p class="eyebrow">人员证照台账</p><h1>@ViewData["Title"]</h1><p class="page-lead">到期日期留空即视为长期有效；常用类型可直接选择，也可以录入其他证书名称。</p></div><a class="button button--ghost" asp-page="Index">返回列表</a></section>
+<form method="post" enctype="multipart/form-data" class="panel form-grid certificate-edit-form">
+    <input type="hidden" asp-for="Input.Id" /><input type="hidden" asp-for="Input.ConcurrencyStamp" /><input type="hidden" asp-for="Input.ExistingAttachmentFileName" />
+    <label>所属员工<select asp-for="Input.EmployeeId" required><option value="">请选择员工</option>@foreach (var employee in Model.Employees) { <option value="@employee.Id">@employee.EmployeeNumber · @employee.Name</option> }</select><span asp-validation-for="Input.EmployeeId"></span></label>
+    <label>证书类型<input asp-for="Input.CertificateType" list="employee-certificate-types" required /><span asp-validation-for="Input.CertificateType"></span></label>
+    <label>证书编号<input asp-for="Input.CertificateNumber" /></label><label>专业/等级/资质范围<input asp-for="Input.SpecialtyLevelScope" /></label><label>发证机关<input asp-for="Input.IssuingAuthority" /></label>
+    <label>签发日期<input asp-for="Input.IssuedOn" type="date" /></label><label>到期日期<input asp-for="Input.ExpiresOn" type="date" /><small>留空表示长期有效</small></label>
+    <label class="form-span">附件<input asp-for="Input.Attachment" type="file" /><small>单个附件最大 20MB。当前：@(Model.Input.ExistingAttachmentFileName ?? "无")</small></label>
+    @if (!string.IsNullOrWhiteSpace(Model.Input.ExistingAttachmentFileName)) { <label class="checkbox-row form-span"><input asp-for="Input.RemoveAttachment" />删除当前附件</label> }
+    <label class="form-span">备注<textarea asp-for="Input.Notes"></textarea></label><label class="form-span">修改原因<input asp-for="Input.Reason" required /></label>
+    <div asp-validation-summary="ModelOnly" class="form-span validation-summary"></div><div class="form-span button-row"><button class="button button--primary" type="submit">保存证书</button><a class="button button--secondary" asp-page="Index">取消</a></div>
+</form>
+<partial name="_ValidationScriptsPartial" />

@@ -27,4 +27,5 @@ public sealed class Employee
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();
     public ICollection<EmployeeAffiliationHistory> AffiliationHistory { get; set; } = [];
+    public ICollection<EmployeeCertificate> Certificates { get; set; } = [];
 }

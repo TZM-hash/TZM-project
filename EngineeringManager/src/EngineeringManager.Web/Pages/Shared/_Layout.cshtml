@@ -4,6 +4,7 @@
     var displaySettings = await SystemSettingsService.GetAsync(Context.RequestAborted);
     var currentPage = Context.Request.Path.Value ?? string.Empty;
     string Nav(string prefix) => currentPage.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? "nav-link is-active" : "nav-link";
+    string NavExact(string path) => string.Equals(currentPage.TrimEnd('/'), path.TrimEnd('/'), StringComparison.OrdinalIgnoreCase) ? "nav-link is-active" : "nav-link";
 }
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -30,13 +31,15 @@
                 <a class='@Nav("/Finance")' asp-page="/Finance/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>经营台账</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">人员与合作方</span>
-                <a class='@Nav("/Employees")' asp-page="/Employees/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>员工管理</span></a>
+                <a class='@NavExact("/Employees")' asp-page="/Employees/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>员工管理</span></a>
+                <a class='@Nav("/Employees/Certificates")' asp-page="/Employees/Certificates/Index"><svg><use href="/img/icons.svg#reminder"></use></svg><span>员工证书</span></a>
                 <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#payroll"></use></svg><span>工资台账</span></a>
                 <a class='@Nav("/EmployeeLedger")' asp-page="/EmployeeLedger/Index"><svg><use href="/img/icons.svg#ledger"></use></svg><span>员工往来</span></a>
                 <a class='@Nav("/Partners")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">公司与设备</span>
-                <a class='@Nav("/Companies")' asp-page="/Companies/Index"><svg><use href="/img/icons.svg#company"></use></svg><span>自有公司</span></a>
+                <a class='@NavExact("/Companies")' asp-page="/Companies/Index"><svg><use href="/img/icons.svg#company"></use></svg><span>自有公司</span></a>
+                <a class='@Nav("/Companies/Certificates")' asp-page="/Companies/Certificates/Index"><svg><use href="/img/icons.svg#reminder"></use></svg><span>公司证书</span></a>
                 <a class='@Nav("/Equipment")' asp-page="/Equipment/Index"><svg><use href="/img/icons.svg#equipment"></use></svg><span>设备管理</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">数据与系统</span>

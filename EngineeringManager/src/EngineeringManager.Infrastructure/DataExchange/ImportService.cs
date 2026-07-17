@@ -21,6 +21,17 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("岗位", "position", false),
             new("电话", "phone", false)
         ],
+        [ExportDataset.EmployeeCertificates] =
+        [
+            new("员工编号", "employee_number", true),
+            new("证书类型", "certificate_type", true),
+            new("证书编号", "certificate_number", false),
+            new("专业/等级/范围", "specialty_level_scope", false),
+            new("发证机关", "issuing_authority", false),
+            new("签发日期", "issued_on", false),
+            new("到期日期", "expires_on", false),
+            new("备注", "notes", false)
+        ],
         [ExportDataset.Partners] =
         [
             new("单位编号", "partner_number", true),
@@ -63,6 +74,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("公司编码", "company_code", true),
             new("资料类型", "certificate_type", true),
             new("资料编号", "certificate_number", false),
+            new("专业/等级/范围", "specialty_level_scope", false),
+            new("发证机关", "issuing_authority", false),
             new("签发日期", "issued_on", false),
             new("有效期", "expires_on", false),
             new("备注", "notes", false)
@@ -218,6 +231,14 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     errors.Add(new ImportErrorDto(excelRow, "公司编码", "公司编码不存在。", companyCode));
                 }
             }
+            if (dataset == ExportDataset.EmployeeCertificates)
+            {
+                var employeeNumber = values.GetValueOrDefault("employee_number");
+                if (!string.IsNullOrWhiteSpace(employeeNumber) && !await db.Employees.AnyAsync(item => item.EmployeeNumber == employeeNumber, cancellationToken))
+                {
+                    errors.Add(new ImportErrorDto(excelRow, "员工编号", "员工编号不存在。", employeeNumber));
+                }
+            }
             if (dataset == ExportDataset.Companies)
             {
                 var categoryCode = values.GetValueOrDefault("category_code");
@@ -237,10 +258,16 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     errors.Add(new ImportErrorDto(excelRow, "期初余额", "期初余额必须是数字。", values.GetValueOrDefault("opening_balance")));
                 }
             }
-            if (dataset == ExportDataset.CompanyCertificates)
+            if (dataset is ExportDataset.CompanyCertificates or ExportDataset.EmployeeCertificates)
             {
                 ValidateDate(values.GetValueOrDefault("issued_on"), excelRow, "签发日期", errors);
-                ValidateDate(values.GetValueOrDefault("expires_on"), excelRow, "有效期", errors);
+                ValidateDate(values.GetValueOrDefault("expires_on"), excelRow, "到期日期", errors);
+                var issuedOn = ParseDate(values.GetValueOrDefault("issued_on"));
+                var expiresOn = ParseDate(values.GetValueOrDefault("expires_on"));
+                if (issuedOn.HasValue && expiresOn.HasValue && expiresOn < issuedOn)
+                {
+                    errors.Add(new ImportErrorDto(excelRow, "到期日期", "到期日期不能早于签发日期。", values.GetValueOrDefault("expires_on")));
+                }
             }
             if (dataset == ExportDataset.Equipment)
             {
@@ -351,6 +378,20 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     Phone = values.GetValueOrDefault("phone")
                 });
                 break;
+            case ExportDataset.EmployeeCertificates:
+                var certificateEmployee = db.Employees.Single(item => item.EmployeeNumber == values["employee_number"]);
+                db.EmployeeCertificates.Add(new EmployeeCertificate
+                {
+                    Employee = certificateEmployee,
+                    CertificateType = values["certificate_type"]!,
+                    CertificateNumber = values.GetValueOrDefault("certificate_number"),
+                    SpecialtyLevelScope = values.GetValueOrDefault("specialty_level_scope"),
+                    IssuingAuthority = values.GetValueOrDefault("issuing_authority"),
+                    IssuedOn = ParseDate(values.GetValueOrDefault("issued_on")),
+                    ExpiresOn = ParseDate(values.GetValueOrDefault("expires_on")),
+                    Notes = values.GetValueOrDefault("notes")
+                });
+                break;
             case ExportDataset.Partners:
                 db.BusinessPartners.Add(new BusinessPartner
                 {
@@ -408,6 +449,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     LegalEntity = certificateCompany,
                     CertificateType = values["certificate_type"]!,
                     CertificateNumber = values.GetValueOrDefault("certificate_number"),
+                    SpecialtyLevelScope = values.GetValueOrDefault("specialty_level_scope"),
+                    IssuingAuthority = values.GetValueOrDefault("issuing_authority"),
                     IssuedOn = ParseDate(values.GetValueOrDefault("issued_on")),
                     ExpiresOn = ParseDate(values.GetValueOrDefault("expires_on")),
                     Notes = values.GetValueOrDefault("notes")
@@ -494,11 +537,12 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
     private static string TemplateSheetName(ExportDataset dataset) => dataset switch
     {
         ExportDataset.Employees => "员工导入",
+        ExportDataset.EmployeeCertificates => "员工证书导入",
         ExportDataset.Partners => "合作单位导入",
         ExportDataset.Projects => "项目导入",
         ExportDataset.Companies => "公司导入",
         ExportDataset.CompanyAccounts => "公司账户导入",
-        ExportDataset.CompanyCertificates => "公司证照导入",
+        ExportDataset.CompanyCertificates => "公司证书导入",
         ExportDataset.Equipment => "设备导入",
         ExportDataset.EquipmentLeases => "设备租赁导入",
         ExportDataset.EquipmentUsages => "设备使用导入",

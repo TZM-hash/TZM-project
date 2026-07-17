@@ -39,6 +39,7 @@ public sealed class ReminderServiceTests
         reminders.Should().Contain(item => item.Type == ReminderType.ImportFailed);
         reminders.Should().Contain(item => item.Type == ReminderType.BackupFailed);
         reminders.Should().Contain(item => item.Type == ReminderType.CompanyCertificateExpiring);
+        reminders.Should().Contain(item => item.Type == ReminderType.EmployeeCertificateExpiring);
         reminders.Should().Contain(item => item.Type == ReminderType.EquipmentLeaseExpiring);
         reminders.Should().Contain(item => item.Type == ReminderType.EquipmentMaintenanceDue);
         reminders.Select(item => item.DeduplicationKey).Should().OnlyHaveUniqueItems();
@@ -100,6 +101,49 @@ public sealed class ReminderServiceTests
         (await fixture.Service.ListAsync(true, CancellationToken.None)).Single(item => item.Id == reminder.Id).Status.Should().Be(ReminderStatus.Resolved);
     }
 
+    [Fact]
+    public async Task CertificatesUseThreeNaturalMonthReminderLevels()
+    {
+        await using var fixture = await ReminderFixture.CreateAsync();
+        var employee = await fixture.Db.Employees.SingleAsync(item => item.EmployeeNumber == "REM-E");
+        fixture.Db.EmployeeCertificates.AddRange(
+            new EmployeeCertificate { Employee = employee, CertificateType = "轻度证书", ExpiresOn = new DateOnly(2026, 10, 16) },
+            new EmployeeCertificate { Employee = employee, CertificateType = "中度证书", ExpiresOn = new DateOnly(2026, 9, 16) },
+            new EmployeeCertificate { Employee = employee, CertificateType = "重度证书", ExpiresOn = new DateOnly(2026, 8, 16) },
+            new EmployeeCertificate { Employee = employee, CertificateType = "长期证书", ExpiresOn = null });
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Service.RefreshAsync(new DateOnly(2026, 7, 17), default);
+        var reminders = (await fixture.Service.ListAsync(false, default)).Where(item => item.Type == ReminderType.EmployeeCertificateExpiring).ToArray();
+
+        reminders.Single(item => item.Message.Contains("轻度证书")).Severity.Should().Be(ReminderSeverity.Info);
+        reminders.Single(item => item.Message.Contains("中度证书")).Severity.Should().Be(ReminderSeverity.Warning);
+        reminders.Single(item => item.Message.Contains("重度证书")).Severity.Should().Be(ReminderSeverity.Critical);
+        reminders.Should().NotContain(item => item.Message.Contains("长期证书"));
+    }
+
+    [Fact]
+    public async Task RenewedOrDeletedCertificateAutomaticallyResolvesReminder()
+    {
+        await using var fixture = await ReminderFixture.CreateAsync();
+        await fixture.Service.RefreshAsync(new DateOnly(2026, 7, 17), default);
+        var companyReminder = (await fixture.Service.ListAsync(false, default)).Single(item => item.Type == ReminderType.CompanyCertificateExpiring);
+        var employeeReminder = (await fixture.Service.ListAsync(false, default)).Single(item => item.Type == ReminderType.EmployeeCertificateExpiring);
+        var companyCertificate = await fixture.Db.CompanyCertificates.SingleAsync();
+        companyCertificate.ExpiresOn = new DateOnly(2027, 1, 1);
+        var employeeCertificate = await fixture.Db.EmployeeCertificates.SingleAsync();
+        employeeCertificate.IsDeleted = true;
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Service.RefreshAsync(new DateOnly(2026, 7, 17), default);
+
+        var unresolved = await fixture.Service.ListAsync(false, default);
+        unresolved.Should().NotContain(item => item.Id == companyReminder.Id || item.Id == employeeReminder.Id);
+        var all = await fixture.Service.ListAsync(true, default);
+        all.Single(item => item.Id == companyReminder.Id).Status.Should().Be(ReminderStatus.Resolved);
+        all.Single(item => item.Id == employeeReminder.Id).Status.Should().Be(ReminderStatus.Resolved);
+    }
+
     private sealed class ReminderFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -135,6 +179,7 @@ public sealed class ReminderServiceTests
             rentedEquipment.MaintenanceRecords.Add(new EquipmentMaintenanceRecord { Equipment = rentedEquipment, NextDueDate = new DateOnly(2026, 7, 18) });
             db.Add(rentedEquipment);
             db.CompanyCertificates.Add(new CompanyCertificate { LegalEntity = legalEntity, CertificateType = "营业执照", CertificateNumber = "REM-LIC", ExpiresOn = new DateOnly(2026, 7, 20) });
+            db.EmployeeCertificates.Add(new EmployeeCertificate { Employee = employee, CertificateType = "安全员证", CertificateNumber = "REM-SAFE", ExpiresOn = new DateOnly(2026, 8, 20) });
             await db.SaveChangesAsync();
             await finance.AddReceivableAsync(new CreateReceivableRequest(project.Id, null, legalEntity.Id, partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, null), CancellationToken.None);
             await finance.AddPayableAsync(new CreatePayableRequest(project.Id, null, legalEntity.Id, partner.Id, PayableSourceType.Manual, new DateOnly(2026, 7, 1), null, 80m, null), CancellationToken.None);

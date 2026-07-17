@@ -1,6 +1,7 @@
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Application.Reminders;
+using EngineeringManager.Domain.Certificates;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Offline;
 using EngineeringManager.Domain.Reminders;
@@ -57,15 +58,39 @@ public sealed class ReminderService(
                 "工资批次存在未发工资", $"{batch.Batch.BatchNumber} · {batch.Batch.Name} 未发 {batch.Summary.UnpaidAmount:N2}", "PayrollBatch", batch.Batch.Id.ToString(), batch.Batch.EndDate, batch.Summary.UnpaidAmount, now);
         }
 
+        var activeCertificateKeys = new HashSet<string>(StringComparer.Ordinal);
         var expiringCertificates = await db.CompanyCertificates.AsNoTracking().Include(item => item.LegalEntity)
-            .Where(item => !item.IsDeleted && item.LegalEntity.IsActive && item.ExpiresOn.HasValue && item.ExpiresOn <= today.AddDays(30))
+            .Where(item => !item.IsDeleted && item.LegalEntity.IsActive && item.ExpiresOn.HasValue && item.ExpiresOn <= today.AddMonths(3))
             .ToListAsync(cancellationToken);
         foreach (var certificate in expiringCertificates)
         {
-            Upsert(existing, $"company-certificate:{certificate.Id}", ReminderType.CompanyCertificateExpiring,
-                certificate.ExpiresOn < today ? ReminderSeverity.Critical : ReminderSeverity.Warning,
-                "公司证照即将到期", $"{certificate.LegalEntity.ShortName} · {certificate.CertificateType} · {certificate.ExpiresOn:yyyy-MM-dd}",
+            var key = $"company-certificate:{certificate.Id}";
+            activeCertificateKeys.Add(key);
+            Upsert(existing, key, ReminderType.CompanyCertificateExpiring,
+                CertificateExpiryCalculator.GetReminderSeverity(today, certificate.ExpiresOn)!.Value,
+                "公司证书到期提醒", $"{certificate.LegalEntity.ShortName} · {certificate.CertificateType} · {certificate.ExpiresOn:yyyy-MM-dd}",
                 nameof(CompanyCertificate), certificate.Id.ToString(), certificate.ExpiresOn, null, now);
+        }
+
+        var employeeCertificates = await db.EmployeeCertificates.AsNoTracking().Include(item => item.Employee)
+            .Where(item => !item.IsDeleted && item.Employee.IsActive && item.ExpiresOn.HasValue && item.ExpiresOn <= today.AddMonths(3))
+            .ToListAsync(cancellationToken);
+        foreach (var certificate in employeeCertificates)
+        {
+            var key = $"employee-certificate:{certificate.Id}";
+            activeCertificateKeys.Add(key);
+            Upsert(existing, key, ReminderType.EmployeeCertificateExpiring,
+                CertificateExpiryCalculator.GetReminderSeverity(today, certificate.ExpiresOn)!.Value,
+                "员工证书到期提醒", $"{certificate.Employee.EmployeeNumber} · {certificate.Employee.Name} · {certificate.CertificateType} · {certificate.ExpiresOn:yyyy-MM-dd}",
+                nameof(EmployeeCertificate), certificate.Id.ToString(), certificate.ExpiresOn, null, now);
+        }
+
+        foreach (var reminder in existing.Values.Where(item =>
+                     item.Type is ReminderType.CompanyCertificateExpiring or ReminderType.EmployeeCertificateExpiring
+                     && !activeCertificateKeys.Contains(item.DeduplicationKey)))
+        {
+            reminder.Status = ReminderStatus.Resolved;
+            reminder.ResolvedAt = now;
         }
 
         var expiringLeases = await db.EquipmentLeaseAgreements.AsNoTracking().Include(item => item.Equipment)

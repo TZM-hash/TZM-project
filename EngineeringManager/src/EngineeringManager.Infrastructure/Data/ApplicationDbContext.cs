@@ -73,6 +73,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AccountTransaction> AccountTransactions => Set<AccountTransaction>();
     public DbSet<AccountTransfer> AccountTransfers => Set<AccountTransfer>();
     public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<EmployeeCertificate> EmployeeCertificates => Set<EmployeeCertificate>();
     public DbSet<EmployeeAffiliationHistory> EmployeeAffiliationHistories => Set<EmployeeAffiliationHistory>();
     public DbSet<PayrollBatch> PayrollBatches => Set<PayrollBatch>();
     public DbSet<PayrollItem> PayrollItems => Set<PayrollItem>();
@@ -194,6 +195,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasKey(item => item.Id);
             entity.Property(item => item.CertificateType).HasMaxLength(100).IsRequired();
             entity.Property(item => item.CertificateNumber).HasMaxLength(100);
+            entity.Property(item => item.SpecialtyLevelScope).HasMaxLength(500);
+            entity.Property(item => item.IssuingAuthority).HasMaxLength(200);
             entity.Property(item => item.Notes).HasMaxLength(1000);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.LegalEntityId, item.CertificateType, item.CertificateNumber });
@@ -600,6 +603,20 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.CrewBusinessPartner).WithMany().HasForeignKey(item => item.CrewBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<EmployeeCertificate>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.CertificateType).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.CertificateNumber).HasMaxLength(100);
+            entity.Property(item => item.SpecialtyLevelScope).HasMaxLength(500);
+            entity.Property(item => item.IssuingAuthority).HasMaxLength(200);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.EmployeeId, item.CertificateType, item.CertificateNumber });
+            entity.HasIndex(item => new { item.ExpiresOn, item.IsDeleted });
+            entity.HasOne(item => item.Employee).WithMany(employee => employee.Certificates).HasForeignKey(item => item.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

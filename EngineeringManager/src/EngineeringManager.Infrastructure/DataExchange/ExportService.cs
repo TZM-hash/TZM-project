@@ -43,6 +43,18 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("phone", "电话", ExportFieldDataType.Text, false),
                 new("is_active", "状态", ExportFieldDataType.Boolean, true)
             ],
+            [ExportDataset.EmployeeCertificates] =
+            [
+                new("employee_number", "员工编号", ExportFieldDataType.Text, true),
+                new("employee_name", "员工姓名", ExportFieldDataType.Text, true),
+                new("certificate_type", "证书类型", ExportFieldDataType.Text, true),
+                new("certificate_number", "证书编号", ExportFieldDataType.Text, false),
+                new("specialty_level_scope", "专业/等级/范围", ExportFieldDataType.Text, true),
+                new("issuing_authority", "发证机关", ExportFieldDataType.Text, false),
+                new("issued_on", "签发日期", ExportFieldDataType.Date, false),
+                new("expires_on", "到期日期", ExportFieldDataType.Date, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
+            ],
             [ExportDataset.Partners] =
             [
                 new("partner_number", "单位编号", ExportFieldDataType.Text, true),
@@ -131,10 +143,12 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             [ExportDataset.CompanyCertificates] =
             [
                 new("company_code", "公司编码", ExportFieldDataType.Text, true),
-                new("certificate_type", "资料类型", ExportFieldDataType.Text, true),
-                new("certificate_number", "资料编号", ExportFieldDataType.Text, false),
+                new("certificate_type", "证书类型", ExportFieldDataType.Text, true),
+                new("certificate_number", "证书编号", ExportFieldDataType.Text, false),
+                new("specialty_level_scope", "专业/等级/范围", ExportFieldDataType.Text, true),
+                new("issuing_authority", "发证机关", ExportFieldDataType.Text, false),
                 new("issued_on", "签发日期", ExportFieldDataType.Date, false),
-                new("expires_on", "有效期", ExportFieldDataType.Date, false),
+                new("expires_on", "到期日期", ExportFieldDataType.Date, false),
                 new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Equipment] =
@@ -179,6 +193,7 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
         {
             ExportDataset.ProjectOverview => await ExportProjectOverviewAsync(fields, request.CutoffDate, request.ProjectIds, cancellationToken),
             ExportDataset.Employees => await ExportEmployeesAsync(fields, cancellationToken),
+            ExportDataset.EmployeeCertificates => await ExportEmployeeCertificatesAsync(fields, cancellationToken),
             ExportDataset.Partners => await ExportPartnersAsync(fields, cancellationToken),
             ExportDataset.Payroll => await ExportPayrollAsync(fields, request.CutoffDate, cancellationToken),
             ExportDataset.Collections => await ExportCollectionsAsync(fields, request.CutoffDate, cancellationToken),
@@ -496,10 +511,30 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["company_code"] = item.LegalEntity.Code,
             ["certificate_type"] = item.CertificateType,
             ["certificate_number"] = item.CertificateNumber,
+            ["specialty_level_scope"] = item.SpecialtyLevelScope,
+            ["issuing_authority"] = item.IssuingAuthority,
             ["issued_on"] = item.IssuedOn,
             ["expires_on"] = item.ExpiresOn,
             ["notes"] = item.Notes
         })), "公司证照");
+    }
+
+    private async Task<ExportFileResult> ExportEmployeeCertificatesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    {
+        var certificates = await db.EmployeeCertificates.AsNoTracking().Include(item => item.Employee)
+            .Where(item => !item.IsDeleted).OrderBy(item => item.Employee.EmployeeNumber).ThenBy(item => item.CertificateType).ToListAsync(cancellationToken);
+        return CreateSingleSheet("员工证书", fields, certificates.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["employee_number"] = item.Employee.EmployeeNumber,
+            ["employee_name"] = item.Employee.Name,
+            ["certificate_type"] = item.CertificateType,
+            ["certificate_number"] = item.CertificateNumber,
+            ["specialty_level_scope"] = item.SpecialtyLevelScope,
+            ["issuing_authority"] = item.IssuingAuthority,
+            ["issued_on"] = item.IssuedOn,
+            ["expires_on"] = item.ExpiresOn,
+            ["notes"] = item.Notes
+        })), "员工证书");
     }
 
     private async Task<ExportFileResult> ExportEquipmentAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)

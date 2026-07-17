@@ -14,6 +14,7 @@ public enum ReminderType
     CompanyCertificateExpiring = 10,
     EquipmentLeaseExpiring = 11,
     EquipmentMaintenanceDue = 12
+    ,EmployeeCertificateExpiring = 13
 }
 
 public enum ReminderSeverity { Info = 1, Warning = 2, Critical = 3 }

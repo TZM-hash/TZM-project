@@ -33,6 +33,7 @@ public sealed class PermissionCatalogTests
     public void CompanyPermissionsAreAvailableToExpectedRoles()
     {
         PermissionKeys.IsKnown(PermissionKeys.CompaniesRead).Should().BeTrue();
+        PermissionKeys.IsKnown(PermissionKeys.EmployeeCertificatesManage).Should().BeTrue();
         PermissionKeys.IsKnown(PermissionKeys.CompaniesManage).Should().BeTrue();
         PermissionKeys.DefaultsForRole(SystemRoles.ApplicationAdministrator).Should().Contain(PermissionKeys.CompaniesManage);
         PermissionKeys.DefaultsForRole(SystemRoles.Finance).Should().Contain(PermissionKeys.CompaniesRead);

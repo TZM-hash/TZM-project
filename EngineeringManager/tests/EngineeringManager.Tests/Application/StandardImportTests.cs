@@ -17,6 +17,7 @@ public sealed class StandardImportTests
     [InlineData(ExportDataset.Companies, "公司编码")]
     [InlineData(ExportDataset.CompanyAccounts, "公司编码")]
     [InlineData(ExportDataset.CompanyCertificates, "公司编码")]
+    [InlineData(ExportDataset.EmployeeCertificates, "员工编号")]
     [InlineData(ExportDataset.Equipment, "设备编号")]
     [InlineData(ExportDataset.EquipmentLeases, "设备编号")]
     [InlineData(ExportDataset.EquipmentUsages, "设备编号")]
@@ -115,6 +116,23 @@ public sealed class StandardImportTests
         var equipment = await fixture.Db.Equipment.SingleAsync();
         equipment.EquipmentNumber.Should().Be("IMP-EQ");
         equipment.OwnerLegalEntityId.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task EmployeeCertificateImportResolvesEmployeeAndExtendedFields()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        fixture.Db.Employees.Add(new Employee { EmployeeNumber = "CERT-EMP", Name = "导入持证员工", EmployeeType = EngineeringManager.Domain.Employees.EmployeeType.Formal });
+        await fixture.Db.SaveChangesAsync();
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet("员工证书导入", ["员工编号", "证书类型", "证书编号", "专业/等级/范围", "发证机关", "签发日期", "到期日期"], [["CERT-EMP", "安全员证", "AQ-100", "C证", "住建部门", "2024-01-01", "2027-01-01"]]);
+
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("user", ExportDataset.EmployeeCertificates, "员工证书.xlsx", workbook.ToArray(), null), default);
+        await fixture.Service.ConfirmAsync(preview.BatchId, default);
+
+        var certificate = await fixture.Db.EmployeeCertificates.SingleAsync();
+        certificate.SpecialtyLevelScope.Should().Be("C证");
+        certificate.IssuingAuthority.Should().Be("住建部门");
     }
 
     private sealed class ImportFixture : IAsyncDisposable

@@ -1,0 +1,33 @@
+@page
+@model EngineeringManager.Web.Pages.Employees.Certificates.IndexModel
+@using EngineeringManager.Domain.Certificates
+@{ ViewData["Title"] = "员工证书管理"; }
+
+<section class="page-heading">
+    <div><p class="eyebrow">人员证照台账</p><h1>员工证书管理</h1><p class="page-lead">员工可没有证书，也可维护多本证书。系统按自然月在到期前三个月、两个月和一个月分级提醒。</p></div>
+    @if (Model.CanManage) { <a class="button button--primary" asp-page="Edit">新增员工证书</a> }
+</section>
+
+<section class="metric-grid" aria-label="员工证书统计">
+    <article class="metric-card"><span class="metric-label">证书总数</span><strong class="metric-value">@Model.Certificates.Count</strong><span class="metric-hint">当前筛选范围</span></article>
+    <article class="metric-card"><span class="metric-label">三个月内到期</span><strong class="metric-value">@Model.Certificates.Count(item => item.State is CertificateExpiryState.Info or CertificateExpiryState.Warning or CertificateExpiryState.Critical)</strong><span class="metric-hint">轻度至重度提醒</span></article>
+    <article class="metric-card"><span class="metric-label">已过期</span><strong class="metric-value metric-value--risk">@Model.Certificates.Count(item => item.State == CertificateExpiryState.Expired)</strong><span class="metric-hint">需优先处理</span></article>
+    <article class="metric-card"><span class="metric-label">长期有效</span><strong class="metric-value metric-value--good">@Model.Certificates.Count(item => item.State == CertificateExpiryState.LongTerm)</strong><span class="metric-hint">不进入提醒</span></article>
+</section>
+
+<form method="get" class="filter-bar certificate-filter-bar">
+    <label>关键词<input asp-for="Search" placeholder="员工、证书类型或编号" /></label>
+    <label>员工<select asp-for="EmployeeId"><option value="">全部员工</option>@foreach (var employee in Model.Employees) { <option value="@employee.Id">@employee.EmployeeNumber · @employee.Name</option> }</select></label>
+    <label>证书类型<select asp-for="CertificateType"><option value="">全部类型</option>@foreach (var type in Model.CertificateTypes) { <option value="@type">@type</option> }</select></label>
+    <label>状态<select asp-for="State"><option value="">全部状态</option><option value="Info">轻度提醒</option><option value="Warning">中度提醒</option><option value="Critical">重度提醒</option><option value="Expired">已过期</option><option value="LongTerm">长期有效</option><option value="Normal">有效</option></select></label>
+    <button class="button button--secondary" type="submit">筛选</button><a class="button button--ghost" asp-page="Index">重置</a>
+</form>
+
+<section class="panel">
+    <div class="panel-heading"><div><p class="eyebrow">证书清单</p><h2>员工持证情况</h2></div></div>
+    <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.EmployeeCertificates" />
+    @if (Model.Certificates.Count == 0) { <p class="panel-copy">当前筛选范围内没有员工证书。</p> }
+    else { <div class="table-wrap"><table class="data-table" id="employee-certificates-table"><thead><tr><th data-column-key="employee">员工</th><th data-column-key="certificate_type">证书类型</th><th data-column-key="certificate_number">证书编号</th><th data-column-key="scope">专业/等级/范围</th><th data-column-key="authority">发证机关</th><th data-column-key="issued_on">签发日期</th><th data-column-key="expires_on">到期日期</th><th data-column-key="status">状态</th><th data-column-key="attachment">附件</th><th data-column-key="actions">操作</th></tr></thead><tbody>
+    @foreach (var item in Model.Certificates) { <tr><td data-column-key="employee"><strong>@item.EmployeeName</strong><small class="table-secondary">@item.EmployeeNumber</small></td><td data-column-key="certificate_type">@item.CertificateType</td><td data-column-key="certificate_number">@(item.CertificateNumber ?? "—")</td><td data-column-key="scope">@(item.SpecialtyLevelScope ?? "—")</td><td data-column-key="authority">@(item.IssuingAuthority ?? "—")</td><td data-column-key="issued_on">@(item.IssuedOn?.ToString("yyyy-MM-dd") ?? "—")</td><td data-column-key="expires_on">@(item.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</td><td data-column-key="status"><span class="certificate-status certificate-status--@IndexModel.StatusClass(item.State)">@IndexModel.StatusLabel(item.State)</span></td><td data-column-key="attachment">@if (item.AttachmentId.HasValue) { <a asp-page-handler="Attachment" asp-route-id="@item.Id">@item.AttachmentFileName</a> } else { <span>—</span> }</td><td data-column-key="actions"><div class="table-actions">@if (Model.CanManage) { <a class="button button--secondary" asp-page="Edit" asp-route-id="@item.Id">编辑</a><form method="post" asp-page-handler="Delete" onsubmit="return confirm('确认删除这本员工证书？');"><input type="hidden" name="id" value="@item.Id" /><input type="hidden" name="concurrencyStamp" value="@item.ConcurrencyStamp" /><button class="button button--ghost" type="submit">删除</button></form> }</div></td></tr> }
+    </tbody></table></div> }
+</section>
