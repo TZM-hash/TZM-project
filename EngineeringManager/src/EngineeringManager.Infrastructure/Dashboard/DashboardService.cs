@@ -1,5 +1,6 @@
 using EngineeringManager.Application.Dashboard;
 using EngineeringManager.Domain.Employees;
+using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Reminders;
@@ -34,7 +35,9 @@ public sealed class DashboardService(ApplicationDbContext db) : IDashboardServic
         var comparisons = actor.CanViewFinance
             ? await LoadFinanceAsync(projectIds, cancellationToken)
             : EmptyComparisons();
-        var unpaidPayroll = actor.CanViewPayroll ? await LoadUnpaidPayrollAsync(projectIds, actor.CanViewAllProjects, cancellationToken) : 0m;
+        var monthlyTrend = actor.CanViewFinance ? await LoadMonthlyTrendAsync(projectIds, cancellationToken) : EmptyMonthlyTrend();
+        var payrollSummary = actor.CanViewPayroll ? await LoadPayrollSummaryAsync(projectIds, actor.CanViewAllProjects, cancellationToken) : new DashboardPayrollSummaryDto(0m, 0m, 0m);
+        var equipmentSummary = await LoadEquipmentSummaryAsync(projectIds, actor.CanViewAllProjects, cancellationToken);
         var reminderQuery = db.ReminderItems.AsNoTracking().Where(item => item.Status != ReminderStatus.Resolved);
         if (!actor.CanViewAllProjects)
         {
@@ -47,14 +50,17 @@ public sealed class DashboardService(ApplicationDbContext db) : IDashboardServic
         return new DashboardDto(
             projects.Count,
             currentAmount,
-            unpaidPayroll,
+            payrollSummary.Unpaid,
             reminders.Length,
             actor.CanViewFinance,
             actor.CanViewPayroll,
             stageDistribution,
             comparisons,
             reminders.Select(item => new DashboardRiskDto(item.Id, item.Severity, item.Title, item.Message, item.SourceType, item.SourceId)).ToArray(),
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            monthlyTrend,
+            equipmentSummary,
+            payrollSummary);
     }
 
     private async Task<IReadOnlyList<DashboardMoneyComparisonDto>> LoadFinanceAsync(Guid[] projectIds, CancellationToken cancellationToken)
@@ -84,17 +90,79 @@ public sealed class DashboardService(ApplicationDbContext db) : IDashboardServic
         ];
     }
 
-    private async Task<decimal> LoadUnpaidPayrollAsync(Guid[] projectIds, bool allProjects, CancellationToken cancellationToken)
+    private async Task<DashboardPayrollSummaryDto> LoadPayrollSummaryAsync(Guid[] projectIds, bool allProjects, CancellationToken cancellationToken)
     {
         var batches = db.PayrollBatches.AsNoTracking().Where(item => item.Status != PayrollBatchStatus.Voided);
         if (!allProjects) batches = batches.Where(item => item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value));
         var batchIds = await batches.Select(item => item.Id).ToArrayAsync(cancellationToken);
-        if (batchIds.Length == 0) return 0m;
+        if (batchIds.Length == 0) return new DashboardPayrollSummaryDto(0m, 0m, 0m);
         var items = await db.PayrollItems.AsNoTracking().Where(item => batchIds.Contains(item.PayrollBatchId)).Select(item => new { item.Nature, item.Amount }).ToListAsync(cancellationToken);
         var payments = await db.PayrollPayments.AsNoTracking().Where(item => batchIds.Contains(item.PayrollBatchId)).Select(item => item.Amount).ToListAsync(cancellationToken);
         var payable = Math.Max(items.Where(item => item.Nature == PayrollItemNature.Earning).Sum(item => item.Amount) - items.Where(item => item.Nature == PayrollItemNature.Deduction).Sum(item => item.Amount), 0m);
-        return Math.Max(payable - payments.Sum(), 0m);
+        var paid = payments.Sum();
+        return new DashboardPayrollSummaryDto(payable, paid, Math.Max(payable - paid, 0m));
     }
+
+    private async Task<IReadOnlyList<DashboardMonthlyPointDto>> LoadMonthlyTrendAsync(Guid[] projectIds, CancellationToken cancellationToken)
+    {
+        var firstMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1).AddMonths(-11);
+        var months = Enumerable.Range(0, 12).Select(index => firstMonth.AddMonths(index)).ToArray();
+        if (projectIds.Length == 0) return months.Select(month => MonthPoint(month)).ToArray();
+
+        var collections = await db.CollectionEntries.AsNoTracking()
+            .Where(item => projectIds.Contains(item.ProjectId) && item.CollectionDate >= firstMonth)
+            .Select(item => new { item.CollectionDate, item.Amount }).ToListAsync(cancellationToken);
+        var refunds = await db.RefundOrReversalEntries.AsNoTracking()
+            .Where(item => item.EntryDate >= firstMonth && ((item.Collection != null && projectIds.Contains(item.Collection.ProjectId)) || (item.Receivable != null && projectIds.Contains(item.Receivable.ProjectId))))
+            .Select(item => new { item.EntryDate, item.Amount }).ToListAsync(cancellationToken);
+        var payments = await db.PaymentEntries.AsNoTracking()
+            .Where(item => projectIds.Contains(item.ProjectId) && item.PaymentDate >= firstMonth)
+            .Select(item => new { item.PaymentDate, item.Amount }).ToListAsync(cancellationToken);
+        var reversals = await db.PaymentReversalEntries.AsNoTracking()
+            .Where(item => projectIds.Contains(item.Payment.ProjectId) && item.EntryDate >= firstMonth)
+            .Select(item => new { item.EntryDate, item.Amount }).ToListAsync(cancellationToken);
+        var invoices = await db.InvoiceEntries.AsNoTracking()
+            .Where(item => projectIds.Contains(item.ProjectId) && item.InvoiceDate >= firstMonth && item.Direction == InvoiceDirection.Output && item.Status != InvoiceStatus.Voided)
+            .Select(item => new { item.InvoiceDate, item.GrossAmount }).ToListAsync(cancellationToken);
+
+        return months.Select(month =>
+        {
+            var end = month.AddMonths(1);
+            var collected = collections.Where(item => item.CollectionDate >= month && item.CollectionDate < end).Sum(item => item.Amount)
+                - refunds.Where(item => item.EntryDate >= month && item.EntryDate < end).Sum(item => item.Amount);
+            var paid = payments.Where(item => item.PaymentDate >= month && item.PaymentDate < end).Sum(item => item.Amount)
+                - reversals.Where(item => item.EntryDate >= month && item.EntryDate < end).Sum(item => item.Amount);
+            var invoiced = invoices.Where(item => item.InvoiceDate >= month && item.InvoiceDate < end).Sum(item => item.GrossAmount);
+            return MonthPoint(month, collected, paid, invoiced);
+        }).ToArray();
+    }
+
+    private async Task<DashboardEquipmentSummaryDto> LoadEquipmentSummaryAsync(Guid[] projectIds, bool allProjects, CancellationToken cancellationToken)
+    {
+        var equipment = db.Equipment.AsNoTracking().Where(item => item.IsActive);
+        var usages = db.EquipmentProjectUsages.AsNoTracking();
+        if (!allProjects)
+        {
+            equipment = equipment.Where(item => item.ProjectUsages.Any(usage => projectIds.Contains(usage.ProjectId)));
+            usages = usages.Where(item => projectIds.Contains(item.ProjectId));
+        }
+        var total = await equipment.CountAsync(cancellationToken);
+        var inUse = await equipment.CountAsync(item => item.Status == EquipmentStatus.InUse, cancellationToken);
+        var rented = await equipment.CountAsync(item => item.OwnershipType == EquipmentOwnershipType.Rented, cancellationToken);
+        var settlements = await usages.Where(item => item.Settlement != null)
+            .Select(item => new { item.Equipment.OwnershipType, item.Settlement!.TotalAmount })
+            .ToListAsync(cancellationToken);
+        return new DashboardEquipmentSummaryDto(total, inUse, rented, settlements.Where(item => item.OwnershipType == EquipmentOwnershipType.Rented).Sum(item => item.TotalAmount), settlements.Sum(item => item.TotalAmount));
+    }
+
+    private static DashboardMonthlyPointDto[] EmptyMonthlyTrend()
+    {
+        var firstMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1).AddMonths(-11);
+        return Enumerable.Range(0, 12).Select(index => MonthPoint(firstMonth.AddMonths(index))).ToArray();
+    }
+
+    private static DashboardMonthlyPointDto MonthPoint(DateOnly month, decimal collected = 0m, decimal paid = 0m, decimal invoiced = 0m) =>
+        new(month.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture), collected, paid, invoiced);
 
     private static DashboardMoneyComparisonDto Comparison(string key, string label, decimal total, decimal completed, decimal remaining) =>
         new(key, label, total, completed, remaining, total <= 0m ? 0m : decimal.Round(Math.Clamp(completed / total * 100m, 0m, 100m), 1));

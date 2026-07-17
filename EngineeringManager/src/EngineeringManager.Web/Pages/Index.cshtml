@@ -1,5 +1,6 @@
 @page
 @model IndexModel
+@using System.Text.Json
 @{
     ViewData["Title"] = "系统总览";
 }
@@ -62,6 +63,31 @@ else
         </section>
 
         <section class="dashboard-grid">
+            @if (dashboard.CanViewFinance)
+            {
+                <article class="panel panel--wide" data-chart="monthly-trend" data-chart-kind="line" data-chart-series='@JsonSerializer.Serialize(dashboard.MonthlyTrend)'>
+                    <div class="panel-heading"><div><p class="eyebrow">十二个月趋势</p><h2>收款、付款与开票走势</h2></div></div>
+                    <div class="chart-canvas-shell" data-chart-canvas aria-label="十二个月经营金额趋势图"></div>
+                    <table class="chart-data-table sr-only" data-chart-table>
+                        <thead><tr><th>月份</th><th>已收款</th><th>已付款</th><th>已开票</th></tr></thead>
+                        <tbody>@foreach (var point in dashboard.MonthlyTrend) { <tr><td>@point.Month</td><td>@point.Collected.ToString("N2")</td><td>@point.Paid.ToString("N2")</td><td>@point.Invoiced.ToString("N2")</td></tr> }</tbody>
+                    </table>
+                </article>
+            }
+
+            <article class="panel" data-dashboard-equipment>
+                <div class="panel-heading"><div><p class="eyebrow">设备协同</p><h2>设备摘要</h2></div><a class="button button--secondary" asp-page="/Equipment/Index">设备管理</a></div>
+                <dl class="status-list"><div><dt>设备总数</dt><dd>@dashboard.EquipmentSummary.Total</dd></div><div><dt>使用中</dt><dd>@dashboard.EquipmentSummary.InUse</dd></div><div><dt>租赁设备</dt><dd>@dashboard.EquipmentSummary.Rented</dd></div><div><dt>租赁结算</dt><dd>@dashboard.EquipmentSummary.RentedCost.ToString("N2")</dd></div></dl>
+            </article>
+
+            @if (dashboard.CanViewPayroll)
+            {
+                <article class="panel" data-dashboard-payroll>
+                    <div class="panel-heading"><div><p class="eyebrow">工资摘要</p><h2>本期工资状态</h2></div><a class="button button--secondary" asp-page="/Payroll/Index">工资台账</a></div>
+                    <dl class="status-list"><div><dt>应发工资</dt><dd>@dashboard.PayrollSummary.Payable.ToString("N2")</dd></div><div><dt>已发工资</dt><dd>@dashboard.PayrollSummary.Paid.ToString("N2")</dd></div><div><dt>未发工资</dt><dd>@dashboard.PayrollSummary.Unpaid.ToString("N2")</dd></div></dl>
+                </article>
+            }
+
             @if (dashboard.CanViewFinance)
             {
                 <article class="panel" data-money-chart>

@@ -17,14 +17,55 @@ public sealed record DashboardMoneyComparisonDto(
 
 public sealed record DashboardRiskDto(Guid Id, ReminderSeverity Severity, string Title, string Message, string? SourceType, string? SourceId);
 
-public sealed record DashboardDto(
-    int ActiveProjectCount,
-    decimal CurrentProjectAmount,
-    decimal UnpaidPayrollAmount,
-    int OpenReminderCount,
-    bool CanViewFinance,
-    bool CanViewPayroll,
-    IReadOnlyList<DashboardStageDto> StageDistribution,
-    IReadOnlyList<DashboardMoneyComparisonDto> MoneyComparisons,
-    IReadOnlyList<DashboardRiskDto> Risks,
-    DateTimeOffset GeneratedAt);
+public sealed record DashboardMonthlyPointDto(string Month, decimal Collected, decimal Paid, decimal Invoiced);
+
+public sealed record DashboardEquipmentSummaryDto(int Total, int InUse, int Rented, decimal RentedCost, decimal SettledAmount);
+
+public sealed record DashboardPayrollSummaryDto(decimal Payable, decimal Paid, decimal Unpaid);
+
+public sealed record DashboardDto
+{
+    public DashboardDto(
+        int activeProjectCount,
+        decimal currentProjectAmount,
+        decimal unpaidPayrollAmount,
+        int openReminderCount,
+        bool canViewFinance,
+        bool canViewPayroll,
+        IReadOnlyList<DashboardStageDto> stageDistribution,
+        IReadOnlyList<DashboardMoneyComparisonDto> moneyComparisons,
+        IReadOnlyList<DashboardRiskDto> risks,
+        DateTimeOffset generatedAt,
+        IReadOnlyList<DashboardMonthlyPointDto>? monthlyTrend = null,
+        DashboardEquipmentSummaryDto? equipmentSummary = null,
+        DashboardPayrollSummaryDto? payrollSummary = null)
+    {
+        ActiveProjectCount = activeProjectCount;
+        CurrentProjectAmount = currentProjectAmount;
+        UnpaidPayrollAmount = unpaidPayrollAmount;
+        OpenReminderCount = openReminderCount;
+        CanViewFinance = canViewFinance;
+        CanViewPayroll = canViewPayroll;
+        StageDistribution = stageDistribution;
+        MoneyComparisons = moneyComparisons;
+        Risks = risks;
+        GeneratedAt = generatedAt;
+        MonthlyTrend = monthlyTrend ?? [];
+        EquipmentSummary = equipmentSummary ?? new DashboardEquipmentSummaryDto(0, 0, 0, 0m, 0m);
+        PayrollSummary = payrollSummary ?? new DashboardPayrollSummaryDto(0m, 0m, 0m);
+    }
+
+    public int ActiveProjectCount { get; }
+    public decimal CurrentProjectAmount { get; }
+    public decimal UnpaidPayrollAmount { get; }
+    public int OpenReminderCount { get; }
+    public bool CanViewFinance { get; }
+    public bool CanViewPayroll { get; }
+    public IReadOnlyList<DashboardStageDto> StageDistribution { get; }
+    public IReadOnlyList<DashboardMoneyComparisonDto> MoneyComparisons { get; }
+    public IReadOnlyList<DashboardRiskDto> Risks { get; }
+    public DateTimeOffset GeneratedAt { get; }
+    public IReadOnlyList<DashboardMonthlyPointDto> MonthlyTrend { get; }
+    public DashboardEquipmentSummaryDto EquipmentSummary { get; }
+    public DashboardPayrollSummaryDto PayrollSummary { get; }
+}

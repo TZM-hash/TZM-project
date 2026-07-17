@@ -1,5 +1,6 @@
 using EngineeringManager.Application.Dashboard;
 using EngineeringManager.Domain.Employees;
+using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
@@ -45,6 +46,21 @@ public sealed class DashboardServiceTests
         result.UnpaidPayrollAmount.Should().Be(150m);
         result.OpenReminderCount.Should().Be(1);
         result.Risks.Should().ContainSingle(item => item.Title == "经营风险");
+    }
+
+    [Fact]
+    public async Task DashboardProvidesTwelveMonthTrendEquipmentAndPayrollSummary()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.SeedBusinessDataAsync();
+
+        var result = await fixture.Service.GetAsync(new DashboardActor("admin", true, true, true), default);
+
+        result.MonthlyTrend.Should().HaveCount(12);
+        result.MonthlyTrend.Should().Contain(item => item.Collected > 0m && item.Paid > 0m);
+        result.EquipmentSummary.Total.Should().BeGreaterThan(0);
+        result.EquipmentSummary.RentedCost.Should().BeGreaterThan(0m);
+        result.PayrollSummary.Unpaid.Should().BeGreaterThanOrEqualTo(0m);
     }
 
     private sealed class Fixture : IAsyncDisposable
@@ -96,6 +112,12 @@ public sealed class DashboardServiceTests
                 new DeductionEntry { Payable = payable, Project = project, LegalEntity = legalEntity, BusinessPartner = partner, EntryDate = new DateOnly(2026, 7, 5), Amount = 20m, Reason = "扣款" },
                 new InvoiceEntry { Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, Direction = InvoiceDirection.Output, InvoiceNumber = "INV-DASH", InvoiceDate = new DateOnly(2026, 7, 5), GrossAmount = 300m, Status = InvoiceStatus.IssuedOrReceived },
                 new ReminderItem { DeduplicationKey = "dashboard-risk", Type = ReminderType.UncollectedReceivable, Severity = ReminderSeverity.Warning, Title = "经营风险", Message = "存在未收款" });
+
+            var equipment = new Equipment { EquipmentNumber = "EQ-DASH", Name = "租赁吊车", OwnershipType = EquipmentOwnershipType.Rented, Status = EquipmentStatus.InUse };
+            var usage = new EquipmentProjectUsage { Equipment = equipment, Project = project, LegalEntity = legalEntity, EntryDate = new DateOnly(2026, 7, 1), UnitRate = 100m, RentMode = RentMode.Daily };
+            usage.Settlement = new EquipmentSettlement { Usage = usage, SettlementDate = new DateOnly(2026, 7, 31), BaseAmount = 1000m, TotalAmount = 1200m };
+            equipment.ProjectUsages.Add(usage);
+            Db.Add(equipment);
 
             var employee = new Employee { EmployeeNumber = "E-DASH", Name = "驾驶舱员工", EmployeeType = EmployeeType.Formal };
             var batch = new PayrollBatch { BatchNumber = "PB-DASH", Name = "工资批次", BatchType = PayrollBatchType.Monthly, StartDate = new DateOnly(2026, 7, 1), EndDate = new DateOnly(2026, 7, 31), Status = PayrollBatchStatus.Confirmed };
