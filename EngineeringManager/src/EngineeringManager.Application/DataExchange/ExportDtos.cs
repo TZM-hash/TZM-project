@@ -6,7 +6,8 @@ public sealed record ExportRequest(
     ExportDataset Dataset,
     string UserId,
     IReadOnlyList<string> SelectedFields,
-    DateOnly? CutoffDate);
+    DateOnly? CutoffDate,
+    IReadOnlyList<Guid>? ProjectIds = null);
 
 public sealed record ExportFileResult(string FileName, string ContentType, byte[] Content);
 

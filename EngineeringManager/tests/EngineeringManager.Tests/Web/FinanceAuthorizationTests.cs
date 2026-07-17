@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using EngineeringManager.Application.DataViews;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Web;
 using FluentAssertions;
@@ -67,6 +68,8 @@ public sealed class FinanceAuthorizationTests
                 }).AddScheme<AuthenticationSchemeOptions, FinanceTestHandler>(FinanceTestHandler.Scheme, _ => { });
                 services.RemoveAll<IFinanceLedgerService>();
                 services.AddSingleton<IFinanceLedgerService, FakeFinanceLedgerService>();
+                services.RemoveAll<ISavedDataViewService>();
+                services.AddSingleton<ISavedDataViewService, EmptySavedViewService>();
             });
             builder.UseSetting(FinanceTestHandler.RoleSetting, role);
         });
@@ -77,6 +80,8 @@ public sealed class FinanceAuthorizationTests
         public Task<IReadOnlyList<FinancialAccountDto>> ListAccountsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<FinancialAccountDto>>([]);
         public Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ProjectFinanceListItemDto>>([]);
         public Task<FinanceOverviewDto> GetOverviewAsync(CancellationToken cancellationToken) => Task.FromResult(new FinanceOverviewDto([], new FinanceProjectSummaryDto(Guid.Empty, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, false, false)));
+        public Task<FinanceOverviewPageDto> SearchOverviewAsync(FinanceOverviewQuery query, CancellationToken cancellationToken) =>
+            Task.FromResult(new FinanceOverviewPageDto([], new FinanceProjectSummaryDto(Guid.Empty, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, false, false), 1, 20, 0, 1, []));
         public Task<FinanceEntryOptionsDto> GetEntryOptionsAsync(CancellationToken cancellationToken) => Task.FromResult(new FinanceEntryOptionsDto([], [], [], [], [], [], [], [], []));
         public Task<Guid> AddReceivableAsync(CreateReceivableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> RecordCollectionAsync(RecordCollectionRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -89,6 +94,13 @@ public sealed class FinanceAuthorizationTests
         public Task<Guid> AddInvoiceAsync(CreateInvoiceRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<FinanceProjectSummaryDto> GetSummaryAsync(FinanceSummaryFilter filter, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<FinanceProjectSummaryDto> GetProjectSummaryAsync(Guid projectId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class EmptySavedViewService : ISavedDataViewService
+    {
+        public Task<IReadOnlyList<SavedDataViewDto>> ListAsync(string userId, DataViewDefinition definition, CancellationToken token) => Task.FromResult<IReadOnlyList<SavedDataViewDto>>([]);
+        public Task<SavedDataViewDto> SaveAsync(string userId, SaveDataViewRequest request, DataViewDefinition definition, CancellationToken token) => throw new NotSupportedException();
+        public Task DeleteAsync(string userId, Guid id, CancellationToken token) => throw new NotSupportedException();
     }
 
     private sealed class FinanceTestHandler(

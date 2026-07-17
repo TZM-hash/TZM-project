@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using EngineeringManager.Application.DataViews;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Web;
@@ -68,6 +69,8 @@ public sealed class ProjectAuthorizationTests
                     _ => { });
                 services.RemoveAll<IProjectService>();
                 services.AddSingleton<IProjectService, FakeProjectService>();
+                services.RemoveAll<ISavedDataViewService>();
+                services.AddSingleton<ISavedDataViewService, EmptySavedViewService>();
             });
             builder.UseSetting(ProjectTestAuthenticationHandler.RoleSetting, role ?? string.Empty);
         });
@@ -79,7 +82,18 @@ public sealed class ProjectAuthorizationTests
         public Task<ContractLineItemDto> AddLineItemAsync(CreateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProjectListItemDto>> ListProjectsAsync(string? search, ProjectStage? stage, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ProjectListItemDto>>([]);
+        public Task<ProjectListPageDto> SearchProjectsAsync(ProjectListActor actor, ProjectListQuery query, CancellationToken cancellationToken) =>
+            Task.FromResult(new ProjectListPageDto([], new ProjectListAggregateDto(0, 0m, 0m, 0), 1, 20, 0, 1, []));
+        public Task<ProjectListOptionsDto> GetListOptionsAsync(ProjectListActor actor, CancellationToken cancellationToken) =>
+            Task.FromResult(new ProjectListOptionsDto([], []));
         public Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<ProjectDetailsDto?>(null);
+    }
+
+    private sealed class EmptySavedViewService : ISavedDataViewService
+    {
+        public Task<IReadOnlyList<SavedDataViewDto>> ListAsync(string userId, DataViewDefinition definition, CancellationToken token) => Task.FromResult<IReadOnlyList<SavedDataViewDto>>([]);
+        public Task<SavedDataViewDto> SaveAsync(string userId, SaveDataViewRequest request, DataViewDefinition definition, CancellationToken token) => throw new NotSupportedException();
+        public Task DeleteAsync(string userId, Guid id, CancellationToken token) => throw new NotSupportedException();
     }
 
     private sealed class ProjectTestAuthenticationHandler(

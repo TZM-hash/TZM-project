@@ -8,43 +8,70 @@
     <div>
         <p class="eyebrow">项目经营台账</p>
         <h1>项目管理</h1>
-        <p class="page-lead">项目是合同、工程清单、阶段成果和后续财务台账的最高管理单位。</p>
+        <p class="page-lead">统一查看项目阶段、合同和当前工程金额，可按权限范围筛选、排序并导出。</p>
     </div>
-    <a class="button button--secondary" href="#">新建项目（服务已就绪）</a>
+    @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager"))
+    {
+        <a class="button button--secondary" href="#">新建项目（服务已就绪）</a>
+    }
 </section>
 
 <section class="metric-grid" aria-label="项目汇总">
-    <article class="metric-card"><span class="metric-label">项目数量</span><strong class="metric-value">@Model.Projects.Count</strong><span class="metric-hint">当前授权范围</span></article>
-    <article class="metric-card"><span class="metric-label">合同金额</span><strong class="metric-value">@Model.Projects.Sum(item => item.Summary.ContractAmount).ToString("N2")</strong><span class="metric-hint">合同明细汇总</span></article>
-    <article class="metric-card"><span class="metric-label">当前工程金额</span><strong class="metric-value">@Model.Projects.Sum(item => item.Summary.CurrentAmount).ToString("N2")</strong><span class="metric-hint">暂估/部分结算/结算口径</span></article>
-    <article class="metric-card"><span class="metric-label">已结算项目</span><strong class="metric-value">@Model.Projects.Count(item => item.Summary.SettlementStatus == EngineeringManager.Domain.Projects.ProjectSettlementStatus.Settled)</strong><span class="metric-hint">由清单项状态计算</span></article>
+    <article class="metric-card"><span class="metric-label">项目数量</span><strong class="metric-value">@Model.Result.Aggregate.ProjectCount</strong><span class="metric-hint">当前筛选与授权范围</span></article>
+    <article class="metric-card"><span class="metric-label">合同金额</span><strong class="metric-value">@Model.Result.Aggregate.ContractAmount.ToString("N2")</strong><span class="metric-hint">有效合同汇总</span></article>
+    <article class="metric-card"><span class="metric-label">当前工程金额</span><strong class="metric-value">@Model.Result.Aggregate.CurrentAmount.ToString("N2")</strong><span class="metric-hint">自动标记暂估或结算口径</span></article>
+    <article class="metric-card"><span class="metric-label">已结算项目</span><strong class="metric-value">@Model.Result.Aggregate.SettledProjectCount</strong><span class="metric-hint">由工程量清单状态计算</span></article>
 </section>
 
-<section class="panel">
-    <div class="panel-heading"><div><p class="eyebrow">项目清单</p><h2>当前项目</h2></div></div>
-    @if (Model.Projects.Count == 0)
+<section class="panel data-work-surface">
+    <div class="panel-heading"><div><p class="eyebrow">项目清单</p><h2>当前项目</h2></div><span class="result-count">共 @Model.Result.TotalCount 个项目</span></div>
+    <partial name="_DataWorkbench" model="Model.Workbench" />
+    <form id="projects-table-export-form" method="post" asp-page-handler="Export" hidden>
+        <input type="hidden" asp-for="Search" /><input type="hidden" asp-for="LegalEntityId" /><input type="hidden" asp-for="ResponsibleUserId" />
+        <input type="hidden" asp-for="MinimumCurrentAmount" /><input type="hidden" asp-for="MaximumCurrentAmount" />
+        <input type="hidden" asp-for="SortKey" /><input type="hidden" asp-for="SortDescending" /><input type="hidden" asp-for="PageSize" />
+        @foreach (var stage in Model.Stages) { <input type="hidden" name="Stages" value="@stage" /> }
+        <input type="hidden" name="SelectedFields" value="project_number" data-export-column-key="project_number" />
+        <input type="hidden" name="SelectedFields" value="project_name" data-export-column-key="project_name" />
+        <input type="hidden" name="SelectedFields" value="stage" data-export-column-key="stage" />
+        <input type="hidden" name="SelectedFields" value="contract_amount" data-export-column-key="contract_amount" />
+        <input type="hidden" name="SelectedFields" value="current_project_amount" data-export-column-key="current_project_amount" />
+    </form>
+    @if (Model.Result.Items.Count == 0)
     {
-        <p class="panel-copy">当前授权范围内还没有项目。项目新增入口将在下一轮页面交互中接入同一项目服务。</p>
+        <div class="empty-state"><strong>没有符合条件的项目</strong><p>可以调整筛选条件，或清除筛选后查看授权范围内的全部项目。</p></div>
     }
     else
     {
         <div class="table-wrap">
-            <table class="data-table">
-                <thead><tr><th>项目编号</th><th>项目名称</th><th>阶段</th><th>合同金额</th><th>当前工程金额</th><th>结算状态</th></tr></thead>
+            <table class="data-table" id="projects-table">
+                <thead><tr>
+                    <th data-column-key="project_number"><button class="table-sort-button" type="button" data-sort-key="ProjectNumber">项目编号</button></th>
+                    <th data-column-key="project_name"><button class="table-sort-button" type="button" data-sort-key="Name">项目名称</button></th>
+                    <th data-column-key="stage"><button class="table-sort-button" type="button" data-sort-key="Stage">阶段</button></th>
+                    <th data-column-key="contract_amount"><button class="table-sort-button" type="button" data-sort-key="ContractAmount">合同金额</button></th>
+                    <th data-column-key="current_project_amount"><button class="table-sort-button" type="button" data-sort-key="CurrentAmount">当前工程金额</button></th>
+                    <th data-column-key="settlement_status"><button class="table-sort-button" type="button" data-sort-key="SettlementStatus">结算状态</button></th>
+                </tr></thead>
                 <tbody>
-                @foreach (var item in Model.Projects)
+                @foreach (var item in Model.Result.Items)
                 {
                     <tr>
-                        <td><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.ProjectNumber</a></td>
-                        <td>@item.Project.Name</td>
-                        <td>@item.Project.Stage</td>
-                        <td>@item.Summary.ContractAmount.ToString("N2")</td>
-                        <td>@item.Summary.CurrentAmount.ToString("N2")</td>
-                        <td>@item.Summary.SettlementStatus</td>
+                        <td data-column-key="project_number"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.ProjectNumber</a></td>
+                        <td data-column-key="project_name">@item.Project.Name</td>
+                        <td data-column-key="stage"><span class="pill">@item.Project.Stage</span></td>
+                        <td data-column-key="contract_amount">@item.Summary.ContractAmount.ToString("N2")</td>
+                        <td data-column-key="current_project_amount">@item.Summary.CurrentAmount.ToString("N2")</td>
+                        <td data-column-key="settlement_status">@item.Summary.SettlementStatus</td>
                     </tr>
                 }
                 </tbody>
             </table>
         </div>
+        <nav class="table-pagination" aria-label="项目分页">
+            <a class="button button--secondary @(Model.Result.Page <= 1 ? "is-disabled" : null)" href="@(Model.Result.Page <= 1 ? null : Model.PageUrl(Model.Result.Page - 1))">上一页</a>
+            <span>第 @Model.Result.Page / @Model.Result.TotalPages 页</span>
+            <a class="button button--secondary @(Model.Result.Page >= Model.Result.TotalPages ? "is-disabled" : null)" href="@(Model.Result.Page >= Model.Result.TotalPages ? null : Model.PageUrl(Model.Result.Page + 1))">下一页</a>
+        </nav>
     }
 </section>

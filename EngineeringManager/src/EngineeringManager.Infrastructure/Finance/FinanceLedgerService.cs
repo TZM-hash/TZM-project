@@ -110,6 +110,35 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
                 summaries.Any(item => item.HasPaymentRisk)));
     }
 
+    public async Task<FinanceOverviewPageDto> SearchOverviewAsync(FinanceOverviewQuery query, CancellationToken cancellationToken)
+    {
+        IEnumerable<ProjectFinanceListItemDto> items = await ListProjectSummariesAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var term = query.Search.Trim();
+            items = items.Where(item => item.ProjectNumber.Contains(term, StringComparison.OrdinalIgnoreCase) || item.ProjectName.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+        if (query.MinimumReceivable.HasValue) items = items.Where(item => item.Summary.ReceivableAmount >= query.MinimumReceivable.Value);
+        if (query.MinimumUncollected.HasValue) items = items.Where(item => item.Summary.UncollectedAmount >= query.MinimumUncollected.Value);
+        if (query.RiskOnly) items = items.Where(item => item.Summary.HasCollectionRisk || item.Summary.HasPaymentRisk);
+        items = SortOverview(items, query.SortKey, query.SortDescending);
+
+        var matching = items.ToArray();
+        var summaries = matching.Select(item => item.Summary).ToArray();
+        var total = SumOverview(summaries);
+        var pageSize = query.PageSize is 20 or 50 or 100 ? query.PageSize : 20;
+        var totalPages = Math.Max(1, (int)Math.Ceiling((double)matching.Length / pageSize));
+        var page = Math.Clamp(query.Page, 1, totalPages);
+        return new FinanceOverviewPageDto(
+            matching.Skip((page - 1) * pageSize).Take(pageSize).ToArray(),
+            total,
+            page,
+            pageSize,
+            matching.Length,
+            totalPages,
+            matching.Select(item => item.ProjectId).ToArray());
+    }
+
     public async Task<FinanceEntryOptionsDto> GetEntryOptionsAsync(CancellationToken cancellationToken)
     {
         var projects = await db.Projects.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.ProjectNumber)
@@ -647,4 +676,41 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static IEnumerable<ProjectFinanceListItemDto> SortOverview(
+        IEnumerable<ProjectFinanceListItemDto> items,
+        string? sortKey,
+        bool descending)
+    {
+        Func<ProjectFinanceListItemDto, object> selector = sortKey switch
+        {
+            "ProjectName" => item => item.ProjectName,
+            "ReceivableAmount" => item => item.Summary.ReceivableAmount,
+            "CollectedAmount" => item => item.Summary.CollectedAmount,
+            "UncollectedAmount" => item => item.Summary.UncollectedAmount,
+            "PayableAmount" => item => item.Summary.PayableAmount,
+            "PaidAmount" => item => item.Summary.PaidAmount,
+            "UnpaidAmount" => item => item.Summary.UnpaidAmount,
+            "OutputInvoiceAmount" => item => item.Summary.OutputInvoiceAmount,
+            "UninvoicedAmount" => item => item.Summary.UninvoicedAmount,
+            _ => item => item.ProjectNumber
+        };
+        return descending ? items.OrderByDescending(selector).ThenBy(item => item.ProjectNumber) : items.OrderBy(selector).ThenBy(item => item.ProjectNumber);
+    }
+
+    private static FinanceProjectSummaryDto SumOverview(IReadOnlyCollection<FinanceProjectSummaryDto> summaries) =>
+        new(
+            Guid.Empty,
+            summaries.Sum(item => item.ReceivableAmount),
+            summaries.Sum(item => item.CollectedAmount),
+            summaries.Sum(item => item.UncollectedAmount),
+            summaries.Sum(item => item.PayableAmount),
+            summaries.Sum(item => item.PaidAmount),
+            summaries.Sum(item => item.DeductionAmount),
+            summaries.Sum(item => item.UnpaidAmount),
+            summaries.Sum(item => item.OutputInvoiceAmount),
+            summaries.Sum(item => item.UninvoicedAmount),
+            summaries.Sum(item => item.InputInvoiceAmount),
+            summaries.Any(item => item.HasCollectionRisk),
+            summaries.Any(item => item.HasPaymentRisk));
 }

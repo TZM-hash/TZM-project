@@ -45,6 +45,25 @@ public sealed record FinanceOverviewDto(
     IReadOnlyList<ProjectFinanceListItemDto> Projects,
     FinanceProjectSummaryDto Total);
 
+public sealed record FinanceOverviewQuery(
+    string? Search,
+    decimal? MinimumReceivable,
+    decimal? MinimumUncollected,
+    bool RiskOnly,
+    string? SortKey,
+    bool SortDescending,
+    int Page = 1,
+    int PageSize = 20);
+
+public sealed record FinanceOverviewPageDto(
+    IReadOnlyList<ProjectFinanceListItemDto> Items,
+    FinanceProjectSummaryDto Total,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages,
+    IReadOnlyList<Guid> MatchingProjectIds);
+
 public sealed record FinanceOptionDto(Guid Id, string Label, Guid? ParentId = null);
 
 public sealed record FinanceEntryOptionsDto(

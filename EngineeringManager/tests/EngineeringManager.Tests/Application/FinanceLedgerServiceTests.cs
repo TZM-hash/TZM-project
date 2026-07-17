@@ -13,6 +13,28 @@ namespace EngineeringManager.Tests.Application;
 public sealed class FinanceLedgerServiceTests
 {
     [Fact]
+    public async Task SearchOverviewFiltersSortsAndPaginatesProjectSummaries()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        fixture.Project.Name = "市政一标段";
+        var second = new Project { ProjectNumber = "FIN-SVC-P2", Name = "房建二标段", Stage = ProjectStage.UnderConstruction };
+        fixture.Db.Projects.Add(second);
+        fixture.Db.ReceivableEntries.AddRange(
+            new ReceivableEntry { Project = fixture.Project, LegalEntity = fixture.LegalEntity, EntryDate = new DateOnly(2026, 7, 1), Amount = 300m },
+            new ReceivableEntry { Project = second, LegalEntity = fixture.LegalEntity, EntryDate = new DateOnly(2026, 7, 1), Amount = 100m });
+        await fixture.Db.SaveChangesAsync();
+
+        var result = await fixture.Service.SearchOverviewAsync(
+            new FinanceOverviewQuery("标段", 150m, null, false, "UncollectedAmount", true, 1, 20),
+            CancellationToken.None);
+
+        result.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(item => item.ProjectId == fixture.Project.Id);
+        result.Total.ReceivableAmount.Should().Be(300m);
+        result.MatchingProjectIds.Should().Equal(fixture.Project.Id);
+    }
+
+    [Fact]
     public async Task CollectionsAndPaymentsCreateMatchingAccountTransactionsAndRisks()
     {
         await using var fixture = await FinanceFixture.CreateAsync();

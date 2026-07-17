@@ -2,6 +2,7 @@ function removeFilter(key) {
   const url = new URL(window.location.href);
   url.searchParams.delete(key);
   url.searchParams.delete("page");
+  url.searchParams.delete("pageNumber");
   window.location.assign(url);
 }
 
@@ -9,6 +10,7 @@ function clearFilters(root) {
   const url = new URL(window.location.href);
   root.querySelectorAll("[data-filter-key]").forEach((control) => url.searchParams.delete(control.dataset.filterKey));
   url.searchParams.delete("page");
+  url.searchParams.delete("pageNumber");
   window.location.assign(url);
 }
 

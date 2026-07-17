@@ -15,5 +15,14 @@ public interface IProjectService
         ProjectStage? stage,
         CancellationToken cancellationToken);
 
+    Task<ProjectListPageDto> SearchProjectsAsync(
+        ProjectListActor actor,
+        ProjectListQuery query,
+        CancellationToken cancellationToken);
+
+    Task<ProjectListOptionsDto> GetListOptionsAsync(
+        ProjectListActor actor,
+        CancellationToken cancellationToken);
+
     Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken);
 }

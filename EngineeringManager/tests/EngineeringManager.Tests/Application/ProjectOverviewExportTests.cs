@@ -50,6 +50,23 @@ public sealed class ProjectOverviewExportTests
     }
 
     [Fact]
+    public async Task CurrentViewExportRestrictsRowsToMatchingProjects()
+    {
+        await using var fixture = await ExportFixture.CreateAsync();
+        var hidden = new Project { ProjectNumber = "EXPORT-HIDDEN", Name = "不在当前筛选中的项目", Stage = ProjectStage.UnderConstruction };
+        fixture.Db.Projects.Add(hidden);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(
+            new ExportRequest(ExportDataset.ProjectOverview, "leader-filter", ["project_number", "project_name"], null, [fixture.Project.Id]),
+            CancellationToken.None);
+        var details = SimpleXlsxReader.Read(file.Content)[1].Rows;
+
+        details.Should().Contain(row => row.Contains(fixture.Project.ProjectNumber));
+        details.Should().NotContain(row => row.Contains(hidden.ProjectNumber));
+    }
+
+    [Fact]
     public async Task PersonalAndAdministratorSharedTemplatesCanBeSaved()
     {
         await using var fixture = await ExportFixture.CreateAsync();

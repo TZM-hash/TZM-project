@@ -8,53 +8,79 @@
     <div>
         <p class="eyebrow">内部经营财务</p>
         <h1>经营台账</h1>
-        <p class="page-lead">按项目汇总应收、实收、应付、实付和发票数据。这里用于把内账理清，不替代会计总账或法定报表。</p>
+        <p class="page-lead">按项目汇总应收、实收、应付、实付和发票数据，用于把内账理清，不替代法定会计报表。</p>
     </div>
     @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("Finance"))
     {
-        <div>
-            <a class="button button--secondary" asp-page="/Finance/Accounts">资金账户</a>
-            <a class="button button--secondary" asp-page="/Finance/Entries/Create">录入业务</a>
-        </div>
+        <div class="page-actions-inline"><a class="button button--secondary" asp-page="/Finance/Accounts">资金账户</a><a class="button button--primary" asp-page="/Finance/Entries/Create">录入业务</a></div>
     }
 </section>
 
 <section class="metric-grid" aria-label="经营财务汇总">
-    <article class="metric-card"><span class="metric-label">应收款</span><strong class="metric-value">@Model.Overview.Total.ReceivableAmount.ToString("N2")</strong><span class="metric-hint">独立经营应收记录</span></article>
-    <article class="metric-card"><span class="metric-label">已收款</span><strong class="metric-value metric-value--good">@Model.Overview.Total.CollectedAmount.ToString("N2")</strong><span class="metric-hint">收款减退款/冲销</span></article>
-    <article class="metric-card"><span class="metric-label">未收款</span><strong class="metric-value">@Model.Overview.Total.UncollectedAmount.ToString("N2")</strong><span class="metric-hint">应收减已收</span></article>
-    <article class="metric-card"><span class="metric-label">未开票</span><strong class="metric-value">@Model.Overview.Total.UninvoicedAmount.ToString("N2")</strong><span class="metric-hint">应收减有效销项发票</span></article>
+    <article class="metric-card"><span class="metric-label">应收款</span><strong class="metric-value">@Model.Result.Total.ReceivableAmount.ToString("N2")</strong><span class="metric-hint">当前筛选项目汇总</span></article>
+    <article class="metric-card"><span class="metric-label">已收款</span><strong class="metric-value metric-value--good">@Model.Result.Total.CollectedAmount.ToString("N2")</strong><span class="metric-hint">收款减退款/冲销</span></article>
+    <article class="metric-card"><span class="metric-label">未收款</span><strong class="metric-value">@Model.Result.Total.UncollectedAmount.ToString("N2")</strong><span class="metric-hint">应收减已收</span></article>
+    <article class="metric-card"><span class="metric-label">未开票</span><strong class="metric-value">@Model.Result.Total.UninvoicedAmount.ToString("N2")</strong><span class="metric-hint">应收减有效销项发票</span></article>
 </section>
 
-<section class="panel" style="margin-top: var(--space-3)">
-    <div class="panel-heading"><div><p class="eyebrow">项目维度</p><h2>项目经营明细</h2></div></div>
-    @if (Model.Overview.Projects.Count == 0)
+<section class="panel data-work-surface">
+    <div class="panel-heading"><div><p class="eyebrow">项目维度</p><h2>项目经营明细</h2></div><span class="result-count">共 @Model.Result.TotalCount 个项目</span></div>
+    <partial name="_DataWorkbench" model="Model.Workbench" />
+    <form id="finance-table-export-form" method="post" asp-page-handler="Export" hidden>
+        <input type="hidden" asp-for="Search" /><input type="hidden" asp-for="MinimumReceivable" /><input type="hidden" asp-for="MinimumUncollected" />
+        <input type="hidden" asp-for="RiskOnly" /><input type="hidden" asp-for="SortKey" /><input type="hidden" asp-for="SortDescending" /><input type="hidden" asp-for="PageSize" />
+        <input type="hidden" name="SelectedFields" value="project_number" data-export-column-key="project_number" />
+        <input type="hidden" name="SelectedFields" value="project_name" data-export-column-key="project_name" />
+        <input type="hidden" name="SelectedFields" value="receivable_amount" data-export-column-key="receivable_amount" />
+        <input type="hidden" name="SelectedFields" value="collected_amount" data-export-column-key="collected_amount" />
+        <input type="hidden" name="SelectedFields" value="uncollected_amount" data-export-column-key="uncollected_amount" />
+        <input type="hidden" name="SelectedFields" value="payable_amount" data-export-column-key="payable_amount" />
+        <input type="hidden" name="SelectedFields" value="paid_amount" data-export-column-key="paid_amount" />
+        <input type="hidden" name="SelectedFields" value="unpaid_amount" data-export-column-key="unpaid_amount" />
+        <input type="hidden" name="SelectedFields" value="output_invoice_amount" data-export-column-key="output_invoice_amount" />
+        <input type="hidden" name="SelectedFields" value="uninvoiced_amount" data-export-column-key="uninvoiced_amount" />
+    </form>
+    @if (Model.Result.Items.Count == 0)
     {
-        <p class="panel-copy">当前还没有可汇总的项目。录入项目和财务业务后，这里会自动计算经营口径。</p>
+        <div class="empty-state"><strong>没有符合条件的经营数据</strong><p>调整筛选条件后重试，或录入项目财务业务后查看自动汇总。</p></div>
     }
     else
     {
         <div class="table-wrap">
-            <table class="data-table">
-                <thead><tr><th>项目</th><th>应收</th><th>已收</th><th>未收</th><th>应付</th><th>已付</th><th>未付</th><th>已开票</th><th>未开票</th><th>风险</th></tr></thead>
+            <table class="data-table" id="finance-table">
+                <thead><tr>
+                    <th data-column-key="project_number"><button class="table-sort-button" type="button" data-sort-key="ProjectNumber">项目编号</button></th>
+                    <th data-column-key="project_name"><button class="table-sort-button" type="button" data-sort-key="ProjectName">项目名称</button></th>
+                    <th data-column-key="receivable_amount"><button class="table-sort-button" type="button" data-sort-key="ReceivableAmount">应收</button></th>
+                    <th data-column-key="collected_amount"><button class="table-sort-button" type="button" data-sort-key="CollectedAmount">已收</button></th>
+                    <th data-column-key="uncollected_amount"><button class="table-sort-button" type="button" data-sort-key="UncollectedAmount">未收</button></th>
+                    <th data-column-key="payable_amount"><button class="table-sort-button" type="button" data-sort-key="PayableAmount">应付</button></th>
+                    <th data-column-key="paid_amount"><button class="table-sort-button" type="button" data-sort-key="PaidAmount">已付</button></th>
+                    <th data-column-key="unpaid_amount"><button class="table-sort-button" type="button" data-sort-key="UnpaidAmount">未付</button></th>
+                    <th data-column-key="output_invoice_amount"><button class="table-sort-button" type="button" data-sort-key="OutputInvoiceAmount">已开票</button></th>
+                    <th data-column-key="uninvoiced_amount"><button class="table-sort-button" type="button" data-sort-key="UninvoicedAmount">未开票</button></th>
+                    <th data-column-key="risk">风险</th>
+                </tr></thead>
                 <tbody>
-                @foreach (var item in Model.Overview.Projects)
+                @foreach (var item in Model.Result.Items)
                 {
+                    var hasRisk = item.Summary.HasCollectionRisk || item.Summary.HasPaymentRisk;
                     <tr>
-                        <td>@item.ProjectNumber · @item.ProjectName</td>
-                        <td>@item.Summary.ReceivableAmount.ToString("N2")</td>
-                        <td>@item.Summary.CollectedAmount.ToString("N2")</td>
-                        <td>@item.Summary.UncollectedAmount.ToString("N2")</td>
-                        <td>@item.Summary.PayableAmount.ToString("N2")</td>
-                        <td>@item.Summary.PaidAmount.ToString("N2")</td>
-                        <td>@item.Summary.UnpaidAmount.ToString("N2")</td>
-                        <td>@item.Summary.OutputInvoiceAmount.ToString("N2")</td>
-                        <td>@item.Summary.UninvoicedAmount.ToString("N2")</td>
-                        <td>@(item.Summary.HasCollectionRisk || item.Summary.HasPaymentRisk ? "超收/超付" : "正常")</td>
+                        <td data-column-key="project_number">@item.ProjectNumber</td><td data-column-key="project_name">@item.ProjectName</td>
+                        <td data-column-key="receivable_amount">@item.Summary.ReceivableAmount.ToString("N2")</td><td data-column-key="collected_amount">@item.Summary.CollectedAmount.ToString("N2")</td>
+                        <td data-column-key="uncollected_amount">@item.Summary.UncollectedAmount.ToString("N2")</td><td data-column-key="payable_amount">@item.Summary.PayableAmount.ToString("N2")</td>
+                        <td data-column-key="paid_amount">@item.Summary.PaidAmount.ToString("N2")</td><td data-column-key="unpaid_amount">@item.Summary.UnpaidAmount.ToString("N2")</td>
+                        <td data-column-key="output_invoice_amount">@item.Summary.OutputInvoiceAmount.ToString("N2")</td><td data-column-key="uninvoiced_amount">@item.Summary.UninvoicedAmount.ToString("N2")</td>
+                        <td data-column-key="risk"><span class="pill @(hasRisk ? "pill--danger" : "pill--success")">@(hasRisk ? "超收/超付" : "正常")</span></td>
                     </tr>
                 }
                 </tbody>
             </table>
         </div>
+        <nav class="table-pagination" aria-label="经营台账分页">
+            <a class="button button--secondary @(Model.Result.Page <= 1 ? "is-disabled" : null)" href="@(Model.Result.Page <= 1 ? null : Model.PageUrl(Model.Result.Page - 1))">上一页</a>
+            <span>第 @Model.Result.Page / @Model.Result.TotalPages 页</span>
+            <a class="button button--secondary @(Model.Result.Page >= Model.Result.TotalPages ? "is-disabled" : null)" href="@(Model.Result.Page >= Model.Result.TotalPages ? null : Model.PageUrl(Model.Result.Page + 1))">下一页</a>
+        </nav>
     }
 </section>

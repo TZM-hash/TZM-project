@@ -27,6 +27,9 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("receivable_amount", "应收款", ExportFieldDataType.Number, true),
                 new("collected_amount", "已收款", ExportFieldDataType.Number, true),
                 new("uncollected_amount", "未收款", ExportFieldDataType.Number, true),
+                new("payable_amount", "应付款", ExportFieldDataType.Number, true),
+                new("paid_amount", "已付款", ExportFieldDataType.Number, true),
+                new("unpaid_amount", "未付款", ExportFieldDataType.Number, true),
                 new("expected_invoice_amount", "应开票", ExportFieldDataType.Number, true),
                 new("output_invoice_amount", "已开票", ExportFieldDataType.Number, true),
                 new("uninvoiced_amount", "未开票", ExportFieldDataType.Number, true)
@@ -174,7 +177,7 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
         ExportSelectionValidator.ValidateCutoffDate(request.CutoffDate);
         var file = request.Dataset switch
         {
-            ExportDataset.ProjectOverview => await ExportProjectOverviewAsync(fields, request.CutoffDate, cancellationToken),
+            ExportDataset.ProjectOverview => await ExportProjectOverviewAsync(fields, request.CutoffDate, request.ProjectIds, cancellationToken),
             ExportDataset.Employees => await ExportEmployeesAsync(fields, cancellationToken),
             ExportDataset.Partners => await ExportPartnersAsync(fields, cancellationToken),
             ExportDataset.Payroll => await ExportPayrollAsync(fields, request.CutoffDate, cancellationToken),
@@ -242,19 +245,26 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
         return templates.Select(ToDto).ToArray();
     }
 
-    private async Task<ExportFileResult> ExportProjectOverviewAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
+    private async Task<ExportFileResult> ExportProjectOverviewAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, IReadOnlyList<Guid>? projectIds, CancellationToken cancellationToken)
     {
-        var projects = await db.Projects.AsNoTracking()
+        var query = db.Projects.AsNoTracking()
             .Include(item => item.Contracts)
                 .ThenInclude(item => item.LineItems)
-            .Where(item => item.IsActive)
-            .OrderBy(item => item.ProjectNumber)
-            .ToListAsync(cancellationToken);
+            .Where(item => item.IsActive);
+        if (projectIds is not null)
+        {
+            var allowedProjectIds = projectIds.Distinct().ToArray();
+            query = query.Where(item => allowedProjectIds.Contains(item.Id));
+        }
+        var projects = await query.OrderBy(item => item.ProjectNumber).ToListAsync(cancellationToken);
         var rows = new List<IReadOnlyList<object?>>(projects.Count);
         decimal contractTotal = 0m;
         decimal receivableTotal = 0m;
         decimal collectedTotal = 0m;
         decimal uncollectedTotal = 0m;
+        decimal payableTotal = 0m;
+        decimal paidTotal = 0m;
+        decimal unpaidTotal = 0m;
         decimal invoiceTotal = 0m;
         decimal uninvoicedTotal = 0m;
         foreach (var project in projects)
@@ -272,6 +282,9 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 ["receivable_amount"] = finance.ReceivableAmount,
                 ["collected_amount"] = finance.CollectedAmount,
                 ["uncollected_amount"] = finance.UncollectedAmount,
+                ["payable_amount"] = finance.PayableAmount,
+                ["paid_amount"] = finance.PaidAmount,
+                ["unpaid_amount"] = finance.UnpaidAmount,
                 ["expected_invoice_amount"] = finance.ReceivableAmount,
                 ["output_invoice_amount"] = finance.OutputInvoiceAmount,
                 ["uninvoiced_amount"] = finance.UninvoicedAmount
@@ -281,6 +294,9 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             receivableTotal += finance.ReceivableAmount;
             collectedTotal += finance.CollectedAmount;
             uncollectedTotal += finance.UncollectedAmount;
+            payableTotal += finance.PayableAmount;
+            paidTotal += finance.PaidAmount;
+            unpaidTotal += finance.UnpaidAmount;
             invoiceTotal += finance.OutputInvoiceAmount;
             uninvoicedTotal += finance.UninvoicedAmount;
         }
@@ -295,6 +311,9 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 ["应收款", receivableTotal],
                 ["已收款", collectedTotal],
                 ["未收款", uncollectedTotal],
+                ["应付款", payableTotal],
+                ["已付款", paidTotal],
+                ["未付款", unpaidTotal],
                 ["应开票", receivableTotal],
                 ["已开票", invoiceTotal],
                 ["未开票", uninvoicedTotal],

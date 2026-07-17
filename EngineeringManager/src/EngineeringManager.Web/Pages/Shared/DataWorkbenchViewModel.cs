@@ -29,6 +29,20 @@ public sealed record DataWorkbenchFilterField(
 
 public sealed record DataWorkbenchFilterChip(string Key, string Label, string Value);
 
+public sealed class SavedDataViewInput
+{
+    public Guid? Id { get; set; }
+    public string PageKey { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public bool IsDefault { get; set; }
+    public string FilterJson { get; set; } = "{}";
+    public string ColumnJson { get; set; } = "[]";
+    public string? SortKey { get; set; }
+    public bool SortDescending { get; set; }
+    public TableDensity RowDensity { get; set; } = TableDensity.Standard;
+    public int PageSize { get; set; } = 20;
+}
+
 public sealed record DataWorkbenchViewModel(
     string PageKey,
     string TableId,

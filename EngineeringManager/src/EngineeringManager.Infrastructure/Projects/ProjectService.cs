@@ -143,24 +143,106 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         ProjectStage? stage,
         CancellationToken cancellationToken)
     {
-        var query = db.Projects
-            .AsNoTracking()
-            .Include(project => project.Contracts)
-                .ThenInclude(contract => contract.LineItems)
+        var query = db.Projects.AsNoTracking()
+            .Include(project => project.Contracts).ThenInclude(contract => contract.LineItems)
             .Where(project => project.IsActive);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
             query = query.Where(project => project.ProjectNumber.Contains(term) || project.Name.Contains(term));
         }
-
-        if (stage.HasValue)
-        {
-            query = query.Where(project => project.Stage == stage.Value);
-        }
-
+        if (stage.HasValue) query = query.Where(project => project.Stage == stage.Value);
         var projects = await query.OrderByDescending(project => project.CreatedAt).ToListAsync(cancellationToken);
         return projects.Select(project => new ProjectListItemDto(ToProjectDto(project), ProjectSummaryService.Calculate(project))).ToArray();
+    }
+
+    public async Task<ProjectListPageDto> SearchProjectsAsync(
+        ProjectListActor actor,
+        ProjectListQuery query,
+        CancellationToken cancellationToken)
+    {
+        var projectQuery = db.Projects
+            .AsNoTracking()
+            .Include(project => project.Contracts)
+                .ThenInclude(contract => contract.LineItems)
+            .Include(project => project.Assignments)
+            .Include(project => project.LegalEntities)
+            .Where(project => project.IsActive);
+        if (!actor.CanAccessAllProjects)
+        {
+            projectQuery = projectQuery.Where(project => project.ResponsibleUserId == actor.UserId || project.Assignments.Any(assignment => assignment.UserId == actor.UserId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var term = query.Search.Trim();
+            projectQuery = projectQuery.Where(project => project.ProjectNumber.Contains(term) || project.Name.Contains(term) || (project.GeneralContractorName != null && project.GeneralContractorName.Contains(term)));
+        }
+        if (query.Stages.Count > 0)
+        {
+            var stages = query.Stages.Distinct().ToArray();
+            projectQuery = projectQuery.Where(project => stages.Contains(project.Stage));
+        }
+        if (query.LegalEntityId.HasValue)
+        {
+            projectQuery = projectQuery.Where(project => project.LegalEntities.Any(item => item.LegalEntityId == query.LegalEntityId.Value));
+        }
+        if (!string.IsNullOrWhiteSpace(query.ResponsibleUserId))
+        {
+            var responsibleUserId = query.ResponsibleUserId.Trim();
+            projectQuery = projectQuery.Where(project => project.ResponsibleUserId == responsibleUserId);
+        }
+
+        var projects = await projectQuery.ToListAsync(cancellationToken);
+        IEnumerable<ProjectListItemDto> items = projects.Select(project => new ProjectListItemDto(ToProjectDto(project), ProjectSummaryService.Calculate(project)));
+        if (query.MinimumCurrentAmount.HasValue) items = items.Where(item => item.Summary.CurrentAmount >= query.MinimumCurrentAmount.Value);
+        if (query.MaximumCurrentAmount.HasValue) items = items.Where(item => item.Summary.CurrentAmount <= query.MaximumCurrentAmount.Value);
+        items = SortProjects(items, query.SortKey, query.SortDescending);
+
+        var matching = items.ToArray();
+        var pageSize = NormalizePageSize(query.PageSize);
+        var totalPages = Math.Max(1, (int)Math.Ceiling((double)matching.Length / pageSize));
+        var page = Math.Clamp(query.Page, 1, totalPages);
+        return new ProjectListPageDto(
+            matching.Skip((page - 1) * pageSize).Take(pageSize).ToArray(),
+            new ProjectListAggregateDto(
+                matching.Length,
+                matching.Sum(item => item.Summary.ContractAmount),
+                matching.Sum(item => item.Summary.CurrentAmount),
+                matching.Count(item => item.Summary.SettlementStatus == ProjectSettlementStatus.Settled)),
+            page,
+            pageSize,
+            matching.Length,
+            totalPages,
+            matching.Select(item => item.Project.Id).ToArray());
+    }
+
+    public async Task<ProjectListOptionsDto> GetListOptionsAsync(ProjectListActor actor, CancellationToken cancellationToken)
+    {
+        var query = db.Projects.AsNoTracking().Where(item => item.IsActive);
+        if (!actor.CanAccessAllProjects)
+        {
+            query = query.Where(item => item.ResponsibleUserId == actor.UserId || item.Assignments.Any(assignment => assignment.UserId == actor.UserId));
+        }
+        var projectIds = query.Select(item => item.Id);
+        var legalEntityRows = await db.ProjectLegalEntities.AsNoTracking()
+            .Where(item => projectIds.Contains(item.ProjectId))
+            .Select(item => new { item.LegalEntityId, item.LegalEntity.ShortName })
+            .ToListAsync(cancellationToken);
+        var legalEntities = legalEntityRows
+            .DistinctBy(item => item.LegalEntityId)
+            .Select(item => new ProjectFilterOptionDto(item.LegalEntityId.ToString(), item.ShortName))
+            .OrderBy(item => item.Label)
+            .ToArray();
+        var responsibleRows = await query.Where(item => item.ResponsibleUserId != null && item.ResponsibleUser != null)
+            .Select(item => new { UserId = item.ResponsibleUserId!, item.ResponsibleUser!.DisplayName })
+            .ToListAsync(cancellationToken);
+        var responsibleUsers = responsibleRows
+            .DistinctBy(item => item.UserId)
+            .Select(item => new ProjectFilterOptionDto(item.UserId, item.DisplayName))
+            .OrderBy(item => item.Label)
+            .ToArray();
+        return new ProjectListOptionsDto(legalEntities, responsibleUsers);
     }
 
     public async Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken)
@@ -246,4 +328,20 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static IEnumerable<ProjectListItemDto> SortProjects(IEnumerable<ProjectListItemDto> items, string? sortKey, bool descending)
+    {
+        Func<ProjectListItemDto, object> selector = sortKey switch
+        {
+            "Name" => item => item.Project.Name,
+            "Stage" => item => item.Project.Stage,
+            "ContractAmount" => item => item.Summary.ContractAmount,
+            "CurrentAmount" => item => item.Summary.CurrentAmount,
+            "SettlementStatus" => item => item.Summary.SettlementStatus,
+            _ => item => item.Project.ProjectNumber
+        };
+        return descending ? items.OrderByDescending(selector).ThenBy(item => item.Project.ProjectNumber) : items.OrderBy(selector).ThenBy(item => item.Project.ProjectNumber);
+    }
+
+    private static int NormalizePageSize(int pageSize) => pageSize is 20 or 50 or 100 ? pageSize : 20;
 }

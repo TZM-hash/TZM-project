@@ -12,6 +12,43 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ProjectServiceTests
 {
     [Fact]
+    public async Task SearchProjectsAppliesUserScopeAmountSortAndPaging()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var manager = new ApplicationUser { Id = "project-manager-a", UserName = "project-manager-a", DisplayName = "项目负责人甲" };
+        fixture.Db.Users.Add(manager);
+        for (var index = 1; index <= 24; index++)
+        {
+            var project = new Project
+            {
+                ProjectNumber = $"P-SEARCH-{index:00}",
+                Name = $"市政道路 {index:00}",
+                ResponsibleUserId = manager.Id,
+                Stage = ProjectStage.UnderConstruction
+            };
+            var contract = new Contract { Project = project, ContractNumber = $"C-{index:00}", Name = "施工合同", TotalAmount = index * 2_000m };
+            contract.LineItems.Add(new ContractLineItem { Contract = contract, Code = "001", Name = "工程量", Unit = "项", EstimatedQuantity = index, EstimatedUnitPrice = 1_000m });
+            project.Contracts.Add(contract);
+            fixture.Db.Projects.Add(project);
+        }
+        fixture.Db.Projects.Add(new Project { ProjectNumber = "P-HIDDEN", Name = "市政隐藏项目", Stage = ProjectStage.UnderConstruction });
+        await fixture.Db.SaveChangesAsync();
+
+        var result = await fixture.Service.SearchProjectsAsync(
+            new ProjectListActor(manager.Id, false),
+            new ProjectListQuery("市政", [ProjectStage.UnderConstruction], null, null, 1_000m, 24_000m, "CurrentAmount", true, 2, 20),
+            CancellationToken.None);
+
+        result.TotalCount.Should().Be(24);
+        result.Page.Should().Be(2);
+        result.Items.Should().HaveCount(4);
+        result.Items.Select(item => item.Summary.CurrentAmount).Should().BeInDescendingOrder();
+        result.Items.Should().OnlyContain(item => item.Project.ProjectNumber != "P-HIDDEN");
+        var options = await fixture.Service.GetListOptionsAsync(new ProjectListActor(manager.Id, false), CancellationToken.None);
+        options.ResponsibleUsers.Should().ContainSingle(item => item.Value == manager.Id);
+    }
+
+    [Fact]
     public async Task DuplicateProjectNumberIsRejected()
     {
         await using var fixture = await ProjectFixture.CreateAsync();

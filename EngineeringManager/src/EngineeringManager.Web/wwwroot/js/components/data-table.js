@@ -54,6 +54,10 @@ function applyColumns(root, columns) {
     if (checkbox && !checkbox.disabled) checkbox.checked = column.visible;
     list.appendChild(item);
   });
+  const exportForm = document.getElementById(`${root.dataset.tableId}-export-form`);
+  exportForm?.querySelectorAll("[data-export-column-key]").forEach((input) => {
+    input.disabled = byKey.get(input.dataset.exportColumnKey)?.visible === false;
+  });
 }
 
 function applyRowSpacing(root, spacing) {
@@ -134,9 +138,23 @@ function initPageSize(root) {
     const url = new URL(window.location.href);
     url.searchParams.set("pageSize", event.target.value);
     url.searchParams.delete("page");
+    url.searchParams.delete("pageNumber");
     persist(root);
     window.location.assign(url);
   });
+}
+
+function initSorting(root) {
+  tableFor(root)?.querySelectorAll("[data-sort-key]").forEach((button) => button.addEventListener("click", () => {
+    const url = new URL(window.location.href);
+    const currentKey = root.dataset.currentSortKey;
+    const descending = currentKey === button.dataset.sortKey ? root.dataset.currentSortDescending !== "true" : false;
+    url.searchParams.set("sortKey", button.dataset.sortKey);
+    url.searchParams.set("sortDescending", String(descending));
+    url.searchParams.delete("page");
+    url.searchParams.delete("pageNumber");
+    window.location.assign(url);
+  }));
 }
 
 export function getWorkbenchTableState(root) {
@@ -152,5 +170,6 @@ export function initDataTables() {
     initDialogs(root);
     initRowSpacing(root);
     initPageSize(root);
+    initSorting(root);
   });
 }

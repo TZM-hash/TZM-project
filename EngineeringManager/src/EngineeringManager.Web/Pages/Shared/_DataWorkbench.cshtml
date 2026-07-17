@@ -15,7 +15,9 @@
 }
 
 <section class="data-workbench" data-workbench data-page-key="@Model.PageKey" data-table-id="@Model.TableId"
-         data-row-density="@densityValue" data-default-columns="@defaultColumns" data-saved-view-columns="@initialColumns">
+         data-row-density="@densityValue" data-current-sort-key="@Model.CurrentSortKey"
+         data-current-sort-descending="@Model.SortDescending.ToString().ToLowerInvariant()"
+         data-default-columns="@defaultColumns" data-saved-view-columns="@initialColumns">
     <div class="data-workbench-toolbar" aria-label="数据视图工具栏">
         <label class="workbench-view-picker">
             <span>视图</span>

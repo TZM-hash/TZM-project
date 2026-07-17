@@ -68,6 +68,41 @@ public sealed record ContractDto(
 
 public sealed record ProjectListItemDto(ProjectDto Project, ProjectSummaryDto Summary);
 
+public sealed record ProjectListActor(string UserId, bool CanAccessAllProjects);
+
+public sealed record ProjectListQuery(
+    string? Search,
+    IReadOnlyCollection<ProjectStage> Stages,
+    Guid? LegalEntityId,
+    string? ResponsibleUserId,
+    decimal? MinimumCurrentAmount,
+    decimal? MaximumCurrentAmount,
+    string? SortKey,
+    bool SortDescending,
+    int Page = 1,
+    int PageSize = 20);
+
+public sealed record ProjectListPageDto(
+    IReadOnlyList<ProjectListItemDto> Items,
+    ProjectListAggregateDto Aggregate,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages,
+    IReadOnlyList<Guid> MatchingProjectIds);
+
+public sealed record ProjectListAggregateDto(
+    int ProjectCount,
+    decimal ContractAmount,
+    decimal CurrentAmount,
+    int SettledProjectCount);
+
+public sealed record ProjectFilterOptionDto(string Value, string Label);
+
+public sealed record ProjectListOptionsDto(
+    IReadOnlyList<ProjectFilterOptionDto> LegalEntities,
+    IReadOnlyList<ProjectFilterOptionDto> ResponsibleUsers);
+
 public sealed record ProjectDetailsDto(
     ProjectDto Project,
     ProjectSummaryDto Summary,

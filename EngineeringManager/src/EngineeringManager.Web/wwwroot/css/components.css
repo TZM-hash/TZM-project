@@ -128,6 +128,16 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .row-spacing-compact .data-table th, .row-spacing-compact .data-table td { height: 2.15rem; padding-block: .28rem; font-size: .74rem; }
 .row-spacing-standard .data-table th, .row-spacing-standard .data-table td { height: 2.8rem; padding-block: .58rem; }
 .row-spacing-spacious .data-table th, .row-spacing-spacious .data-table td { height: 3.45rem; padding-block: .85rem; }
+.table-sort-button { display: inline-flex; align-items: center; gap: .3rem; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-weight: inherit; cursor: pointer; }
+.table-sort-button::after { color: #94a3b8; content: "↕"; font-size: .65rem; }
+.table-pagination { display: flex; align-items: center; justify-content: flex-end; gap: .7rem; margin-top: .85rem; color: var(--app-muted); font-size: .74rem; }
+.table-pagination .button { min-height: 2.2rem; padding: .35rem .65rem; font-size: .72rem; }
+.table-pagination .is-disabled { pointer-events: none; opacity: .45; }
+.result-count { color: var(--app-muted); font-size: .74rem; }
+.page-actions-inline { display: flex; flex-wrap: wrap; gap: .55rem; }
+.empty-state { display: grid; min-height: 11rem; place-content: center; gap: .35rem; padding: 1.5rem; color: var(--app-muted); text-align: center; }
+.empty-state strong { color: var(--app-text); }
+.empty-state p { margin: 0; font-size: .78rem; }
 
 @media (max-width: 900px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .option-card-grid--three { grid-template-columns: 1fr; } }
 @media (max-width: 680px) {
