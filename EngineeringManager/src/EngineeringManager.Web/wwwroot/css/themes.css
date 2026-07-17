@@ -1,4 +1,59 @@
-@media (prefers-reduced-motion: no-preference) {
-    .button, .nav-link { transition: background-color .2s ease, color .2s ease, transform .2s ease; }
-    .button:hover { transform: translateY(-1px); }
+/* Optional themes and motion profiles, adapted from Reference. */
+body.theme-clear-glass {
+  --app-bg: #e9f1fb;
+  --app-surface: rgba(255,255,255,.72);
+  --app-surface-raised: rgba(248,250,252,.66);
+  --app-border: rgba(255,255,255,.72);
+  background: radial-gradient(circle at 12% 12%, rgba(96,165,250,.22), transparent 34%), radial-gradient(circle at 86% 72%, rgba(45,212,191,.19), transparent 38%), #eaf1fa;
+}
+body.theme-clear-glass .app-sidebar,
+body.theme-clear-glass .app-header,
+body.theme-clear-glass .panel,
+body.theme-clear-glass .metric-card,
+body.theme-clear-glass .form-section,
+body.theme-clear-glass .data-work-surface {
+  border-color: rgba(255,255,255,.72);
+  background: rgba(255,255,255,.64);
+  backdrop-filter: blur(24px) saturate(170%);
+  box-shadow: 0 18px 46px rgba(44,70,105,.12), inset 0 1px 0 rgba(255,255,255,.72);
+}
+body.theme-clear-glass .data-table th { background: rgba(243,247,253,.76); }
+
+body.ui-effects-low .app-bg-fx span { display: none; }
+body.ui-effects-low .metric-card::after { opacity: .4; }
+body.ui-effects-medium .app-bg-fx span { animation: fx-drift 16s ease-in-out infinite alternate; }
+body.ui-effects-high .app-bg-fx span { opacity: .2; animation: fx-drift 10s ease-in-out infinite alternate; }
+body.ui-effects-high .app-bg-fx span:nth-child(2) { animation-delay: -3s; }
+
+body.motion-technology .nav-link,
+body.motion-technology .button,
+body.motion-technology .metric-card,
+body.motion-technology .panel { transition: color .18s ease, background-color .18s ease, border-color .18s ease, transform .2s ease, box-shadow .2s ease; }
+body.motion-technology.ui-effects-medium .metric-card:hover,
+body.motion-technology.ui-effects-medium .panel:hover { transform: translateY(-2px); box-shadow: var(--app-shadow); }
+body.motion-technology.ui-effects-high .metric-card:hover,
+body.motion-technology.ui-effects-high .panel:hover { transform: translateY(-4px); box-shadow: 0 22px 50px rgba(37,99,235,.13); }
+
+body.motion-apple { --apple-spring: cubic-bezier(.2,.8,.2,1); }
+body.motion-apple .nav-link,
+body.motion-apple .button,
+body.motion-apple .metric-card,
+body.motion-apple .panel,
+body.motion-apple .option-card { transition: transform .34s var(--apple-spring), box-shadow .34s var(--apple-spring), background-color .24s ease, border-color .24s ease; }
+body.motion-apple.ui-effects-medium .app-main { animation: apple-page-enter .42s var(--apple-spring) both; }
+body.motion-apple.ui-effects-high .app-main { animation: apple-page-enter-high .62s var(--apple-spring) both; }
+body.motion-apple.ui-effects-high .button:active,
+body.motion-apple.ui-effects-high .nav-link:active { transform: scale(.96); }
+body.motion-apple.ui-effects-high .metric-card:hover,
+body.motion-apple.ui-effects-high .panel:hover { transform: translateY(-5px) scale(1.003); box-shadow: 0 24px 55px rgba(37,99,235,.16); }
+
+.ui-click-ripple { position: fixed; z-index: 1200; width: .5rem; height: .5rem; border-radius: 50%; pointer-events: none; background: rgba(37,99,235,.2); transform: translate(-50%,-50%) scale(0); animation: click-ripple .5s ease-out forwards; }
+@keyframes fx-drift { from { transform: translate3d(-2%, -2%, 0) scale(.96); } to { transform: translate3d(4%, 5%, 0) scale(1.08); } }
+@keyframes apple-page-enter { from { opacity: 0; transform: translateY(.55rem) scale(.995); } to { opacity: 1; transform: none; } }
+@keyframes apple-page-enter-high { from { opacity: 0; transform: translateY(.9rem) scale(.988); filter: blur(5px); } 75% { opacity: 1; filter: blur(0); } to { transform: none; } }
+@keyframes click-ripple { to { opacity: 0; transform: translate(-50%,-50%) scale(18); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .app-bg-fx span, .ui-click-ripple { display: none !important; }
 }
