@@ -22,8 +22,8 @@ public sealed class IndexModel(
 {
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
-        new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
-        new HashSet<string>(["project_number", "project_name", "stage", "contract_amount", "current_project_amount", "settlement_status"], StringComparer.Ordinal),
+        new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
+        new HashSet<string>(["project_number", "project_name", "stage", "affiliation_type", "contract_amount", "current_project_amount", "settlement_status", "actions"], StringComparer.Ordinal),
         new HashSet<string>(["ProjectNumber", "Name", "Stage", "ContractAmount", "CurrentAmount", "SettlementStatus"], StringComparer.Ordinal));
 
     public ProjectListPageDto Result { get; private set; } = new([], new ProjectListAggregateDto(0, 0m, 0m, 0), 1, 20, 0, 1, []);
@@ -33,6 +33,7 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public List<ProjectStage> Stages { get; set; } = [];
     [BindProperty(SupportsGet = true)] public Guid? LegalEntityId { get; set; }
     [BindProperty(SupportsGet = true)] public string? ResponsibleUserId { get; set; }
+    [BindProperty(SupportsGet = true)] public ProjectAffiliationType? AffiliationType { get; set; }
     [BindProperty(SupportsGet = true)] public decimal? MinimumCurrentAmount { get; set; }
     [BindProperty(SupportsGet = true)] public decimal? MaximumCurrentAmount { get; set; }
     [BindProperty(SupportsGet = true)] public string SortKey { get; set; } = "ProjectNumber";
@@ -61,7 +62,7 @@ public sealed class IndexModel(
     public async Task<IActionResult> OnPostExportAsync(CancellationToken cancellationToken)
     {
         var result = await projectService.SearchProjectsAsync(Actor(), Query() with { Page = 1 }, cancellationToken);
-        var fields = SelectedFields.Count > 0 ? SelectedFields : ["project_number", "project_name", "stage", "contract_amount", "current_project_amount"];
+        var fields = SelectedFields.Count > 0 ? SelectedFields : ["project_number", "project_name", "stage", "affiliation_type", "contract_amount", "current_project_amount"];
         var file = await exportService.ExportAsync(new ExportRequest(ExportDataset.ProjectOverview, UserId(), fields, null, result.MatchingProjectIds), cancellationToken);
         return File(file.Content, file.ContentType, file.FileName);
     }
@@ -100,7 +101,8 @@ public sealed class IndexModel(
         SortKey,
         SortDescending,
         PageNumber,
-        PageSize);
+        PageSize,
+        AffiliationType);
 
     private ProjectListActor Actor()
     {
@@ -119,6 +121,8 @@ public sealed class IndexModel(
                 options.LegalEntities.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
             new("ResponsibleUserId", "项目负责人", ResponsibleUserId, DataWorkbenchFilterKind.Select,
                 options.ResponsibleUsers.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
+            new("AffiliationType", "项目合作方式", AffiliationType.HasValue ? ((int)AffiliationType.Value).ToString(System.Globalization.CultureInfo.InvariantCulture) : null, DataWorkbenchFilterKind.Select,
+                [new("1", "自营项目"), new("2", "他方挂靠我方"), new("3", "我方挂靠他方")]),
             new("MinimumCurrentAmount", "最低当前金额", MinimumCurrentAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture), DataWorkbenchFilterKind.Number),
             new("MaximumCurrentAmount", "最高当前金额", MaximumCurrentAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture), DataWorkbenchFilterKind.Number)
         };
@@ -127,6 +131,7 @@ public sealed class IndexModel(
         if (Stages.Count > 0) chips.Add(new("Stages", "阶段", string.Join("、", Stages.Select(StageLabel))));
         if (LegalEntityId.HasValue) chips.Add(new("LegalEntityId", "签约公司", options.LegalEntities.FirstOrDefault(item => item.Value == LegalEntityId.Value.ToString())?.Label ?? LegalEntityId.Value.ToString()));
         if (!string.IsNullOrWhiteSpace(ResponsibleUserId)) chips.Add(new("ResponsibleUserId", "负责人", options.ResponsibleUsers.FirstOrDefault(item => item.Value == ResponsibleUserId)?.Label ?? ResponsibleUserId));
+        if (AffiliationType.HasValue) chips.Add(new("AffiliationType", "合作方式", AffiliationTypeLabel(AffiliationType.Value)));
         if (MinimumCurrentAmount.HasValue) chips.Add(new("MinimumCurrentAmount", "最低金额", MinimumCurrentAmount.Value.ToString("N2", System.Globalization.CultureInfo.CurrentCulture)));
         if (MaximumCurrentAmount.HasValue) chips.Add(new("MaximumCurrentAmount", "最高金额", MaximumCurrentAmount.Value.ToString("N2", System.Globalization.CultureInfo.CurrentCulture)));
 
@@ -137,9 +142,11 @@ public sealed class IndexModel(
                 new("project_number", "项目编号", true, true),
                 new("project_name", "项目名称"),
                 new("stage", "阶段"),
+                new("affiliation_type", "合作方式"),
                 new("contract_amount", "合同金额"),
                 new("current_project_amount", "当前工程金额"),
-                new("settlement_status", "结算状态")
+                new("settlement_status", "结算状态"),
+                new("actions", "操作", false, false)
             ],
             filters,
             chips,
@@ -159,6 +166,7 @@ public sealed class IndexModel(
         if (TryReadStage(ReadString(filters, "Stages"), out var parsedStage)) Stages = [parsedStage];
         if (Guid.TryParse(ReadString(filters, "LegalEntityId"), out var legalEntityId)) LegalEntityId = legalEntityId;
         ResponsibleUserId = ReadString(filters, "ResponsibleUserId") ?? ResponsibleUserId;
+        if (int.TryParse(ReadString(filters, "AffiliationType"), out var affiliation) && Enum.IsDefined(typeof(ProjectAffiliationType), affiliation)) AffiliationType = (ProjectAffiliationType)affiliation;
         if (decimal.TryParse(ReadString(filters, "MinimumCurrentAmount"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var minimum)) MinimumCurrentAmount = minimum;
         if (decimal.TryParse(ReadString(filters, "MaximumCurrentAmount"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var maximum)) MaximumCurrentAmount = maximum;
         SortKey = view.SortKey ?? SortKey;
@@ -196,4 +204,11 @@ public sealed class IndexModel(
         stage = default;
         return false;
     }
+
+    private static string AffiliationTypeLabel(ProjectAffiliationType type) => type switch
+    {
+        ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方",
+        ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方",
+        _ => "自营项目"
+    };
 }

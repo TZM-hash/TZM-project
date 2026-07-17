@@ -20,15 +20,15 @@
     {
         <div class="table-wrap">
             <table class="data-table" id="partners-table">
-                <thead><tr><th data-column-key="number">编号</th><th data-column-key="name">单位名称</th><th data-column-key="roles">角色</th><th data-column-key="contact">主要联系人</th><th data-column-key="projects">参与项目</th></tr></thead>
+<thead><tr><th data-column-key="number">编号</th><th data-column-key="name">单位名称</th><th data-column-key="roles">角色</th><th data-column-key="contact">主要联系人</th><th data-column-key="projects">参与项目</th><th data-column-key="actions">操作</th></tr></thead>
                 <tbody>
                 @foreach (var partner in Model.Partners)
                 {
                     <tr>
-                        <td data-column-key="number">@partner.PartnerNumber</td><td data-column-key="name">@partner.Name</td>
+<td data-column-key="number">@partner.PartnerNumber</td><td data-column-key="name"><a asp-page="/Partners/Create" asp-route-id="@partner.Id">@partner.Name</a></td>
                         <td data-column-key="roles">@string.Join("、", partner.Roles.Select(role => role.RoleType))</td>
                         <td data-column-key="contact">@(partner.Contacts.FirstOrDefault(contact => contact.IsPrimary)?.Name ?? "未设置")</td>
-                        <td data-column-key="projects">@partner.ProjectCount</td>
+<td data-column-key="projects">@partner.ProjectCount</td><td data-column-key="actions"><a asp-page="/Partners/Create" asp-route-id="@partner.Id">编辑</a> · <a asp-page="/Partners/Create" asp-route-copyFrom="@partner.Id">复制</a></td>
                     </tr>
                 }
                 </tbody>

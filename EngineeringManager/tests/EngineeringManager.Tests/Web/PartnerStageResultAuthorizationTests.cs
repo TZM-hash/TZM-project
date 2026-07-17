@@ -69,6 +69,7 @@ public sealed class PartnerStageResultAuthorizationTests
     {
         public Task<BusinessPartnerDto> CreateAsync(CreateBusinessPartnerRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BusinessPartnerDto> CopyAsync(CopyBusinessPartnerRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BusinessPartnerDto> UpdateAsync(string userId, UpdateBusinessPartnerRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LinkToProjectAsync(LinkPartnerToProjectRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<BusinessPartnerDto>> ListAsync(string? search, BusinessPartnerRoleType? role, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BusinessPartnerDto>>([]);
         public Task<BusinessPartnerDto?> GetAsync(Guid partnerId, CancellationToken cancellationToken) => Task.FromResult<BusinessPartnerDto?>(null);

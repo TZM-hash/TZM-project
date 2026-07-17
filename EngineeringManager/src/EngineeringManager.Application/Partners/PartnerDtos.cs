@@ -30,6 +30,19 @@ public sealed record CopyBusinessPartnerRequest(
     string Name,
     string ShortName);
 
+public sealed record UpdateBusinessPartnerRequest(
+    Guid Id,
+    string PartnerNumber,
+    string Name,
+    string ShortName,
+    string? UnifiedSocialCreditCode,
+    string? Notes,
+    PartnerRoleRequest Role,
+    PartnerContactRequest? PrimaryContact,
+    bool IsActive,
+    Guid ConcurrencyStamp,
+    string Reason);
+
 public sealed record LinkPartnerToProjectRequest(
     Guid PartnerId,
     Guid ProjectId,
@@ -60,4 +73,6 @@ public sealed record BusinessPartnerDto(
     string? Notes,
     IReadOnlyList<PartnerRoleDto> Roles,
     IReadOnlyList<PartnerContactDto> Contacts,
-    int ProjectCount);
+    int ProjectCount,
+    bool IsActive = true,
+    Guid ConcurrencyStamp = default);

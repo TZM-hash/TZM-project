@@ -1,0 +1,34 @@
+@page
+@model EngineeringManager.Web.Pages.Projects.EditModel
+@{
+    ViewData["Title"] = Model.IsEditing ? "编辑项目" : "新增项目";
+}
+
+<section class="page-heading">
+    <div><p class="eyebrow">项目主档</p><h1>@ViewData["Title"]</h1><p class="page-lead">维护项目基础资料、负责人、组织归属和我方签约公司。金额由工程量、收付款和发票明细自动汇总。</p></div>
+    <a class="button button--secondary" href="@(Model.Id.HasValue ? Url.Page("Details", new { id = Model.Id }) : Url.Page("Index"))">返回</a>
+</section>
+
+<form method="post" class="panel form-grid project-edit-form">
+    <input type="hidden" asp-for="Id" /><input type="hidden" asp-for="ConcurrencyStamp" />
+    <div asp-validation-summary="All" class="panel-copy form-span"></div>
+    <section class="form-section"><h2 class="section-heading">项目基础资料</h2>
+        <label>项目编号<input asp-for="ProjectNumber" required /></label><label>项目名称<input asp-for="Name" required /></label>
+        <label>上级/总项目名称<input asp-for="ParentProjectName" /></label>
+        <label>当前阶段<select asp-for="Stage" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Projects.ProjectStage>()"></select></label>
+        <label>项目合作方式<select asp-for="AffiliationType"><option value="1">自营项目</option><option value="2">他方挂靠我方</option><option value="3">我方挂靠他方</option></select></label>
+        <label>归档状态<select asp-for="ArchiveStatus" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Projects.ArchiveStatus>()"></select></label>
+    </section>
+    <section class="form-section"><h2 class="section-heading">总包与负责人</h2>
+        <label>总包单位<input asp-for="GeneralContractorName" /></label><label>总包联系人<input asp-for="GeneralContractorContact" /></label>
+        <label>联系电话<input asp-for="GeneralContractorPhone" /></label>
+        <label>项目负责人<select asp-for="ResponsibleUserId"><option value="">未设置</option>@foreach (var item in Model.Options.ResponsibleUsers) { <option value="@item.Value">@item.Label</option> }</select></label>
+        <label>部门<select asp-for="DepartmentId"><option value="">未设置</option>@foreach (var item in Model.Options.Departments) { <option value="@item.Value">@item.Label</option> }</select></label>
+        <label>分支机构<select asp-for="BranchId"><option value="">未设置</option>@foreach (var item in Model.Options.Branches) { <option value="@item.Value">@item.Label</option> }</select></label>
+    </section>
+    <section class="form-section form-span"><h2 class="section-heading">我方签约公司</h2><p class="section-help">可勾选多家公司；第一家公司作为默认主签约公司，合同层级仍可分别维护金额。</p>
+        <div class="choice-grid">@foreach (var item in Model.Options.LegalEntities) { var id = Guid.Parse(item.Value); <label class="choice-card"><input type="checkbox" name="LegalEntityIds" value="@item.Value" checked="@(Model.LegalEntityIds.Contains(id) ? "checked" : null)" /><span>@item.Label</span></label> }</div>
+    </section>
+    @if (Model.IsEditing) { <label class="form-span">修改原因<textarea asp-for="Reason" rows="2" required></textarea></label> }
+    <div class="sticky-actions form-span"><button class="button button--primary" type="submit">保存项目资料</button></div>
+</form>

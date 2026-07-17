@@ -1,11 +1,12 @@
 @page
 @model EngineeringManager.Web.Pages.Employees.CreateModel
 @{
-    ViewData["Title"] = "新增员工";
+    ViewData["Title"] = Model.IsEditing ? "编辑员工" : "新增员工";
 }
 
-<section class="page-heading"><div><p class="eyebrow">员工主档</p><h1>新增员工</h1><p class="page-lead">录入基础和默认工资资料。归属历史、工资批次、报销和借支在保存主档后分别维护。</p></div><a class="button button--secondary" asp-page="/Employees/Index">返回员工列表</a></section>
+<section class="page-heading"><div><p class="eyebrow">员工主档</p><h1>@ViewData["Title"]</h1><p class="page-lead">集中维护基础资料和默认工资设置，证书、工资、报销和借支在对应台账中联动。</p></div><a class="button button--secondary" asp-page="/Employees/Index">返回员工列表</a></section>
 <form method="post" class="panel form-grid">
+    <input type="hidden" asp-for="Id" /><input type="hidden" asp-for="ConcurrencyStamp" /><input type="hidden" asp-for="DefaultLegalEntityId" />
     <div asp-validation-summary="All" class="panel-copy form-span"></div>
     <section class="form-section">
         <h2 class="section-heading">基础资料</h2>
@@ -16,7 +17,10 @@
         <label>岗位<input asp-for="PositionTitle" /></label>
         <label>电话<input asp-for="Phone" /></label>
         <label>入职日期<input asp-for="HireDate" type="date" /></label>
+        <label>离职日期<input asp-for="LeaveDate" type="date" /></label>
+        <label class="checkbox-row"><input asp-for="IsActive" />账号档案启用</label>
     </section>
+    @if (Model.IsEditing) { <label class="form-span">修改原因<textarea asp-for="Reason" rows="2" required></textarea></label> }
     <section class="form-section">
         <h2 class="section-heading">敏感资料与默认工资</h2>
         <p class="section-help">敏感字段只供有权限的人员查看；默认工资可在每个批次中覆盖。</p>

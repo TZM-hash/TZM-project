@@ -2,6 +2,7 @@ using EngineeringManager.Application.Partners;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.Partners;
 
@@ -69,6 +70,50 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
                 source.Roles.Select(role => new PartnerRoleRequest(role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms)).ToArray(),
                 []),
             cancellationToken);
+    }
+
+    public async Task<BusinessPartnerDto> UpdateAsync(string userId, UpdateBusinessPartnerRequest request, CancellationToken cancellationToken)
+    {
+        var partner = await db.BusinessPartners.Include(item => item.Roles).Include(item => item.Contacts).Include(item => item.ProjectLinks)
+            .SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken) ?? throw new InvalidOperationException("合作单位不存在。");
+        if (partner.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("合作单位资料已被其他用户修改，请刷新后重试。");
+        var number = NormalizeRequired(request.PartnerNumber, nameof(request.PartnerNumber));
+        if (await db.BusinessPartners.AnyAsync(item => item.Id != request.Id && item.PartnerNumber == number, cancellationToken)) throw new InvalidOperationException($"合作单位编号已存在：{number}");
+        var creditCode = NormalizeOptional(request.UnifiedSocialCreditCode);
+        if (creditCode is not null && await db.BusinessPartners.AnyAsync(item => item.Id != request.Id && item.UnifiedSocialCreditCode == creditCode, cancellationToken)) throw new InvalidOperationException("统一社会信用代码已存在。");
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        var before = Snapshot(partner);
+        partner.PartnerNumber = number;
+        partner.Name = NormalizeRequired(request.Name, nameof(request.Name));
+        partner.ShortName = NormalizeRequired(request.ShortName, nameof(request.ShortName));
+        partner.UnifiedSocialCreditCode = creditCode;
+        partner.Notes = NormalizeOptional(request.Notes);
+        partner.IsActive = request.IsActive;
+        partner.UpdatedAt = DateTimeOffset.UtcNow;
+        db.Entry(partner).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
+        partner.ConcurrencyStamp = Guid.NewGuid();
+        var role = partner.Roles.FirstOrDefault(item => item.RoleType == request.Role.RoleType);
+        if (role is null)
+        {
+            role = new BusinessPartnerRole { Partner = partner, RoleType = request.Role.RoleType };
+            partner.Roles.Add(role);
+            db.BusinessPartnerRoles.Add(role);
+        }
+        role.TradeCategory = NormalizeOptional(request.Role.TradeCategory); role.PricingRule = NormalizeOptional(request.Role.PricingRule); role.SettlementTerms = NormalizeOptional(request.Role.SettlementTerms);
+        if (request.PrimaryContact is not null && !string.IsNullOrWhiteSpace(request.PrimaryContact.Name))
+        {
+            var contact = partner.Contacts.FirstOrDefault(item => item.IsPrimary);
+            if (contact is null)
+            {
+                contact = new PartnerContact { Partner = partner, IsPrimary = true };
+                partner.Contacts.Add(contact);
+                db.PartnerContacts.Add(contact);
+            }
+            contact.Name = NormalizeRequired(request.PrimaryContact.Name, nameof(request.PrimaryContact.Name)); contact.Phone = NormalizeOptional(request.PrimaryContact.Phone); contact.Email = NormalizeOptional(request.PrimaryContact.Email); contact.Address = NormalizeOptional(request.PrimaryContact.Address);
+        }
+        db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "UpdateBusinessPartner", EntityType = nameof(BusinessPartner), EntityId = partner.Id.ToString(), Reason = reason, BeforeJson = JsonSerializer.Serialize(before), AfterJson = JsonSerializer.Serialize(Snapshot(partner)) });
+        await db.SaveChangesAsync(cancellationToken);
+        return ToDto(partner);
     }
 
     public async Task LinkToProjectAsync(LinkPartnerToProjectRequest request, CancellationToken cancellationToken)
@@ -173,7 +218,11 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
             partner.Notes,
             partner.Roles.OrderBy(role => role.RoleType).Select(role => new PartnerRoleDto(role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms)).ToArray(),
             partner.Contacts.OrderByDescending(contact => contact.IsPrimary).ThenBy(contact => contact.Name).Select(contact => new PartnerContactDto(contact.Id, contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary)).ToArray(),
-            partner.ProjectLinks.Count(link => link.IsActive));
+            partner.ProjectLinks.Count(link => link.IsActive),
+            partner.IsActive,
+            partner.ConcurrencyStamp);
+
+    private static object Snapshot(BusinessPartner item) => new { item.PartnerNumber, item.Name, item.ShortName, item.UnifiedSocialCreditCode, item.Notes, item.IsActive, Roles = item.Roles.Select(role => new { role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms }).ToArray(), Contacts = item.Contacts.Select(contact => new { contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary }).ToArray() };
 
     private static string NormalizeRequired(string value, string parameterName)
     {

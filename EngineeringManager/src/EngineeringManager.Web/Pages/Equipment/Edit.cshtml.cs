@@ -11,9 +11,14 @@ namespace EngineeringManager.Web.Pages.Equipment;
 public sealed class EditModel(IEquipmentService service) : EquipmentPageModel
 {
     [BindProperty] public InputModel Input { get; set; } = new();
-    public async Task OnGetAsync(Guid? copyFrom, CancellationToken token)
+    public async Task OnGetAsync(Guid? id, Guid? copyFrom, CancellationToken token)
     {
-        if (copyFrom.HasValue) Input = InputModel.From(await service.CopyEquipmentAsync(ResolveActor(), copyFrom.Value, token));
+        if (id.HasValue)
+        {
+            var dashboard = await service.GetDashboardAsync(ResolveActor(), new EquipmentFilter(null, null, null, null), token);
+            Input = InputModel.From(dashboard.Items.Single(item => item.Id == id.Value));
+        }
+        else if (copyFrom.HasValue) Input = InputModel.From(await service.CopyEquipmentAsync(ResolveActor(), copyFrom.Value, token));
     }
     public async Task<IActionResult> OnPostAsync(CancellationToken token)
     {
@@ -35,6 +40,6 @@ public sealed class EditModel(IEquipmentService service) : EquipmentPageModel
         public Guid? ConcurrencyStamp { get; set; }
         [Required] public string Reason { get; set; } = "维护设备档案";
         public SaveEquipmentRequest ToRequest() => new(Id, EquipmentNumber, Name, Model, Category, OwnershipType, OwnerLegalEntityId, LessorBusinessPartnerId, InternalDailyRate, ConcurrencyStamp, Reason);
-        public static InputModel From(EquipmentDetailsDto item) => new() { EquipmentNumber = item.EquipmentNumber, Name = item.Name, Model = item.Model, Category = item.Category, OwnershipType = item.OwnershipType, OwnerLegalEntityId = item.OwnerLegalEntityId, LessorBusinessPartnerId = item.LessorBusinessPartnerId, InternalDailyRate = item.InternalDailyRate };
+        public static InputModel From(EquipmentDetailsDto item) => new() { Id = item.Id == Guid.Empty ? null : item.Id, EquipmentNumber = item.EquipmentNumber, Name = item.Name, Model = item.Model, Category = item.Category, OwnershipType = item.OwnershipType, OwnerLegalEntityId = item.OwnerLegalEntityId, LessorBusinessPartnerId = item.LessorBusinessPartnerId, InternalDailyRate = item.InternalDailyRate, ConcurrencyStamp = item.ConcurrencyStamp };
     }
 }

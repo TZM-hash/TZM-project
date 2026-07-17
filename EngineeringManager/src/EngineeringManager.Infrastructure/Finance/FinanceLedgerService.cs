@@ -2,6 +2,7 @@ using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.Finance;
 
@@ -179,6 +180,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             Description = NormalizeOptional(request.Description)
         };
         db.ReceivableEntries.Add(entry);
+        AddProjectAudit("CreateReceivable", nameof(ReceivableEntry), entry.Id, entry.ProjectId, $"新增应收 {entry.Amount:N2}", new { entry.EntryDate, entry.DueDate, entry.Amount, entry.Description });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -210,6 +212,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         };
         db.CollectionEntries.Add(entry);
         db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Inflow, AccountTransactionSourceType.Collection, entry.Id, entry.CollectionDate, entry.Amount, entry.Notes));
+        AddProjectAudit("RecordCollection", nameof(CollectionEntry), entry.Id, entry.ProjectId, $"登记收款 {entry.Amount:N2}", new { entry.CollectionDate, entry.Amount, entry.PaymentMethod, entry.Notes });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -256,6 +259,8 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         };
         db.RefundOrReversalEntries.Add(entry);
         db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Outflow, AccountTransactionSourceType.Refund, entry.Id, entry.EntryDate, entry.Amount, entry.Reason));
+        var refundProjectId = collection?.ProjectId ?? await db.ReceivableEntries.Where(item => item.Id == request.ReceivableEntryId).Select(item => (Guid?)item.ProjectId).SingleOrDefaultAsync(cancellationToken);
+        if (refundProjectId.HasValue) AddProjectAudit("RecordCollectionReversal", nameof(RefundOrReversalEntry), entry.Id, refundProjectId.Value, $"退款/收款冲销 {entry.Amount:N2}", new { entry.EntryDate, entry.Amount, entry.AdjustmentType, entry.Reason });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -277,6 +282,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             Description = NormalizeOptional(request.Description)
         };
         db.PayableEntries.Add(entry);
+        AddProjectAudit("CreatePayable", nameof(PayableEntry), entry.Id, entry.ProjectId, $"新增应付 {entry.Amount:N2}", new { entry.EntryDate, entry.DueDate, entry.Amount, entry.Description });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -308,6 +314,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         };
         db.PaymentEntries.Add(entry);
         db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Outflow, AccountTransactionSourceType.Payment, entry.Id, entry.PaymentDate, entry.Amount, entry.Notes));
+        AddProjectAudit("RecordPayment", nameof(PaymentEntry), entry.Id, entry.ProjectId, $"登记付款 {entry.Amount:N2}", new { entry.PaymentDate, entry.Amount, entry.PaymentMethod, entry.Notes });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -338,6 +345,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             Reason = reason
         };
         db.DeductionEntries.Add(entry);
+        AddProjectAudit("CreateDeduction", nameof(DeductionEntry), entry.Id, entry.ProjectId, $"登记扣款 {entry.Amount:N2}", new { entry.EntryDate, entry.Amount, entry.Reason });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -364,6 +372,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         };
         db.PaymentReversalEntries.Add(entry);
         db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Inflow, AccountTransactionSourceType.PaymentReversal, entry.Id, entry.EntryDate, entry.Amount, entry.Reason));
+        AddProjectAudit("RecordPaymentReversal", nameof(PaymentReversalEntry), entry.Id, payment.ProjectId, $"付款冲销 {entry.Amount:N2}", new { entry.EntryDate, entry.Amount, entry.AdjustmentType, entry.Reason });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -477,6 +486,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         }
 
         db.InvoiceEntries.Add(invoice);
+        AddProjectAudit("CreateInvoice", nameof(InvoiceEntry), invoice.Id, invoice.ProjectId, $"登记发票 {invoice.InvoiceNumber}，金额 {invoice.GrossAmount:N2}", new { invoice.InvoiceDate, invoice.InvoiceNumber, invoice.Direction, invoice.TaxRate, invoice.NetAmount, invoice.TaxAmount, invoice.GrossAmount, invoice.Status });
         await db.SaveChangesAsync(cancellationToken);
         return invoice.Id;
     }
@@ -594,6 +604,17 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             throw new ArgumentException("发票分配金额合计必须等于含税金额。", nameof(allocations));
         }
     }
+
+    private void AddProjectAudit(string action, string entityType, Guid entityId, Guid projectId, string reason, object after) =>
+        db.AuditLogs.Add(new AuditLog
+        {
+            Action = action,
+            EntityType = entityType,
+            EntityId = entityId.ToString(),
+            RelatedProjectId = projectId.ToString(),
+            Reason = reason,
+            AfterJson = JsonSerializer.Serialize(after)
+        });
 
     private async Task ValidateDimensionsAsync(
         Guid projectId,

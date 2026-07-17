@@ -88,6 +88,7 @@ public sealed class CertificatePageTests
         public Task<EmployeeDto?> GetAsync(Guid employeeId, CancellationToken token) => throw new NotSupportedException();
         public Task<EmployeeDto> CreateAsync(CreateEmployeeRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<EmployeeDto> CopyAsync(CopyEmployeeRequest request, CancellationToken token) => throw new NotSupportedException();
+        public Task<EmployeeDto> UpdateAsync(string userId, UpdateEmployeeRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<EmployeeAffiliationDto> AddAffiliationAsync(CreateEmployeeAffiliationRequest request, CancellationToken token) => throw new NotSupportedException();
     }
     private sealed class FakeCompanyService : ICompanyManagementService

@@ -11,7 +11,11 @@ public sealed record CreateProjectRequest(
     Guid? BranchId,
     ProjectStage Stage,
     ArchiveStatus ArchiveStatus,
-    IReadOnlyCollection<Guid> LegalEntityIds);
+    IReadOnlyCollection<Guid> LegalEntityIds,
+    string? ParentProjectName = null,
+    string? GeneralContractorContact = null,
+    string? GeneralContractorPhone = null,
+    ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated);
 
 public sealed record ContractAllocationRequest(Guid LegalEntityId, decimal? Amount, decimal? Percentage);
 
@@ -42,7 +46,8 @@ public sealed record ProjectDto(
     string Name,
     string? GeneralContractorName,
     ProjectStage Stage,
-    ArchiveStatus ArchiveStatus);
+    ArchiveStatus ArchiveStatus,
+    ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated);
 
 public sealed record ContractLineItemDto(
     Guid Id,
@@ -80,7 +85,8 @@ public sealed record ProjectListQuery(
     string? SortKey,
     bool SortDescending,
     int Page = 1,
-    int PageSize = 20);
+    int PageSize = 20,
+    ProjectAffiliationType? AffiliationType = null);
 
 public sealed record ProjectListPageDto(
     IReadOnlyList<ProjectListItemDto> Items,

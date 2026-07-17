@@ -21,6 +21,7 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("project_number", "项目编号", ExportFieldDataType.Text, true),
                 new("project_name", "项目名称", ExportFieldDataType.Text, true),
                 new("stage", "项目阶段", ExportFieldDataType.Text, true),
+                new("affiliation_type", "项目合作方式", ExportFieldDataType.Text, true),
                 new("general_contractor", "总包单位", ExportFieldDataType.Text, true),
                 new("contract_amount", "合同金额", ExportFieldDataType.Number, true),
                 new("current_project_amount", "当前工程金额", ExportFieldDataType.Number, true),
@@ -291,6 +292,12 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 ["project_number"] = project.ProjectNumber,
                 ["project_name"] = project.Name,
                 ["stage"] = project.Stage.ToString(),
+                ["affiliation_type"] = project.AffiliationType switch
+                {
+                    EngineeringManager.Domain.Projects.ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方",
+                    EngineeringManager.Domain.Projects.ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方",
+                    _ => "自营项目"
+                },
                 ["general_contractor"] = project.GeneralContractorName,
                 ["contract_amount"] = projectSummary.ContractAmount,
                 ["current_project_amount"] = projectSummary.CurrentAmount,

@@ -12,7 +12,7 @@
     </div>
     @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager"))
     {
-        <a class="button button--secondary" href="#">新建项目（服务已就绪）</a>
+        <a class="button button--primary" asp-page="/Projects/Edit">新建项目</a>
     }
 </section>
 
@@ -29,13 +29,14 @@
     <div class="panel-heading"><div><p class="eyebrow">项目清单</p><h2>当前项目</h2></div><span class="result-count">共 @Model.Result.TotalCount 个项目</span></div>
     <partial name="_DataWorkbench" model="Model.Workbench" />
     <form id="projects-table-export-form" method="post" asp-page-handler="Export" hidden>
-        <input type="hidden" asp-for="Search" /><input type="hidden" asp-for="LegalEntityId" /><input type="hidden" asp-for="ResponsibleUserId" />
+        <input type="hidden" asp-for="Search" /><input type="hidden" asp-for="LegalEntityId" /><input type="hidden" asp-for="ResponsibleUserId" /><input type="hidden" asp-for="AffiliationType" />
         <input type="hidden" asp-for="MinimumCurrentAmount" /><input type="hidden" asp-for="MaximumCurrentAmount" />
         <input type="hidden" asp-for="SortKey" /><input type="hidden" asp-for="SortDescending" /><input type="hidden" asp-for="PageSize" />
         @foreach (var stage in Model.Stages) { <input type="hidden" name="Stages" value="@stage" /> }
         <input type="hidden" name="SelectedFields" value="project_number" data-export-column-key="project_number" />
         <input type="hidden" name="SelectedFields" value="project_name" data-export-column-key="project_name" />
         <input type="hidden" name="SelectedFields" value="stage" data-export-column-key="stage" />
+        <input type="hidden" name="SelectedFields" value="affiliation_type" data-export-column-key="affiliation_type" />
         <input type="hidden" name="SelectedFields" value="contract_amount" data-export-column-key="contract_amount" />
         <input type="hidden" name="SelectedFields" value="current_project_amount" data-export-column-key="current_project_amount" />
     </form>
@@ -50,10 +51,10 @@
                 <thead><tr>
                     <th data-column-key="project_number"><button class="table-sort-button" type="button" data-sort-key="ProjectNumber">项目编号</button></th>
                     <th data-column-key="project_name"><button class="table-sort-button" type="button" data-sort-key="Name">项目名称</button></th>
-                    <th data-column-key="stage"><button class="table-sort-button" type="button" data-sort-key="Stage">阶段</button></th>
+                    <th data-column-key="stage"><button class="table-sort-button" type="button" data-sort-key="Stage">阶段</button></th><th data-column-key="affiliation_type">合作方式</th>
                     <th data-column-key="contract_amount"><button class="table-sort-button" type="button" data-sort-key="ContractAmount">合同金额</button></th>
                     <th data-column-key="current_project_amount"><button class="table-sort-button" type="button" data-sort-key="CurrentAmount">当前工程金额</button></th>
-                    <th data-column-key="settlement_status"><button class="table-sort-button" type="button" data-sort-key="SettlementStatus">结算状态</button></th>
+                    <th data-column-key="settlement_status"><button class="table-sort-button" type="button" data-sort-key="SettlementStatus">结算状态</button></th><th data-column-key="actions">操作</th>
                 </tr></thead>
                 <tbody>
                 @foreach (var item in Model.Result.Items)
@@ -61,10 +62,10 @@
                     <tr>
                         <td data-column-key="project_number"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.ProjectNumber</a></td>
                         <td data-column-key="project_name">@item.Project.Name</td>
-                        <td data-column-key="stage"><span class="pill">@item.Project.Stage</span></td>
+                        <td data-column-key="stage"><span class="pill">@item.Project.Stage</span></td><td data-column-key="affiliation_type">@(item.Project.AffiliationType switch { EngineeringManager.Domain.Projects.ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方", EngineeringManager.Domain.Projects.ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方", _ => "自营项目" })</td>
                         <td data-column-key="contract_amount">@item.Summary.ContractAmount.ToString("N2")</td>
                         <td data-column-key="current_project_amount">@item.Summary.CurrentAmount.ToString("N2")</td>
-                        <td data-column-key="settlement_status">@item.Summary.SettlementStatus</td>
+                        <td data-column-key="settlement_status">@item.Summary.SettlementStatus</td><td data-column-key="actions"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">查看</a>@if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager")) { <span> · </span><a asp-page="/Projects/Edit" asp-route-id="@item.Project.Id">编辑</a> }</td>
                     </tr>
                 }
                 </tbody>

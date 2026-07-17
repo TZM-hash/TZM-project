@@ -72,6 +72,19 @@ public sealed class EmployeeServiceTests
         copiedEntity.AffiliationHistory.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task UpdateChangesEmployeeAndWritesAuditLog()
+    {
+        await using var fixture = await EmployeeFixture.CreateAsync();
+        var employee = await fixture.Service.CreateAsync(CreateRequest("E-SVC-005", "待修改员工"), CancellationToken.None);
+
+        var updated = await fixture.Service.UpdateAsync("admin", new UpdateEmployeeRequest(employee.Id, employee.EmployeeNumber, "已修改员工", EmployeeType.Labor, "13800000001", null, null, null, null, null, "操作员", null, null, 320m, null, null, true, employee.ConcurrencyStamp, "调整员工主档"), CancellationToken.None);
+
+        updated.Name.Should().Be("已修改员工");
+        updated.EmployeeType.Should().Be(EmployeeType.Labor);
+        (await fixture.Db.AuditLogs.SingleAsync()).Action.Should().Be("UpdateEmployee");
+    }
+
     private static CreateEmployeeRequest CreateRequest(string number, string name) =>
         new(number, name, EmployeeType.Formal, null, null, null, null, null, null, null, null, null, null, true);
 

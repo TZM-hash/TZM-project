@@ -68,7 +68,7 @@
                 {
                     var hasRisk = item.Summary.HasCollectionRisk || item.Summary.HasPaymentRisk;
                     <tr>
-                        <td data-column-key="project_number">@item.ProjectNumber</td><td data-column-key="project_name">@item.ProjectName</td>
+                <td data-column-key="project_number"><a asp-page="/Projects/Details" asp-route-id="@item.ProjectId">@item.ProjectNumber</a></td><td data-column-key="project_name">@item.ProjectName</td>
                         <td data-column-key="receivable_amount">@item.Summary.ReceivableAmount.ToString("N2")</td><td data-column-key="collected_amount">@item.Summary.CollectedAmount.ToString("N2")</td>
                         <td data-column-key="uncollected_amount">@item.Summary.UncollectedAmount.ToString("N2")</td><td data-column-key="payable_amount">@item.Summary.PayableAmount.ToString("N2")</td>
                         <td data-column-key="paid_amount">@item.Summary.PaidAmount.ToString("N2")</td><td data-column-key="unpaid_amount">@item.Summary.UnpaidAmount.ToString("N2")</td>

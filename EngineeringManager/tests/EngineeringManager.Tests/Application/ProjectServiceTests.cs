@@ -61,6 +61,21 @@ public sealed class ProjectServiceTests
     }
 
     [Fact]
+    public async Task AffiliationTypeFilterSeparatesAttachedProjects()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        await fixture.Service.CreateProjectAsync(new CreateProjectRequest("P-AFF-01", "自营项目", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [], AffiliationType: ProjectAffiliationType.SelfOperated), CancellationToken.None);
+        await fixture.Service.CreateProjectAsync(new CreateProjectRequest("P-AFF-02", "他方挂靠", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [], AffiliationType: ProjectAffiliationType.ExternalPartyAttachedToUs), CancellationToken.None);
+
+        var result = await fixture.Service.SearchProjectsAsync(new ProjectListActor("administrator", true),
+            new ProjectListQuery(null, [], null, null, null, null, null, false, 1, 20, ProjectAffiliationType.ExternalPartyAttachedToUs), CancellationToken.None);
+
+        result.Items.Should().ContainSingle();
+        result.Items[0].Project.ProjectNumber.Should().Be("P-AFF-02");
+        result.Items[0].Project.AffiliationType.Should().Be(ProjectAffiliationType.ExternalPartyAttachedToUs);
+    }
+
+    [Fact]
     public async Task InvalidContractAllocationDoesNotSaveContract()
     {
         await using var fixture = await ProjectFixture.CreateAsync();

@@ -12,11 +12,11 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
 {
     public FinanceEntryOptionsDto Options { get; private set; } = new([], [], [], [], [], [], [], [], []);
 
-    [BindProperty] public FinanceEntryKind EntryKind { get; set; } = FinanceEntryKind.Receivable;
-    [BindProperty] public Guid ProjectId { get; set; }
-    [BindProperty] public Guid? ContractId { get; set; }
-    [BindProperty] public Guid LegalEntityId { get; set; }
-    [BindProperty] public Guid? BusinessPartnerId { get; set; }
+    [BindProperty(SupportsGet = true)] public FinanceEntryKind EntryKind { get; set; } = FinanceEntryKind.Receivable;
+    [BindProperty(SupportsGet = true)] public Guid ProjectId { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid? ContractId { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid LegalEntityId { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid? BusinessPartnerId { get; set; }
     [BindProperty] public Guid? AccountId { get; set; }
     [BindProperty] public Guid? SecondaryAccountId { get; set; }
     [BindProperty] public Guid? RelatedEntryId { get; set; }
@@ -30,6 +30,7 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
     [BindProperty] public decimal TaxRate { get; set; }
     [BindProperty] public decimal NetAmount { get; set; }
     [BindProperty] public decimal TaxAmount { get; set; }
+    [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken) => Options = await financeService.GetEntryOptionsAsync(cancellationToken);
 
@@ -38,7 +39,9 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
         try
         {
             await SaveAsync(cancellationToken);
-            return RedirectToPage("/Finance/Index");
+            return !string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl)
+                ? LocalRedirect(ReturnUrl)
+                : RedirectToPage("/Finance/Index");
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {

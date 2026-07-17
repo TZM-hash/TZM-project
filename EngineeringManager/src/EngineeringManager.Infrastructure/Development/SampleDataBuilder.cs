@@ -336,6 +336,15 @@ public sealed class SampleDataBuilder(
             projects.Add(project);
         }
 
+        for (var index = 0; index < projects.Count; index++)
+        {
+            projects[index].AffiliationType = index % 7 == 2
+                ? ProjectAffiliationType.ExternalPartyAttachedToUs
+                : index % 11 == 5
+                    ? ProjectAffiliationType.WeAttachedToExternalParty
+                    : ProjectAffiliationType.SelfOperated;
+        }
+
         await db.SaveChangesAsync(token);
         return projects.OrderBy(item => item.ProjectNumber).ToArray();
     }

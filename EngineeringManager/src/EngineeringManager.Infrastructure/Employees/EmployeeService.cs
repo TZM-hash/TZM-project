@@ -2,6 +2,7 @@ using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.Employees;
 
@@ -58,6 +59,42 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
                 DefaultMonthlySalary: source.DefaultMonthlySalary,
                 DefaultHourlyRate: source.DefaultHourlyRate),
             cancellationToken);
+    }
+
+    public async Task<EmployeeDto> UpdateAsync(string userId, UpdateEmployeeRequest request, CancellationToken cancellationToken)
+    {
+        var employee = await db.Employees.Include(item => item.AffiliationHistory).SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("员工不存在。");
+        if (employee.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("员工资料已被其他用户修改，请刷新后重试。");
+        var number = NormalizeRequired(request.EmployeeNumber, nameof(request.EmployeeNumber));
+        if (await db.Employees.AnyAsync(item => item.Id != request.Id && item.EmployeeNumber == number, cancellationToken))
+            throw new InvalidOperationException($"员工编号已存在：{number}");
+        ValidateRates(request.DefaultMonthlySalary, request.DefaultDailyRate, request.DefaultHourlyRate, request.DefaultPieceworkRate);
+        await ValidateLegalEntityAsync(request.DefaultLegalEntityId, cancellationToken);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        var before = Snapshot(employee);
+        employee.EmployeeNumber = number;
+        employee.Name = NormalizeRequired(request.Name, nameof(request.Name));
+        employee.EmployeeType = request.EmployeeType;
+        employee.Phone = NormalizeOptional(request.Phone);
+        employee.IdentityNumber = NormalizeOptional(request.IdentityNumber);
+        employee.BankAccountNumber = NormalizeOptional(request.BankAccountNumber);
+        employee.BankName = NormalizeOptional(request.BankName);
+        employee.HireDate = request.HireDate;
+        employee.LeaveDate = request.LeaveDate;
+        employee.PositionTitle = NormalizeOptional(request.PositionTitle);
+        employee.DefaultLegalEntityId = request.DefaultLegalEntityId;
+        employee.DefaultMonthlySalary = request.DefaultMonthlySalary;
+        employee.DefaultDailyRate = request.DefaultDailyRate;
+        employee.DefaultHourlyRate = request.DefaultHourlyRate;
+        employee.DefaultPieceworkRate = request.DefaultPieceworkRate;
+        employee.IsActive = request.IsActive;
+        employee.UpdatedAt = DateTimeOffset.UtcNow;
+        db.Entry(employee).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
+        employee.ConcurrencyStamp = Guid.NewGuid();
+        db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "UpdateEmployee", EntityType = nameof(Employee), EntityId = employee.Id.ToString(), Reason = reason, BeforeJson = JsonSerializer.Serialize(before), AfterJson = JsonSerializer.Serialize(Snapshot(employee)) });
+        await db.SaveChangesAsync(cancellationToken);
+        return ToDto(employee);
     }
 
     public async Task<EmployeeAffiliationDto> AddAffiliationAsync(CreateEmployeeAffiliationRequest request, CancellationToken cancellationToken)
@@ -169,7 +206,15 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             employee.DefaultHourlyRate,
             employee.DefaultPieceworkRate,
             employee.IsActive,
-            employee.AffiliationHistory.OrderByDescending(item => item.StartDate).Select(ToDto).ToArray());
+            employee.AffiliationHistory.OrderByDescending(item => item.StartDate).Select(ToDto).ToArray(),
+            employee.IdentityNumber,
+            employee.BankAccountNumber,
+            employee.BankName,
+            employee.HireDate,
+            employee.LeaveDate,
+            employee.ConcurrencyStamp);
+
+    private static object Snapshot(Employee employee) => new { employee.EmployeeNumber, employee.Name, employee.EmployeeType, employee.Phone, employee.IdentityNumber, employee.BankAccountNumber, employee.BankName, employee.HireDate, employee.LeaveDate, employee.PositionTitle, employee.DefaultLegalEntityId, employee.DefaultMonthlySalary, employee.DefaultDailyRate, employee.DefaultHourlyRate, employee.DefaultPieceworkRate, employee.IsActive };
 
     private static EmployeeAffiliationDto ToDto(EmployeeAffiliationHistory affiliation) =>
         new(

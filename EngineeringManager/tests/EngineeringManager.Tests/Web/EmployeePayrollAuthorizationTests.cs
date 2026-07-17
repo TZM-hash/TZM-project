@@ -104,6 +104,7 @@ public sealed class EmployeePayrollAuthorizationTests
     {
         public Task<EmployeeDto> CreateAsync(CreateEmployeeRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeDto> CopyAsync(CopyEmployeeRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<EmployeeDto> UpdateAsync(string userId, UpdateEmployeeRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeAffiliationDto> AddAffiliationAsync(CreateEmployeeAffiliationRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<EmployeeDto>> ListAsync(string? search, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<EmployeeDto>>([]);
         public Task<EmployeeDto?> GetAsync(Guid employeeId, CancellationToken cancellationToken) => Task.FromResult<EmployeeDto?>(null);

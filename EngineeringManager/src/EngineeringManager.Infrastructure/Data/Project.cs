@@ -19,6 +19,7 @@ public sealed class Project
     public Guid? BranchId { get; set; }
     public OrganizationUnit? Branch { get; set; }
     public ProjectStage Stage { get; set; } = ProjectStage.Preliminary;
+    public ProjectAffiliationType AffiliationType { get; set; } = ProjectAffiliationType.SelfOperated;
     public ArchiveStatus ArchiveStatus { get; set; } = ArchiveStatus.NotArchived;
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

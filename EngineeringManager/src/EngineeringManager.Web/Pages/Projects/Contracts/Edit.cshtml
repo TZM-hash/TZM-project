@@ -1,11 +1,27 @@
 @page "/Projects/Contracts/Edit"
 @model EngineeringManager.Web.Pages.Projects.Contracts.EditModel
 @{
-    ViewData["Title"] = "合同编辑";
+    ViewData["Title"] = "合同与工程量维护";
 }
 
-<section class="panel">
-    <p class="eyebrow">项目管理</p>
-    <h1>合同编辑入口</h1>
-    <p class="panel-copy">合同和工程清单写入统一经过项目服务，页面交互将在当前阶段后续迭代中接入。</p>
-</section>
+<section class="page-heading"><div><p class="eyebrow">项目业务维护</p><h1>合同与工程量维护</h1><p class="page-lead">先选择项目，再新增合同和工程量。量价保存后会自动回写项目总览。</p></div>@if (Model.ProjectId.HasValue) { <a class="button button--secondary" asp-page="/Projects/Details" asp-route-id="@Model.ProjectId">返回项目</a> }</section>
+<form method="get" class="panel filter-bar"><label>选择项目<select asp-for="ProjectId"><option value="">请选择项目</option>@foreach (var item in Model.Projects) { <option value="@item.Project.Id">@item.Project.ProjectNumber · @item.Project.Name</option> }</select></label><button class="button button--primary" type="submit">进入维护</button></form>
+
+@if (Model.Workspace is not null)
+{
+    <div asp-validation-summary="All" class="panel panel-copy"></div>
+    <section class="content-grid workspace-edit-grid">
+        <article class="panel"><div class="panel-heading"><div><p class="eyebrow">合同</p><h2>新增项目合同</h2></div></div><form method="post" asp-page-handler="Contract" class="form-stack"><input type="hidden" asp-for="ProjectId" />
+            <label>合同编号<input asp-for="ContractNumber" required /></label><label>合同名称<input asp-for="ContractName" required /></label>
+            <label>合同类型<select asp-for="ContractType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Projects.ContractType>()"></select></label>
+            <label>对方单位<input asp-for="CounterpartyName" /></label><label>合同金额<input asp-for="ContractAmount" type="number" step="0.01" required /></label>
+            <label>我方签约公司<select asp-for="ContractLegalEntityId"><option value="">请选择</option>@foreach (var item in Model.Workspace.Overview.LegalEntities) { <option value="@item.Value">@item.Label</option> }</select></label>
+            <button class="button button--primary" type="submit">保存合同</button></form></article>
+        <article class="panel"><div class="panel-heading"><div><p class="eyebrow">工程量</p><h2>新增工程量明细</h2></div></div><form method="post" asp-page-handler="Line" class="form-stack"><input type="hidden" asp-for="ProjectId" />
+            <label>所属合同<select asp-for="ContractId"><option value="">请选择</option>@foreach (var item in Model.Workspace.Contracts) { <option value="@item.Id">@item.ContractNumber · @item.Name</option> }</select></label>
+            <label>清单编码<input asp-for="LineCode" required /></label><label>名称<input asp-for="LineName" required /></label><label>单位<input asp-for="Unit" required /></label>
+            <div class="form-grid form-grid--nested"><label>暂估工程量<input asp-for="EstimatedQuantity" type="number" step="0.0001" /></label><label>暂估单价<input asp-for="EstimatedUnitPrice" type="number" step="0.0001" /></label><label>结算工程量<input asp-for="SettledQuantity" type="number" step="0.0001" /></label><label>结算单价<input asp-for="SettledUnitPrice" type="number" step="0.0001" /></label></div>
+            <label class="checkbox-row"><input asp-for="IsSettlementConfirmed" />已确认结算量价</label><button class="button button--primary" type="submit">保存工程量</button></form></article>
+    </section>
+    <section class="panel"><div class="panel-heading"><div><p class="eyebrow">当前明细</p><h2>@Model.Workspace.Overview.Name</h2></div><span>@Model.Workspace.Contracts.Sum(item => item.LineItems.Count) 条工程量</span></div>@foreach (var contract in Model.Workspace.Contracts) { <div class="workspace-subsection"><div class="workspace-subheading"><h3>@contract.ContractNumber · @contract.Name</h3><span>@contract.TotalAmount.ToString("N2")</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>编码</th><th>名称</th><th>单位</th><th>暂估量</th><th>暂估单价</th><th>暂估金额</th><th>结算量</th><th>结算单价</th><th>结算金额</th><th>状态</th></tr></thead><tbody>@foreach (var line in contract.LineItems) { <tr><td>@line.Code</td><td>@line.Name</td><td>@line.Unit</td><td>@line.EstimatedQuantity</td><td>@line.EstimatedUnitPrice</td><td>@line.EstimatedAmount.ToString("N2")</td><td>@line.SettledQuantity</td><td>@line.SettledUnitPrice</td><td>@line.SettledAmount.ToString("N2")</td><td>@(line.IsSettlementConfirmed ? "结算" : "暂估")</td></tr> }</tbody></table></div></div> }</section>
+}

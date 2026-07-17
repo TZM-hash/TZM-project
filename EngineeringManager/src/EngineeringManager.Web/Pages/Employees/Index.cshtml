@@ -24,10 +24,10 @@
 <section class="panel" style="margin-top: var(--space-3)">
     <div class="panel-heading"><div><p class="eyebrow">员工清单</p><h2>基础资料</h2></div></div>
     <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Employees" />
-    <div class="table-wrap"><table class="data-table" id="employees-table"><thead><tr><th data-column-key="employee_number">员工编号</th><th data-column-key="name">姓名</th><th data-column-key="employee_type">类型</th><th data-column-key="position">岗位</th><th data-column-key="phone">电话</th><th data-column-key="assignments">主归属记录</th><th data-column-key="status">状态</th></tr></thead><tbody>
+<div class="table-wrap"><table class="data-table" id="employees-table"><thead><tr><th data-column-key="employee_number">员工编号</th><th data-column-key="name">姓名</th><th data-column-key="employee_type">类型</th><th data-column-key="position">岗位</th><th data-column-key="phone">电话</th><th data-column-key="assignments">主归属记录</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead><tbody>
     @foreach (var item in Model.Employees)
     {
-        <tr><td data-column-key="employee_number">@item.EmployeeNumber</td><td data-column-key="name">@item.Name</td><td data-column-key="employee_type">@item.EmployeeType</td><td data-column-key="position">@item.PositionTitle</td><td data-column-key="phone">@item.Phone</td><td data-column-key="assignments">@item.Affiliations.Count</td><td data-column-key="status">@(item.IsActive ? "启用" : "停用")</td></tr>
+<tr><td data-column-key="employee_number">@item.EmployeeNumber</td><td data-column-key="name"><a asp-page="/Employees/Create" asp-route-id="@item.Id">@item.Name</a></td><td data-column-key="employee_type">@item.EmployeeType</td><td data-column-key="position">@item.PositionTitle</td><td data-column-key="phone">@item.Phone</td><td data-column-key="assignments">@item.Affiliations.Count</td><td data-column-key="status">@(item.IsActive ? "启用" : "停用")</td><td data-column-key="actions"><a asp-page="/Employees/Create" asp-route-id="@item.Id">编辑</a> · <a asp-page="/Employees/Create" asp-route-copyFrom="@item.Id">复制</a> · <a asp-page="/Employees/Certificates/Index" asp-route-EmployeeId="@item.Id">证书</a></td></tr>
     }
     </tbody></table></div>
 </section>

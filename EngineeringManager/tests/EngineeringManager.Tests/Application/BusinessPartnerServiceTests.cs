@@ -70,6 +70,20 @@ public sealed class BusinessPartnerServiceTests
         copy.ProjectCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task UpdateChangesMasterDataAndPreservesAuditTrail()
+    {
+        await using var fixture = await PartnerFixture.CreateAsync();
+        var partner = await fixture.Service.CreateAsync(new CreateBusinessPartnerRequest("BP-UPD", "原单位", "原单位", null, null, [new PartnerRoleRequest(BusinessPartnerRoleType.ConstructionCrew, "土建", null, null)], []), CancellationToken.None);
+
+        var updated = await fixture.Service.UpdateAsync("admin", new UpdateBusinessPartnerRequest(partner.Id, partner.PartnerNumber, "修改后单位", "修改后", null, "更新备注", new PartnerRoleRequest(BusinessPartnerRoleType.MaterialSupplier, "材料", null, null), new PartnerContactRequest("新联系人", "13800000002", null, null, true), true, partner.ConcurrencyStamp, "维护合作单位"), CancellationToken.None);
+
+        updated.Name.Should().Be("修改后单位");
+        updated.Roles.Should().Contain(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew);
+        updated.Roles.Should().Contain(item => item.RoleType == BusinessPartnerRoleType.MaterialSupplier);
+        (await fixture.Db.AuditLogs.SingleAsync()).Action.Should().Be("UpdateBusinessPartner");
+    }
+
     private sealed class PartnerFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EngineeringManager.Application.DataViews;
+using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Web;
@@ -55,6 +56,58 @@ public sealed class ProjectAuthorizationTests
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task ProjectManagerSeesWorkspaceTabsActivityAndEditEntrances()
+    {
+        await using var factory = CreateFactory("ProjectManager");
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync($"/Projects/Details/{FakeProjectWorkspaceService.ProjectId}");
+        var html = System.Net.WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        html.Should().Contain("工程量明细");
+        html.Should().Contain("收款明细");
+        html.Should().Contain("开票明细");
+        html.Should().Contain("付款明细");
+        html.Should().Contain("提示与记录");
+        html.Should().Contain("他方挂靠我方");
+        html.Should().Contain(">编辑项目</a>");
+        html.Should().Contain("维护工程量");
+    }
+
+    [Fact]
+    public async Task QueryOnlySeesWorkspaceWithoutEditEntrances()
+    {
+        await using var factory = CreateFactory("QueryOnly");
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync($"/Projects/Details/{FakeProjectWorkspaceService.ProjectId}");
+        var html = System.Net.WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        html.Should().Contain("工程量明细");
+        html.Should().Contain("提示与记录");
+        html.Should().NotContain(">编辑项目</a>");
+        html.Should().NotContain("维护工程量");
+        html.Should().NotContain("登记收款");
+    }
+
+    [Fact]
+    public async Task ProjectListIncludesAffiliationFilter()
+    {
+        await using var factory = CreateFactory("ProjectManager");
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/Projects");
+        var html = System.Net.WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        html.Should().Contain("name=\"AffiliationType\"");
+        html.Should().Contain("他方挂靠我方");
+        html.Should().Contain("我方挂靠他方");
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string? role) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -69,6 +122,8 @@ public sealed class ProjectAuthorizationTests
                     _ => { });
                 services.RemoveAll<IProjectService>();
                 services.AddSingleton<IProjectService, FakeProjectService>();
+                services.RemoveAll<IProjectWorkspaceService>();
+                services.AddSingleton<IProjectWorkspaceService, FakeProjectWorkspaceService>();
                 services.RemoveAll<ISavedDataViewService>();
                 services.AddSingleton<ISavedDataViewService, EmptySavedViewService>();
             });
@@ -94,6 +149,50 @@ public sealed class ProjectAuthorizationTests
         public Task<IReadOnlyList<SavedDataViewDto>> ListAsync(string userId, DataViewDefinition definition, CancellationToken token) => Task.FromResult<IReadOnlyList<SavedDataViewDto>>([]);
         public Task<SavedDataViewDto> SaveAsync(string userId, SaveDataViewRequest request, DataViewDefinition definition, CancellationToken token) => throw new NotSupportedException();
         public Task DeleteAsync(string userId, Guid id, CancellationToken token) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeProjectWorkspaceService : IProjectWorkspaceService
+    {
+        public static readonly Guid ProjectId = Guid.Parse("71000000-0000-0000-0000-000000000001");
+
+        public Task<ProjectWorkspaceDto?> GetAsync(Guid projectId, CancellationToken cancellationToken) =>
+            Task.FromResult<ProjectWorkspaceDto?>(projectId != ProjectId ? null : new ProjectWorkspaceDto(
+                new ProjectWorkspaceOverviewDto(
+                    ProjectId,
+                    "P-WEB-001",
+                    "项目工作台页面测试",
+                    "上级项目",
+                    "测试总包单位",
+                    "测试联系人",
+                    "13800000000",
+                    null,
+                    "项目负责人",
+                    null,
+                    "项目部",
+                    null,
+                    "一分公司",
+                    ProjectStage.UnderConstruction,
+                    ProjectAffiliationType.ExternalPartyAttachedToUs,
+                    ArchiveStatus.NotArchived,
+                    [new ProjectWorkspaceOptionDto(Guid.NewGuid().ToString(), "测试签约公司")],
+                    new DateTimeOffset(2026, 7, 17, 8, 0, 0, TimeSpan.Zero),
+                    Guid.Parse("71000000-0000-0000-0000-000000000002")),
+                new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1),
+                new FinanceProjectSummaryDto(ProjectId, 100m, 40m, 60m, 80m, 25m, 0m, 55m, 30m, 70m, 0m, false, false),
+                [new ContractDto(Guid.NewGuid(), "C-WEB-001", "测试合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, 300m,
+                    [new ContractLineItemDto(Guid.NewGuid(), "001", "土方工程", "m³", 10m, 20m, 200m, null, null, 0m, false)])],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [new ProjectActivityItemDto(new DateTimeOffset(2026, 7, 17, 8, 30, 0, TimeSpan.Zero), "修改记录", "编辑项目资料", "页面测试记录", "项目管理员", "normal")]));
+
+        public Task<ProjectEditOptionsDto> GetEditOptionsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new ProjectEditOptionsDto([], [], [], []));
+
+        public Task<ProjectWorkspaceDto> UpdateAsync(ProjectWorkspaceActor actor, UpdateProjectRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class ProjectTestAuthenticationHandler(

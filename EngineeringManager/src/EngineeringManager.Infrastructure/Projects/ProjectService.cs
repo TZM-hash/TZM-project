@@ -21,11 +21,15 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         {
             ProjectNumber = projectNumber,
             Name = name,
+            ParentProjectName = NormalizeOptional(request.ParentProjectName),
             GeneralContractorName = NormalizeOptional(request.GeneralContractorName),
+            GeneralContractorContact = NormalizeOptional(request.GeneralContractorContact),
+            GeneralContractorPhone = NormalizeOptional(request.GeneralContractorPhone),
             ResponsibleUserId = request.ResponsibleUserId,
             DepartmentId = request.DepartmentId,
             BranchId = request.BranchId,
             Stage = request.Stage,
+            AffiliationType = request.AffiliationType,
             ArchiveStatus = request.ArchiveStatus
         };
         foreach (var legalEntityId in request.LegalEntityIds.Distinct())
@@ -187,6 +191,10 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         {
             projectQuery = projectQuery.Where(project => project.LegalEntities.Any(item => item.LegalEntityId == query.LegalEntityId.Value));
         }
+        if (query.AffiliationType.HasValue)
+        {
+            projectQuery = projectQuery.Where(project => project.AffiliationType == query.AffiliationType.Value);
+        }
         if (!string.IsNullOrWhiteSpace(query.ResponsibleUserId))
         {
             var responsibleUserId = query.ResponsibleUserId.Trim();
@@ -284,7 +292,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
     }
 
     private static ProjectDto ToProjectDto(Project project) =>
-        new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage, project.ArchiveStatus);
+        new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage, project.ArchiveStatus, project.AffiliationType);
 
     private static ContractDto ToContractDto(Contract contract) =>
         new(

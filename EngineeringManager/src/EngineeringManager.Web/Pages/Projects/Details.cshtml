@@ -1,45 +1,74 @@
 @page "{id:guid}"
 @model EngineeringManager.Web.Pages.Projects.DetailsModel
+@using EngineeringManager.Application.Finance
+@using EngineeringManager.Domain.Finance
 @{
     ViewData["Title"] = "项目详情";
 }
 
-@if (Model.Details is null)
+@if (Model.Workspace is null)
 {
     <section class="panel"><h1>项目不存在</h1><p class="panel-copy">项目可能已归档或不在当前授权范围内。</p></section>
 }
 else
 {
-    <section class="page-heading">
-        <div>
-            <p class="eyebrow">@Model.Details.Project.ProjectNumber</p>
-            <h1>@Model.Details.Project.Name</h1>
-            <p class="page-lead">@Model.Details.Project.GeneralContractorName</p>
-        </div>
-        <span class="pill pill--success">@Model.Details.Summary.SettlementStatus</span>
+    var item = Model.Workspace;
+    <section class="page-heading project-heading">
+        <div><p class="eyebrow">@item.Overview.ProjectNumber</p><h1>@item.Overview.Name</h1><p class="page-lead">@(item.Overview.GeneralContractorName ?? "未填写总包单位") · @(item.Overview.ResponsibleUserName ?? "未设置负责人")</p></div>
+        <div class="button-row"><span class="pill pill--success">@item.Overview.Stage</span>@if (Model.CanManage) { <a class="button button--primary" asp-page="Edit" asp-route-id="@item.Overview.Id">编辑项目</a><a class="button button--secondary" asp-page="Edit" asp-route-copyFrom="@item.Overview.Id">复制项目</a> }</div>
     </section>
-    <section class="metric-grid" aria-label="项目金额摘要">
-        <article class="metric-card"><span class="metric-label">合同金额</span><strong class="metric-value">@Model.Details.Summary.ContractAmount.ToString("N2")</strong></article>
-        <article class="metric-card"><span class="metric-label">暂估金额</span><strong class="metric-value">@Model.Details.Summary.EstimatedAmount.ToString("N2")</strong></article>
-        <article class="metric-card"><span class="metric-label">结算金额</span><strong class="metric-value">@Model.Details.Summary.SettledAmount.ToString("N2")</strong></article>
-        <article class="metric-card"><span class="metric-label">当前工程金额</span><strong class="metric-value">@Model.Details.Summary.CurrentAmount.ToString("N2")</strong></article>
-    </section>
-    <section class="panel">
-        <div class="panel-heading"><div><p class="eyebrow">合同与工程清单</p><h2>量价明细</h2></div></div>
-        @foreach (var contract in Model.Details.Contracts)
-        {
-            <h3>@contract.ContractNumber · @contract.Name（@contract.TotalAmount.ToString("N2")）</h3>
-            <div class="table-wrap">
-                <table class="data-table">
-                    <thead><tr><th>编码</th><th>名称</th><th>单位</th><th>暂估金额</th><th>结算金额</th><th>状态</th></tr></thead>
-                    <tbody>
-                    @foreach (var line in contract.LineItems)
-                    {
-                        <tr><td>@line.Code</td><td>@line.Name</td><td>@line.Unit</td><td>@line.EstimatedAmount.ToString("N2")</td><td>@line.SettledAmount.ToString("N2")</td><td>@(line.IsSettlementConfirmed ? "结算" : "暂估")</td></tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </section>
+
+    <div class="project-workspace-shell">
+        <main class="project-workspace-main">
+            <section class="metric-grid project-metric-grid" aria-label="项目经营总览">
+                <article class="metric-card metric-card--accent"><span class="metric-label">当前工程金额</span><strong class="metric-value">@item.ProjectSummary.CurrentAmount.ToString("N2")</strong><span class="metric-hint">@item.ProjectSummary.SettlementStatus</span></article>
+                <article class="metric-card"><span class="metric-label">应收款</span><strong class="metric-value">@item.FinanceSummary.ReceivableAmount.ToString("N2")</strong></article>
+                <article class="metric-card"><span class="metric-label">已收款</span><strong class="metric-value">@item.FinanceSummary.CollectedAmount.ToString("N2")</strong></article>
+                <article class="metric-card"><span class="metric-label">未收款</span><strong class="metric-value">@item.FinanceSummary.UncollectedAmount.ToString("N2")</strong></article>
+                <article class="metric-card"><span class="metric-label">已开票</span><strong class="metric-value">@item.FinanceSummary.OutputInvoiceAmount.ToString("N2")</strong></article>
+                <article class="metric-card"><span class="metric-label">未开票</span><strong class="metric-value">@item.FinanceSummary.UninvoicedAmount.ToString("N2")</strong></article>
+            </section>
+
+            <section class="panel project-overview-panel">
+                <div class="panel-heading"><div><p class="eyebrow">项目总览</p><h2>基础资料与金额口径</h2></div>@if (Model.CanManage) { <a asp-page="Edit" asp-route-id="@item.Overview.Id">编辑资料</a> }</div>
+                <dl class="detail-grid detail-grid--compact">
+                    <div><dt>上级项目</dt><dd>@(item.Overview.ParentProjectName ?? "未设置")</dd></div><div><dt>总包单位</dt><dd>@(item.Overview.GeneralContractorName ?? "未设置")</dd></div>
+                    <div><dt>总包联系人</dt><dd>@(item.Overview.GeneralContractorContact ?? "未设置")</dd></div><div><dt>联系电话</dt><dd>@(item.Overview.GeneralContractorPhone ?? "未设置")</dd></div>
+                    <div><dt>负责人</dt><dd>@(item.Overview.ResponsibleUserName ?? "未设置")</dd></div><div><dt>部门 / 分支</dt><dd>@(item.Overview.DepartmentName ?? "-") / @(item.Overview.BranchName ?? "-")</dd></div>
+                    <div><dt>签约公司</dt><dd>@(item.Overview.LegalEntities.Count == 0 ? "未设置" : string.Join("、", item.Overview.LegalEntities.Select(option => option.Label)))</dd></div><div><dt>项目合作方式</dt><dd>@(item.Overview.AffiliationType switch { EngineeringManager.Domain.Projects.ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方", EngineeringManager.Domain.Projects.ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方", _ => "自营项目" })</dd></div>
+                    <div><dt>合同金额</dt><dd>@item.ProjectSummary.ContractAmount.ToString("N2")</dd></div><div><dt>暂估 / 结算</dt><dd>@item.ProjectSummary.EstimatedAmount.ToString("N2") / @item.ProjectSummary.SettledAmount.ToString("N2")</dd></div>
+                    <div><dt>应付 / 已付 / 未付</dt><dd>@item.FinanceSummary.PayableAmount.ToString("N2") / @item.FinanceSummary.PaidAmount.ToString("N2") / @item.FinanceSummary.UnpaidAmount.ToString("N2")</dd></div><div><dt>最近更新</dt><dd>@item.Overview.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd></div>
+                </dl>
+            </section>
+
+            <section class="panel project-tabs" data-project-tabs>
+                <input type="radio" name="project-detail-tab" id="project-tab-quantity" checked /><input type="radio" name="project-detail-tab" id="project-tab-collection" /><input type="radio" name="project-detail-tab" id="project-tab-invoice" /><input type="radio" name="project-detail-tab" id="project-tab-payment" />
+                <nav class="project-tab-list" aria-label="项目业务明细">
+                    <label for="project-tab-quantity">工程量明细 <span>@item.Contracts.Sum(contract => contract.LineItems.Count)</span></label>
+                    <label for="project-tab-collection">收款明细 <span>@item.Collections.Count</span></label>
+                    <label for="project-tab-invoice">开票明细 <span>@item.Invoices.Count</span></label>
+                    <label for="project-tab-payment">付款明细 <span>@item.Payments.Count</span></label>
+                </nav>
+                <div class="project-tab-panels">
+                    <article class="project-tab-panel project-tab-panel--quantity"><div class="tab-panel-heading"><div><h2>合同与工程量</h2><p>暂估和结算量价自动计算，并汇总到上方项目总览。</p></div>@if (Model.CanManage) { <a class="button button--primary" asp-page="/Projects/Contracts/Edit" asp-route-projectId="@item.Overview.Id">维护工程量</a> }</div>
+                        @if (item.Contracts.Count == 0) { <div class="empty-state"><strong>尚未录入合同与工程量</strong><p>先新增合同，再录入工程量、单价和结算数据。</p></div> }
+                        @foreach (var contract in item.Contracts) { <section class="workspace-subsection"><div class="workspace-subheading"><h3>@contract.ContractNumber · @contract.Name</h3><span>合同额 @contract.TotalAmount.ToString("N2")</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>编码</th><th>名称</th><th>单位</th><th>暂估工程量</th><th>暂估单价</th><th>暂估小计</th><th>结算工程量</th><th>结算单价</th><th>结算小计</th><th>口径</th></tr></thead><tbody>@foreach (var line in contract.LineItems) { <tr><td>@line.Code</td><td>@line.Name</td><td>@line.Unit</td><td>@line.EstimatedQuantity?.ToString("N2")</td><td>@line.EstimatedUnitPrice?.ToString("N2")</td><td>@line.EstimatedAmount.ToString("N2")</td><td>@line.SettledQuantity?.ToString("N2")</td><td>@line.SettledUnitPrice?.ToString("N2")</td><td>@line.SettledAmount.ToString("N2")</td><td><span class="pill @(line.IsSettlementConfirmed ? "pill--success" : null)">@(line.IsSettlementConfirmed ? "结算" : "暂估")</span></td></tr> }</tbody></table></div></section> }
+                    </article>
+                    <article class="project-tab-panel project-tab-panel--collection"><div class="tab-panel-heading"><div><h2>应收与实际收款</h2><p>应收计划和每次到账分开记录，自动计算已收与未收。</p></div>@if (Model.CanManage || User.IsInRole("Finance")) { <div class="button-row"><a class="button button--secondary" asp-page="/Finance/Entries/Create" asp-route-EntryKind="@FinanceEntryKind.Receivable" asp-route-ProjectId="@item.Overview.Id" asp-route-ReturnUrl="@Request.Path">新增应收</a><a class="button button--primary" asp-page="/Finance/Entries/Create" asp-route-EntryKind="@FinanceEntryKind.Collection" asp-route-ProjectId="@item.Overview.Id" asp-route-ReturnUrl="@Request.Path">登记收款</a></div> }</div>
+                        <h3>应收记录</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>到期日</th><th>合同</th><th>签约公司</th><th>付款方</th><th>金额</th><th>说明</th><th>状态</th></tr></thead><tbody>@foreach (var row in item.Receivables) { <tr><td>@row.EntryDate</td><td>@row.DueDate</td><td>@(row.ContractNumber ?? "-")</td><td>@row.LegalEntityName</td><td>@(row.BusinessPartnerName ?? "-")</td><td>@row.Amount.ToString("N2")</td><td>@row.Description</td><td>@(row.IsVoided ? "已作废" : "有效")</td></tr> }</tbody></table></div>
+                        <h3>收款记录</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>收款日期</th><th>合同</th><th>签约公司</th><th>付款方</th><th>账户</th><th>金额</th><th>方式</th><th>备注</th></tr></thead><tbody>@foreach (var row in item.Collections) { <tr><td>@row.CollectionDate</td><td>@(row.ContractNumber ?? "-")</td><td>@row.LegalEntityName</td><td>@(row.BusinessPartnerName ?? "-")</td><td>@row.AccountName</td><td>@row.Amount.ToString("N2")</td><td>@row.PaymentMethod</td><td>@row.Notes</td></tr> }</tbody></table></div>
+                    </article>
+                    <article class="project-tab-panel project-tab-panel--invoice"><div class="tab-panel-heading"><div><h2>发票明细</h2><p>销项和进项发票统一归集，项目总览默认显示销项开票进度。</p></div>@if (Model.CanManage || User.IsInRole("Finance")) { <a class="button button--primary" asp-page="/Finance/Entries/Create" asp-route-EntryKind="@FinanceEntryKind.Invoice" asp-route-ProjectId="@item.Overview.Id" asp-route-ReturnUrl="@Request.Path">登记发票</a> }</div><div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>号码</th><th>方向</th><th>合同</th><th>签约公司</th><th>往来单位</th><th>税率</th><th>不含税</th><th>税额</th><th>含税金额</th><th>状态</th></tr></thead><tbody>@foreach (var row in item.Invoices) { <tr><td>@row.InvoiceDate</td><td>@row.InvoiceNumber</td><td>@row.Direction</td><td>@(row.ContractNumber ?? "-")</td><td>@row.LegalEntityName</td><td>@(row.BusinessPartnerName ?? "-")</td><td>@row.TaxRate.ToString("N2")%</td><td>@row.NetAmount.ToString("N2")</td><td>@row.TaxAmount.ToString("N2")</td><td>@row.GrossAmount.ToString("N2")</td><td>@row.Status</td></tr> }</tbody></table></div></article>
+                    <article class="project-tab-panel project-tab-panel--payment"><div class="tab-panel-heading"><div><h2>应付与实际付款</h2><p>应付计划、扣款和实际付款共同形成项目付款汇总。</p></div>@if (Model.CanManage || User.IsInRole("Finance")) { <div class="button-row"><a class="button button--secondary" asp-page="/Finance/Entries/Create" asp-route-EntryKind="@FinanceEntryKind.Payable" asp-route-ProjectId="@item.Overview.Id" asp-route-ReturnUrl="@Request.Path">新增应付</a><a class="button button--primary" asp-page="/Finance/Entries/Create" asp-route-EntryKind="@FinanceEntryKind.Payment" asp-route-ProjectId="@item.Overview.Id" asp-route-ReturnUrl="@Request.Path">登记付款</a></div> }</div>
+                        <h3>应付记录</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>到期日</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>金额</th><th>说明</th><th>状态</th></tr></thead><tbody>@foreach (var row in item.Payables) { <tr><td>@row.EntryDate</td><td>@row.DueDate</td><td>@(row.ContractNumber ?? "-")</td><td>@row.LegalEntityName</td><td>@row.BusinessPartnerName</td><td>@row.Amount.ToString("N2")</td><td>@row.Description</td><td>@(row.IsVoided ? "已作废" : "有效")</td></tr> }</tbody></table></div>
+                        <h3>付款记录</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>付款日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>账户</th><th>金额</th><th>方式</th><th>备注</th></tr></thead><tbody>@foreach (var row in item.Payments) { <tr><td>@row.PaymentDate</td><td>@(row.ContractNumber ?? "-")</td><td>@row.LegalEntityName</td><td>@row.BusinessPartnerName</td><td>@row.AccountName</td><td>@row.Amount.ToString("N2")</td><td>@row.PaymentMethod</td><td>@row.Notes</td></tr> }</tbody></table></div>
+                    </article>
+                </div>
+            </section>
+        </main>
+        <aside class="project-activity-panel" aria-label="项目提示与修改记录">
+            <div class="activity-panel-heading"><div><p class="eyebrow">动态</p><h2>提示与记录</h2></div><span>@item.Activities.Count</span></div>
+            <div class="activity-feed">@if (item.Activities.Count == 0) { <div class="empty-state"><strong>暂无动态</strong><p>编辑项目或录入业务后会在这里形成记录。</p></div> } @foreach (var activity in item.Activities) { <article class="activity-item activity-item--@activity.Tone"><span class="activity-dot"></span><div><p class="activity-meta">@activity.Category · @activity.OccurredAt.ToLocalTime().ToString("MM-dd HH:mm")</p><h3>@activity.Title</h3>@if (!string.IsNullOrWhiteSpace(activity.Detail)) { <p>@activity.Detail</p> }@if (!string.IsNullOrWhiteSpace(activity.UserName)) { <small>操作人：@activity.UserName</small> }</div></article> }</div>
+        </aside>
+    </div>
 }
