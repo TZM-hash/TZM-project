@@ -75,6 +75,24 @@ public sealed class DevelopmentSampleDataSeederTests
         }
     }
 
+    [Fact]
+    public async Task SeederCreatesTwelveMonthBalancedBusinessScenario()
+    {
+        await using var fixture = await SampleSeederFixture.CreateAsync();
+
+        await fixture.SeedCompleteAsync();
+        await fixture.SeedCompleteAsync();
+
+        (await fixture.Db.BusinessPartners.CountAsync()).Should().Be(SampleDataCatalog.PartnerCount);
+        (await fixture.Db.Equipment.CountAsync()).Should().Be(SampleDataCatalog.EquipmentCount);
+        (await fixture.Db.ReceivableEntries.CountAsync()).Should().BeGreaterThan(20);
+        (await fixture.Db.CollectionEntries.CountAsync()).Should().BeGreaterThan(15);
+        (await fixture.Db.InvoiceEntries.CountAsync()).Should().BeGreaterThan(15);
+        (await fixture.Db.PayrollBatches.CountAsync()).Should().Be(12);
+        (await fixture.Db.StageResults.CountAsync()).Should().BeGreaterThan(10);
+        (await fixture.Db.ReminderItems.CountAsync()).Should().BeGreaterThan(5);
+    }
+
     private sealed class SampleSeederFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -131,6 +149,12 @@ public sealed class DevelopmentSampleDataSeederTests
         public async Task SeedAsync()
         {
             await Builder.BuildCoreAsync(CancellationToken.None);
+            await Db.SaveChangesAsync();
+        }
+
+        public async Task SeedCompleteAsync()
+        {
+            await Builder.BuildCompleteAsync(contentRoot, CancellationToken.None);
             await Db.SaveChangesAsync();
         }
 

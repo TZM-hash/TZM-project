@@ -23,7 +23,7 @@ public sealed class DevelopmentSampleDataSeeder(ApplicationDbContext db, UserMan
     {
         var databaseName = db.Database.GetDbConnection().Database;
         ValidateSafety(environmentName, databaseName);
-        var context = await new SampleDataBuilder(db, userManager, TimeProvider.System).BuildCoreAsync(token);
+        var context = await new SampleDataBuilder(db, userManager, TimeProvider.System).BuildCompleteAsync(contentRootPath, token);
         var appData = Path.Combine(contentRootPath, "App_Data"); Directory.CreateDirectory(appData);
         var lines = new List<string>
         {
