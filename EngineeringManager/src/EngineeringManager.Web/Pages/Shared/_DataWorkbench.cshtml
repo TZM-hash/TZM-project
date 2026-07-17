@@ -1,0 +1,171 @@
+@using System.Text.Json
+@using EngineeringManager.Application.Settings
+@using EngineeringManager.Web.Workbenches
+@model EngineeringManager.Web.Workbenches.DataWorkbenchViewModel
+@{
+    var densityValue = Model.RowDensity.ToString().ToLowerInvariant();
+    var selectedView = Model.SavedViews.FirstOrDefault(item => item.Id == Model.CurrentSavedViewId);
+    var defaultColumns = JsonSerializer.Serialize(Model.Columns.Select((column, index) => new
+    {
+        key = column.Key,
+        visible = column.IsVisible,
+        order = index
+    }));
+    var initialColumns = selectedView?.ColumnJson ?? string.Empty;
+}
+
+<section class="data-workbench" data-workbench data-page-key="@Model.PageKey" data-table-id="@Model.TableId"
+         data-row-density="@densityValue" data-default-columns="@defaultColumns" data-saved-view-columns="@initialColumns">
+    <div class="data-workbench-toolbar" aria-label="数据视图工具栏">
+        <label class="workbench-view-picker">
+            <span>视图</span>
+            <select data-saved-view-select aria-label="选择保存视图">
+                <option value="">当前视图</option>
+                @foreach (var view in Model.SavedViews)
+                {
+                    <option value="@view.Id" selected="@(view.Id == Model.CurrentSavedViewId)"
+                            data-saved-view-filter-json="@view.FilterJson"
+                            data-saved-view-column-json="@view.ColumnJson"
+                            data-saved-view-sort-key="@view.SortKey"
+                            data-saved-view-sort-descending="@view.SortDescending.ToString().ToLowerInvariant()"
+                            data-saved-view-row-density="@view.RowDensity.ToString().ToLowerInvariant()"
+                            data-saved-view-page-size="@view.PageSize">@view.Name@(view.IsDefault ? " · 默认" : string.Empty)</option>
+                }
+            </select>
+        </label>
+
+        <div class="workbench-toolbar-actions">
+            <button class="button button--secondary workbench-tool-button" type="button" data-open-filter-drawer>
+                高级筛选
+                @if (Model.ActiveFilters.Count > 0)
+                {
+                    <span class="workbench-count">@Model.ActiveFilters.Count</span>
+                }
+            </button>
+            <button class="button button--secondary workbench-tool-button" type="button" data-open-column-manager>列管理</button>
+            <div class="row-spacing-picker" role="group" aria-label="表格行间距">
+                <button type="button" data-row-spacing="compact" aria-pressed="@(Model.RowDensity == TableDensity.Compact ? "true" : "false")">紧凑</button>
+                <button type="button" data-row-spacing="standard" aria-pressed="@(Model.RowDensity == TableDensity.Standard ? "true" : "false")">标准</button>
+                <button type="button" data-row-spacing="spacious" aria-pressed="@(Model.RowDensity == TableDensity.Spacious ? "true" : "false")">宽松</button>
+            </div>
+            <label class="page-size-picker">
+                <span>每页</span>
+                <select data-current-page-size aria-label="每页显示条数">
+                    @foreach (var size in new[] { 20, 50, 100 })
+                    {
+                        <option value="@size" selected="@(Model.CurrentPageSize == size)">@size 条</option>
+                    }
+                </select>
+            </label>
+            <button class="button button--secondary workbench-tool-button" type="button" data-open-save-view>保存视图</button>
+            @if (Model.CanExport)
+            {
+                <button class="button button--primary workbench-tool-button" type="submit" form="@($"{Model.TableId}-export-form")" data-export-current-view>导出当前视图</button>
+            }
+        </div>
+    </div>
+
+    @if (Model.ActiveFilters.Count > 0)
+    {
+        <div class="filter-chip-list" aria-label="当前筛选条件">
+            @foreach (var chip in Model.ActiveFilters)
+            {
+                <button type="button" class="filter-chip" data-filter-chip data-filter-key="@chip.Key">
+                    <span>@chip.Label：@chip.Value</span><span aria-hidden="true">×</span>
+                </button>
+            }
+            <button type="button" class="filter-chip-clear" data-clear-filter-chips>清除全部</button>
+        </div>
+    }
+
+    <dialog class="workbench-dialog column-manager-dialog" data-column-manager-table>
+        <div class="workbench-dialog-heading">
+            <div><strong>列管理</strong><span>选择显示列并拖动调整顺序，固定列不可隐藏。</span></div>
+            <button type="button" class="dialog-close" data-close-dialog aria-label="关闭列管理">×</button>
+        </div>
+        <ol class="column-manager-list" data-column-list>
+            @for (var index = 0; index < Model.Columns.Count; index++)
+            {
+                var column = Model.Columns[index];
+                <li draggable="true" data-column-key="@column.Key" data-column-order="@index" data-column-fixed="@column.IsFixed.ToString().ToLowerInvariant()">
+                    <span class="column-drag-handle" aria-hidden="true">⋮⋮</span>
+                    <label><input type="checkbox" checked="@column.IsVisible" disabled="@column.IsFixed" data-column-visibility /> <span>@column.Label</span></label>
+                    @if (column.IsFixed) { <small>固定</small> }
+                </li>
+            }
+        </ol>
+        <div class="workbench-dialog-actions">
+            <button type="button" class="button button--secondary" data-reset-columns>恢复默认</button>
+            <button type="button" class="button button--primary" data-apply-columns>应用</button>
+        </div>
+    </dialog>
+
+    <dialog class="workbench-dialog workbench-drawer" data-filter-drawer>
+        <form method="get" data-filter-form>
+            <div class="workbench-dialog-heading">
+                <div><strong>高级筛选</strong><span>组合多个条件后应用，筛选会同步到地址栏和导出范围。</span></div>
+                <button type="button" class="dialog-close" data-close-dialog aria-label="关闭高级筛选">×</button>
+            </div>
+            <div class="workbench-filter-grid">
+                @foreach (var field in Model.Filters)
+                {
+                    <label>
+                        <span>@field.Label</span>
+                        @if (field.Kind == DataWorkbenchFilterKind.Select)
+                        {
+                            <select name="@field.Key" data-filter-key="@field.Key">
+                                <option value="">全部</option>
+                                @foreach (var option in field.Options ?? [])
+                                {
+                                    <option value="@option.Value" selected="@(option.Value == field.Value)">@option.Label</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            var inputType = field.Kind switch
+                            {
+                                DataWorkbenchFilterKind.Date => "date",
+                                DataWorkbenchFilterKind.Number => "number",
+                                _ => "text"
+                            };
+                            <input type="@inputType" name="@field.Key" value="@field.Value" placeholder="@field.Placeholder" data-filter-key="@field.Key" />
+                        }
+                    </label>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.CurrentSortKey))
+            {
+                <input type="hidden" name="sort" value="@Model.CurrentSortKey" />
+                <input type="hidden" name="descending" value="@Model.SortDescending.ToString().ToLowerInvariant()" />
+            }
+            <input type="hidden" name="pageSize" value="@Model.CurrentPageSize" />
+            <div class="workbench-dialog-actions">
+                <button type="button" class="button button--secondary" data-reset-filter-form>重置</button>
+                <button type="submit" class="button button--primary">应用筛选</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog class="workbench-dialog save-view-dialog" data-save-view-dialog>
+        <form method="post" asp-page-handler="SaveView" data-save-view-form>
+            <div class="workbench-dialog-heading">
+                <div><strong>保存当前视图</strong><span>保存筛选、列顺序、排序、行距和分页设置，仅自己可见。</span></div>
+                <button type="button" class="dialog-close" data-close-dialog aria-label="关闭保存视图">×</button>
+            </div>
+            <label class="save-view-name">视图名称<input name="SavedView.Name" maxlength="100" required /></label>
+            <label class="save-view-default"><input type="checkbox" name="SavedView.IsDefault" value="true" /> 设为本页面默认视图</label>
+            <input type="hidden" name="SavedView.PageKey" value="@Model.PageKey" />
+            <input type="hidden" name="SavedView.FilterJson" data-saved-view-filter-json />
+            <input type="hidden" name="SavedView.ColumnJson" data-saved-view-column-json />
+            <input type="hidden" name="SavedView.SortKey" value="@Model.CurrentSortKey" />
+            <input type="hidden" name="SavedView.SortDescending" value="@Model.SortDescending.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="SavedView.RowDensity" value="@Model.RowDensity" data-saved-view-row-density />
+            <input type="hidden" name="SavedView.PageSize" value="@Model.CurrentPageSize" data-saved-view-page-size />
+            <div class="workbench-dialog-actions">
+                <button type="button" class="button button--secondary" data-close-dialog>取消</button>
+                <button type="submit" class="button button--primary">保存视图</button>
+            </div>
+        </form>
+    </dialog>
+</section>

@@ -5,6 +5,17 @@ const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard(
 if (document.querySelector("[data-theme-option], [data-motion-option], [data-global-font-picker]")) {
   jobs.push(import("./pages/settings.js").then((module) => module.initSettingsPreview()));
 }
+if (document.querySelector("[data-workbench]")) {
+  jobs.push(Promise.all([
+    import("./components/data-table.js"),
+    import("./components/saved-views.js"),
+    import("./components/filter-drawer.js")
+  ]).then(([tables, views, filters]) => {
+    tables.initDataTables();
+    views.initSavedViews();
+    filters.initFilterDrawers();
+  }));
+}
 await Promise.all(jobs);
 
 async function initPwaStatus() {

@@ -89,6 +89,46 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .offline-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 .pwa-badge.is-offline { color: #92400e; border-color: #fcd34d; background: #fffbeb; }
 
+.data-workbench { display: grid; gap: .7rem; margin-top: 1rem; }
+.data-workbench-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .72rem; border: 1px solid var(--app-border); border-radius: 10px; background: color-mix(in srgb, var(--app-surface) 92%, var(--app-primary-soft)); }
+.workbench-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
+.workbench-view-picker, .page-size-picker { display: flex; align-items: center; gap: .45rem; color: var(--app-muted); font-size: .72rem; font-weight: 700; }
+.workbench-view-picker select, .page-size-picker select { min-height: 2.35rem; padding: .38rem 2rem .38rem .65rem; border: 1px solid var(--app-border-strong); border-radius: 7px; color: var(--app-text); background: var(--app-surface); font: inherit; }
+.workbench-view-picker select { min-width: 11rem; }
+.workbench-tool-button { min-height: 2.35rem; padding: .42rem .68rem; font-size: .76rem; }
+.workbench-count { display: inline-grid; min-width: 1.2rem; height: 1.2rem; place-items: center; border-radius: 999px; color: #fff; background: var(--app-primary); font-size: .65rem; }
+.row-spacing-picker { display: inline-flex; padding: .18rem; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface-raised); }
+.row-spacing-picker button { min-height: 1.9rem; padding: .25rem .55rem; border: 0; border-radius: 6px; color: var(--app-muted); background: transparent; font-size: .7rem; cursor: pointer; }
+.row-spacing-picker button[aria-pressed="true"] { color: var(--app-primary); background: var(--app-surface); box-shadow: 0 1px 4px rgba(15,23,42,.12); }
+.filter-chip-list { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.filter-chip, .filter-chip-clear { display: inline-flex; min-height: 2rem; align-items: center; gap: .45rem; padding: .3rem .62rem; border: 1px solid #bfdbfe; border-radius: 999px; color: #1d4ed8; background: #eff6ff; font-size: .72rem; cursor: pointer; }
+.filter-chip span:last-child { font-size: 1rem; line-height: 1; }
+.filter-chip-clear { border-color: transparent; color: var(--app-muted); background: transparent; }
+.workbench-dialog { width: min(36rem, calc(100vw - 2rem)); padding: 0; border: 1px solid var(--app-border); border-radius: 13px; color: var(--app-text); background: var(--app-surface); box-shadow: 0 24px 70px rgba(15,23,42,.24); }
+.workbench-dialog::backdrop { background: rgba(15,23,42,.4); backdrop-filter: blur(4px); }
+.workbench-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; border-bottom: 1px solid var(--app-border); }
+.workbench-dialog-heading strong, .workbench-dialog-heading span { display: block; }
+.workbench-dialog-heading span { margin-top: .25rem; color: var(--app-muted); font-size: .72rem; line-height: 1.45; }
+.dialog-close { width: 2rem; height: 2rem; border: 0; border-radius: 7px; color: var(--app-muted); background: var(--app-surface-raised); font-size: 1.25rem; cursor: pointer; }
+.workbench-dialog-actions { display: flex; justify-content: flex-end; gap: .55rem; padding: .85rem 1.1rem; border-top: 1px solid var(--app-border); }
+.column-manager-list { display: grid; gap: .35rem; max-height: 23rem; margin: 0; padding: .8rem 1.1rem; overflow-y: auto; list-style: none; }
+.column-manager-list li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .65rem; min-height: 2.65rem; padding: .45rem .6rem; border: 1px solid transparent; border-radius: 8px; background: var(--app-surface-raised); cursor: grab; }
+.column-manager-list li.is-dragging { opacity: .55; border-color: var(--app-primary); }
+.column-manager-list label { display: flex; align-items: center; gap: .55rem; font-size: .78rem; }
+.column-manager-list small { color: var(--app-muted); font-size: .66rem; }
+.column-drag-handle { color: #94a3b8; letter-spacing: -.15em; }
+.workbench-drawer { width: min(42rem, calc(100vw - 2rem)); margin-right: 0; height: 100dvh; max-height: 100dvh; border-radius: 13px 0 0 13px; }
+.workbench-drawer form { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+.workbench-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: .8rem; padding: 1rem 1.1rem; overflow-y: auto; }
+.workbench-filter-grid label, .save-view-name { display: grid; gap: .38rem; color: var(--app-muted); font-size: .74rem; font-weight: 650; }
+.workbench-filter-grid input, .workbench-filter-grid select, .save-view-name input { min-height: 2.55rem; padding: .55rem .65rem; border: 1px solid var(--app-border-strong); border-radius: 7px; color: var(--app-text); background: var(--app-surface); font: inherit; }
+.save-view-dialog form { display: grid; }
+.save-view-name { margin: 1rem 1.1rem .65rem; }
+.save-view-default { margin: 0 1.1rem 1rem; color: var(--app-text-soft); font-size: .76rem; }
+.row-spacing-compact .data-table th, .row-spacing-compact .data-table td { height: 2.15rem; padding-block: .28rem; font-size: .74rem; }
+.row-spacing-standard .data-table th, .row-spacing-standard .data-table td { height: 2.8rem; padding-block: .58rem; }
+.row-spacing-spacious .data-table th, .row-spacing-spacious .data-table td { height: 3.45rem; padding-block: .85rem; }
+
 @media (max-width: 900px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .option-card-grid--three { grid-template-columns: 1fr; } }
 @media (max-width: 680px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
@@ -98,4 +138,9 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
   .form-span { grid-column: auto; }
   .offline-line-row { grid-template-columns: 1fr; }
   .offline-actions .button { width: 100%; }
+  .data-workbench-toolbar { align-items: stretch; flex-direction: column; }
+  .workbench-toolbar-actions { justify-content: flex-start; }
+  .workbench-view-picker select { flex: 1; min-width: 0; }
+  .workbench-filter-grid { grid-template-columns: 1fr; }
+  .workbench-drawer { width: 100vw; border-radius: 0; }
 }
