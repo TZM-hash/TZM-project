@@ -93,6 +93,29 @@ public sealed class DevelopmentSampleDataSeederTests
         (await fixture.Db.ReminderItems.CountAsync()).Should().BeGreaterThan(5);
     }
 
+    [Fact]
+    public void ResetScriptRequiresDevelopmentAndTestSuffix()
+    {
+        var script = ReadRepositoryFile("scripts", "reset-test-database.ps1");
+
+        script.Should().Contain("$ErrorActionPreference = 'Stop'");
+        script.Should().Contain("-notmatch '_Test$'");
+        script.Should().Contain("$env:ASPNETCORE_ENVIRONMENT = 'Development'");
+        script.Should().Contain("DevelopmentSampleData__Enabled");
+        script.Should().NotContain("EngineeringManager_Production");
+    }
+
+    private static string ReadRepositoryFile(params string[] parts)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "EngineeringManager.sln")))
+        {
+            directory = directory.Parent;
+        }
+        var root = directory ?? throw new DirectoryNotFoundException("Cannot locate EngineeringManager.sln.");
+        return File.ReadAllText(Path.Combine(new[] { root.FullName }.Concat(parts).ToArray()));
+    }
+
     private sealed class SampleSeederFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

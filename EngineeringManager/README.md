@@ -64,6 +64,13 @@ $env:DevelopmentSampleData__Enabled = 'true'
 
 账号密码写入 Git 忽略的 `src/EngineeringManager.Web/App_Data/local-test-credentials.txt`，不得复制到生产环境。
 
+如需按确认方案删除并重建完整测试库，使用带三重安全校验的脚本。脚本只接受 Development 配置中的 `EngineeringManager_Test`，会应用全部 Migration、生成五类测试账号和完整关联样例；任何数据库名不一致或不以 `_Test` 结尾的请求都会被拒绝：
+
+```powershell
+$ErrorActionPreference = 'Stop'
+& .\.tools\pwsh\pwsh.exe -NoLogo -NoProfile -File .\scripts\reset-test-database.ps1 -DatabaseName 'EngineeringManager_Test'
+```
+
 健康端点：
 
 - `/health/live`：进程存活检查，不访问数据库。
