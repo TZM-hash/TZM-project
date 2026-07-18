@@ -176,15 +176,11 @@ public sealed class DashboardService(ApplicationDbContext db) : IDashboardServic
 
     private static string StageLabel(ProjectStage stage) => stage switch
     {
-        ProjectStage.Preliminary => "前期",
-        ProjectStage.AwaitingContract => "待签合同",
         ProjectStage.AwaitingMobilization => "待进场",
         ProjectStage.UnderConstruction => "施工中",
-        ProjectStage.Suspended => "暂停施工",
-        ProjectStage.CompletedAwaitingAcceptance => "完工待验收",
-        ProjectStage.Settlement => "结算中",
-        ProjectStage.Warranty => "质保期",
-        ProjectStage.Closed => "已结束",
+        ProjectStage.Suspended => "停工中",
+        ProjectStage.CompletedUnsettled => "已完工未结算",
+        ProjectStage.SettledArchived => "已结算归档",
         _ => stage.ToString()
     };
 }

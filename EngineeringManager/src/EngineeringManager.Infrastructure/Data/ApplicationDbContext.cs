@@ -39,6 +39,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<ProjectMilestone> ProjectMilestones => Set<ProjectMilestone>();
     public DbSet<ProjectConstructionRecord> ProjectConstructionRecords => Set<ProjectConstructionRecord>();
+    public DbSet<ProjectTaxConfiguration> ProjectTaxConfigurations => Set<ProjectTaxConfiguration>();
 
     public DbSet<Contract> Contracts => Set<Contract>();
 
@@ -76,6 +77,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AccountTransaction> AccountTransactions => Set<AccountTransaction>();
     public DbSet<AccountTransfer> AccountTransfers => Set<AccountTransfer>();
     public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<PersonnelMigrationMap> PersonnelMigrationMaps => Set<PersonnelMigrationMap>();
     public DbSet<BusinessYear> BusinessYears => Set<BusinessYear>();
     public DbSet<EmployeeWageEntry> EmployeeWageEntries => Set<EmployeeWageEntry>();
     public DbSet<EmployeeReceipt> EmployeeReceipts => Set<EmployeeReceipt>();
@@ -89,7 +91,6 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<PayrollCrewAllocation> PayrollCrewAllocations => Set<PayrollCrewAllocation>();
     public DbSet<ConstructionWorker> ConstructionWorkers => Set<ConstructionWorker>();
     public DbSet<ConstructionCrewMembership> ConstructionCrewMemberships => Set<ConstructionCrewMembership>();
-    public DbSet<TemporaryWorker> TemporaryWorkers => Set<TemporaryWorker>();
     public DbSet<ExpenseRecord> ExpenseRecords => Set<ExpenseRecord>();
     public DbSet<ExpensePayment> ExpensePayments => Set<ExpensePayment>();
     public DbSet<EmployeeAdvance> EmployeeAdvances => Set<EmployeeAdvance>();
@@ -656,13 +657,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.Batch).WithMany(batch => batch.Payments).HasForeignKey(item => item.PayrollBatchId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Employee).WithMany().HasForeignKey(item => item.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.ConstructionWorker).WithMany().HasForeignKey(item => item.ConstructionWorkerId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(item => item.TemporaryWorker).WithMany().HasForeignKey(item => item.TemporaryWorkerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.CrewBusinessPartner).WithMany().HasForeignKey(item => item.CrewBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Account).WithMany().HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.PayeeBusinessPartner).WithMany().HasForeignKey(item => item.PayeeBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_PayrollPayments_Recipient",
-                "([RecipientType] = 1 AND [EmployeeId] IS NOT NULL AND [ConstructionWorkerId] IS NULL AND [TemporaryWorkerId] IS NULL AND [CrewBusinessPartnerId] IS NULL) OR ([RecipientType] = 2 AND [EmployeeId] IS NULL AND [ConstructionWorkerId] IS NOT NULL AND [TemporaryWorkerId] IS NULL AND [CrewBusinessPartnerId] IS NOT NULL) OR ([RecipientType] = 3 AND [EmployeeId] IS NULL AND [ConstructionWorkerId] IS NULL AND [TemporaryWorkerId] IS NOT NULL AND [CrewBusinessPartnerId] IS NULL)"));
+                "([RecipientType] = 1 AND [EmployeeId] IS NOT NULL AND [ConstructionWorkerId] IS NULL AND [CrewBusinessPartnerId] IS NULL) OR ([RecipientType] = 2 AND [EmployeeId] IS NULL AND [ConstructionWorkerId] IS NOT NULL AND [CrewBusinessPartnerId] IS NOT NULL)"));
         });
         builder.Entity<ConstructionWorker>(entity =>
         {
@@ -685,21 +685,6 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(item => new { item.ConstructionWorkerId, item.CrewBusinessPartnerId, item.StartDate }).IsUnique();
             entity.HasOne(item => item.Worker).WithMany(item => item.Memberships).HasForeignKey(item => item.ConstructionWorkerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.CrewBusinessPartner).WithMany().HasForeignKey(item => item.CrewBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
-        });
-        builder.Entity<TemporaryWorker>(entity =>
-        {
-            entity.HasKey(item => item.Id);
-            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
-            entity.Property(item => item.IdentityNumber).HasMaxLength(50);
-            entity.Property(item => item.Phone).HasMaxLength(50);
-            entity.Property(item => item.BankAccountNumber).HasMaxLength(100);
-            entity.Property(item => item.BankName).HasMaxLength(150);
-            entity.Property(item => item.Trade).HasMaxLength(100);
-            entity.Property(item => item.Notes).HasMaxLength(1000);
-            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
-            entity.HasIndex(item => item.IdentityNumber).HasFilter("[IdentityNumber] IS NOT NULL");
-            entity.HasOne(item => item.DefaultProject).WithMany().HasForeignKey(item => item.DefaultProjectId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(item => item.ConvertedEmployee).WithMany().HasForeignKey(item => item.ConvertedEmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<PayrollCrewAllocation>(entity =>
         {
@@ -735,6 +720,13 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(item => item.EmployeeNumber).IsUnique();
             entity.HasIndex(item => item.IdentityNumber).IsUnique().HasFilter("[IdentityNumber] IS NOT NULL");
             entity.HasOne(item => item.DefaultLegalEntity).WithMany().HasForeignKey(item => item.DefaultLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<PersonnelMigrationMap>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => item.LegacyTemporaryWorkerId).IsUnique();
+            entity.HasIndex(item => item.EmployeeId);
+            entity.HasOne(item => item.Employee).WithMany().HasForeignKey(item => item.EmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<EmployeeAffiliationHistory>(entity =>
         {
@@ -882,6 +874,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.GrossAmount).HasPrecision(18, 2);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.LegalEntityId, item.Direction, item.InvoiceNumber }).IsUnique();
+            entity.HasOne(item => item.ProjectTaxConfiguration).WithMany().HasForeignKey(item => item.ProjectTaxConfigurationId).OnDelete(DeleteBehavior.Restrict);
             ConfigureProjectContractLegalPartner(entity);
         });
         builder.Entity<InvoiceReceivableLink>(entity =>
@@ -977,6 +970,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.PreviousRecord).WithMany().HasForeignKey(item => item.PreviousRecordId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.NextRecord).WithMany().HasForeignKey(item => item.NextRecordId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_ProjectConstructionRecords_Subject", "([RecordType] = 1 AND [EquipmentId] IS NOT NULL AND [CrewBusinessPartnerId] IS NULL) OR ([RecordType] = 2 AND [EquipmentId] IS NULL AND [CrewBusinessPartnerId] IS NOT NULL)"));
+        });
+
+        builder.Entity<ProjectTaxConfiguration>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.TaxRate).HasPrecision(9, 4);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.ProjectId, item.TaxRate, item.InvoiceType }).IsUnique();
+            entity.HasOne(item => item.Project).WithMany(project => project.TaxConfigurations).HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<ProjectLegalEntity>(entity =>

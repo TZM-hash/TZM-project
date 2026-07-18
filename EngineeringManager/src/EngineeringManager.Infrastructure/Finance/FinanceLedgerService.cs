@@ -2,6 +2,7 @@ using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.Finance;
@@ -162,7 +163,15 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             .Select(item => new FinanceOptionDto(item.Id, item.CollectionDate + " · 收款 " + item.Amount, item.ProjectId)).ToListAsync(cancellationToken);
         var payments = await db.PaymentEntries.AsNoTracking().OrderByDescending(item => item.PaymentDate)
             .Select(item => new FinanceOptionDto(item.Id, item.PaymentDate + " · 付款 " + item.Amount, item.ProjectId)).ToListAsync(cancellationToken);
-        return new FinanceEntryOptionsDto(projects, contracts, legalEntities, partners, accounts, receivables, payables, collections, payments);
+        var projectLegalEntities = await db.ProjectLegalEntities.AsNoTracking().Where(item => item.Project.IsActive && item.LegalEntity.IsActive)
+            .OrderByDescending(item => item.IsPrimary).ThenBy(item => item.LegalEntity.Code)
+            .Select(item => new FinanceOptionDto(item.LegalEntityId, item.LegalEntity.Code + " · " + item.LegalEntity.ShortName, item.ProjectId)).ToListAsync(cancellationToken);
+        var projectTaxConfigurations = await db.ProjectTaxConfigurations.AsNoTracking().Where(item => item.Project.IsActive && item.IsActive)
+            .OrderBy(item => item.TaxRate).ThenBy(item => item.InvoiceType)
+            .Select(item => new FinanceOptionDto(item.Id,
+                (item.TaxRate * 100m).ToString("0", CultureInfo.InvariantCulture) + "% · " + (item.InvoiceType == ProjectInvoiceType.Ordinary ? "普票" : "专票"), item.ProjectId))
+            .ToListAsync(cancellationToken);
+        return new FinanceEntryOptionsDto(projects, contracts, legalEntities, partners, accounts, receivables, payables, collections, payments, projectLegalEntities, projectTaxConfigurations);
     }
 
     public async Task<Guid> AddReceivableAsync(CreateReceivableRequest request, CancellationToken cancellationToken)
@@ -417,9 +426,10 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
     public async Task<Guid> AddInvoiceAsync(CreateInvoiceRequest request, CancellationToken cancellationToken)
     {
         EnsurePositive(request.GrossAmount);
-        InvoiceAmountValidator.Validate(request.NetAmount, request.TaxAmount, request.GrossAmount, request.TaxRate);
         var invoiceNumber = NormalizeRequired(request.InvoiceNumber, nameof(request.InvoiceNumber));
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
+        var taxConfiguration = await GetTaxConfigurationAsync(request.ProjectId, request.ProjectTaxConfigurationId, cancellationToken);
+        InvoiceAmountValidator.Validate(request.NetAmount, request.TaxAmount, request.GrossAmount, taxConfiguration.TaxRate);
         if (await db.InvoiceEntries.AnyAsync(item =>
                 item.LegalEntityId == request.LegalEntityId &&
                 item.Direction == request.Direction &&
@@ -460,8 +470,9 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             Direction = request.Direction,
             InvoiceNumber = invoiceNumber,
             InvoiceDate = request.InvoiceDate,
-            InvoiceType = NormalizeOptional(request.InvoiceType),
-            TaxRate = request.TaxRate,
+            ProjectTaxConfigurationId = taxConfiguration.Id,
+            InvoiceType = InvoiceTypeLabel(taxConfiguration.InvoiceType),
+            TaxRate = taxConfiguration.TaxRate,
             NetAmount = request.NetAmount,
             TaxAmount = request.TaxAmount,
             GrossAmount = request.GrossAmount,
@@ -555,10 +566,11 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
     public async Task UpdateInvoiceAsync(FinanceRecordActor actor, UpdateInvoiceRequest request, CancellationToken cancellationToken)
     {
         EnsurePositive(request.GrossAmount);
-        InvoiceAmountValidator.Validate(request.NetAmount, request.TaxAmount, request.GrossAmount, request.TaxRate);
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
         var invoiceNumber = NormalizeRequired(request.InvoiceNumber, nameof(request.InvoiceNumber));
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
+        var taxConfiguration = await GetTaxConfigurationAsync(request.ProjectId, request.ProjectTaxConfigurationId, cancellationToken);
+        InvoiceAmountValidator.Validate(request.NetAmount, request.TaxAmount, request.GrossAmount, taxConfiguration.TaxRate);
         if (await db.InvoiceEntries.AnyAsync(item => item.Id != request.Id && item.LegalEntityId == request.LegalEntityId && item.Direction == request.Direction && item.InvoiceNumber == invoiceNumber, cancellationToken))
             throw new InvalidOperationException($"发票号码已存在：{invoiceNumber}");
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -575,8 +587,9 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         entry.Direction = request.Direction;
         entry.InvoiceNumber = invoiceNumber;
         entry.InvoiceDate = request.InvoiceDate;
-        entry.InvoiceType = NormalizeOptional(request.InvoiceType);
-        entry.TaxRate = request.TaxRate;
+        entry.ProjectTaxConfigurationId = taxConfiguration.Id;
+        entry.InvoiceType = InvoiceTypeLabel(taxConfiguration.InvoiceType);
+        entry.TaxRate = taxConfiguration.TaxRate;
         entry.NetAmount = request.NetAmount;
         entry.TaxAmount = request.TaxAmount;
         entry.GrossAmount = request.GrossAmount;
@@ -805,7 +818,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
     private static object InvoiceSnapshot(InvoiceEntry item) => new
     {
         item.ProjectId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.Direction, item.InvoiceNumber,
-        item.InvoiceDate, item.InvoiceType, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status, item.ConcurrencyStamp,
+        item.InvoiceDate, item.ProjectTaxConfigurationId, item.InvoiceType, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status, item.ConcurrencyStamp,
         ReceivableAllocations = item.ReceivableLinks.Select(link => new { link.ReceivableEntryId, link.AllocatedAmount }).ToArray(),
         LineItemAllocations = item.LineItemLinks.Select(link => new { link.ContractLineItemId, link.AllocatedAmount }).ToArray()
     };
@@ -877,6 +890,21 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             throw new InvalidOperationException("资金账户不存在、已停用或不属于当前签约公司。");
         }
     }
+
+    private async Task<ProjectTaxConfiguration> GetTaxConfigurationAsync(Guid projectId, Guid configurationId, CancellationToken cancellationToken)
+    {
+        return await db.ProjectTaxConfigurations.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.Id == configurationId && item.ProjectId == projectId && item.IsActive,
+                cancellationToken)
+            ?? throw new InvalidOperationException("项目税金配置不存在、已停用或不属于当前项目。");
+    }
+
+    private static string InvoiceTypeLabel(ProjectInvoiceType invoiceType) => invoiceType switch
+    {
+        ProjectInvoiceType.Ordinary => "普票",
+        ProjectInvoiceType.Special => "专票",
+        _ => throw new ArgumentOutOfRangeException(nameof(invoiceType), invoiceType, "发票类型无效。")
+    };
 
     private static AccountTransaction CreateTransaction(
         Guid accountId,

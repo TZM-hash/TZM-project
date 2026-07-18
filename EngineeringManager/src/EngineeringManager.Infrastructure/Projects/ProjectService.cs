@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Projects;
+using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
 
         await ValidateProjectReferencesAsync(request, cancellationToken);
         ValidateActualDates(request.ActualStartDate, request.ActualCompletionDate);
+        ValidateTaxConfigurations(request.TaxConfigurations);
         var project = new Project
         {
             ProjectNumber = projectNumber,
@@ -31,8 +33,8 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             DepartmentId = request.DepartmentId,
             BranchId = request.BranchId,
             Stage = request.Stage,
+            ContractSigningStatus = request.ContractSigningStatus,
             AffiliationType = request.AffiliationType,
-            ArchiveStatus = request.ArchiveStatus,
             ActualStartDate = request.ActualStartDate,
             ActualCompletionDate = request.ActualCompletionDate,
             Notes = NormalizeOptional(request.Notes)
@@ -44,6 +46,15 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
                 Project = project,
                 LegalEntityId = legalEntityId,
                 IsPrimary = project.LegalEntities.Count == 0
+            });
+        }
+        foreach (var configuration in request.TaxConfigurations ?? [])
+        {
+            project.TaxConfigurations.Add(new ProjectTaxConfiguration
+            {
+                Project = project,
+                TaxRate = configuration.TaxRate,
+                InvoiceType = configuration.InvoiceType
             });
         }
 
@@ -205,6 +216,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
     {
         var query = db.Projects.AsNoTracking()
             .Include(project => project.Contracts).ThenInclude(contract => contract.LineItems)
+            .Include(project => project.TaxConfigurations)
             .Where(project => project.IsActive);
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -227,6 +239,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
                 .ThenInclude(contract => contract.LineItems)
             .Include(project => project.Assignments)
             .Include(project => project.LegalEntities)
+            .Include(project => project.TaxConfigurations)
             .Where(project => project.IsActive);
         if (!actor.CanAccessAllProjects)
         {
@@ -315,6 +328,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             .AsNoTracking()
             .Include(item => item.Contracts)
                 .ThenInclude(contract => contract.LineItems)
+            .Include(item => item.TaxConfigurations)
             .SingleOrDefaultAsync(item => item.Id == projectId && item.IsActive, cancellationToken);
         if (project is null)
         {
@@ -348,7 +362,21 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
     }
 
     private static ProjectDto ToProjectDto(Project project) =>
-        new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage, project.ArchiveStatus, project.AffiliationType, project.ActualStartDate, project.ActualCompletionDate, project.Notes);
+        new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage,
+            project.AffiliationType, project.ActualStartDate, project.ActualCompletionDate, project.Notes, project.ContractSigningStatus,
+            project.TaxConfigurations.OrderBy(item => item.TaxRate).ThenBy(item => item.InvoiceType)
+                .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray());
+
+    private static void ValidateTaxConfigurations(IReadOnlyCollection<ProjectTaxConfigurationInput>? configurations)
+    {
+        if (configurations is null) return;
+        if (configurations.Any(item => !ProjectTaxRules.IsAllowedRate(item.TaxRate)))
+            throw new ArgumentException("项目税率只允许 1%、3%、6%、9% 或 13%。", nameof(configurations));
+        if (configurations.Any(item => !Enum.IsDefined(item.InvoiceType)))
+            throw new ArgumentException("项目发票类型无效。", nameof(configurations));
+        if (configurations.GroupBy(item => new { item.TaxRate, item.InvoiceType }).Any(group => group.Count() > 1))
+            throw new ArgumentException("项目税金配置存在重复的税率和发票类型组合。", nameof(configurations));
+    }
 
     private static void ValidateActualDates(DateOnly? actualStartDate, DateOnly? actualCompletionDate)
     {

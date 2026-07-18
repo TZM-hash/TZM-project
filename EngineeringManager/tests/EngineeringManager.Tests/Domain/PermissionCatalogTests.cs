@@ -41,15 +41,23 @@ public sealed class PermissionCatalogTests
     }
 
     [Fact]
-    public void CrewTemporaryWorkerAndSensitivePayrollPermissionsAreCatalogued()
+    public void CrewAndSensitivePayrollPermissionsRemainWhileTemporaryWorkerPermissionsAreRemoved()
     {
         PermissionKeys.IsKnown(PermissionKeys.ConstructionCrewsRead).Should().BeTrue();
         PermissionKeys.IsKnown(PermissionKeys.ConstructionCrewsManage).Should().BeTrue();
-        PermissionKeys.IsKnown(PermissionKeys.TemporaryWorkersRead).Should().BeTrue();
-        PermissionKeys.IsKnown(PermissionKeys.TemporaryWorkersManage).Should().BeTrue();
+        PermissionKeys.IsKnown("temporary-workers.read").Should().BeFalse();
+        PermissionKeys.IsKnown("temporary-workers.manage").Should().BeFalse();
+        typeof(PermissionKeys).GetFields().Select(field => field.Name).Should().NotContain([
+            "TemporaryWorkersRead",
+            "TemporaryWorkersManage"
+        ]);
         PermissionKeys.IsKnown(PermissionKeys.SensitivePersonnelRead).Should().BeTrue();
         PermissionKeys.DefaultsForRole(SystemRoles.ApplicationAdministrator).Should().Contain(PermissionKeys.ConstructionCrewsManage);
-        PermissionKeys.DefaultsForRole(SystemRoles.Finance).Should().Contain(PermissionKeys.TemporaryWorkersManage);
         PermissionKeys.DefaultsForRole(SystemRoles.QueryOnly).Should().Contain(PermissionKeys.ConstructionCrewsRead);
+        foreach (var role in SystemRoles.All)
+        {
+            PermissionKeys.DefaultsForRole(role).Should().NotContain("temporary-workers.read");
+            PermissionKeys.DefaultsForRole(role).Should().NotContain("temporary-workers.manage");
+        }
     }
 }

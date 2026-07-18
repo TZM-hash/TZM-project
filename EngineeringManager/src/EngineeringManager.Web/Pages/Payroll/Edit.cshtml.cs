@@ -5,6 +5,7 @@ using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Web.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -35,15 +36,22 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
         await LoadOptionsAsync(cancellationToken);
         try
         {
+            var existingAllocations = new Dictionary<Guid, PayrollCrewAllocationDto>();
+            if (Id.HasValue)
+            {
+                var details = await payrollService.GetDisbursementBatchAsync(Id.Value, cancellationToken)
+                    ?? throw new InvalidOperationException("工资批次不存在。");
+                existingAllocations = details.CrewAllocations.ToDictionary(item => item.CrewBusinessPartnerId);
+            }
             var lines = Input.EmployeeLines.Where(item => item.Selected && item.Amount > 0m)
-                .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.Employee, item.PersonId, null, null, null, item.Amount, item.Notes))
+                .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.Employee, item.PersonId, null, null, item.Amount, item.Notes))
                 .Concat(Input.CrewLines.Where(item => item.Selected && item.Amount > 0m)
-                    .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.CrewWorker, null, item.PersonId, null, item.CrewBusinessPartnerId, item.Amount, item.Notes)))
-                .Concat(Input.TemporaryLines.Where(item => item.Selected && item.Amount > 0m)
-                    .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.TemporaryWorker, null, null, item.PersonId, null, item.Amount, item.Notes)))
+                    .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.CrewWorker, null, item.PersonId, item.CrewBusinessPartnerId, item.Amount, item.Notes)))
                 .ToArray();
             var crewAllocations = lines.Where(item => item.CrewBusinessPartnerId.HasValue).Select(item => item.CrewBusinessPartnerId!.Value).Distinct()
-                .Select(crewId => new PayrollCrewAllocationRequest(crewId, null, null, "工程款待关联"))
+                .Select(crewId => existingAllocations.TryGetValue(crewId, out var existing)
+                    ? new PayrollCrewAllocationRequest(crewId, existing.ContractId, existing.PayableEntryId, existing.Notes)
+                    : new PayrollCrewAllocationRequest(crewId, null, null, "工程款待关联"))
                 .ToArray();
             var saved = await payrollService.SaveDisbursementBatchAsync(
                 User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown",
@@ -108,19 +116,33 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
     private async Task ReloadPersonLinesAsync(CancellationToken cancellationToken, PayrollDisbursementBatchDetailsDto? details = null)
     {
         if (details is null && Id.HasValue) details = await payrollService.GetDisbursementBatchAsync(Id.Value, cancellationToken);
-        var existing = details?.Lines.ToDictionary(item => (item.RecipientType, item.EmployeeId ?? item.ConstructionWorkerId ?? item.TemporaryWorkerId!.Value)) ?? [];
+        var existing = details?.Lines
+            .Where(item => item.RecipientType is PayrollRecipientType.Employee or PayrollRecipientType.CrewWorker)
+            .ToDictionary(item => (
+                item.RecipientType,
+                item.EmployeeId ?? item.ConstructionWorkerId!.Value,
+                item.RecipientType == PayrollRecipientType.CrewWorker ? item.CrewBusinessPartnerId : null)) ?? [];
         var employees = await db.Employees.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.EmployeeNumber).ToListAsync(cancellationToken);
-        Input.EmployeeLines = employees.Select(item => MakeLine(existing, PayrollRecipientType.Employee, item.Id, item.EmployeeNumber + " · " + item.Name, null)).ToList();
+        var employeeLines = employees.Select(item => MakeLine(existing, PayrollRecipientType.Employee, item.Id, item.EmployeeNumber + " · " + item.Name + " · " + item.EmployeeType.ToChinese(), null)).ToList();
+        foreach (var line in existing.Values.Where(item => item.RecipientType == PayrollRecipientType.Employee && employeeLines.All(candidate => candidate.PersonId != item.EmployeeId)))
+        {
+            employeeLines.Add(MakeLine(existing, PayrollRecipientType.Employee, line.EmployeeId!.Value, line.RecipientNameSnapshot, null));
+        }
+        Input.EmployeeLines = employeeLines;
         var memberships = await db.ConstructionCrewMemberships.AsNoTracking().Where(item => !item.EndDate.HasValue && item.Worker.IsActive && item.CrewBusinessPartner.IsActive && item.CrewBusinessPartner.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew))
             .Include(item => item.Worker).Include(item => item.CrewBusinessPartner).OrderBy(item => item.CrewBusinessPartner.Name).ThenBy(item => item.Worker.Name).ToListAsync(cancellationToken);
-        Input.CrewLines = memberships.Select(item => MakeLine(existing, PayrollRecipientType.CrewWorker, item.Worker.Id, item.Worker.Name, item.CrewBusinessPartnerId, item.CrewBusinessPartner.Name)).ToList();
-        var temporaryWorkers = await db.TemporaryWorkers.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name).ToListAsync(cancellationToken);
-        Input.TemporaryLines = temporaryWorkers.Select(item => MakeLine(existing, PayrollRecipientType.TemporaryWorker, item.Id, item.Name, null)).ToList();
+        var crewLines = memberships.Select(item => MakeLine(existing, PayrollRecipientType.CrewWorker, item.Worker.Id, item.Worker.Name, item.CrewBusinessPartnerId, item.CrewBusinessPartner.Name)).ToList();
+        foreach (var line in existing.Values.Where(item => item.RecipientType == PayrollRecipientType.CrewWorker && crewLines.All(candidate =>
+                     candidate.PersonId != item.ConstructionWorkerId || candidate.CrewBusinessPartnerId != item.CrewBusinessPartnerId)))
+        {
+            crewLines.Add(MakeLine(existing, PayrollRecipientType.CrewWorker, line.ConstructionWorkerId!.Value, line.RecipientNameSnapshot, line.CrewBusinessPartnerId, line.CrewNameSnapshot));
+        }
+        Input.CrewLines = crewLines;
     }
 
-    private static PersonLineInput MakeLine(Dictionary<(PayrollRecipientType, Guid), PayrollDisbursementLineDto> existing, PayrollRecipientType type, Guid personId, string label, Guid? crewId, string? crewName = null)
+    private static PersonLineInput MakeLine(Dictionary<(PayrollRecipientType, Guid, Guid?), PayrollDisbursementLineDto> existing, PayrollRecipientType type, Guid personId, string label, Guid? crewId, string? crewName = null)
     {
-        existing.TryGetValue((type, personId), out var line);
+        existing.TryGetValue((type, personId, crewId), out var line);
         return new PersonLineInput { PaymentId = line?.Id, PersonId = personId, CrewBusinessPartnerId = crewId, CrewName = crewName, Label = label, Selected = line is not null, Amount = line?.Amount ?? 0m, Notes = line?.Notes };
     }
 
@@ -152,7 +174,6 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
         public string Reason { get; set; } = string.Empty;
         public List<PersonLineInput> EmployeeLines { get; set; } = [];
         public List<PersonLineInput> CrewLines { get; set; } = [];
-        public List<PersonLineInput> TemporaryLines { get; set; } = [];
     }
 
     public sealed class PersonLineInput

@@ -15,12 +15,11 @@ public sealed class IndexModel(IEmployeeService employeeService) : PageModel
     public IReadOnlyList<EmployeeDto> Employees { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
     public bool QuickEditOpen { get; private set; }
+    [BindProperty(SupportsGet = true)] public string? Search { get; set; }
+    [BindProperty(SupportsGet = true)] public EmployeeType? EmployeeType { get; set; }
     [BindProperty] public QuickEditInput QuickEdit { get; set; } = new();
 
-    public async Task OnGetAsync(CancellationToken cancellationToken)
-    {
-        Employees = await employeeService.ListAsync(null, cancellationToken);
-    }
+    public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadEmployeesAsync(cancellationToken);
 
     public async Task<IActionResult> OnPostQuickEditAsync(CancellationToken cancellationToken)
     {
@@ -52,15 +51,23 @@ public sealed class IndexModel(IEmployeeService employeeService) : PageModel
                     QuickEdit.Reason,
                     existing?.Notes),
                 cancellationToken);
-            return RedirectToPage();
+            return RedirectToPage(new { search = Search, employeeType = EmployeeType });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
         {
             ModelState.AddModelError(string.Empty, exception.Message);
             QuickEditOpen = true;
-            Employees = await employeeService.ListAsync(null, cancellationToken);
+            await LoadEmployeesAsync(cancellationToken);
             return Page();
         }
+    }
+
+    private async Task LoadEmployeesAsync(CancellationToken cancellationToken)
+    {
+        var employees = await employeeService.ListAsync(Search, cancellationToken);
+        Employees = EmployeeType.HasValue
+            ? employees.Where(employee => employee.EmployeeType == EmployeeType.Value).ToList()
+            : employees;
     }
 
     public sealed class QuickEditInput

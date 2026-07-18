@@ -23,13 +23,6 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             throw new InvalidOperationException($"工资批次编号已存在：{number}");
         }
 
-        await ValidateDisbursementDimensionsAsync(request, cancellationToken);
-        var resolvedLines = await ResolveDisbursementLinesAsync(request, cancellationToken);
-        var inputs = resolvedLines.Select(item => item.Input).ToArray();
-        var summary = request.Status == PayrollBatchStatus.Confirmed
-            ? PayrollDisbursementRules.EnsureCanReview(request.ActualAmount, request.ProjectId, inputs)
-            : PayrollDisbursementRules.Calculate(request.ActualAmount, inputs);
-
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var batch = request.Id.HasValue
             ? await db.PayrollBatches
@@ -42,6 +35,13 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         {
             throw new DbUpdateConcurrencyException("工资批次已被其他用户修改，请刷新后重试。");
         }
+
+        await ValidateDisbursementDimensionsAsync(request, cancellationToken);
+        var resolvedLines = await ResolveDisbursementLinesAsync(batch, request, cancellationToken);
+        var inputs = resolvedLines.Select(item => item.Input).ToArray();
+        var summary = request.Status == PayrollBatchStatus.Confirmed
+            ? PayrollDisbursementRules.EnsureCanReview(request.ActualAmount, request.ProjectId, inputs)
+            : PayrollDisbursementRules.Calculate(request.ActualAmount, inputs);
 
         var before = request.Id.HasValue ? BatchSnapshot(batch) : null;
         var effectiveDate = request.PaymentDate ?? DateOnly.FromDateTime(DateTime.Today);
@@ -99,13 +99,7 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             .SingleOrDefaultAsync(item => item.Id == batchId, cancellationToken);
         if (batch is null) return null;
         var lines = batch.Payments.Select(ToDisbursementLineDto).OrderBy(item => item.RecipientType).ThenBy(item => item.RecipientNameSnapshot).ToArray();
-        var summary = PayrollDisbursementRules.Calculate(batch.ActualAmount, lines.Select(item => new PayrollDisbursementLineInput(
-            item.RecipientType,
-            item.EmployeeId,
-            item.ConstructionWorkerId,
-            item.TemporaryWorkerId,
-            item.CrewBusinessPartnerId,
-            item.Amount)));
+        var summary = PayrollDisbursementRules.Calculate(batch.ActualAmount, batch.Payments.Select(ToDisbursementSummaryInput));
         return new PayrollDisbursementBatchDetailsDto(
             ToDisbursementBatchDto(batch),
             summary,
@@ -131,7 +125,6 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             batches.Sum(item => item.Batch.ActualAmount),
             batches.Sum(item => item.Summary.EmployeeAmount),
             batches.Sum(item => item.Summary.CrewAmount),
-            batches.Sum(item => item.Summary.TemporaryAmount),
             batches.Sum(item => item.Summary.Difference),
             batches);
     }
@@ -433,41 +426,43 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
     }
 
     private async Task<IReadOnlyList<ResolvedDisbursementLine>> ResolveDisbursementLinesAsync(
+        PayrollBatch batch,
         SavePayrollDisbursementBatchRequest request,
         CancellationToken cancellationToken)
     {
         var employeeIds = request.Lines.Where(item => item.EmployeeId.HasValue).Select(item => item.EmployeeId!.Value).Distinct().ToArray();
         var workerIds = request.Lines.Where(item => item.ConstructionWorkerId.HasValue).Select(item => item.ConstructionWorkerId!.Value).Distinct().ToArray();
-        var temporaryIds = request.Lines.Where(item => item.TemporaryWorkerId.HasValue).Select(item => item.TemporaryWorkerId!.Value).Distinct().ToArray();
         var crewIds = request.Lines.Where(item => item.CrewBusinessPartnerId.HasValue).Select(item => item.CrewBusinessPartnerId!.Value).Distinct().ToArray();
-        var employees = await db.Employees.Where(item => employeeIds.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
-        var workers = await db.ConstructionWorkers.Where(item => workerIds.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
-        var temporaryWorkers = await db.TemporaryWorkers.Where(item => temporaryIds.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
-        var crews = await db.BusinessPartners.Where(item => crewIds.Contains(item.Id) && item.IsActive && item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew)).ToDictionaryAsync(item => item.Id, cancellationToken);
+        var employees = await db.Employees.Where(item => employeeIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken);
+        var workers = await db.ConstructionWorkers.Where(item => workerIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken);
+        var crews = await db.BusinessPartners.Where(item => crewIds.Contains(item.Id)).Include(item => item.Roles).ToDictionaryAsync(item => item.Id, cancellationToken);
         var memberships = await db.ConstructionCrewMemberships.AsNoTracking()
             .Where(item => workerIds.Contains(item.ConstructionWorkerId) && crewIds.Contains(item.CrewBusinessPartnerId))
             .ToListAsync(cancellationToken);
         var result = new List<ResolvedDisbursementLine>(request.Lines.Count);
         foreach (var line in request.Lines)
         {
-            var input = new PayrollDisbursementLineInput(line.RecipientType, line.EmployeeId, line.ConstructionWorkerId, line.TemporaryWorkerId, line.CrewBusinessPartnerId, line.Amount);
+            var input = new PayrollDisbursementLineInput(line.RecipientType, line.EmployeeId, line.ConstructionWorkerId, line.CrewBusinessPartnerId, line.Amount);
+            var matchesExistingRecipient = line.Id.HasValue && batch.Payments.Any(item =>
+                item.Id == line.Id.Value &&
+                item.RecipientType == line.RecipientType &&
+                item.EmployeeId == line.EmployeeId &&
+                item.ConstructionWorkerId == line.ConstructionWorkerId &&
+                item.CrewBusinessPartnerId == line.CrewBusinessPartnerId);
             switch (line.RecipientType)
             {
                 case PayrollRecipientType.Employee:
-                    if (!line.EmployeeId.HasValue || !employees.TryGetValue(line.EmployeeId.Value, out var employee)) throw new InvalidOperationException("员工不存在或已停用。");
+                    if (!line.EmployeeId.HasValue || !employees.TryGetValue(line.EmployeeId.Value, out var employee) || !employee.IsActive && !matchesExistingRecipient) throw new InvalidOperationException("员工不存在或已停用。");
                     result.Add(new ResolvedDisbursementLine(input, $"employee:{employee.Id:N}", employee.Name, employee.IdentityNumber, employee.Phone, employee.BankAccountNumber, employee.PositionTitle, null));
                     break;
                 case PayrollRecipientType.CrewWorker:
-                    if (!line.ConstructionWorkerId.HasValue || !workers.TryGetValue(line.ConstructionWorkerId.Value, out var worker)) throw new InvalidOperationException("班组人员不存在或已停用。");
-                    if (!line.CrewBusinessPartnerId.HasValue || !crews.TryGetValue(line.CrewBusinessPartnerId.Value, out var crew)) throw new InvalidOperationException("施工班组不存在或已停用。");
-                    var validMembership = memberships.Any(item => item.ConstructionWorkerId == worker.Id && item.CrewBusinessPartnerId == crew.Id &&
+                    if (!line.ConstructionWorkerId.HasValue || !workers.TryGetValue(line.ConstructionWorkerId.Value, out var worker) || !worker.IsActive && !matchesExistingRecipient) throw new InvalidOperationException("班组人员不存在或已停用。");
+                    if (!line.CrewBusinessPartnerId.HasValue || !crews.TryGetValue(line.CrewBusinessPartnerId.Value, out var crew) ||
+                        (!crew.IsActive || !crew.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew)) && !matchesExistingRecipient) throw new InvalidOperationException("施工班组不存在或已停用。");
+                    var validMembership = matchesExistingRecipient || memberships.Any(item => item.ConstructionWorkerId == worker.Id && item.CrewBusinessPartnerId == crew.Id &&
                         (!request.PaymentDate.HasValue || item.StartDate <= request.PaymentDate.Value && (!item.EndDate.HasValue || item.EndDate.Value >= request.PaymentDate.Value)));
                     if (!validMembership) throw new InvalidOperationException("班组人员在发放日期不属于所选施工班组。");
                     result.Add(new ResolvedDisbursementLine(input, $"crew-worker:{worker.Id:N}", worker.Name, worker.IdentityNumber, worker.Phone, worker.BankAccountNumber, worker.Trade, crew.Name));
-                    break;
-                case PayrollRecipientType.TemporaryWorker:
-                    if (!line.TemporaryWorkerId.HasValue || !temporaryWorkers.TryGetValue(line.TemporaryWorkerId.Value, out var temporaryWorker)) throw new InvalidOperationException("临时人员不存在或已停用。");
-                    result.Add(new ResolvedDisbursementLine(input, $"temporary-worker:{temporaryWorker.Id:N}", temporaryWorker.Name, temporaryWorker.IdentityNumber, temporaryWorker.Phone, temporaryWorker.BankAccountNumber, temporaryWorker.Trade, null));
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(request), $"不支持的人员来源：{line.RecipientType}。");
@@ -497,10 +492,9 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             line.RecipientKey = data.RecipientKey;
             line.EmployeeId = request.EmployeeId;
             line.ConstructionWorkerId = request.ConstructionWorkerId;
-            line.TemporaryWorkerId = request.TemporaryWorkerId;
             line.CrewBusinessPartnerId = request.CrewBusinessPartnerId;
             line.Amount = request.Amount;
-            line.PayeeType = request.RecipientType == PayrollRecipientType.Employee ? PayrollPayeeType.Employee : request.RecipientType == PayrollRecipientType.CrewWorker ? PayrollPayeeType.CrewLeader : PayrollPayeeType.EntrustedRecipient;
+            line.PayeeType = request.RecipientType == PayrollRecipientType.Employee ? PayrollPayeeType.Employee : PayrollPayeeType.CrewLeader;
             line.PayeeName = data.Name;
             line.RecipientNameSnapshot = data.Name;
             line.IdentityNumberSnapshot = data.IdentityNumber;
@@ -622,9 +616,17 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         batch.ActualAmount, batch.PaymentMethod, batch.VoucherNumber, batch.Status, batch.Notes, batch.IsUnifiedDisbursement, batch.ConcurrencyStamp);
 
     private static PayrollDisbursementLineDto ToDisbursementLineDto(PayrollPayment item) => new(
-        item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.TemporaryWorkerId, item.CrewBusinessPartnerId,
+        item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.CrewBusinessPartnerId,
         item.Amount, item.RecipientNameSnapshot ?? item.PayeeName, item.IdentityNumberSnapshot, item.PhoneSnapshot, item.BankAccountSnapshot,
         item.TradeSnapshot, item.CrewNameSnapshot, item.Notes, item.ConcurrencyStamp);
+
+    private static PayrollDisbursementLineInput ToDisbursementSummaryInput(PayrollPayment item) =>
+        new(
+            item.RecipientType,
+            item.EmployeeId,
+            item.ConstructionWorkerId,
+            item.CrewBusinessPartnerId,
+            item.Amount);
 
     private static object BatchSnapshot(PayrollBatch batch) => new
     {
@@ -639,7 +641,7 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         batch.VoucherNumber,
         batch.Status,
         batch.Notes,
-        Lines = batch.Payments.Select(item => new { item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.TemporaryWorkerId, item.CrewBusinessPartnerId, item.Amount, item.RecipientNameSnapshot, item.Notes }),
+        Lines = batch.Payments.Select(item => new { item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.CrewBusinessPartnerId, item.Amount, item.RecipientNameSnapshot, item.Notes }),
         CrewAllocations = batch.CrewAllocations.Select(item => new { item.CrewBusinessPartnerId, item.ContractId, item.PayableEntryId, item.Notes })
     };
 

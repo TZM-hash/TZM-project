@@ -1,9 +1,21 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace EngineeringManager.Domain.Employees;
 
-public enum EmployeeType { Formal = 1, Labor = 2 }
+public enum EmployeeType
+{
+    [Display(Name = "正式员工")]
+    Formal = 1,
+
+    [Display(Name = "劳务员工")]
+    Labor = 2,
+
+    [Display(Name = "特殊临时人员")]
+    Temporary = 3
+}
 public enum PayrollBatchType { Monthly = 1, DateRange = 2, ProjectStage = 3, Milestone = 4, Temporary = 5 }
 public enum PayrollBatchStatus { Draft = 1, Confirmed = 2, Closed = 3, Voided = 4, ModifiedPendingReview = 5 }
-public enum PayrollRecipientType { Employee = 1, CrewWorker = 2, TemporaryWorker = 3 }
+public enum PayrollRecipientType { Employee = 1, CrewWorker = 2 }
 public enum PayrollItemNature { Earning = 1, Deduction = 2 }
 public enum PayrollItemType
 {

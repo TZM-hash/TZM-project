@@ -116,6 +116,30 @@ public sealed class ProjectAuthorizationTests
     }
 
     [Fact]
+    public void ProjectPagesExposeContractTaxEquipmentAndFullWidthNotesWithoutArchiveField()
+    {
+        var root = RepositoryRoot();
+        var details = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml"));
+        var edit = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Edit.cshtml"));
+        var financeCreate = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Finance", "Entries", "Create.cshtml"));
+
+        details.Should().NotContain("归档状态")
+            .And.NotContain("QuickEdit.ArchiveStatus")
+            .And.Contain("合同签订")
+            .And.Contain("data-project-tax-matrix")
+            .And.Contain("施工机械")
+            .And.Contain("显示在项目总览")
+            .And.Contain("project-summary-notes");
+        details.IndexOf("项目备注", StringComparison.Ordinal).Should().BeGreaterThan(details.IndexOf("应付 / 已付 / 未付", StringComparison.Ordinal));
+        edit.Should().NotContain("归档状态")
+            .And.Contain("合同签订状态")
+            .And.Contain("data-project-tax-matrix");
+        financeCreate.Should().Contain("开票公司")
+            .And.Contain("ProjectTaxConfigurationId")
+            .And.Contain("税率与发票类型");
+    }
+
+    [Fact]
     public async Task QueryOnlySeesWorkspaceWithoutEditEntrances()
     {
         await using var factory = CreateFactory("QueryOnly");
@@ -199,7 +223,7 @@ public sealed class ProjectAuthorizationTests
         public Task<ProjectListPageDto> SearchProjectsAsync(ProjectListActor actor, ProjectListQuery query, CancellationToken cancellationToken) =>
             Task.FromResult(new ProjectListPageDto(
                 [new ProjectListItemDto(
-                    new ProjectDto(FakeProjectWorkspaceService.ProjectId, "P-WEB-001", "项目工作台页面测试", "测试总包单位", ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, ProjectAffiliationType.ExternalPartyAttachedToUs),
+                    new ProjectDto(FakeProjectWorkspaceService.ProjectId, "P-WEB-001", "项目工作台页面测试", "测试总包单位", ProjectStage.UnderConstruction, ProjectAffiliationType.ExternalPartyAttachedToUs),
                     new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1))],
                 new ProjectListAggregateDto(1, 300m, 200m, 0), 1, 20, 1, 1, [FakeProjectWorkspaceService.ProjectId]));
         public Task<ProjectListOptionsDto> GetListOptionsAsync(ProjectListActor actor, CancellationToken cancellationToken) =>
@@ -236,7 +260,6 @@ public sealed class ProjectAuthorizationTests
                     "一分公司",
                     ProjectStage.UnderConstruction,
                     ProjectAffiliationType.ExternalPartyAttachedToUs,
-                    ArchiveStatus.NotArchived,
                     [new ProjectWorkspaceOptionDto(Guid.NewGuid().ToString(), "测试签约公司")],
                     new DateTimeOffset(2026, 7, 17, 8, 0, 0, TimeSpan.Zero),
                     Guid.Parse("71000000-0000-0000-0000-000000000002")),

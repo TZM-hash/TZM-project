@@ -36,6 +36,34 @@ function updateKindFields(select) {
   });
 }
 
+function updateConstructionEquipmentFields(select) {
+  const container = select.closest("form, [data-construction-row]");
+  if (!container) return;
+  const isEquipment = select.value === "1";
+  container.querySelectorAll("[data-construction-equipment-only]").forEach((element) => {
+    element.hidden = !isEquipment;
+    element.querySelectorAll("input").forEach((field) => {
+      field.disabled = !isEquipment;
+      if (!isEquipment && field.type === "checkbox") field.checked = false;
+    });
+  });
+}
+
+function updateProjectScopedOptions(projectSelect) {
+  const form = projectSelect.closest("form");
+  if (!form) return;
+  form.querySelectorAll("[data-project-scoped-select]").forEach((select) => {
+    let selectedIsVisible = !select.value;
+    select.querySelectorAll("option[data-project-id]").forEach((option) => {
+      const visible = option.dataset.projectId === projectSelect.value;
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (visible && option.value === select.value) selectedIsVisible = true;
+    });
+    if (!selectedIsVisible) select.value = "";
+  });
+}
+
 export function initInlineEditors() {
   document.querySelectorAll("[data-inline-edit]").forEach((editor) => {
     editor.querySelectorAll("[data-inline-edit-open]").forEach((button) => button.addEventListener("click", () => setEditorState(editor, true)));
@@ -88,4 +116,16 @@ export function initInlineEditors() {
   document.querySelectorAll("[data-construction-row]").forEach((row) => {
     row.querySelectorAll("[data-construction-entry], [data-construction-exit], [data-construction-stop]").forEach((field) => field.addEventListener("input", () => recalculateConstruction(row)));
   });
+
+  document.querySelectorAll("[data-construction-type]").forEach((select) => {
+    select.addEventListener("change", () => updateConstructionEquipmentFields(select));
+    updateConstructionEquipmentFields(select);
+  });
+
+  document.querySelectorAll("[data-finance-project-select]").forEach((select) => {
+    select.addEventListener("change", () => updateProjectScopedOptions(select));
+    updateProjectScopedOptions(select);
+  });
+
+  document.querySelector(".is-target-record")?.scrollIntoView({ behavior: "smooth", block: "center" });
 }

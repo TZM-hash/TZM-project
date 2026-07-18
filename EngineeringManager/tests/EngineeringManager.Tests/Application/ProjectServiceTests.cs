@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Projects;
+using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
@@ -53,7 +54,7 @@ public sealed class ProjectServiceTests
     public async Task DuplicateProjectNumberIsRejected()
     {
         await using var fixture = await ProjectFixture.CreateAsync();
-        var request = new CreateProjectRequest("P-SVC-01", "服务测试项目", null, null, null, null, ProjectStage.Preliminary, ArchiveStatus.NotArchived, []);
+        var request = new CreateProjectRequest("P-SVC-01", "服务测试项目", null, null, null, null, ProjectStage.AwaitingMobilization, []);
         await fixture.Service.CreateProjectAsync(request, CancellationToken.None);
 
         var action = () => fixture.Service.CreateProjectAsync(request with { Name = "重复项目" }, CancellationToken.None);
@@ -65,8 +66,8 @@ public sealed class ProjectServiceTests
     public async Task AffiliationTypeFilterSeparatesAttachedProjects()
     {
         await using var fixture = await ProjectFixture.CreateAsync();
-        await fixture.Service.CreateProjectAsync(new CreateProjectRequest("P-AFF-01", "自营项目", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [], AffiliationType: ProjectAffiliationType.SelfOperated), CancellationToken.None);
-        await fixture.Service.CreateProjectAsync(new CreateProjectRequest("P-AFF-02", "他方挂靠", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [], AffiliationType: ProjectAffiliationType.ExternalPartyAttachedToUs), CancellationToken.None);
+        await fixture.Service.CreateProjectAsync(new CreateProjectRequest("P-AFF-01", "自营项目", null, null, null, null, ProjectStage.UnderConstruction, [], AffiliationType: ProjectAffiliationType.SelfOperated), CancellationToken.None);
+        await fixture.Service.CreateProjectAsync(new CreateProjectRequest("P-AFF-02", "他方挂靠", null, null, null, null, ProjectStage.UnderConstruction, [], AffiliationType: ProjectAffiliationType.ExternalPartyAttachedToUs), CancellationToken.None);
 
         var result = await fixture.Service.SearchProjectsAsync(new ProjectListActor("administrator", true),
             new ProjectListQuery(null, [], null, null, null, null, null, false, 1, 20, ProjectAffiliationType.ExternalPartyAttachedToUs), CancellationToken.None);
@@ -82,7 +83,7 @@ public sealed class ProjectServiceTests
         await using var fixture = await ProjectFixture.CreateAsync();
         var legalEntity = await fixture.AddLegalEntityAsync();
         var project = await fixture.Service.CreateProjectAsync(
-            new CreateProjectRequest("P-SVC-02", "合同校验项目", null, null, null, null, ProjectStage.AwaitingContract, ArchiveStatus.NotArchived, [legalEntity.Id]),
+            new CreateProjectRequest("P-SVC-02", "合同校验项目", null, null, null, null, ProjectStage.AwaitingMobilization, [legalEntity.Id]),
             CancellationToken.None);
         var request = new CreateContractRequest(
             project.Id,
@@ -106,7 +107,7 @@ public sealed class ProjectServiceTests
         await using var fixture = await ProjectFixture.CreateAsync();
         var legalEntity = await fixture.AddLegalEntityAsync();
         var project = await fixture.Service.CreateProjectAsync(
-            new CreateProjectRequest("P-SVC-03", "汇总项目", null, null, null, null, ProjectStage.Settlement, ArchiveStatus.NotArchived, [legalEntity.Id]),
+            new CreateProjectRequest("P-SVC-03", "汇总项目", null, null, null, null, ProjectStage.CompletedUnsettled, [legalEntity.Id]),
             CancellationToken.None);
         var contract = await fixture.Service.AddContractAsync(
             new CreateContractRequest(
@@ -142,7 +143,7 @@ public sealed class ProjectServiceTests
         await using var fixture = await ProjectFixture.CreateAsync();
         var legalEntity = await fixture.AddLegalEntityAsync();
         var project = await fixture.Service.CreateProjectAsync(
-            new CreateProjectRequest("P-SVC-04", "原位编辑项目", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [legalEntity.Id]),
+            new CreateProjectRequest("P-SVC-04", "原位编辑项目", null, null, null, null, ProjectStage.UnderConstruction, [legalEntity.Id]),
             CancellationToken.None);
         var contract = await fixture.Service.AddContractAsync(
             new CreateContractRequest(project.Id, "C-SVC-04", "原位编辑合同", ContractType.MainContract,
@@ -170,7 +171,7 @@ public sealed class ProjectServiceTests
         await using var fixture = await ProjectFixture.CreateAsync();
         var legalEntity = await fixture.AddLegalEntityAsync();
         var project = await fixture.Service.CreateProjectAsync(
-            new CreateProjectRequest("P-NOTES", "备注项目", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [legalEntity.Id], Notes: "项目备注"),
+            new CreateProjectRequest("P-NOTES", "备注项目", null, null, null, null, ProjectStage.UnderConstruction, [legalEntity.Id], Notes: "项目备注"),
             CancellationToken.None);
         var contract = await fixture.Service.AddContractAsync(
             new CreateContractRequest(project.Id, "C-NOTES", "备注合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, "总包", 100m, [new ContractAllocationRequest(legalEntity.Id, 100m, null)], "合同备注"),
@@ -191,6 +192,61 @@ public sealed class ProjectServiceTests
         audit.Reason.Should().Be("修改工程量备注");
         using var after = JsonDocument.Parse(audit.AfterJson!);
         after.RootElement.GetProperty("Notes").GetString().Should().Be("工程量更新备注");
+    }
+
+    [Fact]
+    public async Task ProjectCanStoreMultipleTaxConfigurationsAndContractSigningStatus()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+
+        var project = await fixture.Service.CreateProjectAsync(
+            new CreateProjectRequest(
+                "P-TAX-SVC",
+                "多税率项目",
+                null,
+                null,
+                null,
+                null,
+                ProjectStage.AwaitingMobilization,
+                [],
+                ContractSigningStatus: ContractSigningStatus.SentForSignature,
+                TaxConfigurations:
+                [
+                    new ProjectTaxConfigurationInput(0.03m, ProjectInvoiceType.Special),
+                    new ProjectTaxConfigurationInput(0.09m, ProjectInvoiceType.Ordinary)
+                ]),
+            CancellationToken.None);
+
+        project.ContractSigningStatus.Should().Be(ContractSigningStatus.SentForSignature);
+        project.TaxConfigurations.Should().BeEquivalentTo(
+        [
+            new { TaxRate = 0.03m, InvoiceType = ProjectInvoiceType.Special, IsActive = true },
+            new { TaxRate = 0.09m, InvoiceType = ProjectInvoiceType.Ordinary, IsActive = true }
+        ]);
+    }
+
+    [Fact]
+    public async Task DuplicateProjectTaxConfigurationsAreRejected()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var request = new CreateProjectRequest(
+            "P-TAX-DUP",
+            "重复税率项目",
+            null,
+            null,
+            null,
+            null,
+            ProjectStage.AwaitingMobilization,
+            [],
+            TaxConfigurations:
+            [
+                new ProjectTaxConfigurationInput(0.03m, ProjectInvoiceType.Special),
+                new ProjectTaxConfigurationInput(0.03m, ProjectInvoiceType.Special)
+            ]);
+
+        var action = () => fixture.Service.CreateProjectAsync(request, CancellationToken.None);
+
+        await action.Should().ThrowAsync<ArgumentException>().WithMessage("*重复*");
     }
 
     private sealed class ProjectFixture : IAsyncDisposable

@@ -20,7 +20,6 @@ public sealed record PayrollDisbursementLineRequest(
     PayrollRecipientType RecipientType,
     Guid? EmployeeId,
     Guid? ConstructionWorkerId,
-    Guid? TemporaryWorkerId,
     Guid? CrewBusinessPartnerId,
     decimal Amount,
     string? Notes);
@@ -54,7 +53,6 @@ public sealed record PayrollDisbursementLineDto(
     PayrollRecipientType RecipientType,
     Guid? EmployeeId,
     Guid? ConstructionWorkerId,
-    Guid? TemporaryWorkerId,
     Guid? CrewBusinessPartnerId,
     decimal Amount,
     string RecipientNameSnapshot,
@@ -105,7 +103,6 @@ public sealed record PayrollDisbursementOverviewDto(
     decimal ActualAmount,
     decimal EmployeeAmount,
     decimal CrewAmount,
-    decimal TemporaryAmount,
     decimal Difference,
     IReadOnlyList<PayrollDisbursementBatchListItemDto> Batches);
 

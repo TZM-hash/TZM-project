@@ -216,16 +216,76 @@ public sealed class FinanceLedgerServiceTests
     {
         await using var fixture = await FinanceFixture.CreateAsync();
         var receivableId = await fixture.Service.AddReceivableAsync(new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 200m, null), CancellationToken.None);
-        var invoiceId = await fixture.Service.AddInvoiceAsync(new CreateInvoiceRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 2), null, 0m, 100m, 0m, 100m, InvoiceStatus.IssuedOrReceived, [new InvoiceAllocationRequest(receivableId, 100m)], []), CancellationToken.None);
+        var invoiceId = await fixture.Service.AddInvoiceAsync(new CreateInvoiceRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 2), fixture.TaxConfiguration.Id, 100m, 0m, 100m, InvoiceStatus.IssuedOrReceived, [new InvoiceAllocationRequest(receivableId, 100m)], []), CancellationToken.None);
         var invoice = await fixture.Db.InvoiceEntries.SingleAsync(item => item.Id == invoiceId);
         var originalStamp = invoice.ConcurrencyStamp;
         var actor = new FinanceRecordActor("project-manager", "项目经理");
 
-        await fixture.Service.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(invoiceId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 3), null, 0m, 60m, 0m, 60m, InvoiceStatus.IssuedOrReceived, originalStamp, "修正开票金额"), CancellationToken.None);
+        await fixture.Service.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(invoiceId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 3), fixture.TaxConfiguration.Id, 60m, 0m, 60m, InvoiceStatus.IssuedOrReceived, originalStamp, "修正开票金额"), CancellationToken.None);
 
         (await fixture.Db.InvoiceReceivableLinks.AsNoTracking().SingleAsync(item => item.InvoiceEntryId == invoiceId)).AllocatedAmount.Should().Be(60m);
-        var staleAction = () => fixture.Service.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(invoiceId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 3), null, 0m, 50m, 0m, 50m, InvoiceStatus.IssuedOrReceived, originalStamp, "过期修改"), CancellationToken.None);
+        var staleAction = () => fixture.Service.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(invoiceId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 3), fixture.TaxConfiguration.Id, 50m, 0m, 50m, InvoiceStatus.IssuedOrReceived, originalStamp, "过期修改"), CancellationToken.None);
         await staleAction.Should().ThrowAsync<DbUpdateConcurrencyException>().WithMessage("*刷新后重试*");
+    }
+
+    [Fact]
+    public async Task InvoiceUsesEnabledProjectTaxConfiguration()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+
+        var invoiceId = await fixture.Service.AddInvoiceAsync(
+            new CreateInvoiceRequest(
+                fixture.Project.Id,
+                fixture.Contract.Id,
+                fixture.LegalEntity.Id,
+                fixture.Partner.Id,
+                InvoiceDirection.Output,
+                "INV-TAX-01",
+                new DateOnly(2026, 7, 18),
+                fixture.TaxConfiguration.Id,
+                100m,
+                3m,
+                103m,
+                InvoiceStatus.IssuedOrReceived,
+                [],
+                []),
+            CancellationToken.None);
+
+        var invoice = await fixture.Db.InvoiceEntries.SingleAsync(item => item.Id == invoiceId);
+        invoice.ProjectTaxConfigurationId.Should().Be(fixture.TaxConfiguration.Id);
+        invoice.TaxRate.Should().Be(0.03m);
+        invoice.InvoiceType.Should().Be("专票");
+    }
+
+    [Fact]
+    public async Task InvoiceRejectsTaxConfigurationFromAnotherProjectOrDisabledConfiguration()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        var otherProject = new Project { ProjectNumber = "FIN-TAX-OTHER", Name = "其他税金项目" };
+        var otherConfiguration = new ProjectTaxConfiguration
+        {
+            Project = otherProject,
+            TaxRate = 0.09m,
+            InvoiceType = ProjectInvoiceType.Ordinary
+        };
+        fixture.Db.Add(otherConfiguration);
+        await fixture.Db.SaveChangesAsync();
+
+        var otherProjectAction = () => fixture.Service.AddInvoiceAsync(
+            new CreateInvoiceRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+                InvoiceDirection.Output, "INV-TAX-OTHER", new DateOnly(2026, 7, 18), otherConfiguration.Id,
+                100m, 9m, 109m, InvoiceStatus.IssuedOrReceived, [], []),
+            CancellationToken.None);
+        await otherProjectAction.Should().ThrowAsync<InvalidOperationException>().WithMessage("*税金配置*");
+
+        fixture.TaxConfiguration.IsActive = false;
+        await fixture.Db.SaveChangesAsync();
+        var disabledAction = () => fixture.Service.AddInvoiceAsync(
+            new CreateInvoiceRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+                InvoiceDirection.Output, "INV-TAX-DISABLED", new DateOnly(2026, 7, 18), fixture.TaxConfiguration.Id,
+                100m, 3m, 103m, InvoiceStatus.IssuedOrReceived, [], []),
+            CancellationToken.None);
+        await disabledAction.Should().ThrowAsync<InvalidOperationException>().WithMessage("*税金配置*");
     }
 
     private sealed class FinanceFixture : IAsyncDisposable
@@ -245,6 +305,7 @@ public sealed class FinanceLedgerServiceTests
         public BusinessPartner Partner { get; private set; } = null!;
         public Project Project { get; private set; } = null!;
         public Contract Contract { get; private set; } = null!;
+        public ProjectTaxConfiguration TaxConfiguration { get; private set; } = null!;
         public FinancialAccount Bank { get; private set; } = null!;
         public FinancialAccount Cash { get; private set; } = null!;
 
@@ -267,6 +328,8 @@ public sealed class FinanceLedgerServiceTests
             Contract = new Contract { Project = Project, BusinessPartner = Partner, ContractNumber = "FIN-SVC-C", Name = "财务服务合同", TotalAmount = 100m };
             Project.Contracts.Add(Contract);
             Project.LegalEntities.Add(new ProjectLegalEntity { Project = Project, LegalEntity = LegalEntity, IsPrimary = true });
+            TaxConfiguration = new ProjectTaxConfiguration { Project = Project, TaxRate = 0.03m, InvoiceType = ProjectInvoiceType.Special };
+            Project.TaxConfigurations.Add(TaxConfiguration);
             Bank = new FinancialAccount { LegalEntity = LegalEntity, AccountName = "基本户", AccountType = FinancialAccountType.Bank, OpeningBalance = 1000m };
             Cash = new FinancialAccount { LegalEntity = LegalEntity, AccountName = "现金", AccountType = FinancialAccountType.Cash };
             Db.AddRange(LegalEntity, Partner, Project, Bank, Cash);

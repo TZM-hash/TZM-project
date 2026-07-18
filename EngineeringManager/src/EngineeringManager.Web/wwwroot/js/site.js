@@ -20,7 +20,7 @@ if (document.querySelector("[data-workbench]")) {
 if (document.querySelector("[data-chart]")) {
   jobs.push(import("./components/charts.js").then((module) => module.initCharts()));
 }
-if (document.querySelector("[data-inline-edit], [data-inline-edit-table]")) {
+if (document.querySelector("[data-inline-edit], [data-inline-edit-table], [data-finance-project-select]")) {
   jobs.push(import("./components/quick-edit.js").then((module) => module.initInlineEditors()));
 }
 await Promise.all(jobs);

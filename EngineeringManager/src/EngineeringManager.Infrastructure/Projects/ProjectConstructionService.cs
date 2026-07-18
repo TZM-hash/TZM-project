@@ -35,6 +35,8 @@ public sealed class ProjectConstructionService(
     {
         var reason = Required(request.Reason, "请填写修改原因。");
         ValidateSubject(request.RecordType, request.EquipmentId, request.CrewBusinessPartnerId);
+        if (request.RecordType == ProjectConstructionRecordType.ConstructionCrew && request.ShowInProjectOverview)
+            throw new ArgumentException("施工班组不能显示在项目总览。", nameof(request));
         ProjectConstructionCalculator.Calculate(request.EntryDate, request.ExitDate, request.StopDays, today);
         if (request.TransferFromProjectId == request.ProjectId || request.TransferToProjectId == request.ProjectId)
             throw new ArgumentException("调入或调出项目不能是当前项目。");
@@ -71,6 +73,7 @@ public sealed class ProjectConstructionService(
         record.StopDays = request.StopDays;
         record.Notes = Optional(request.Notes);
         record.IsDraft = !request.EntryDate.HasValue;
+        record.ShowInProjectOverview = request.RecordType == ProjectConstructionRecordType.Equipment && request.ShowInProjectOverview;
         record.UpdatedAt = DateTimeOffset.UtcNow;
         record.ConcurrencyStamp = Guid.NewGuid();
 
@@ -202,10 +205,10 @@ public sealed class ProjectConstructionService(
             item.RecordType == ProjectConstructionRecordType.Equipment ? item.EquipmentId!.Value : item.CrewBusinessPartnerId!.Value,
             item.RecordType == ProjectConstructionRecordType.Equipment ? item.Equipment!.EquipmentNumber + " · " + item.Equipment.Name : item.CrewBusinessPartner!.PartnerNumber + " · " + item.CrewBusinessPartner.ShortName,
             item.TransferFromProjectId, item.TransferFromProject?.Name, item.EntryDate, item.ExitDate, duration.TotalDays, item.StopDays, duration.WorkDays,
-            item.TransferToProjectId, item.TransferToProject?.Name, item.Notes, item.IsDraft, item.ConcurrencyStamp);
+            item.TransferToProjectId, item.TransferToProject?.Name, item.Notes, item.IsDraft, item.ConcurrencyStamp, item.ShowInProjectOverview);
     }
 
-    private static object Snapshot(ProjectConstructionRecord item) => new { item.ProjectId, item.RecordType, item.EquipmentId, item.CrewBusinessPartnerId, item.TransferFromProjectId, item.TransferToProjectId, item.PreviousRecordId, item.NextRecordId, item.EntryDate, item.ExitDate, item.StopDays, item.Notes, item.IsDraft, item.ConcurrencyStamp };
+    private static object Snapshot(ProjectConstructionRecord item) => new { item.ProjectId, item.RecordType, item.EquipmentId, item.CrewBusinessPartnerId, item.TransferFromProjectId, item.TransferToProjectId, item.PreviousRecordId, item.NextRecordId, item.EntryDate, item.ExitDate, item.StopDays, item.Notes, item.IsDraft, item.ShowInProjectOverview, item.ConcurrencyStamp };
     private static string Required(string? value, string message) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException(message);
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

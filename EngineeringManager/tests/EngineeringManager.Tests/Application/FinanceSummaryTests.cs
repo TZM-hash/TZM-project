@@ -67,8 +67,7 @@ public sealed class FinanceSummaryTests
                 InvoiceDirection.Output,
                 "OUT-001",
                 new DateOnly(2026, 7, 18),
-                "增值税专用发票",
-                13m,
+                fixture.SpecialTaxConfiguration.Id,
                 61.95m,
                 8.05m,
                 70m,
@@ -104,8 +103,7 @@ public sealed class FinanceSummaryTests
                 InvoiceDirection.Input,
                 "IN-001",
                 new DateOnly(2026, 7, 18),
-                null,
-                3m,
+                fixture.OrdinaryTaxConfiguration.Id,
                 48.54m,
                 1.46m,
                 50m,
@@ -123,8 +121,7 @@ public sealed class FinanceSummaryTests
                 InvoiceDirection.Output,
                 "OUT-BAD",
                 new DateOnly(2026, 7, 19),
-                null,
-                0m,
+                fixture.OrdinaryTaxConfiguration.Id,
                 60m,
                 0m,
                 60m,
@@ -189,6 +186,8 @@ public sealed class FinanceSummaryTests
         public Contract Contract { get; private set; } = null!;
         public ContractLineItem FirstLine { get; private set; } = null!;
         public ContractLineItem SecondLine { get; private set; } = null!;
+        public ProjectTaxConfiguration OrdinaryTaxConfiguration { get; private set; } = null!;
+        public ProjectTaxConfiguration SpecialTaxConfiguration { get; private set; } = null!;
 
         public static async Task<FinanceSummaryFixture> CreateAsync()
         {
@@ -213,6 +212,10 @@ public sealed class FinanceSummaryTests
             Contract.LineItems.Add(SecondLine);
             Project.Contracts.Add(Contract);
             Project.LegalEntities.Add(new ProjectLegalEntity { Project = Project, LegalEntity = LegalEntity, IsPrimary = true });
+            OrdinaryTaxConfiguration = new ProjectTaxConfiguration { Project = Project, TaxRate = 0.03m, InvoiceType = ProjectInvoiceType.Ordinary };
+            SpecialTaxConfiguration = new ProjectTaxConfiguration { Project = Project, TaxRate = 0.13m, InvoiceType = ProjectInvoiceType.Special };
+            Project.TaxConfigurations.Add(OrdinaryTaxConfiguration);
+            Project.TaxConfigurations.Add(SpecialTaxConfiguration);
             Db.AddRange(LegalEntity, Partner, Project);
             await Db.SaveChangesAsync();
         }

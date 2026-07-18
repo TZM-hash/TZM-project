@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Globalization;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Security;
@@ -25,13 +26,14 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
     [BindProperty] public string? ResponsibleUserId { get; set; }
     [BindProperty] public Guid? DepartmentId { get; set; }
     [BindProperty] public Guid? BranchId { get; set; }
-    [BindProperty] public ProjectStage Stage { get; set; } = ProjectStage.Preliminary;
+    [BindProperty] public ProjectStage Stage { get; set; } = ProjectStage.AwaitingMobilization;
+    [BindProperty] public ContractSigningStatus ContractSigningStatus { get; set; } = ContractSigningStatus.NotSigned;
     [BindProperty] public ProjectAffiliationType AffiliationType { get; set; } = ProjectAffiliationType.SelfOperated;
-    [BindProperty] public ArchiveStatus ArchiveStatus { get; set; } = ArchiveStatus.NotArchived;
     [BindProperty] public DateOnly? ActualStartDate { get; set; }
     [BindProperty] public DateOnly? ActualCompletionDate { get; set; }
     [BindProperty] public string? Notes { get; set; }
     [BindProperty] public List<Guid> LegalEntityIds { get; set; } = [];
+    [BindProperty] public List<string> TaxConfigurationSelections { get; set; } = [];
     [BindProperty] public Guid ConcurrencyStamp { get; set; }
     [BindProperty] public string Reason { get; set; } = "维护项目资料";
 
@@ -61,16 +63,17 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
             if (!Id.HasValue)
             {
                 var created = await projectService.CreateProjectAsync(new CreateProjectRequest(
-                    ProjectNumber, Name, GeneralContractorName, ResponsibleUserId, DepartmentId, BranchId, Stage, ArchiveStatus,
+                    ProjectNumber, Name, GeneralContractorName, ResponsibleUserId, DepartmentId, BranchId, Stage,
                     LegalEntityIds, ParentProjectName, GeneralContractorContact, GeneralContractorPhone, AffiliationType,
-                    ActualStartDate, ActualCompletionDate, Notes), token);
+                    ActualStartDate, ActualCompletionDate, Notes, ContractSigningStatus, ParseTaxConfigurations()), token);
                 return RedirectToPage("Details", new { id = created.Id });
             }
             await workspaceService.UpdateAsync(
                 new ProjectWorkspaceActor(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.Identity?.Name),
                 new UpdateProjectRequest(Id.Value, ProjectNumber, Name, ParentProjectName, GeneralContractorName,
                     GeneralContractorContact, GeneralContractorPhone, ResponsibleUserId, DepartmentId, BranchId, Stage, AffiliationType,
-                    ArchiveStatus, LegalEntityIds, ConcurrencyStamp, Reason, ActualStartDate, ActualCompletionDate, Notes), token);
+                    LegalEntityIds, ConcurrencyStamp, Reason, ActualStartDate, ActualCompletionDate, Notes,
+                    ContractSigningStatus, ParseTaxConfigurations()), token);
             return RedirectToPage("Details", new { id = Id.Value });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
@@ -94,12 +97,24 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
         DepartmentId = item.DepartmentId;
         BranchId = item.BranchId;
         Stage = item.Stage;
+        ContractSigningStatus = item.ContractSigningStatus;
         AffiliationType = item.AffiliationType;
-        ArchiveStatus = item.ArchiveStatus;
         ActualStartDate = item.ActualStartDate;
         ActualCompletionDate = item.ActualCompletionDate;
         Notes = item.Notes;
         LegalEntityIds = item.LegalEntities.Select(option => Guid.Parse(option.Value)).ToList();
+        TaxConfigurationSelections = item.TaxConfigurations?.Where(configuration => configuration.IsActive)
+            .Select(configuration => $"{configuration.TaxRate * 100m:0}|{(int)configuration.InvoiceType}").ToList() ?? [];
         ConcurrencyStamp = item.ConcurrencyStamp;
     }
+
+    private ProjectTaxConfigurationInput[] ParseTaxConfigurations() =>
+        TaxConfigurationSelections.Where(item => !string.IsNullOrWhiteSpace(item)).Select(item =>
+        {
+            var parts = item.Split('|', StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var percent) ||
+                !Enum.TryParse<EngineeringManager.Domain.Finance.ProjectInvoiceType>(parts[1], out var invoiceType))
+                throw new ArgumentException("项目税金配置格式无效。");
+            return new ProjectTaxConfigurationInput(percent / 100m, invoiceType);
+        }).ToArray();
 }

@@ -17,6 +17,8 @@ public sealed class InvoiceEntry
     public InvoiceDirection Direction { get; set; }
     public string InvoiceNumber { get; set; } = string.Empty;
     public DateOnly InvoiceDate { get; set; }
+    public Guid? ProjectTaxConfigurationId { get; set; }
+    public ProjectTaxConfiguration? ProjectTaxConfiguration { get; set; }
     public string? InvoiceType { get; set; }
     public decimal TaxRate { get; set; }
     public decimal NetAmount { get; set; }

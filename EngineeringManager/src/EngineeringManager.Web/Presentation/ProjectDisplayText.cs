@@ -12,6 +12,7 @@ public static class ProjectDisplayText
     {
         EmployeeType.Formal => "正式员工",
         EmployeeType.Labor => "劳务员工",
+        EmployeeType.Temporary => "特殊临时人员",
         _ => value.ToString()
     };
 
@@ -69,15 +70,26 @@ public static class ProjectDisplayText
 
     public static string ToChinese(this ProjectStage value) => value switch
     {
-        ProjectStage.Preliminary => "前期跟踪",
-        ProjectStage.AwaitingContract => "待签合同",
         ProjectStage.AwaitingMobilization => "待进场",
         ProjectStage.UnderConstruction => "施工中",
-        ProjectStage.Suspended => "已停工",
-        ProjectStage.CompletedAwaitingAcceptance => "完工待验收",
-        ProjectStage.Settlement => "结算中",
-        ProjectStage.Warranty => "质保期",
-        ProjectStage.Closed => "已关闭",
+        ProjectStage.Suspended => "停工中",
+        ProjectStage.CompletedUnsettled => "已完工未结算",
+        ProjectStage.SettledArchived => "已结算归档",
+        _ => value.ToString()
+    };
+
+    public static string ToChinese(this ContractSigningStatus value) => value switch
+    {
+        ContractSigningStatus.NotSigned => "未签合同",
+        ContractSigningStatus.SentForSignature => "合同已寄出",
+        ContractSigningStatus.FullySigned => "合同已签完",
+        _ => value.ToString()
+    };
+
+    public static string ToChinese(this ProjectInvoiceType value) => value switch
+    {
+        ProjectInvoiceType.Ordinary => "普票",
+        ProjectInvoiceType.Special => "专票",
         _ => value.ToString()
     };
 
@@ -86,14 +98,6 @@ public static class ProjectDisplayText
         ProjectSettlementStatus.Estimated => "暂估",
         ProjectSettlementStatus.PartiallySettled => "部分结算",
         ProjectSettlementStatus.Settled => "已结算",
-        _ => value.ToString()
-    };
-
-    public static string ToChinese(this ArchiveStatus value) => value switch
-    {
-        ArchiveStatus.NotArchived => "未归档",
-        ArchiveStatus.PendingArchive => "待归档",
-        ArchiveStatus.Archived => "已归档",
         _ => value.ToString()
     };
 

@@ -5,7 +5,7 @@ namespace EngineeringManager.Tests.Web;
 public sealed class PayrollDisbursementPageTests
 {
     [Fact]
-    public void PayrollPagesExposeBatchListMixedLinesDifferenceAndSourceLocation()
+    public void PayrollPagesExposeOnlyEditableEmployeeAndCrewLines()
     {
         var index = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml");
         var edit = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Edit.cshtml");
@@ -16,7 +16,16 @@ public sealed class PayrollDisbursementPageTests
         edit.Should().Contain("实际发放总金额");
         edit.Should().Contain("自有员工");
         edit.Should().Contain("施工班组人员");
-        edit.Should().Contain("临时人员");
+        edit.Should().NotContain("Input.TemporaryLines");
+        model.Should().NotContain("TemporaryLines");
+        model.Should().NotContain("LegacyLines");
+        model.Should().Contain("item.RecipientType is PayrollRecipientType.Employee or PayrollRecipientType.CrewWorker");
+        edit.Should().NotContain("历史临时人员明细");
+        edit.Should().NotContain("Model.LegacyLines");
+        edit.Should().NotContain("data-payroll-legacy-total");
+        model.Should().Contain("item.EmployeeType.ToChinese()");
+        index.Should().NotContain("TemporaryAmount");
+        index.Should().NotContain("<th>临时人员</th>");
         edit.Should().Contain("批次差额");
         edit.Should().Contain("修改原因");
         model.Should().Contain("LineId");
@@ -24,13 +33,14 @@ public sealed class PayrollDisbursementPageTests
     }
 
     [Fact]
-    public void SidebarRestoresPayrollAndAddsCrewAndTemporaryWorkerEntries()
+    public void SidebarKeepsEmployeePayrollAndCrewEntriesWithoutTemporaryWorkerEntryPoint()
     {
         var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
 
+        layout.Should().Contain("asp-page=\"/Employees/Index\"");
         layout.Should().Contain("asp-page=\"/Payroll/Index\"");
         layout.Should().Contain("asp-page=\"/Crews/Index\"");
-        layout.Should().Contain("asp-page=\"/TemporaryWorkers/Index\"");
+        layout.Should().NotContain("/TemporaryWorkers");
     }
 
     [Fact]

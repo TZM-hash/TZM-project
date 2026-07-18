@@ -4,18 +4,14 @@ public sealed record PayrollDisbursementLineInput(
     PayrollRecipientType RecipientType,
     Guid? EmployeeId,
     Guid? ConstructionWorkerId,
-    Guid? TemporaryWorkerId,
     Guid? CrewBusinessPartnerId,
     decimal Amount)
 {
     public static PayrollDisbursementLineInput ForEmployee(Guid employeeId, decimal amount) =>
-        new(PayrollRecipientType.Employee, employeeId, null, null, null, amount);
+        new(PayrollRecipientType.Employee, employeeId, null, null, amount);
 
     public static PayrollDisbursementLineInput ForCrewWorker(Guid constructionWorkerId, Guid crewBusinessPartnerId, decimal amount) =>
-        new(PayrollRecipientType.CrewWorker, null, constructionWorkerId, null, crewBusinessPartnerId, amount);
-
-    public static PayrollDisbursementLineInput ForTemporaryWorker(Guid temporaryWorkerId, decimal amount) =>
-        new(PayrollRecipientType.TemporaryWorker, null, null, temporaryWorkerId, null, amount);
+        new(PayrollRecipientType.CrewWorker, null, constructionWorkerId, crewBusinessPartnerId, amount);
 }
 
 public sealed record PayrollCrewAmount(Guid CrewBusinessPartnerId, decimal Amount);
@@ -23,7 +19,6 @@ public sealed record PayrollCrewAmount(Guid CrewBusinessPartnerId, decimal Amoun
 public sealed record PayrollDisbursementSummary(
     decimal EmployeeAmount,
     decimal CrewAmount,
-    decimal TemporaryAmount,
     decimal DetailAmount,
     decimal ActualAmount,
     decimal Difference,
@@ -66,12 +61,10 @@ public static class PayrollDisbursementRules
             .OrderBy(item => item.CrewBusinessPartnerId)
             .ToArray();
         var crewAmount = crewAmounts.Sum(item => item.Amount);
-        var temporaryAmount = items.Where(item => item.RecipientType == PayrollRecipientType.TemporaryWorker).Sum(item => item.Amount);
-        var detailAmount = employeeAmount + crewAmount + temporaryAmount;
+        var detailAmount = employeeAmount + crewAmount;
         return new PayrollDisbursementSummary(
             employeeAmount,
             crewAmount,
-            temporaryAmount,
             detailAmount,
             actualAmount,
             actualAmount - detailAmount,
@@ -107,11 +100,9 @@ public static class PayrollDisbursementRules
         var valid = item.RecipientType switch
         {
             PayrollRecipientType.Employee =>
-                item.EmployeeId.HasValue && !item.ConstructionWorkerId.HasValue && !item.TemporaryWorkerId.HasValue && !item.CrewBusinessPartnerId.HasValue,
+                item.EmployeeId.HasValue && !item.ConstructionWorkerId.HasValue && !item.CrewBusinessPartnerId.HasValue,
             PayrollRecipientType.CrewWorker =>
-                !item.EmployeeId.HasValue && item.ConstructionWorkerId.HasValue && !item.TemporaryWorkerId.HasValue && item.CrewBusinessPartnerId.HasValue,
-            PayrollRecipientType.TemporaryWorker =>
-                !item.EmployeeId.HasValue && !item.ConstructionWorkerId.HasValue && item.TemporaryWorkerId.HasValue && !item.CrewBusinessPartnerId.HasValue,
+                !item.EmployeeId.HasValue && item.ConstructionWorkerId.HasValue && item.CrewBusinessPartnerId.HasValue,
             _ => false
         };
         if (!valid)
@@ -124,7 +115,6 @@ public static class PayrollDisbursementRules
     {
         PayrollRecipientType.Employee => $"employee:{item.EmployeeId}",
         PayrollRecipientType.CrewWorker => $"crew:{item.ConstructionWorkerId}",
-        PayrollRecipientType.TemporaryWorker => $"temporary:{item.TemporaryWorkerId}",
         _ => throw new ArgumentOutOfRangeException(nameof(item))
     };
 }

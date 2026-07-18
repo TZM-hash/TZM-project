@@ -29,8 +29,6 @@ public static class PermissionKeys
     public const string PayrollManage = "payroll.manage";
     public const string ConstructionCrewsRead = "construction-crews.read";
     public const string ConstructionCrewsManage = "construction-crews.manage";
-    public const string TemporaryWorkersRead = "temporary-workers.read";
-    public const string TemporaryWorkersManage = "temporary-workers.manage";
     public const string SensitivePersonnelRead = "personnel.sensitive.read";
     public const string EmployeeLedgerRead = "employee-ledger.read";
     public const string EmployeeLedgerManage = "employee-ledger.manage";
@@ -75,8 +73,6 @@ public static class PermissionKeys
         PayrollManage,
         ConstructionCrewsRead,
         ConstructionCrewsManage,
-        TemporaryWorkersRead,
-        TemporaryWorkersManage,
         SensitivePersonnelRead,
         EmployeeLedgerRead,
         EmployeeLedgerManage,
@@ -124,8 +120,6 @@ public static class PermissionKeys
                 PayrollManage,
                 ConstructionCrewsRead,
                 ConstructionCrewsManage,
-                TemporaryWorkersRead,
-                TemporaryWorkersManage,
                 SensitivePersonnelRead,
                 EmployeeLedgerRead,
                 EmployeeLedgerManage,
@@ -141,10 +135,10 @@ public static class PermissionKeys
                 ,EquipmentSettlementManage
                 ,EquipmentMaintenanceManage
             },
-            [SystemRoles.Finance] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, FinanceManage, FinancialAccountsManage, EmployeesRead, PayrollRead, PayrollManage, ConstructionCrewsRead, TemporaryWorkersRead, TemporaryWorkersManage, SensitivePersonnelRead, EmployeeLedgerRead, EmployeeLedgerManage, RemindersRead, CompaniesRead },
+            [SystemRoles.Finance] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, FinanceManage, FinancialAccountsManage, EmployeesRead, PayrollRead, PayrollManage, ConstructionCrewsRead, SensitivePersonnelRead, EmployeeLedgerRead, EmployeeLedgerManage, RemindersRead, CompaniesRead },
             [SystemRoles.ProjectManager] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, ProjectsManage, ContractsManage, PartnersRead, PartnersManage, ConstructionCrewsRead, ConstructionCrewsManage, StageResultsRead, StageResultsCreate, StageResultsManage, EmployeesRead, RemindersRead, CompaniesRead },
             [SystemRoles.SiteStaff] = new HashSet<string>(StringComparer.Ordinal) { ProjectsRead, PartnersRead, StageResultsRead, StageResultsCreate },
-            [SystemRoles.QueryOnly] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, ConstructionCrewsRead, TemporaryWorkersRead, StageResultsRead, FinanceRead, EmployeesRead, PayrollRead, EmployeeLedgerRead, RemindersRead, CompaniesRead, EquipmentRead },
+            [SystemRoles.QueryOnly] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, ConstructionCrewsRead, StageResultsRead, FinanceRead, EmployeesRead, PayrollRead, EmployeeLedgerRead, RemindersRead, CompaniesRead, EquipmentRead },
             [SystemRoles.EquipmentManager] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, CompaniesRead, RemindersRead, EquipmentRead, EquipmentManage, EquipmentUsageManage, EquipmentSettlementManage, EquipmentMaintenanceManage }
         };
 

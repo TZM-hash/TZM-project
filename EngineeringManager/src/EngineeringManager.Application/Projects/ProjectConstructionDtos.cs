@@ -11,7 +11,7 @@ public sealed record ProjectConstructionRecordDto(
     Guid Id, Guid ProjectId, ProjectConstructionRecordType RecordType, Guid SubjectId, string SubjectLabel,
     Guid? TransferFromProjectId, string? TransferFromProjectName, DateOnly? EntryDate, DateOnly? ExitDate,
     int TotalDays, int StopDays, int WorkDays, Guid? TransferToProjectId, string? TransferToProjectName,
-    string? Notes, bool IsDraft, Guid ConcurrencyStamp);
+    string? Notes, bool IsDraft, Guid ConcurrencyStamp, bool ShowInProjectOverview = false);
 
 public sealed record ProjectConstructionWorkspaceDto(
     IReadOnlyList<ProjectConstructionRecordDto> Records,
@@ -23,7 +23,7 @@ public sealed record SaveProjectConstructionRecordRequest(
     Guid? Id, Guid ProjectId, ProjectConstructionRecordType RecordType, Guid? EquipmentId,
     Guid? CrewBusinessPartnerId, Guid? TransferFromProjectId, Guid? TransferToProjectId,
     DateOnly? EntryDate, DateOnly? ExitDate, int StopDays, string? Notes, bool AutoConnectPrevious,
-    Guid? ConcurrencyStamp, string Reason);
+    Guid? ConcurrencyStamp, string Reason, bool ShowInProjectOverview = false);
 
 public sealed record CreateProjectEquipmentRequest(
     string EquipmentNumber, string Name, string? Model, string? Category,

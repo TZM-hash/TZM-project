@@ -77,7 +77,9 @@ public sealed record FinanceEntryOptionsDto(
     IReadOnlyList<FinanceOptionDto> Receivables,
     IReadOnlyList<FinanceOptionDto> Payables,
     IReadOnlyList<FinanceOptionDto> Collections,
-    IReadOnlyList<FinanceOptionDto> Payments);
+    IReadOnlyList<FinanceOptionDto> Payments,
+    IReadOnlyList<FinanceOptionDto>? ProjectLegalEntities = null,
+    IReadOnlyList<FinanceOptionDto>? ProjectTaxConfigurations = null);
 
 public sealed record CreateReceivableRequest(
     Guid ProjectId,
@@ -168,8 +170,7 @@ public sealed record CreateInvoiceRequest(
     InvoiceDirection Direction,
     string InvoiceNumber,
     DateOnly InvoiceDate,
-    string? InvoiceType,
-    decimal TaxRate,
+    Guid ProjectTaxConfigurationId,
     decimal NetAmount,
     decimal TaxAmount,
     decimal GrossAmount,
@@ -191,8 +192,8 @@ public sealed record UpdateCollectionRequest(
 
 public sealed record UpdateInvoiceRequest(
     Guid Id, Guid ProjectId, Guid? ContractId, Guid LegalEntityId, Guid? BusinessPartnerId,
-    InvoiceDirection Direction, string InvoiceNumber, DateOnly InvoiceDate, string? InvoiceType,
-    decimal TaxRate, decimal NetAmount, decimal TaxAmount, decimal GrossAmount, InvoiceStatus Status,
+    InvoiceDirection Direction, string InvoiceNumber, DateOnly InvoiceDate, Guid ProjectTaxConfigurationId,
+    decimal NetAmount, decimal TaxAmount, decimal GrossAmount, InvoiceStatus Status,
     Guid ConcurrencyStamp, string Reason);
 
 public sealed record UpdatePayableRequest(

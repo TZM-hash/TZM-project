@@ -5,7 +5,7 @@ const SHELL = [
   '/js/components/data-table.js', '/js/components/saved-views.js', '/js/components/filter-drawer.js', '/js/components/charts.js', '/js/components/quick-edit.js',
   '/js/offline-stage-results.js', '/js/offline-equipment.js', '/img/icons.svg', '/manifest.webmanifest'
 ];
-const SENSITIVE_PREFIXES = ['/api/', '/Finance', '/Payroll', '/EmployeeLedger', '/Employees', '/Crews', '/TemporaryWorkers', '/DataExchange', '/Backups', '/Reminders', '/Projects/Contracts', '/Equipment/Settlement'];
+const SENSITIVE_PREFIXES = ['/api/', '/Finance', '/Payroll', '/EmployeeLedger', '/Employees', '/Crews', '/DataExchange', '/Backups', '/Reminders', '/Projects/Contracts', '/Equipment/Settlement'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

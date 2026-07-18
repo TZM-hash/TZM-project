@@ -18,9 +18,9 @@ public sealed class Project
     public OrganizationUnit? Department { get; set; }
     public Guid? BranchId { get; set; }
     public OrganizationUnit? Branch { get; set; }
-    public ProjectStage Stage { get; set; } = ProjectStage.Preliminary;
+    public ProjectStage Stage { get; set; } = ProjectStage.AwaitingMobilization;
+    public ContractSigningStatus ContractSigningStatus { get; set; } = ContractSigningStatus.NotSigned;
     public ProjectAffiliationType AffiliationType { get; set; } = ProjectAffiliationType.SelfOperated;
-    public ArchiveStatus ArchiveStatus { get; set; } = ArchiveStatus.NotArchived;
     public DateOnly? ActualStartDate { get; set; }
     public DateOnly? ActualCompletionDate { get; set; }
     public string? Notes { get; set; }
@@ -34,4 +34,5 @@ public sealed class Project
     public ICollection<Contract> Contracts { get; set; } = [];
     public ICollection<ProjectPartner> Partners { get; set; } = [];
     public ICollection<ProjectConstructionRecord> ConstructionRecords { get; set; } = [];
+    public ICollection<ProjectTaxConfiguration> TaxConfigurations { get; set; } = [];
 }

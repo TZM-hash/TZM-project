@@ -25,13 +25,22 @@ public sealed record ProjectWorkspaceOverviewDto(
     string? BranchName,
     ProjectStage Stage,
     ProjectAffiliationType AffiliationType,
-    ArchiveStatus ArchiveStatus,
     IReadOnlyList<ProjectWorkspaceOptionDto> LegalEntities,
     DateTimeOffset UpdatedAt,
     Guid ConcurrencyStamp,
     DateOnly? ActualStartDate = null,
     DateOnly? ActualCompletionDate = null,
-    string? Notes = null);
+    string? Notes = null,
+    ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
+    IReadOnlyList<ProjectTaxConfigurationDto>? TaxConfigurations = null);
+
+public sealed record ProjectOverviewEquipmentDto(
+    Guid ConstructionRecordId,
+    Guid EquipmentId,
+    string EquipmentNumber,
+    string EquipmentName,
+    DateOnly? EntryDate,
+    DateOnly? ExitDate);
 
 public sealed record ProjectEditOptionsDto(
     IReadOnlyList<ProjectWorkspaceOptionDto> ResponsibleUsers,
@@ -52,13 +61,14 @@ public sealed record UpdateProjectRequest(
     Guid? BranchId,
     ProjectStage Stage,
     ProjectAffiliationType AffiliationType,
-    ArchiveStatus ArchiveStatus,
     IReadOnlyCollection<Guid> LegalEntityIds,
     Guid ConcurrencyStamp,
     string Reason,
     DateOnly? ActualStartDate = null,
     DateOnly? ActualCompletionDate = null,
-    string? Notes = null);
+    string? Notes = null,
+    ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
+    IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null);
 
 public sealed record ProjectReceivableItemDto(
     Guid Id,
@@ -109,6 +119,7 @@ public sealed record ProjectInvoiceItemDto(
     Guid? LegalEntityId = null,
     Guid? BusinessPartnerId = null,
     string? InvoiceType = null,
+    Guid? ProjectTaxConfigurationId = null,
     Guid ConcurrencyStamp = default);
 
 public sealed record ProjectPayableItemDto(
@@ -195,4 +206,5 @@ public sealed record ProjectWorkspaceDto(
     IReadOnlyList<ProjectActivityItemDto> Activities,
     IReadOnlyList<ProjectMilestoneDto>? Milestones = null,
     IReadOnlyList<ProjectAssignmentDto>? Assignments = null,
-    IReadOnlyList<ProjectPartnerLinkDto>? Partners = null);
+    IReadOnlyList<ProjectPartnerLinkDto>? Partners = null,
+    IReadOnlyList<ProjectOverviewEquipmentDto>? OverviewEquipment = null);

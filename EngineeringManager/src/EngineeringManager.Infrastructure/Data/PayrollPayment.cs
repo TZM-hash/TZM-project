@@ -14,8 +14,6 @@ public sealed class PayrollPayment
     public Employee? Employee { get; set; }
     public Guid? ConstructionWorkerId { get; set; }
     public ConstructionWorker? ConstructionWorker { get; set; }
-    public Guid? TemporaryWorkerId { get; set; }
-    public TemporaryWorker? TemporaryWorker { get; set; }
     public Guid? CrewBusinessPartnerId { get; set; }
     public BusinessPartner? CrewBusinessPartner { get; set; }
     public Guid? AccountId { get; set; }

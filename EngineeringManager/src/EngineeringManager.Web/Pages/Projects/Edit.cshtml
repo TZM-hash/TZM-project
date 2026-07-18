@@ -1,5 +1,8 @@
 @page
 @model EngineeringManager.Web.Pages.Projects.EditModel
+@using EngineeringManager.Domain.Finance
+@using EngineeringManager.Domain.Projects
+@using EngineeringManager.Web.Presentation
 @{
     ViewData["Title"] = Model.IsEditing ? "编辑项目" : "新增项目";
 }
@@ -15,12 +18,11 @@
     <section class="form-section"><h2 class="section-heading">项目基础资料</h2>
         <label>项目编号<input asp-for="ProjectNumber" required /></label><label>项目名称<input asp-for="Name" required /></label>
         <label>上级/总项目名称<input asp-for="ParentProjectName" /></label>
-        <label>当前阶段<select asp-for="Stage" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Projects.ProjectStage>()"></select></label>
+        <label>当前阶段<select asp-for="Stage">@foreach (var value in Enum.GetValues<ProjectStage>()) { <option value="@value">@value.ToChinese()</option> }</select></label>
+        <label>合同签订状态<select asp-for="ContractSigningStatus">@foreach (var value in Enum.GetValues<ContractSigningStatus>()) { <option value="@value">@value.ToChinese()</option> }</select></label>
         <label>项目合作方式<select asp-for="AffiliationType"><option value="1">自营项目</option><option value="2">他方挂靠我方</option><option value="3">我方挂靠他方</option></select></label>
-        <label>归档状态<select asp-for="ArchiveStatus" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Projects.ArchiveStatus>()"></select></label>
         <label>实际开工日期<input asp-for="ActualStartDate" type="date" /></label>
         <label>实际完工日期<input asp-for="ActualCompletionDate" type="date" /></label>
-        <label class="form-span">项目备注<textarea asp-for="Notes" rows="3"></textarea></label>
     </section>
     <section class="form-section"><h2 class="section-heading">总包与负责人</h2>
         <label>总包单位<input asp-for="GeneralContractorName" /></label><label>总包联系人<input asp-for="GeneralContractorContact" /></label>
@@ -32,6 +34,16 @@
     <section class="form-section form-span"><h2 class="section-heading">我方签约公司</h2><p class="section-help">可勾选多家公司；第一家公司作为默认主签约公司，合同层级仍可分别维护金额。</p>
         <div class="choice-grid">@foreach (var item in Model.Options.LegalEntities) { var id = Guid.Parse(item.Value); <label class="choice-card"><input type="checkbox" name="LegalEntityIds" value="@item.Value" checked="@(Model.LegalEntityIds.Contains(id) ? "checked" : null)" /><span>@item.Label</span></label> }</div>
     </section>
+    <section class="form-section form-span"><h2 class="section-heading">税金</h2><p class="section-help">可同时选择多种税率和票种；发票录入只能使用这里启用的组合。</p>
+        <div class="project-tax-matrix" data-project-tax-matrix>
+            @foreach (var rate in ProjectTaxRules.AllowedRates)
+            {
+                var percent = decimal.ToInt32(rate * 100m);
+                <div class="project-tax-row"><strong>@percent%</strong>@foreach (var invoiceType in Enum.GetValues<ProjectInvoiceType>()) { var token = $"{percent}|{(int)invoiceType}"; <label><input type="checkbox" name="TaxConfigurationSelections" value="@token" checked="@(Model.TaxConfigurationSelections.Contains(token) ? "checked" : null)" /><span>@invoiceType.ToChinese()</span></label> }</div>
+            }
+        </div>
+    </section>
+    <label class="form-span project-summary-notes">项目备注<textarea asp-for="Notes" rows="5"></textarea></label>
     @if (Model.IsEditing) { <label class="form-span">修改原因<textarea asp-for="Reason" rows="2" required></textarea></label> }
     <div class="sticky-actions form-span"><button class="button button--primary" type="submit">保存项目资料</button></div>
 </form>

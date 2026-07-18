@@ -1,4 +1,5 @@
 using EngineeringManager.Infrastructure.Development;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Identity;
@@ -103,8 +104,11 @@ public sealed class DevelopmentSampleDataSeederTests
         (await fixture.Db.PayrollBatches.CountAsync()).Should().Be(13);
         (await fixture.Db.PayrollBatches.CountAsync(item => item.IsUnifiedDisbursement)).Should().Be(1);
         (await fixture.Db.ConstructionWorkers.CountAsync()).Should().BeGreaterThanOrEqualTo(2);
-        (await fixture.Db.TemporaryWorkers.CountAsync()).Should().BeGreaterThanOrEqualTo(1);
+        var temporaryEmployee = await fixture.Db.Employees.SingleAsync(item => item.EmployeeType == EmployeeType.Temporary);
         var unified = await fixture.Db.PayrollBatches.Include(item => item.Payments).SingleAsync(item => item.IsUnifiedDisbursement);
+        unified.Payments.Should().ContainSingle(item =>
+            item.RecipientType == PayrollRecipientType.Employee &&
+            item.EmployeeId == temporaryEmployee.Id);
         unified.Payments.Sum(item => item.Amount).Should().Be(unified.ActualAmount);
         (await fixture.Db.AccountTransactions.CountAsync(item => item.SourceType == EngineeringManager.Domain.Finance.AccountTransactionSourceType.PayrollPayment && item.SourceId == unified.Id)).Should().Be(1);
         (await fixture.Db.StageResults.CountAsync()).Should().BeGreaterThan(10);
@@ -124,7 +128,7 @@ public sealed class DevelopmentSampleDataSeederTests
         (await fixture.Db.EmployeeReceipts.CountAsync()).Should().BeGreaterThanOrEqualTo(2);
         (await fixture.Db.EmployeeFinancialAdjustments.CountAsync()).Should().BeGreaterThanOrEqualTo(2);
         (await fixture.Db.EmployeeFinancialAdjustments.CountAsync(item => item.ReversalOfId != null)).Should().BeGreaterThanOrEqualTo(1);
-        (await fixture.Db.Employees.CountAsync(item => item.Notes != null && item.Notes != string.Empty)).Should().Be(SampleDataCatalog.EmployeeCount);
+        (await fixture.Db.Employees.CountAsync(item => item.Notes != null && item.Notes != string.Empty)).Should().Be(await fixture.Db.Employees.CountAsync());
         (await fixture.Db.Projects.CountAsync(item => item.Notes != null && item.Notes != string.Empty)).Should().Be(SampleDataCatalog.ProjectCount);
     }
 

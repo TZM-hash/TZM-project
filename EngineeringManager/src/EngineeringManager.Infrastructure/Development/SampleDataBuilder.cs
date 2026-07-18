@@ -41,16 +41,15 @@ public sealed class SampleDataBuilder(
 
     private static readonly ProjectStage[] ProjectStages =
     [
-        ProjectStage.Preliminary,
-        ProjectStage.AwaitingContract,
+        ProjectStage.AwaitingMobilization,
         ProjectStage.AwaitingMobilization,
         ProjectStage.UnderConstruction,
         ProjectStage.UnderConstruction,
         ProjectStage.Suspended,
-        ProjectStage.CompletedAwaitingAcceptance,
-        ProjectStage.Settlement,
-        ProjectStage.Warranty,
-        ProjectStage.Closed
+        ProjectStage.CompletedUnsettled,
+        ProjectStage.CompletedUnsettled,
+        ProjectStage.SettledArchived,
+        ProjectStage.SettledArchived
     ];
 
     private static readonly (Guid Id, string Code, string Name, int SortOrder)[] CompanyCategoryDefinitions =
@@ -349,6 +348,7 @@ public sealed class SampleDataBuilder(
                 GeneralContractorPhone = $"1390000{number:0000}",
                 ResponsibleUserId = manager.Id,
                 Stage = stage,
+                ContractSigningStatus = ContractSigningStatus.FullySigned,
                 Notes = "演示项目主档备注，仅用于 EngineeringManager_Test。",
                 CreatedAt = anchor.AddMonths(-(index % 12 + 1)).ToDateTime(TimeOnly.MinValue),
                 UpdatedAt = anchor.AddDays(-(index % 35)).ToDateTime(TimeOnly.MinValue)
@@ -363,7 +363,7 @@ public sealed class SampleDataBuilder(
             project.Assignments.Add(new ProjectAssignment { Project = project, User = manager, UserId = manager.Id, AssignmentType = ProjectAssignmentType.Responsible });
             project.Assignments.Add(new ProjectAssignment { Project = project, User = siteStaff, UserId = siteStaff.Id, AssignmentType = ProjectAssignmentType.SiteStaff });
             project.Milestones.Add(new ProjectMilestone { Project = project, Name = "计划进场", PlannedDate = anchor.AddMonths(-6 + index % 4), ActualDate = stage >= ProjectStage.UnderConstruction ? anchor.AddMonths(-5 + index % 4) : null, IsCompleted = stage >= ProjectStage.UnderConstruction, SortOrder = 10 });
-            project.Milestones.Add(new ProjectMilestone { Project = project, Name = "计划完工", PlannedDate = anchor.AddMonths(2 + index % 5), ActualDate = stage >= ProjectStage.Settlement ? anchor.AddMonths(-1) : null, IsCompleted = stage >= ProjectStage.Settlement, SortOrder = 20 });
+            project.Milestones.Add(new ProjectMilestone { Project = project, Name = "计划完工", PlannedDate = anchor.AddMonths(2 + index % 5), ActualDate = stage >= ProjectStage.CompletedUnsettled ? anchor.AddMonths(-1) : null, IsCompleted = stage >= ProjectStage.CompletedUnsettled, SortOrder = 20 });
             db.Projects.Add(project);
             projects.Add(project);
         }
@@ -405,7 +405,7 @@ public sealed class SampleDataBuilder(
             TotalAmount = total
         };
         contract.LegalEntityAllocations.Add(new ContractLegalEntityAllocation { Contract = contract, LegalEntity = company, Amount = total });
-        var settled = stage >= ProjectStage.Settlement;
+        var settled = stage == ProjectStage.SettledArchived;
         var lineAmounts = new[] { total * 0.45m, total * 0.35m, total * 0.20m };
         var lineNames = new[] { "旋挖灌注桩施工", "钢筋笼制作安装", "设备进退场及措施费" };
         var units = new[] { "米", "吨", "项" };
@@ -632,17 +632,19 @@ public sealed class SampleDataBuilder(
                 db.ConstructionCrewMemberships.Add(new ConstructionCrewMembership { Worker = worker, CrewBusinessPartner = crew, StartDate = context.AnchorDate.AddMonths(-6), IsPrimary = true, Notes = "演示班组花名册" });
             }
 
-            var temporaryWorker = new TemporaryWorker
+            var temporaryEmployee = new Employee
             {
+                EmployeeNumber = "DEMO-E-TEMP-001",
                 Name = "演示临时人员甲",
+                EmployeeType = EmployeeType.Temporary,
                 Phone = "13900002001",
                 BankAccountNumber = "6222000000002001",
                 BankName = "演示银行",
-                Trade = "临时杂工",
-                DefaultProject = project,
+                PositionTitle = "临时杂工",
+                DefaultLegalEntity = company,
                 Notes = "统一工资批次演示人员"
             };
-            db.TemporaryWorkers.Add(temporaryWorker);
+            db.Employees.Add(temporaryEmployee);
 
             var paymentDate = context.AnchorDate.AddDays(-3);
             var employee = context.Employees[0];
@@ -669,7 +671,7 @@ public sealed class SampleDataBuilder(
             batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.Employee, RecipientKey = $"employee:{employee.Id:N}", Employee = employee, Amount = 6_800m, PayeeType = PayrollPayeeType.Employee, PayeeName = employee.Name, RecipientNameSnapshot = employee.Name, PhoneSnapshot = employee.Phone, Notes = "自有员工工资" });
             batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.CrewWorker, RecipientKey = $"crew:{workers[0].Id:N}", ConstructionWorker = workers[0], CrewBusinessPartner = crew, Amount = 4_500m, PayeeType = PayrollPayeeType.CrewLeader, PayeeName = workers[0].Name, RecipientNameSnapshot = workers[0].Name, IdentityNumberSnapshot = workers[0].IdentityNumber, PhoneSnapshot = workers[0].Phone, BankAccountSnapshot = workers[0].BankAccountNumber, TradeSnapshot = workers[0].Trade, CrewNameSnapshot = crew.Name, Notes = "班组民工工资代发" });
             batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.CrewWorker, RecipientKey = $"crew:{workers[1].Id:N}", ConstructionWorker = workers[1], CrewBusinessPartner = crew, Amount = 4_200m, PayeeType = PayrollPayeeType.CrewLeader, PayeeName = workers[1].Name, RecipientNameSnapshot = workers[1].Name, PhoneSnapshot = workers[1].Phone, BankAccountSnapshot = workers[1].BankAccountNumber, TradeSnapshot = workers[1].Trade, CrewNameSnapshot = crew.Name, Notes = "班组民工工资代发" });
-            batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.TemporaryWorker, RecipientKey = $"temporary:{temporaryWorker.Id:N}", TemporaryWorker = temporaryWorker, Amount = 3_100m, PayeeType = PayrollPayeeType.Employee, PayeeName = temporaryWorker.Name, RecipientNameSnapshot = temporaryWorker.Name, PhoneSnapshot = temporaryWorker.Phone, BankAccountSnapshot = temporaryWorker.BankAccountNumber, TradeSnapshot = temporaryWorker.Trade, Notes = "临时人员工资" });
+            batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.Employee, RecipientKey = $"employee:{temporaryEmployee.Id:N}", EmployeeId = temporaryEmployee.Id, Employee = temporaryEmployee, Amount = 3_100m, PayeeType = PayrollPayeeType.Employee, PayeeName = temporaryEmployee.Name, RecipientNameSnapshot = temporaryEmployee.Name, PhoneSnapshot = temporaryEmployee.Phone, BankAccountSnapshot = temporaryEmployee.BankAccountNumber, TradeSnapshot = temporaryEmployee.PositionTitle, Notes = "临时人员工资" });
             batch.CrewAllocations.Add(new PayrollCrewAllocation { Batch = batch, CrewBusinessPartner = crew, Notes = "按班组汇总映射至项目工程款明细" });
 
             var transaction = new AccountTransaction

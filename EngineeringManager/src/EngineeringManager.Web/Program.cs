@@ -26,8 +26,6 @@ using EngineeringManager.Application.Payroll;
 using EngineeringManager.Infrastructure.Payroll;
 using EngineeringManager.Application.ConstructionCrews;
 using EngineeringManager.Infrastructure.ConstructionCrews;
-using EngineeringManager.Application.TemporaryWorkers;
-using EngineeringManager.Infrastructure.TemporaryWorkers;
 using EngineeringManager.Application.EmployeeLedger;
 using EngineeringManager.Infrastructure.EmployeeLedger;
 using EngineeringManager.Application.EmployeeAnnualLedger;
@@ -95,7 +93,6 @@ public sealed class Program
         builder.Services.AddScoped<ICompanyCertificateService, CompanyCertificateService>();
         builder.Services.AddScoped<IPayrollService, PayrollService>();
         builder.Services.AddScoped<IConstructionCrewService, ConstructionCrewService>();
-        builder.Services.AddScoped<ITemporaryWorkerService, TemporaryWorkerService>();
         builder.Services.AddScoped<IEmployeeLedgerService, EmployeeLedgerService>();
         builder.Services.AddScoped<IBusinessYearService, BusinessYearService>();
         builder.Services.AddScoped<IEmployeeAnnualLedgerService>(services => new EmployeeAnnualLedgerService(

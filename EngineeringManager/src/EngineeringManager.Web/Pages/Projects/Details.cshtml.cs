@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Globalization;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
@@ -26,6 +27,7 @@ public sealed class DetailsModel(
     public bool CanManageFinance => CanManage || User.IsInRole(SystemRoles.Finance);
     public string? ActiveInlineEditor { get; private set; }
     [BindProperty(SupportsGet = true)] public string? Tab { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid? RecordId { get; set; }
     [BindProperty] public QuickEditInput QuickEdit { get; set; } = new();
     [BindProperty] public QuantityEditInput QuantityEdit { get; set; } = new();
     [BindProperty] public CollectionEditInput CollectionEdit { get; set; } = new();
@@ -38,6 +40,7 @@ public sealed class DetailsModel(
 
     public async Task<IActionResult> OnGetAsync(Guid id, CancellationToken cancellationToken)
     {
+        if (RecordId.HasValue) Tab = "construction";
         await LoadAsync(id, true, cancellationToken);
         return Page();
     }
@@ -63,13 +66,14 @@ public sealed class DetailsModel(
                     QuickEdit.BranchId,
                     QuickEdit.Stage,
                     QuickEdit.AffiliationType,
-                    QuickEdit.ArchiveStatus,
                     QuickEdit.LegalEntityIds,
                     QuickEdit.ConcurrencyStamp,
                     RequiredText(QuickEdit.Reason, "请填写修改原因。"),
                     QuickEdit.ActualStartDate,
                     QuickEdit.ActualCompletionDate,
-                    QuickEdit.Notes),
+                    QuickEdit.Notes,
+                    QuickEdit.ContractSigningStatus,
+                    ParseTaxConfigurations(QuickEdit.TaxConfigurationSelections)),
                 cancellationToken);
             return RedirectToPage(new { id });
         }
@@ -149,7 +153,7 @@ public sealed class DetailsModel(
             await financeService.AddInvoiceAsync(new CreateInvoiceRequest(
                 id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), InvoiceEdit.BusinessPartnerId,
                 InvoiceEdit.Direction, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
-                null, InvoiceEdit.TaxRate, InvoiceEdit.NetAmount, InvoiceEdit.TaxAmount, Positive(InvoiceEdit.GrossAmount),
+                Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), InvoiceEdit.NetAmount, InvoiceEdit.TaxAmount, Positive(InvoiceEdit.GrossAmount),
                 InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
             return RedirectToPage(new { id, tab = "invoice" });
         }
@@ -216,8 +220,8 @@ public sealed class DetailsModel(
                 case FinanceEntryKind.Invoice:
                     await financeService.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(
                         FinanceRowEdit.Id, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), FinanceRowEdit.BusinessPartnerId,
-                        FinanceRowEdit.Direction, RequiredText(FinanceRowEdit.InvoiceNumber, "请填写发票号码。"), FinanceRowEdit.EntryDate, FinanceRowEdit.InvoiceType,
-                        FinanceRowEdit.TaxRate, FinanceRowEdit.NetAmount, FinanceRowEdit.TaxAmount, Positive(FinanceRowEdit.Amount), FinanceRowEdit.InvoiceStatus,
+                        FinanceRowEdit.Direction, RequiredText(FinanceRowEdit.InvoiceNumber, "请填写发票号码。"), FinanceRowEdit.EntryDate,
+                        Required(FinanceRowEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), FinanceRowEdit.NetAmount, FinanceRowEdit.TaxAmount, Positive(FinanceRowEdit.Amount), FinanceRowEdit.InvoiceStatus,
                         FinanceRowEdit.ConcurrencyStamp, reason), cancellationToken);
                     break;
                 case FinanceEntryKind.Payable:
@@ -256,7 +260,7 @@ public sealed class DetailsModel(
                 ConstructionEdit.TransferFromProjectId, ConstructionEdit.TransferToProjectId, ConstructionEdit.EntryDate, ConstructionEdit.ExitDate,
                 ConstructionEdit.StopDays, ConstructionEdit.Notes, ConstructionEdit.AutoConnectPrevious,
                 ConstructionEdit.ConcurrencyStamp == Guid.Empty ? null : ConstructionEdit.ConcurrencyStamp,
-                RequiredText(ConstructionEdit.Reason, "请填写修改原因。")), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+                RequiredText(ConstructionEdit.Reason, "请填写修改原因。"), ConstructionEdit.ShowInProjectOverview), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
             return RedirectToPage(new { id, tab = "construction" });
         }
         catch (Exception exception) when (IsEditableException(exception))
@@ -337,6 +341,7 @@ public sealed class DetailsModel(
         CollectionEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
         InvoiceEdit.ContractId = defaultContractId;
         InvoiceEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
+        InvoiceEdit.ProjectTaxConfigurationId = Workspace.Overview.TaxConfigurations?.FirstOrDefault(item => item.IsActive)?.Id;
         PaymentEdit.ContractId = defaultContractId;
         PaymentEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
     }
@@ -347,6 +352,15 @@ public sealed class DetailsModel(
     private static Guid Required(Guid? value, string message) => value is { } id && id != Guid.Empty ? id : throw new ArgumentException(message);
     private static string RequiredText(string? value, string message) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException(message);
     private static decimal Positive(decimal value) => value > 0 ? value : throw new ArgumentException("金额必须大于 0。");
+    private static ProjectTaxConfigurationInput[] ParseTaxConfigurations(IEnumerable<string> selections) =>
+        selections.Where(item => !string.IsNullOrWhiteSpace(item)).Select(item =>
+        {
+            var parts = item.Split('|', StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var percent) ||
+                !Enum.TryParse<ProjectInvoiceType>(parts[1], out var invoiceType))
+                throw new ArgumentException("项目税金配置格式无效。");
+            return new ProjectTaxConfigurationInput(percent / 100m, invoiceType);
+        }).ToArray();
 
     public sealed class QuickEditInput
     {
@@ -360,12 +374,13 @@ public sealed class DetailsModel(
         public Guid? DepartmentId { get; set; }
         public Guid? BranchId { get; set; }
         public ProjectStage Stage { get; set; }
+        public ContractSigningStatus ContractSigningStatus { get; set; }
         public ProjectAffiliationType AffiliationType { get; set; }
-        public ArchiveStatus ArchiveStatus { get; set; }
         public DateOnly? ActualStartDate { get; set; }
         public DateOnly? ActualCompletionDate { get; set; }
         public string? Notes { get; set; }
         public List<Guid> LegalEntityIds { get; set; } = [];
+        public List<string> TaxConfigurationSelections { get; set; } = [];
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "快捷编辑项目资料";
 
@@ -381,12 +396,14 @@ public sealed class DetailsModel(
             DepartmentId = item.DepartmentId,
             BranchId = item.BranchId,
             Stage = item.Stage,
+            ContractSigningStatus = item.ContractSigningStatus,
             AffiliationType = item.AffiliationType,
-            ArchiveStatus = item.ArchiveStatus,
             ActualStartDate = item.ActualStartDate,
             ActualCompletionDate = item.ActualCompletionDate,
             Notes = item.Notes,
             LegalEntityIds = item.LegalEntities.Select(option => Guid.Parse(option.Value)).ToList(),
+            TaxConfigurationSelections = item.TaxConfigurations?.Where(configuration => configuration.IsActive)
+                .Select(configuration => $"{configuration.TaxRate * 100m:0}|{(int)configuration.InvoiceType}").ToList() ?? [],
             ConcurrencyStamp = item.ConcurrencyStamp
         };
     }
@@ -429,6 +446,7 @@ public sealed class DetailsModel(
         public InvoiceDirection Direction { get; set; } = InvoiceDirection.Output;
         public string InvoiceNumber { get; set; } = string.Empty;
         public DateOnly InvoiceDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public Guid? ProjectTaxConfigurationId { get; set; }
         public decimal TaxRate { get; set; }
         public decimal NetAmount { get; set; }
         public decimal TaxAmount { get; set; }
@@ -468,6 +486,7 @@ public sealed class DetailsModel(
         public InvoiceDirection Direction { get; set; }
         public string InvoiceNumber { get; set; } = string.Empty;
         public string? InvoiceType { get; set; }
+        public Guid? ProjectTaxConfigurationId { get; set; }
         public decimal TaxRate { get; set; }
         public decimal NetAmount { get; set; }
         public decimal TaxAmount { get; set; }
@@ -488,6 +507,7 @@ public sealed class DetailsModel(
         public int StopDays { get; set; }
         public string? Notes { get; set; }
         public bool AutoConnectPrevious { get; set; }
+        public bool ShowInProjectOverview { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "项目管理页面快捷修改施工详情";
     }

@@ -27,12 +27,20 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
     [BindProperty] public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.BankTransfer;
     [BindProperty] public InvoiceDirection InvoiceDirection { get; set; } = InvoiceDirection.Output;
     [BindProperty] public string? InvoiceNumber { get; set; }
-    [BindProperty] public decimal TaxRate { get; set; }
+    [BindProperty] public Guid? ProjectTaxConfigurationId { get; set; }
     [BindProperty] public decimal NetAmount { get; set; }
     [BindProperty] public decimal TaxAmount { get; set; }
     [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
 
-    public async Task OnGetAsync(CancellationToken cancellationToken) => Options = await financeService.GetEntryOptionsAsync(cancellationToken);
+    public async Task OnGetAsync(CancellationToken cancellationToken)
+    {
+        Options = await financeService.GetEntryOptionsAsync(cancellationToken);
+        if (ProjectId != Guid.Empty)
+        {
+            if (LegalEntityId == Guid.Empty) LegalEntityId = Options.ProjectLegalEntities?.FirstOrDefault(item => item.ParentId == ProjectId)?.Id ?? Guid.Empty;
+            ProjectTaxConfigurationId ??= Options.ProjectTaxConfigurations?.FirstOrDefault(item => item.ParentId == ProjectId)?.Id;
+        }
+    }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
@@ -80,7 +88,7 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
                 await financeService.TransferAsync(new CreateAccountTransferRequest(Required(AccountId, "请选择转出账户。"), Required(SecondaryAccountId, "请选择转入账户。"), EntryDate, Amount, Description), cancellationToken);
                 break;
             case FinanceEntryKind.Invoice:
-                await financeService.AddInvoiceAsync(new CreateInvoiceRequest(ProjectId, ContractId, LegalEntityId, BusinessPartnerId, InvoiceDirection, RequiredText(InvoiceNumber, "请填写发票号码。"), EntryDate, null, TaxRate, NetAmount, TaxAmount, Amount, InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
+                await financeService.AddInvoiceAsync(new CreateInvoiceRequest(ProjectId, ContractId, LegalEntityId, BusinessPartnerId, InvoiceDirection, RequiredText(InvoiceNumber, "请填写发票号码。"), EntryDate, Required(ProjectTaxConfigurationId, "请选择税率和发票类型。"), NetAmount, TaxAmount, Amount, InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
                 break;
             default:
                 throw new InvalidOperationException("不支持的财务业务类型。");

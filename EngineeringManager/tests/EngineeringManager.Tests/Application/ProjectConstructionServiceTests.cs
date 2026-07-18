@@ -1,5 +1,6 @@
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Equipment;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Equipment;
@@ -62,5 +63,38 @@ public sealed class ProjectConstructionServiceTests
         var saved = await service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(null, project.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null, new DateOnly(2026, 7, 1), null, 0, null, false, null, "新增"), new DateOnly(2026, 7, 17), CancellationToken.None);
         var stale = () => service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(saved.Id, project.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null, new DateOnly(2026, 7, 1), null, 0, null, false, Guid.NewGuid(), "过期修改"), new DateOnly(2026, 7, 17), CancellationToken.None);
         await stale.Should().ThrowAsync<DbUpdateConcurrencyException>();
+    }
+
+    [Fact]
+    public async Task OverviewFlagIsAllowedForEquipmentOnlyAndIsNotCopiedToTransferDraft()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var source = new Project { ProjectNumber = "CONS-FLAG-01", Name = "机械标记来源项目" };
+        var target = new Project { ProjectNumber = "CONS-FLAG-02", Name = "机械标记目标项目" };
+        var equipment = new Equipment { EquipmentNumber = "EQ-CONS-FLAG", Name = "重要机械" };
+        var crew = new BusinessPartner { PartnerNumber = "CREW-CONS-FLAG", Name = "施工班组", ShortName = "施工班组" };
+        crew.Roles.Add(new BusinessPartnerRole { Partner = crew, RoleType = BusinessPartnerRoleType.ConstructionCrew });
+        db.AddRange(source, target, equipment, crew);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+        var actor = new ProjectConstructionActor("project-manager", "项目经理");
+
+        var saved = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, target.Id,
+                new DateOnly(2026, 7, 1), null, 0, null, false, null, "显示重要机械", ShowInProjectOverview: true),
+            new DateOnly(2026, 7, 18), CancellationToken.None);
+
+        saved.ShowInProjectOverview.Should().BeTrue();
+        (await db.ProjectConstructionRecords.SingleAsync(item => item.Id == saved.Id)).ShowInProjectOverview.Should().BeTrue();
+        (await db.ProjectConstructionRecords.SingleAsync(item => item.ProjectId == target.Id)).ShowInProjectOverview.Should().BeFalse();
+
+        var crewAction = () => service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.ConstructionCrew, null, crew.Id, null, null,
+                new DateOnly(2026, 7, 1), null, 0, null, false, null, "错误显示班组", ShowInProjectOverview: true),
+            new DateOnly(2026, 7, 18), CancellationToken.None);
+        await crewAction.Should().ThrowAsync<ArgumentException>().WithMessage("*施工班组不能显示在项目总览*");
     }
 }

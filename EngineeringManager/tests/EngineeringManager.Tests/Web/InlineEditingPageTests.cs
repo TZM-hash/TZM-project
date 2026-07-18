@@ -34,6 +34,14 @@ public sealed class InlineEditingPageTests
     }
 
     [Fact]
+    public void FinanceProjectScopedSelectsLoadTheirClientSideFilteringModule()
+    {
+        var siteScript = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "site.js");
+
+        siteScript.Should().Contain("[data-finance-project-select]");
+    }
+
+    [Fact]
     public void RowEditorsAreNotNestedInsideAnotherInlineEditor()
     {
         var employees = ReadPage("Employees", "Index.cshtml");

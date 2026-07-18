@@ -19,6 +19,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .Include(item => item.Department)
             .Include(item => item.Branch)
             .Include(item => item.LegalEntities).ThenInclude(item => item.LegalEntity)
+            .Include(item => item.TaxConfigurations)
             .Include(item => item.Contracts).ThenInclude(item => item.LineItems)
             .Include(item => item.Milestones)
             .Include(item => item.Assignments).ThenInclude(item => item.User)
@@ -50,7 +51,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .Select(item => new ProjectInvoiceItemDto(item.Id, item.InvoiceDate, item.InvoiceNumber, item.Direction,
                 item.Contract == null ? null : item.Contract.ContractNumber, item.LegalEntity.ShortName,
                 item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status,
-                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.InvoiceType, item.ConcurrencyStamp))
+                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.InvoiceType, item.ProjectTaxConfigurationId, item.ConcurrencyStamp))
             .ToListAsync(cancellationToken);
         var payables = await db.PayableEntries.AsNoTracking()
             .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
@@ -123,6 +124,19 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             }));
         payments = payments.OrderByDescending(item => item.PaymentDate).ThenBy(item => item.BusinessPartnerName).ToList();
 
+        var overviewEquipment = await db.ProjectConstructionRecords.AsNoTracking()
+            .Where(item => item.ProjectId == projectId && item.RecordType == EngineeringManager.Domain.Projects.ProjectConstructionRecordType.Equipment && item.ShowInProjectOverview)
+            .OrderByDescending(item => item.EntryDate)
+            .ThenBy(item => item.Equipment!.EquipmentNumber)
+            .Select(item => new ProjectOverviewEquipmentDto(
+                item.Id,
+                item.EquipmentId!.Value,
+                item.Equipment!.EquipmentNumber,
+                item.Equipment.Name,
+                item.EntryDate,
+                item.ExitDate))
+            .ToListAsync(cancellationToken);
+
         var projectSummary = ProjectSummaryService.Calculate(project);
         var financeSummary = await new FinanceLedgerService(db).GetProjectSummaryAsync(projectId, cancellationToken);
         var activities = await BuildActivitiesAsync(projectId, financeSummary, collections, invoices, payments, cancellationToken);
@@ -143,7 +157,8 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
                 item.Id, item.UserId, item.User.DisplayName, item.AssignmentType, item.IsActive, item.Notes)).ToArray(),
             project.Partners.OrderByDescending(item => item.IsPrimary).ThenBy(item => item.Partner.Name).Select(item => new ProjectPartnerLinkDto(
                 item.Id, item.BusinessPartnerId, item.Partner.Name, item.RoleType, item.ContractId, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.IsPrimary, item.IsActive, item.Notes)).ToArray());
+                item.IsPrimary, item.IsActive, item.Notes)).ToArray(),
+            overviewEquipment);
     }
 
     public async Task<ProjectEditOptionsDto> GetEditOptionsAsync(CancellationToken cancellationToken)
@@ -164,13 +179,14 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         var reason = Required(request.Reason, nameof(request.Reason));
         var number = Required(request.ProjectNumber, nameof(request.ProjectNumber));
         var name = Required(request.Name, nameof(request.Name));
-        var project = await db.Projects.Include(item => item.LegalEntities)
+        var project = await db.Projects.Include(item => item.LegalEntities).Include(item => item.TaxConfigurations)
             .SingleOrDefaultAsync(item => item.Id == request.Id && item.IsActive, cancellationToken)
             ?? throw new InvalidOperationException("项目不存在或已停用。");
         if (project.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("项目资料已被其他用户修改，请刷新后重试。");
         if (await db.Projects.AnyAsync(item => item.Id != request.Id && item.ProjectNumber == number, cancellationToken))
             throw new InvalidOperationException($"项目编号已存在：{number}");
         ValidateActualDates(request.ActualStartDate, request.ActualCompletionDate);
+        ValidateTaxConfigurations(request.TaxConfigurations);
         await ValidateReferencesAsync(request, cancellationToken);
 
         var before = Snapshot(project);
@@ -184,8 +200,8 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         project.DepartmentId = request.DepartmentId;
         project.BranchId = request.BranchId;
         project.Stage = request.Stage;
+        project.ContractSigningStatus = request.ContractSigningStatus;
         project.AffiliationType = request.AffiliationType;
-        project.ArchiveStatus = request.ArchiveStatus;
         project.ActualStartDate = request.ActualStartDate;
         project.ActualCompletionDate = request.ActualCompletionDate;
         project.Notes = Optional(request.Notes);
@@ -210,6 +226,33 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             }
         }
 
+        if (request.TaxConfigurations is not null)
+        {
+            var requestedTaxConfigurations = request.TaxConfigurations
+                .Select(item => (item.TaxRate, item.InvoiceType))
+                .ToHashSet();
+            foreach (var configuration in project.TaxConfigurations)
+            {
+                configuration.IsActive = requestedTaxConfigurations.Contains((configuration.TaxRate, configuration.InvoiceType));
+                configuration.UpdatedAt = DateTimeOffset.UtcNow;
+                configuration.ConcurrencyStamp = Guid.NewGuid();
+            }
+            var existingTaxConfigurations = project.TaxConfigurations
+                .Select(item => (item.TaxRate, item.InvoiceType))
+                .ToHashSet();
+            foreach (var configuration in request.TaxConfigurations.Where(item => !existingTaxConfigurations.Contains((item.TaxRate, item.InvoiceType))))
+            {
+                var newConfiguration = new ProjectTaxConfiguration
+                {
+                    ProjectId = project.Id,
+                    TaxRate = configuration.TaxRate,
+                    InvoiceType = configuration.InvoiceType
+                };
+                project.TaxConfigurations.Add(newConfiguration);
+                db.ProjectTaxConfigurations.Add(newConfiguration);
+            }
+        }
+
         db.AuditLogs.Add(new AuditLog
         {
             UserId = actor.UserId,
@@ -222,7 +265,15 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             BeforeJson = JsonSerializer.Serialize(before),
             AfterJson = JsonSerializer.Serialize(Snapshot(project))
         });
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            var entityNames = string.Join("、", exception.Entries.Select(entry => entry.Metadata.ClrType.Name).Distinct());
+            throw new DbUpdateConcurrencyException($"项目资料保存发生并发冲突：{entityNames}。请刷新后重试。", exception);
+        }
         return await GetAsync(project.Id, cancellationToken) ?? throw new InvalidOperationException("项目保存后无法读取。");
     }
 
@@ -265,9 +316,12 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     private static ProjectWorkspaceOverviewDto ToOverview(Project project) => new(
         project.Id, project.ProjectNumber, project.Name, project.ParentProjectName, project.GeneralContractorName,
         project.GeneralContractorContact, project.GeneralContractorPhone, project.ResponsibleUserId, project.ResponsibleUser?.DisplayName,
-        project.DepartmentId, project.Department?.Name, project.BranchId, project.Branch?.Name, project.Stage, project.AffiliationType, project.ArchiveStatus,
+        project.DepartmentId, project.Department?.Name, project.BranchId, project.Branch?.Name, project.Stage, project.AffiliationType,
         project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => new ProjectWorkspaceOptionDto(item.LegalEntityId.ToString(), item.LegalEntity.ShortName)).ToArray(),
-        project.UpdatedAt, project.ConcurrencyStamp, project.ActualStartDate, project.ActualCompletionDate, project.Notes);
+        project.UpdatedAt, project.ConcurrencyStamp, project.ActualStartDate, project.ActualCompletionDate, project.Notes,
+        project.ContractSigningStatus,
+        project.TaxConfigurations.OrderBy(item => item.TaxRate).ThenBy(item => item.InvoiceType)
+            .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray());
 
     private static ContractDto ToContractDto(Contract contract) => new(
         contract.Id, contract.ContractNumber, contract.Name, contract.ContractType, contract.AllocationMode, contract.TotalAmount,
@@ -279,10 +333,23 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     private static object Snapshot(Project item) => new
     {
         item.ProjectNumber, item.Name, item.ParentProjectName, item.GeneralContractorName, item.GeneralContractorContact,
-        item.GeneralContractorPhone, item.ResponsibleUserId, item.DepartmentId, item.BranchId, item.Stage, item.AffiliationType, item.ArchiveStatus,
+        item.GeneralContractorPhone, item.ResponsibleUserId, item.DepartmentId, item.BranchId, item.Stage, item.ContractSigningStatus, item.AffiliationType,
         item.ActualStartDate, item.ActualCompletionDate, item.Notes,
-        LegalEntityIds = item.LegalEntities.Select(link => link.LegalEntityId).Order().ToArray()
+        LegalEntityIds = item.LegalEntities.Select(link => link.LegalEntityId).Order().ToArray(),
+        TaxConfigurations = item.TaxConfigurations.OrderBy(configuration => configuration.TaxRate).ThenBy(configuration => configuration.InvoiceType)
+            .Select(configuration => new { configuration.TaxRate, configuration.InvoiceType, configuration.IsActive }).ToArray()
     };
+
+    private static void ValidateTaxConfigurations(IReadOnlyCollection<ProjectTaxConfigurationInput>? configurations)
+    {
+        if (configurations is null) return;
+        if (configurations.Any(item => !ProjectTaxRules.IsAllowedRate(item.TaxRate)))
+            throw new ArgumentException("项目税率只允许 1%、3%、6%、9% 或 13%。", nameof(configurations));
+        if (configurations.Any(item => !Enum.IsDefined(item.InvoiceType)))
+            throw new ArgumentException("项目发票类型无效。", nameof(configurations));
+        if (configurations.GroupBy(item => new { item.TaxRate, item.InvoiceType }).Any(group => group.Count() > 1))
+            throw new ArgumentException("项目税金配置存在重复的税率和发票类型组合。", nameof(configurations));
+    }
 
     private static void ValidateActualDates(DateOnly? actualStartDate, DateOnly? actualCompletionDate)
     {

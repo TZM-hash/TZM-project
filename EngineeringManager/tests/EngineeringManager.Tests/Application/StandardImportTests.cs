@@ -1,5 +1,6 @@
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Domain.DataExchange;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.DataExchange;
 using FluentAssertions;
@@ -73,6 +74,38 @@ public sealed class StandardImportTests
         var batch = await fixture.Db.ImportBatches.SingleAsync(item => item.Id == preview.BatchId);
         batch.OriginalContent.Should().NotBeEmpty();
         batch.Status.Should().Be(DataExchangeTaskStatus.Completed);
+    }
+
+    [Fact]
+    public async Task EmployeeImportAcceptsStableChineseAndEnglishTypeLabels()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工导入",
+            ["员工编号", "姓名", "员工类型"],
+            [
+                ["TYPE-FORMAL-CN", "正式中文", "正式员工"],
+                ["TYPE-FORMAL-EN", "正式英文", "Formal"],
+                ["TYPE-LABOR-CN", "劳务中文", "劳务员工"],
+                ["TYPE-LABOR-EN", "劳务英文", "Labor"],
+                ["TYPE-TEMP-CN", "临时中文", "特殊临时人员"],
+                ["TYPE-TEMP-EN", "临时英文", "Temporary"]
+            ]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("type-labels", ExportDataset.Employees, "员工类型.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        var imported = await fixture.Db.Employees.ToDictionaryAsync(item => item.EmployeeNumber, item => item.EmployeeType);
+        imported["TYPE-FORMAL-CN"].Should().Be(EmployeeType.Formal);
+        imported["TYPE-FORMAL-EN"].Should().Be(EmployeeType.Formal);
+        imported["TYPE-LABOR-CN"].Should().Be(EmployeeType.Labor);
+        imported["TYPE-LABOR-EN"].Should().Be(EmployeeType.Labor);
+        imported["TYPE-TEMP-CN"].Should().Be(EmployeeType.Temporary);
+        imported["TYPE-TEMP-EN"].Should().Be(EmployeeType.Temporary);
     }
 
     [Fact]

@@ -6,7 +6,7 @@ namespace EngineeringManager.Tests.Domain;
 public sealed class PayrollDisbursementRulesTests
 {
     [Fact]
-    public void MixedRecipientsProduceCategoryAndCrewTotals()
+    public void EmployeeAndCrewRecipientsProduceCategoryAndCrewTotals()
     {
         var crewId = Guid.NewGuid();
         var summary = PayrollDisbursementRules.Calculate(
@@ -14,15 +14,22 @@ public sealed class PayrollDisbursementRulesTests
             [
                 PayrollDisbursementLineInput.ForEmployee(Guid.NewGuid(), 3_000m),
                 PayrollDisbursementLineInput.ForCrewWorker(Guid.NewGuid(), crewId, 4_000m),
-                PayrollDisbursementLineInput.ForTemporaryWorker(Guid.NewGuid(), 3_000m)
+                PayrollDisbursementLineInput.ForEmployee(Guid.NewGuid(), 3_000m)
             ]);
 
-        summary.EmployeeAmount.Should().Be(3_000m);
+        summary.EmployeeAmount.Should().Be(6_000m);
         summary.CrewAmount.Should().Be(4_000m);
-        summary.TemporaryAmount.Should().Be(3_000m);
         summary.DetailAmount.Should().Be(10_000m);
         summary.Difference.Should().Be(0m);
         summary.CrewAmounts.Should().ContainSingle().Which.Should().Be(new PayrollCrewAmount(crewId, 4_000m));
+    }
+
+    [Fact]
+    public void DirectPersonInputAndSummaryHaveNoLegacyTemporaryWorkerProperties()
+    {
+        typeof(PayrollDisbursementLineInput).GetProperty("TemporaryWorkerId").Should().BeNull();
+        typeof(PayrollDisbursementLineInput).GetMethod("ForTemporaryWorker").Should().BeNull();
+        typeof(PayrollDisbursementSummary).GetProperty("TemporaryAmount").Should().BeNull();
     }
 
     [Fact]
@@ -49,7 +56,6 @@ public sealed class PayrollDisbursementRulesTests
             PayrollRecipientType.Employee,
             employeeId,
             Guid.NewGuid(),
-            null,
             null,
             1_000m);
         var duplicates = new[]

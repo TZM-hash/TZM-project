@@ -1,3 +1,4 @@
+using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
@@ -30,8 +31,7 @@ public sealed class ProjectModelTests
             ResponsibleUser = manager,
             Department = department,
             Branch = branch,
-            Stage = ProjectStage.UnderConstruction,
-            ArchiveStatus = ArchiveStatus.NotArchived
+            Stage = ProjectStage.UnderConstruction
         };
         project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = legalOne, IsPrimary = true });
         project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = legalTwo });
@@ -80,6 +80,69 @@ public sealed class ProjectModelTests
         db.Projects.AddRange(
             new Project { ProjectNumber = "DUP-P", Name = "项目一" },
             new Project { ProjectNumber = "DUP-P", Name = "项目二" });
+
+        var action = () => db.SaveChangesAsync();
+
+        await action.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task ProjectTaxConfigurationsContractStatusAndEquipmentOverviewFlagCanBePersisted()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateContext(connection);
+        await db.Database.EnsureCreatedAsync();
+
+        var project = new Project
+        {
+            ProjectNumber = "P-TAX-01",
+            Name = "税金配置项目",
+            Stage = ProjectStage.AwaitingMobilization,
+            ContractSigningStatus = ContractSigningStatus.SentForSignature
+        };
+        project.TaxConfigurations.Add(new ProjectTaxConfiguration
+        {
+            Project = project,
+            TaxRate = 0.03m,
+            InvoiceType = ProjectInvoiceType.Special
+        });
+        project.TaxConfigurations.Add(new ProjectTaxConfiguration
+        {
+            Project = project,
+            TaxRate = 0.09m,
+            InvoiceType = ProjectInvoiceType.Ordinary
+        });
+        var equipment = new Equipment { EquipmentNumber = "EQ-P-TAX", Name = "履带吊" };
+        project.ConstructionRecords.Add(new ProjectConstructionRecord
+        {
+            Project = project,
+            RecordType = ProjectConstructionRecordType.Equipment,
+            Equipment = equipment,
+            ShowInProjectOverview = true
+        });
+
+        db.Add(project);
+        await db.SaveChangesAsync();
+
+        var saved = await db.Projects.Include(item => item.TaxConfigurations).Include(item => item.ConstructionRecords).SingleAsync();
+        saved.ContractSigningStatus.Should().Be(ContractSigningStatus.SentForSignature);
+        saved.TaxConfigurations.Should().HaveCount(2);
+        saved.ConstructionRecords.Should().ContainSingle(item => item.ShowInProjectOverview);
+    }
+
+    [Fact]
+    public async Task DuplicateProjectTaxCombinationIsRejected()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateContext(connection);
+        await db.Database.EnsureCreatedAsync();
+
+        var project = new Project { ProjectNumber = "P-TAX-02", Name = "重复税金项目" };
+        project.TaxConfigurations.Add(new ProjectTaxConfiguration { Project = project, TaxRate = 0.03m, InvoiceType = ProjectInvoiceType.Special });
+        project.TaxConfigurations.Add(new ProjectTaxConfiguration { Project = project, TaxRate = 0.03m, InvoiceType = ProjectInvoiceType.Special });
+        db.Add(project);
 
         var action = () => db.SaveChangesAsync();
 

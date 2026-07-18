@@ -15,7 +15,6 @@
         if (currentPage.StartsWith("/Employees/", StringComparison.OrdinalIgnoreCase)) return "/Employees";
         if (currentPage.StartsWith("/Payroll/", StringComparison.OrdinalIgnoreCase)) return "/Payroll";
         if (currentPage.StartsWith("/Crews/", StringComparison.OrdinalIgnoreCase)) return "/Crews";
-        if (currentPage.StartsWith("/TemporaryWorkers/", StringComparison.OrdinalIgnoreCase)) return "/TemporaryWorkers";
         if (currentPage.StartsWith("/Partners/", StringComparison.OrdinalIgnoreCase)) return "/Partners";
         if (currentPage.StartsWith("/Companies/Certificates/Edit", StringComparison.OrdinalIgnoreCase)) return "/Companies/Certificates";
         if (currentPage.StartsWith("/Companies/", StringComparison.OrdinalIgnoreCase)) return "/Companies";
@@ -52,7 +51,6 @@
                 <a class='@NavExact("/Employees")' asp-page="/Employees/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>员工管理</span></a>
                 <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>工资台账</span></a>
                 <a class='@Nav("/Crews")' asp-page="/Crews/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>施工班组</span></a>
-                <a class='@Nav("/TemporaryWorkers")' asp-page="/TemporaryWorkers/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>临时人员</span></a>
                 <a class='@Nav("/Partners")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">公司与设备</span>

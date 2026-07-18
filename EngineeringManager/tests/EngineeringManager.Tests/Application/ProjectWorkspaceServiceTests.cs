@@ -58,6 +58,41 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task WorkspaceOnlyIncludesEquipmentMarkedForProjectOverview()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var important = new Equipment { EquipmentNumber = "EQ-IMPORTANT", Name = "重要履带吊" };
+        var ordinary = new Equipment { EquipmentNumber = "EQ-ORDINARY", Name = "普通挖机" };
+        fixture.Db.AddRange(important, ordinary);
+        fixture.Db.ProjectConstructionRecords.AddRange(
+            new ProjectConstructionRecord
+            {
+                ProjectId = fixture.Project.Id,
+                RecordType = ProjectConstructionRecordType.Equipment,
+                Equipment = important,
+                EntryDate = new DateOnly(2026, 7, 1),
+                ShowInProjectOverview = true
+            },
+            new ProjectConstructionRecord
+            {
+                ProjectId = fixture.Project.Id,
+                RecordType = ProjectConstructionRecordType.Equipment,
+                Equipment = ordinary,
+                EntryDate = new DateOnly(2026, 7, 2),
+                ShowInProjectOverview = false
+            });
+        await fixture.Db.SaveChangesAsync();
+
+        var workspace = await fixture.Service.GetAsync(fixture.Project.Id, CancellationToken.None);
+
+        workspace!.OverviewEquipment.Should().NotBeNull();
+        workspace.OverviewEquipment!.Should().ContainSingle();
+        workspace.OverviewEquipment[0].EquipmentNumber.Should().Be("EQ-IMPORTANT");
+        workspace.OverviewEquipment[0].EquipmentName.Should().Be("重要履带吊");
+        workspace.OverviewEquipment[0].EntryDate.Should().Be(new DateOnly(2026, 7, 1));
+    }
+
+    [Fact]
     public async Task UpdateChangesAffiliationAndLegalEntitiesAndWritesAuditLog()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
@@ -76,9 +111,8 @@ public sealed class ProjectWorkspaceServiceTests
                 null,
                 null,
                 null,
-                ProjectStage.Settlement,
+                ProjectStage.CompletedUnsettled,
                 ProjectAffiliationType.WeAttachedToExternalParty,
-                ArchiveStatus.PendingArchive,
                 [fixture.SecondLegalEntity.Id, fixture.LegalEntity.Id],
                 originalStamp,
                 "调整合作方式和签约公司",
@@ -103,6 +137,41 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task UpdateCanAddNewProjectTaxConfigurations()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+
+        var updated = await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id,
+                fixture.Project.ProjectNumber,
+                fixture.Project.Name,
+                fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName,
+                fixture.Project.GeneralContractorContact,
+                fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId,
+                fixture.Project.DepartmentId,
+                fixture.Project.BranchId,
+                fixture.Project.Stage,
+                fixture.Project.AffiliationType,
+                [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp,
+                "新增税金配置",
+                ContractSigningStatus: fixture.Project.ContractSigningStatus,
+                TaxConfigurations:
+                [
+                    new ProjectTaxConfigurationInput(0.03m, ProjectInvoiceType.Special),
+                    new ProjectTaxConfigurationInput(0.09m, ProjectInvoiceType.Ordinary)
+                ]),
+            CancellationToken.None);
+
+        updated.Overview.TaxConfigurations.Should().NotBeNull();
+        updated.Overview.TaxConfigurations!.Should().HaveCount(2).And.OnlyContain(item => item.IsActive);
+    }
+
+    [Fact]
     public async Task UpdateRejectsStaleConcurrencyStamp()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
@@ -119,7 +188,6 @@ public sealed class ProjectWorkspaceServiceTests
             null,
             fixture.Project.Stage,
             fixture.Project.AffiliationType,
-            fixture.Project.ArchiveStatus,
             [fixture.LegalEntity.Id],
             Guid.NewGuid(),
             "并发测试");
@@ -151,7 +219,6 @@ public sealed class ProjectWorkspaceServiceTests
                 fixture.Project.BranchId,
                 fixture.Project.Stage,
                 fixture.Project.AffiliationType,
-                fixture.Project.ArchiveStatus,
                 [fixture.LegalEntity.Id],
                 fixture.Project.ConcurrencyStamp,
                 "补录实际工期",
@@ -186,7 +253,6 @@ public sealed class ProjectWorkspaceServiceTests
             null,
             fixture.Project.Stage,
             fixture.Project.AffiliationType,
-            fixture.Project.ArchiveStatus,
             [fixture.LegalEntity.Id],
             fixture.Project.ConcurrencyStamp,
             "错误工期",

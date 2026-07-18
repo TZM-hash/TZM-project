@@ -49,8 +49,9 @@ public sealed class OfflineAssetsTests
         script.Should().Contain("'/api/'");
         script.Should().Contain("'/Finance'");
         script.Should().Contain("'/Payroll'");
+        script.Should().Contain("'/Employees'");
         script.Should().Contain("'/Crews'");
-        script.Should().Contain("'/TemporaryWorkers'");
+        script.Should().NotContain("'/TemporaryWorkers'");
         script.Should().Contain("'/DataExchange'");
         script.Should().Contain("request.method !== 'GET'");
         script.Should().Contain("cacheFirst");

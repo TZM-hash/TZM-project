@@ -108,6 +108,19 @@
 .project-summary-grid > div { padding: .58rem .65rem; }
 .project-summary-grid dt { font-size: .66rem; }
 .project-summary-grid dd { margin-top: .18rem; overflow: hidden; font-size: .78rem; line-height: 1.35; text-overflow: ellipsis; }
+.project-summary-grid > .project-summary-wide { grid-column: 1 / -1; }
+.project-summary-notes dd, .project-summary-notes [data-inline-edit-value] { overflow: visible; white-space: pre-wrap; word-break: break-word; }
+.project-summary-notes textarea { min-height: 7rem; resize: vertical; }
+.project-tax-tags { display: flex; flex-wrap: wrap; gap: .4rem; }
+.project-tax-matrix { display: grid; width: 100%; gap: .45rem; }
+.project-tax-row { display: grid; grid-template-columns: minmax(3.5rem, .4fr) repeat(2, minmax(6rem, 1fr)); align-items: center; gap: .5rem; padding: .45rem .55rem; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface); }
+.project-tax-row label, .compact-check { display: flex; align-items: center; gap: .4rem; color: var(--app-text); }
+.project-tax-row input, .compact-check input { width: 1rem; min-width: 1rem; height: 1rem; }
+.project-equipment-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
+.project-equipment-list a { display: grid; min-width: 0; gap: .15rem; padding: .5rem .6rem; border: 1px solid var(--app-border); border-radius: 6px; color: var(--app-text); background: var(--app-surface); text-decoration: none; }
+.project-equipment-list a:hover { border-color: var(--app-primary); }
+.project-equipment-list span { color: var(--app-muted); font-size: .7rem; }
+.construction-detail-table tr.is-target-record > td { background: var(--app-primary-soft); }
 
 .project-activity-panel { position: sticky; top: calc(var(--header-height) + var(--space-3)); max-height: calc(100vh - 96px); overflow: hidden; border: 1px solid var(--app-border); border-radius: var(--app-radius-lg); background: var(--app-surface); box-shadow: var(--app-shadow-soft); }
 .activity-panel-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-4); border-bottom: 1px solid var(--app-border); }
@@ -173,6 +186,8 @@
     .project-tab-list label { padding-inline: var(--space-3); }
     .overview-strip, .project-detail-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .project-overview-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .project-tax-row { grid-template-columns: minmax(3rem, .35fr) repeat(2, minmax(0, 1fr)); }
+    .project-equipment-list { grid-template-columns: minmax(0, 1fr); }
 }
 .payroll-editor { display: grid; gap: var(--space-3); }
 .payroll-editor > *, .payroll-editor .form-grid > * { min-width: 0; }

@@ -220,7 +220,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
 
             if (dataset == ExportDataset.Employees && values.TryGetValue("employee_type", out var type) && !string.IsNullOrWhiteSpace(type) && !TryParseEmployeeType(type, out _))
             {
-                errors.Add(new ImportErrorDto(excelRow, "员工类型", "员工类型必须是正式员工或劳务员工。", type));
+                errors.Add(new ImportErrorDto(excelRow, "员工类型", "员工类型必须是正式员工、劳务员工或特殊临时人员。", type));
             }
 
             if (dataset is ExportDataset.CompanyAccounts or ExportDataset.CompanyCertificates)
@@ -401,7 +401,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 });
                 break;
             case ExportDataset.Projects:
-                var stage = Enum.TryParse<ProjectStage>(values.GetValueOrDefault("stage"), ignoreCase: true, out var parsedStage) ? parsedStage : ProjectStage.Preliminary;
+                var stage = Enum.TryParse<ProjectStage>(values.GetValueOrDefault("stage"), ignoreCase: true, out var parsedStage) ? parsedStage : ProjectStage.AwaitingMobilization;
                 db.Projects.Add(new Project
                 {
                     ProjectNumber = values["project_number"]!,
@@ -492,6 +492,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
     {
         if (value is "正式员工" or "Formal") { employeeType = EmployeeType.Formal; return true; }
         if (value is "劳务员工" or "Labor") { employeeType = EmployeeType.Labor; return true; }
+        if (value is "特殊临时人员" or "Temporary") { employeeType = EmployeeType.Temporary; return true; }
         employeeType = default;
         return false;
     }

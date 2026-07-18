@@ -64,6 +64,27 @@ public sealed class ModuleExportTests
         rows.Should().Contain(row => row.SequenceEqual(new object?[] { new DateOnly(2026, 7, 18), "Employee", employee.Name, 800m, 800m }));
     }
 
+    [Fact]
+    public async Task EmployeeExportUsesStableChineseTypeLabels()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        fixture.Db.Employees.AddRange(
+            new Employee { EmployeeNumber = "MOD-LABOR", Name = "劳务导出员工", EmployeeType = EmployeeType.Labor },
+            new Employee { EmployeeNumber = "MOD-TEMP", Name = "临时导出员工", EmployeeType = EmployeeType.Temporary });
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(
+            new ExportRequest(ExportDataset.Employees, "employee-type-labels", ["employee_type"], null),
+            CancellationToken.None);
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+
+        rows[0].Should().Equal("员工类型");
+        rows.Skip(1).Select(row => (string)row.Single()!).Should().Equal(
+            "正式员工",
+            "劳务员工",
+            "特殊临时人员");
+    }
+
     [Theory]
     [InlineData(ExportDataset.ProjectOverview, "项目备注")]
     [InlineData(ExportDataset.Employees, "员工备注")]

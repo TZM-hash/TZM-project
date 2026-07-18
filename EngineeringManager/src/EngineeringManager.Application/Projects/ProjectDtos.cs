@@ -1,3 +1,4 @@
+using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 
 namespace EngineeringManager.Application.Projects;
@@ -10,7 +11,6 @@ public sealed record CreateProjectRequest(
     Guid? DepartmentId,
     Guid? BranchId,
     ProjectStage Stage,
-    ArchiveStatus ArchiveStatus,
     IReadOnlyCollection<Guid> LegalEntityIds,
     string? ParentProjectName = null,
     string? GeneralContractorContact = null,
@@ -18,7 +18,18 @@ public sealed record CreateProjectRequest(
     ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated,
     DateOnly? ActualStartDate = null,
     DateOnly? ActualCompletionDate = null,
-    string? Notes = null);
+    string? Notes = null,
+    ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
+    IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null);
+
+public sealed record ProjectTaxConfigurationInput(decimal TaxRate, ProjectInvoiceType InvoiceType);
+
+public sealed record ProjectTaxConfigurationDto(
+    Guid Id,
+    decimal TaxRate,
+    ProjectInvoiceType InvoiceType,
+    bool IsActive,
+    Guid ConcurrencyStamp);
 
 public sealed record ContractAllocationRequest(Guid LegalEntityId, decimal? Amount, decimal? Percentage);
 
@@ -66,11 +77,12 @@ public sealed record ProjectDto(
     string Name,
     string? GeneralContractorName,
     ProjectStage Stage,
-    ArchiveStatus ArchiveStatus,
     ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated,
     DateOnly? ActualStartDate = null,
     DateOnly? ActualCompletionDate = null,
-    string? Notes = null);
+    string? Notes = null,
+    ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
+    IReadOnlyList<ProjectTaxConfigurationDto>? TaxConfigurations = null);
 
 public sealed record ContractLineItemDto(
     Guid Id,

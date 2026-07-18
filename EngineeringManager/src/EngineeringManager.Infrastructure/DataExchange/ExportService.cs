@@ -372,13 +372,21 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
         {
             ["employee_number"] = item.EmployeeNumber,
             ["name"] = item.Name,
-            ["employee_type"] = item.EmployeeType.ToString(),
+            ["employee_type"] = EmployeeTypeLabel(item.EmployeeType),
             ["position"] = item.PositionTitle,
             ["phone"] = item.Phone,
             ["is_active"] = item.IsActive,
             ["notes"] = item.Notes
         })), "员工台账");
     }
+
+    private static string EmployeeTypeLabel(EmployeeType employeeType) => employeeType switch
+    {
+        EmployeeType.Formal => "正式员工",
+        EmployeeType.Labor => "劳务员工",
+        EmployeeType.Temporary => "特殊临时人员",
+        _ => employeeType.ToString()
+    };
 
     private async Task<ExportFileResult> ExportPartnersAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
     {
