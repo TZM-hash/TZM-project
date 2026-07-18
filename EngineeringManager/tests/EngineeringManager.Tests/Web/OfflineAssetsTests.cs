@@ -41,13 +41,16 @@ public sealed class OfflineAssetsTests
 
         var script = await client.GetStringAsync("/service-worker.js");
 
-        script.Should().Contain("engineering-manager-shell-v3");
+        script.Should().Contain("engineering-manager-shell-v7");
         script.Should().Contain("/js/components/data-table.js");
         script.Should().Contain("/js/components/charts.js");
+        script.Should().Contain("/js/components/quick-edit.js");
         script.Should().Contain("SENSITIVE_PREFIXES");
         script.Should().Contain("'/api/'");
         script.Should().Contain("'/Finance'");
         script.Should().Contain("'/Payroll'");
+        script.Should().Contain("'/Crews'");
+        script.Should().Contain("'/TemporaryWorkers'");
         script.Should().Contain("'/DataExchange'");
         script.Should().Contain("request.method !== 'GET'");
         script.Should().Contain("cacheFirst");

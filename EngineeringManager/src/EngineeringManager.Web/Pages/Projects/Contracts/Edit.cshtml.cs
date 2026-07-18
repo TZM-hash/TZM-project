@@ -29,6 +29,8 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
     [BindProperty] public decimal? SettledQuantity { get; set; }
     [BindProperty] public decimal? SettledUnitPrice { get; set; }
     [BindProperty] public bool IsSettlementConfirmed { get; set; }
+    [BindProperty] public string? ContractNotes { get; set; }
+    [BindProperty] public string? LineNotes { get; set; }
 
     public async Task OnGetAsync(CancellationToken token) => await LoadAsync(token);
 
@@ -40,7 +42,7 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
             var legalEntityId = ContractLegalEntityId ?? throw new ArgumentException("请选择我方签约公司。");
             await projectService.AddContractAsync(new CreateContractRequest(ProjectId.Value, ContractNumber, ContractName, ContractType,
                 ContractAllocationMode.SingleCompany, CounterpartyName, ContractAmount,
-                [new ContractAllocationRequest(legalEntityId, ContractAmount, null)]), token);
+                [new ContractAllocationRequest(legalEntityId, ContractAmount, null)], ContractNotes), token);
             return RedirectToPage(new { projectId = ProjectId.Value });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
@@ -57,7 +59,7 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
         try
         {
             await projectService.AddLineItemAsync(new CreateContractLineItemRequest(ContractId.Value, LineCode, LineName, Unit,
-                EstimatedQuantity, EstimatedUnitPrice, SettledQuantity, SettledUnitPrice, IsSettlementConfirmed), token);
+                EstimatedQuantity, EstimatedUnitPrice, SettledQuantity, SettledUnitPrice, IsSettlementConfirmed, LineNotes), token);
             return RedirectToPage(new { projectId = ProjectId.Value });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)

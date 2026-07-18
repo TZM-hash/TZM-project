@@ -8,7 +8,7 @@
 <form method="post" class="panel form-grid">
     <input type="hidden" asp-for="Id" /><input type="hidden" asp-for="ConcurrencyStamp" /><div asp-validation-summary="All" class="panel-copy form-span"></div>
     <section class="form-section"><h2 class="section-heading">单位资料</h2><label>单位编号<input asp-for="PartnerNumber" /></label><label>单位全称<input asp-for="Name" /></label><label>单位简称<input asp-for="ShortName" /></label><label>统一社会信用代码<input asp-for="UnifiedSocialCreditCode" /></label><label>业务角色<select asp-for="RoleType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Partners.BusinessPartnerRoleType>()"></select></label><label class="checkbox-row"><input asp-for="IsActive" />启用档案</label></section>
-    <section class="form-section"><h2 class="section-heading">联系与结算信息</h2><label>行业/工种<input asp-for="TradeCategory" /></label><label>主要联系人<input asp-for="ContactName" /></label><label>联系电话<input asp-for="ContactPhone" /></label><label>备注<textarea asp-for="Notes" rows="4"></textarea></label></section>
+    <section class="form-section"><h2 class="section-heading">联系与结算信息</h2><label>行业/工种<input asp-for="TradeCategory" /></label><label>主要联系人<input asp-for="ContactName" /></label><label>联系电话<input asp-for="ContactPhone" /></label><label>联系人备注<textarea asp-for="ContactNotes" rows="3"></textarea></label><label>合作单位备注<textarea asp-for="Notes" rows="4"></textarea></label></section>
     @if (Model.IsEditing) { <label class="form-span">修改原因<textarea asp-for="Reason" rows="2" required></textarea></label> }
     <div class="sticky-actions form-span"><button class="button button--primary" type="submit">保存合作单位</button></div>
 </form>

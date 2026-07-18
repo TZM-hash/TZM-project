@@ -18,7 +18,8 @@ public sealed record CompanyListItemDto(
     string ShortName,
     string? CategoryName,
     string? LegalRepresentative,
-    bool IsActive);
+    bool IsActive,
+    string? Notes = null);
 
 public sealed record CompanyAccountDto(
     Guid Id,
@@ -30,7 +31,8 @@ public sealed record CompanyAccountDto(
     bool IsDefaultCollection,
     bool IsDefaultPayment,
     bool IsDefaultInvoice,
-    bool IsActive);
+    bool IsActive,
+    string? Notes = null);
 
 public sealed record CompanyCertificateDto(
     Guid Id,
@@ -98,7 +100,8 @@ public sealed record SaveCompanyAccountRequest(
     bool IsDefaultInvoice,
     bool IsActive,
     Guid? ConcurrencyStamp,
-    string Reason);
+    string Reason,
+    string? Notes = null);
 
 public sealed record SaveCompanyCertificateRequest(
     Guid? Id,

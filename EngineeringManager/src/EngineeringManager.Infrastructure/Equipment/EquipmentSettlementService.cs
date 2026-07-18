@@ -44,6 +44,7 @@ public sealed class EquipmentSettlementService(ApplicationDbContext db) : IEquip
         settlement.BaseAmount = rent.BaseAmount;
         settlement.TotalAmount = rent.TotalAmount;
         settlement.OffsetAmount = offset;
+        settlement.Notes = Optional(request.Notes);
         settlement.ModificationReason = reason;
         settlement.PreviousSnapshotJson = before;
         settlement.UpdatedAt = DateTimeOffset.UtcNow;
@@ -71,8 +72,8 @@ public sealed class EquipmentSettlementService(ApplicationDbContext db) : IEquip
         return payable.Id;
     }
 
-    private static EquipmentSettlementDto ToDto(EquipmentSettlement item) => new(item.Id, item.UsageId, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.TotalAmount - item.OffsetAmount, item.PayableEntryId, item.ConcurrencyStamp);
-    private static object Snapshot(EquipmentSettlement item) => new { item.SettlementDate, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.PayableEntryId, item.ModificationReason, item.ConcurrencyStamp, Adjustments = item.Adjustments.Select(adjustment => new { adjustment.Direction, adjustment.AdjustmentType, adjustment.Amount, adjustment.Reason }) };
+    private static EquipmentSettlementDto ToDto(EquipmentSettlement item) => new(item.Id, item.UsageId, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.TotalAmount - item.OffsetAmount, item.PayableEntryId, item.ConcurrencyStamp, item.Notes);
+    private static object Snapshot(EquipmentSettlement item) => new { item.SettlementDate, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.PayableEntryId, item.Notes, item.ModificationReason, item.ConcurrencyStamp, Adjustments = item.Adjustments.Select(adjustment => new { adjustment.Direction, adjustment.AdjustmentType, adjustment.Amount, adjustment.Reason }) };
     private static string Required(string? value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("值不能为空。") : value.Trim();
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

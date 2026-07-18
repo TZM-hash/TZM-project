@@ -18,6 +18,7 @@
         <label>电话<input asp-for="Phone" /></label>
         <label>入职日期<input asp-for="HireDate" type="date" /></label>
         <label>离职日期<input asp-for="LeaveDate" type="date" /></label>
+        <label class="form-span">主档备注<textarea asp-for="Notes" rows="3"></textarea></label>
         <label class="checkbox-row"><input asp-for="IsActive" />账号档案启用</label>
     </section>
     @if (Model.IsEditing) { <label class="form-span">修改原因<textarea asp-for="Reason" rows="2" required></textarea></label> }

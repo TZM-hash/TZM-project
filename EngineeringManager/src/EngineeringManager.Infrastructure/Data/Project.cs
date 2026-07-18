@@ -21,6 +21,9 @@ public sealed class Project
     public ProjectStage Stage { get; set; } = ProjectStage.Preliminary;
     public ProjectAffiliationType AffiliationType { get; set; } = ProjectAffiliationType.SelfOperated;
     public ArchiveStatus ArchiveStatus { get; set; } = ArchiveStatus.NotArchived;
+    public DateOnly? ActualStartDate { get; set; }
+    public DateOnly? ActualCompletionDate { get; set; }
+    public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -30,4 +33,5 @@ public sealed class Project
     public ICollection<ProjectMilestone> Milestones { get; set; } = [];
     public ICollection<Contract> Contracts { get; set; } = [];
     public ICollection<ProjectPartner> Partners { get; set; } = [];
+    public ICollection<ProjectConstructionRecord> ConstructionRecords { get; set; } = [];
 }

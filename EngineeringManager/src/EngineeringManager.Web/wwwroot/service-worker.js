@@ -1,11 +1,11 @@
-const CACHE_NAME = 'engineering-manager-shell-v3';
+const CACHE_NAME = 'engineering-manager-shell-v7';
 const SHELL = [
   '/css/base.css', '/css/components.css', '/css/pages.css', '/css/themes.css',
   '/js/site.js', '/js/core/shell.js', '/js/core/effects.js', '/js/pages/settings.js',
-  '/js/components/data-table.js', '/js/components/saved-views.js', '/js/components/filter-drawer.js', '/js/components/charts.js',
+  '/js/components/data-table.js', '/js/components/saved-views.js', '/js/components/filter-drawer.js', '/js/components/charts.js', '/js/components/quick-edit.js',
   '/js/offline-stage-results.js', '/js/offline-equipment.js', '/img/icons.svg', '/manifest.webmanifest'
 ];
-const SENSITIVE_PREFIXES = ['/api/', '/Finance', '/Payroll', '/EmployeeLedger', '/DataExchange', '/Backups', '/Reminders', '/Projects/Contracts', '/Equipment/Settlement'];
+const SENSITIVE_PREFIXES = ['/api/', '/Finance', '/Payroll', '/EmployeeLedger', '/Employees', '/Crews', '/TemporaryWorkers', '/DataExchange', '/Backups', '/Reminders', '/Projects/Contracts', '/Equipment/Settlement'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

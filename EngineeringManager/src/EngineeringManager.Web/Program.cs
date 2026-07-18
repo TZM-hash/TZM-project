@@ -24,8 +24,14 @@ using EngineeringManager.Infrastructure.Equipment;
 using EngineeringManager.Infrastructure.EquipmentOffline;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Infrastructure.Payroll;
+using EngineeringManager.Application.ConstructionCrews;
+using EngineeringManager.Infrastructure.ConstructionCrews;
+using EngineeringManager.Application.TemporaryWorkers;
+using EngineeringManager.Infrastructure.TemporaryWorkers;
 using EngineeringManager.Application.EmployeeLedger;
 using EngineeringManager.Infrastructure.EmployeeLedger;
+using EngineeringManager.Application.EmployeeAnnualLedger;
+using EngineeringManager.Infrastructure.EmployeeAnnualLedger;
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Infrastructure.DataExchange;
 using EngineeringManager.Application.Backups;
@@ -80,6 +86,7 @@ public sealed class Program
         builder.Services.AddScoped<IUserAdministrationService, UserAdministrationService>();
         builder.Services.AddScoped<IProjectService, ProjectService>();
         builder.Services.AddScoped<IProjectWorkspaceService, ProjectWorkspaceService>();
+        builder.Services.AddScoped<IProjectConstructionService, ProjectConstructionService>();
         builder.Services.AddScoped<IBusinessPartnerService, BusinessPartnerService>();
         builder.Services.AddScoped<IStageResultService, StageResultService>();
         builder.Services.AddScoped<IFinanceLedgerService, FinanceLedgerService>();
@@ -87,7 +94,13 @@ public sealed class Program
         builder.Services.AddScoped<IEmployeeCertificateService, EmployeeCertificateService>();
         builder.Services.AddScoped<ICompanyCertificateService, CompanyCertificateService>();
         builder.Services.AddScoped<IPayrollService, PayrollService>();
+        builder.Services.AddScoped<IConstructionCrewService, ConstructionCrewService>();
+        builder.Services.AddScoped<ITemporaryWorkerService, TemporaryWorkerService>();
         builder.Services.AddScoped<IEmployeeLedgerService, EmployeeLedgerService>();
+        builder.Services.AddScoped<IBusinessYearService, BusinessYearService>();
+        builder.Services.AddScoped<IEmployeeAnnualLedgerService>(services => new EmployeeAnnualLedgerService(
+            services.GetRequiredService<ApplicationDbContext>(),
+            TimeProvider.System));
         builder.Services.AddScoped<IExportService, ExportService>();
         builder.Services.AddScoped<IImportService, ImportService>();
         builder.Services.AddSingleton<IDatabaseBackupExecutor>(_ => new SqlServerBackupExecutor(connectionString));

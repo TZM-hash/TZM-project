@@ -48,6 +48,7 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
         entity.OwnerLegalEntityId = request.OwnershipType == EquipmentOwnershipType.SelfOwned ? request.OwnerLegalEntityId : null;
         entity.LessorBusinessPartnerId = request.OwnershipType == EquipmentOwnershipType.Rented ? request.LessorBusinessPartnerId : null;
         entity.InternalDailyRate = request.InternalDailyRate;
+        entity.Notes = Optional(request.Notes);
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.ConcurrencyStamp = Guid.NewGuid();
         AddAudit(actor, request.Id.HasValue ? "Update" : "Create", nameof(Data.Equipment), entity.Id, reason, before, JsonSerializer.Serialize(Snapshot(entity)));
@@ -61,7 +62,7 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
             ?? throw new KeyNotFoundException("设备不存在或无权访问。");
         return new EquipmentDetailsDto(Guid.Empty, string.Empty, $"{source.Name} - 副本", source.Model, source.Category,
             source.OwnershipType, EquipmentStatus.Idle, source.OwnerLegalEntityId, source.LessorBusinessPartnerId,
-            source.InternalDailyRate, Guid.Empty);
+            source.InternalDailyRate, Guid.Empty, source.Notes);
     }
 
     public async Task<EquipmentUsageDto> SaveUsageAsync(EquipmentActor actor, SaveEquipmentUsageRequest request, CancellationToken token)
@@ -209,14 +210,14 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
     }
     private IQueryable<Domain.Organization.LegalEntity> AuthorizedCompanies(EquipmentActor actor) => actor.CanAccessAll ? db.LegalEntities : db.LegalEntities.Where(item => actor.AccessibleCompanyIds.Contains(item.Id));
     private static EquipmentUsagePeriodInput ToInput(EquipmentPeriodRequest item) => new(item.StartDate, item.EndDate, item.PeriodType, item.IsChargeable);
-    private static EquipmentDetailsDto ToDto(Data.Equipment item) => new(item.Id, item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate, item.ConcurrencyStamp);
+    private static EquipmentDetailsDto ToDto(Data.Equipment item) => new(item.Id, item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate, item.ConcurrencyStamp, item.Notes);
     private static EquipmentUsageDto ToUsageDto(EquipmentProjectUsage item)
     {
         var calculation = item.ExitDate.HasValue ? EquipmentUsageCalculator.Calculate(item.EntryDate, item.ExitDate.Value, item.Periods.Select(period => new EquipmentUsagePeriodInput(period.StartDate, period.EndDate, period.PeriodType, period.IsChargeable))) : new EquipmentUsageCalculation(0, 0, 0, 0, 0, 0);
         return new EquipmentUsageDto(item.Id, item.EquipmentId, item.ProjectId, item.LegalEntityId, item.EntryDate, item.ExitDate, calculation.TotalDays, calculation.WorkDays, calculation.StopDays, calculation.UnclassifiedDays, item.ConcurrencyStamp);
     }
     private void AddAudit(EquipmentActor actor, string action, string type, Guid id, string reason, string? before, string? after) => db.AuditLogs.Add(new AuditLog { UserId = actor.UserId, Action = action, EntityType = type, EntityId = id.ToString(), Reason = reason, BeforeJson = before, AfterJson = after });
-    private static object Snapshot(Data.Equipment item) => new { item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate };
+    private static object Snapshot(Data.Equipment item) => new { item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate, item.Notes };
     private static object UsageSnapshot(EquipmentProjectUsage item) => new { item.EquipmentId, item.ProjectId, item.LegalEntityId, item.EntryDate, item.ExitDate, item.RentMode, item.UnitRate, item.SharedUsageOverride, Periods = item.Periods.Select(period => new { period.StartDate, period.EndDate, period.PeriodType, period.IsChargeable }) };
     private static void EnsureManage(EquipmentActor actor) { if (!actor.CanManage) throw new UnauthorizedAccessException("当前用户没有设备管理权限。"); }
     private static string Required(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException($"{name}不能为空。") : value.Trim();

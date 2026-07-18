@@ -15,7 +15,10 @@ public sealed record CreateProjectRequest(
     string? ParentProjectName = null,
     string? GeneralContractorContact = null,
     string? GeneralContractorPhone = null,
-    ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated);
+    ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated,
+    DateOnly? ActualStartDate = null,
+    DateOnly? ActualCompletionDate = null,
+    string? Notes = null);
 
 public sealed record ContractAllocationRequest(Guid LegalEntityId, decimal? Amount, decimal? Percentage);
 
@@ -27,7 +30,8 @@ public sealed record CreateContractRequest(
     ContractAllocationMode AllocationMode,
     string? CounterpartyName,
     decimal TotalAmount,
-    IReadOnlyCollection<ContractAllocationRequest> Allocations);
+    IReadOnlyCollection<ContractAllocationRequest> Allocations,
+    string? Notes = null);
 
 public sealed record CreateContractLineItemRequest(
     Guid ContractId,
@@ -38,7 +42,23 @@ public sealed record CreateContractLineItemRequest(
     decimal? EstimatedUnitPrice,
     decimal? SettledQuantity,
     decimal? SettledUnitPrice,
-    bool IsSettlementConfirmed);
+    bool IsSettlementConfirmed,
+    string? Notes = null);
+
+public sealed record UpdateContractLineItemRequest(
+    Guid Id,
+    string Code,
+    string Name,
+    string Unit,
+    decimal? EstimatedQuantity,
+    decimal? EstimatedUnitPrice,
+    decimal? SettledQuantity,
+    decimal? SettledUnitPrice,
+    bool IsSettlementConfirmed,
+    Guid ConcurrencyStamp,
+    string? Notes = null,
+    string? UserId = null,
+    string? Reason = null);
 
 public sealed record ProjectDto(
     Guid Id,
@@ -47,7 +67,10 @@ public sealed record ProjectDto(
     string? GeneralContractorName,
     ProjectStage Stage,
     ArchiveStatus ArchiveStatus,
-    ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated);
+    ProjectAffiliationType AffiliationType = ProjectAffiliationType.SelfOperated,
+    DateOnly? ActualStartDate = null,
+    DateOnly? ActualCompletionDate = null,
+    string? Notes = null);
 
 public sealed record ContractLineItemDto(
     Guid Id,
@@ -60,7 +83,9 @@ public sealed record ContractLineItemDto(
     decimal? SettledQuantity,
     decimal? SettledUnitPrice,
     decimal SettledAmount,
-    bool IsSettlementConfirmed);
+    bool IsSettlementConfirmed,
+    Guid ConcurrencyStamp,
+    string? Notes = null);
 
 public sealed record ContractDto(
     Guid Id,
@@ -69,7 +94,8 @@ public sealed record ContractDto(
     ContractType ContractType,
     ContractAllocationMode AllocationMode,
     decimal TotalAmount,
-    IReadOnlyList<ContractLineItemDto> LineItems);
+    IReadOnlyList<ContractLineItemDto> LineItems,
+    string? Notes = null);
 
 public sealed record ProjectListItemDto(ProjectDto Project, ProjectSummaryDto Summary);
 

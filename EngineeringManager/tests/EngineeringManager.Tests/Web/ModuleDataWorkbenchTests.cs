@@ -6,8 +6,7 @@ public sealed class ModuleDataWorkbenchTests
 {
     [Theory]
     [InlineData("Employees", "employees-table")]
-    [InlineData("Payroll", "payroll-table")]
-    [InlineData("EmployeeLedger", "employee-ledger-table")]
+    [InlineData("Employees/Ledger", "employee-annual-ledger-table")]
     [InlineData("Partners", "partners-table")]
     [InlineData("StageResults", "stage-results-table")]
     [InlineData("Companies", "companies-table")]

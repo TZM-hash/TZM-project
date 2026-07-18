@@ -15,7 +15,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         return await query.OrderBy(item => item.Code).Select(item => new CompanyListItemDto(
             item.Id, item.Code, item.Name, item.ShortName,
             item.CompanyCategory == null ? null : item.CompanyCategory.Name,
-            item.LegalRepresentative, item.IsActive)).ToListAsync(cancellationToken);
+            item.LegalRepresentative, item.IsActive, item.Notes)).ToListAsync(cancellationToken);
     }
 
     public async Task<CompanyDetailsDto> GetAsync(CompanyActor actor, Guid id, CancellationToken cancellationToken)
@@ -154,7 +154,9 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
     {
         EnsureManage(actor);
         await EnsureAccessAsync(actor, request.LegalEntityId, cancellationToken);
+        var reason = Required(request.Reason, nameof(request.Reason));
         FinancialAccount account;
+        string? before = null;
         if (request.Id.HasValue)
         {
             account = await db.FinancialAccounts.SingleOrDefaultAsync(item => item.Id == request.Id && item.LegalEntityId == request.LegalEntityId, cancellationToken)
@@ -163,6 +165,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             {
                 throw new DbUpdateConcurrencyException("公司账户已被其他用户修改。");
             }
+            before = JsonSerializer.Serialize(Snapshot(account));
         }
         else
         {
@@ -174,6 +177,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         account.BankName = Optional(request.BankName);
         account.AccountType = Enum.IsDefined((FinancialAccountType)request.AccountType) ? (FinancialAccountType)request.AccountType : throw new ArgumentOutOfRangeException(nameof(request));
         account.OpeningBalance = request.OpeningBalance;
+        account.Notes = Optional(request.Notes);
         account.IsDefaultCollection = request.IsDefaultCollection;
         account.IsDefaultPayment = request.IsDefaultPayment;
         account.IsDefaultInvoice = request.IsDefaultInvoice;
@@ -183,6 +187,16 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             .Select(item => new CompanyAccountDefault(item.IsDefaultCollection, item.IsDefaultPayment, item.IsDefaultInvoice)).ToListAsync(cancellationToken);
         siblings.Add(new CompanyAccountDefault(account.IsDefaultCollection, account.IsDefaultPayment, account.IsDefaultInvoice));
         CompanyAccountRules.Validate(siblings);
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actor.UserId,
+            Action = request.Id.HasValue ? "Update" : "Create",
+            EntityType = nameof(FinancialAccount),
+            EntityId = account.Id.ToString(),
+            Reason = reason,
+            BeforeJson = before,
+            AfterJson = JsonSerializer.Serialize(Snapshot(account))
+        });
         await db.SaveChangesAsync(cancellationToken);
         return ToAccount(account);
     }
@@ -309,7 +323,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
 
     private static CompanyAccountDto ToAccount(FinancialAccount account) => new(account.Id, account.AccountName, account.AccountNumber,
         account.BankName, account.AccountType.ToString(), account.OpeningBalance, account.IsDefaultCollection,
-        account.IsDefaultPayment, account.IsDefaultInvoice, account.IsActive);
+        account.IsDefaultPayment, account.IsDefaultInvoice, account.IsActive, account.Notes);
 
     private static CompanyCertificateDto ToCertificate(CompanyCertificate item) => new(item.Id, item.CertificateType,
         item.CertificateNumber, item.IssuedOn, item.ExpiresOn, item.AttachmentId, item.Notes);
@@ -319,6 +333,13 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         item.Code, item.Name, item.ShortName, item.CompanyCategoryId, item.LegalRepresentative,
         item.UnifiedSocialCreditCode, item.RegisteredAddress, item.BusinessAddress, item.Phone,
         item.InvoiceTitle, item.Notes, item.IsActive, item.ConcurrencyStamp
+    };
+
+    private static object Snapshot(FinancialAccount item) => new
+    {
+        item.LegalEntityId, item.AccountName, item.AccountNumber, item.BankName, item.AccountType,
+        item.OpeningBalance, item.Notes, item.IsDefaultCollection, item.IsDefaultPayment,
+        item.IsDefaultInvoice, item.IsActive, item.ConcurrencyStamp
     };
 
     private static string Required(string? value, string parameterName) => string.IsNullOrWhiteSpace(value)

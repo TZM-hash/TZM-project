@@ -18,6 +18,9 @@
         <label>当前阶段<select asp-for="Stage" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Projects.ProjectStage>()"></select></label>
         <label>项目合作方式<select asp-for="AffiliationType"><option value="1">自营项目</option><option value="2">他方挂靠我方</option><option value="3">我方挂靠他方</option></select></label>
         <label>归档状态<select asp-for="ArchiveStatus" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Projects.ArchiveStatus>()"></select></label>
+        <label>实际开工日期<input asp-for="ActualStartDate" type="date" /></label>
+        <label>实际完工日期<input asp-for="ActualCompletionDate" type="date" /></label>
+        <label class="form-span">项目备注<textarea asp-for="Notes" rows="3"></textarea></label>
     </section>
     <section class="form-section"><h2 class="section-heading">总包与负责人</h2>
         <label>总包单位<input asp-for="GeneralContractorName" /></label><label>总包联系人<input asp-for="GeneralContractorContact" /></label>

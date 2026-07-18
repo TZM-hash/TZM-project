@@ -5,6 +5,7 @@ using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.EmployeeLedger;
+using EngineeringManager.Infrastructure.Files;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -58,6 +59,35 @@ public sealed class EmployeeLedgerServiceTests
         (await fixture.Db.AccountTransactions.CountAsync()).Should().Be(0);
     }
 
+    [Fact]
+    public async Task ExpenseStoresOriginalAdjustmentFinalAmountReceiptNumberAndAttachment()
+    {
+        await using var fixture = await EmployeeLedgerFixture.CreateAsync(new FakeFileStore());
+
+        var expenseId = await fixture.Service.CreateExpenseAsync(
+            new CreateExpenseRequest(
+                fixture.Employee.Id,
+                fixture.Project.Id,
+                fixture.Department.Id,
+                fixture.LegalEntity.Id,
+                new DateOnly(2026, 7, 10),
+                "材料费",
+                1_000m,
+                "采购报销",
+                -100m,
+                "FP-2026-001",
+                new ExpenseAttachmentUpload("invoice.pdf", "application/pdf", [1, 2, 3])),
+            CancellationToken.None);
+
+        var expense = await fixture.Db.ExpenseRecords.Include(item => item.Attachment).SingleAsync(item => item.Id == expenseId);
+        expense.OriginalAmount.Should().Be(1_000m);
+        expense.AdjustmentAmount.Should().Be(-100m);
+        expense.Amount.Should().Be(900m);
+        expense.ReceiptNumber.Should().Be("FP-2026-001");
+        expense.Attachment.Should().NotBeNull();
+        expense.Attachment!.OriginalFileName.Should().Be("invoice.pdf");
+    }
+
     private sealed class EmployeeLedgerFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -77,13 +107,13 @@ public sealed class EmployeeLedgerServiceTests
         public LegalEntity LegalEntity { get; private set; } = null!;
         public FinancialAccount Account { get; private set; } = null!;
 
-        public static async Task<EmployeeLedgerFixture> CreateAsync()
+        public static async Task<EmployeeLedgerFixture> CreateAsync(IFileStore? fileStore = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
             var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
             await db.Database.EnsureCreatedAsync();
-            var fixture = new EmployeeLedgerFixture(connection, db, new EmployeeLedgerService(db));
+            var fixture = new EmployeeLedgerFixture(connection, db, new EmployeeLedgerService(db, fileStore));
             fixture.Employee = new Employee { EmployeeNumber = "LEDGER-E", Name = "往来测试员工", EmployeeType = EmployeeType.Formal };
             fixture.Project = new Project { ProjectNumber = "LEDGER-P", Name = "往来测试项目", Stage = ProjectStage.UnderConstruction };
             fixture.Department = new OrganizationUnit { Code = "LEDGER-D", Name = "往来测试部门", UnitType = OrganizationUnitType.Department };
@@ -100,5 +130,13 @@ public sealed class EmployeeLedgerServiceTests
             await Db.DisposeAsync();
             await connection.DisposeAsync();
         }
+    }
+
+
+    private sealed class FakeFileStore : IFileStore
+    {
+        public Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken) => Task.FromResult("stored-invoice.pdf");
+        public Task<Stream> OpenReadAsync(string storedName, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(string storedName, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

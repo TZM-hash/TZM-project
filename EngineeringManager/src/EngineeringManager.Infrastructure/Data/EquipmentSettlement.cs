@@ -12,6 +12,7 @@ public sealed class EquipmentSettlement
     public Guid? PayableEntryId { get; set; }
     public PayableEntry? PayableEntry { get; set; }
     public string ModificationReason { get; set; } = string.Empty;
+    public string? Notes { get; set; }
     public string? PreviousSnapshotJson { get; set; }
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

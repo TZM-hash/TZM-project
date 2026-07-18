@@ -42,7 +42,8 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
                 Phone = NormalizeOptional(contact.Phone),
                 Email = NormalizeOptional(contact.Email),
                 Address = NormalizeOptional(contact.Address),
-                IsPrimary = contact.IsPrimary
+                IsPrimary = contact.IsPrimary,
+                Notes = NormalizeOptional(contact.Notes)
             });
         }
 
@@ -109,7 +110,7 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
                 partner.Contacts.Add(contact);
                 db.PartnerContacts.Add(contact);
             }
-            contact.Name = NormalizeRequired(request.PrimaryContact.Name, nameof(request.PrimaryContact.Name)); contact.Phone = NormalizeOptional(request.PrimaryContact.Phone); contact.Email = NormalizeOptional(request.PrimaryContact.Email); contact.Address = NormalizeOptional(request.PrimaryContact.Address);
+            contact.Name = NormalizeRequired(request.PrimaryContact.Name, nameof(request.PrimaryContact.Name)); contact.Phone = NormalizeOptional(request.PrimaryContact.Phone); contact.Email = NormalizeOptional(request.PrimaryContact.Email); contact.Address = NormalizeOptional(request.PrimaryContact.Address); contact.Notes = NormalizeOptional(request.PrimaryContact.Notes);
         }
         db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "UpdateBusinessPartner", EntityType = nameof(BusinessPartner), EntityId = partner.Id.ToString(), Reason = reason, BeforeJson = JsonSerializer.Serialize(before), AfterJson = JsonSerializer.Serialize(Snapshot(partner)) });
         await db.SaveChangesAsync(cancellationToken);
@@ -147,13 +148,32 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
             return;
         }
 
-        db.ProjectPartners.Add(new ProjectPartner
+        var link = new ProjectPartner
         {
             ProjectId = request.ProjectId,
             BusinessPartnerId = request.PartnerId,
             RoleType = request.RoleType,
             ContractId = request.ContractId,
-            IsPrimary = request.IsPrimary
+            IsPrimary = request.IsPrimary,
+            Notes = NormalizeOptional(request.Notes)
+        };
+        db.ProjectPartners.Add(link);
+        db.AuditLogs.Add(new AuditLog
+        {
+            Action = "LinkPartnerToProject",
+            EntityType = nameof(ProjectPartner),
+            EntityId = link.Id.ToString(),
+            RelatedProjectId = request.ProjectId.ToString(),
+            Reason = "关联项目合作单位",
+            AfterJson = JsonSerializer.Serialize(new
+            {
+                link.ProjectId,
+                link.BusinessPartnerId,
+                link.RoleType,
+                link.ContractId,
+                link.IsPrimary,
+                link.Notes
+            })
         });
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -217,12 +237,12 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
             partner.UnifiedSocialCreditCode,
             partner.Notes,
             partner.Roles.OrderBy(role => role.RoleType).Select(role => new PartnerRoleDto(role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms)).ToArray(),
-            partner.Contacts.OrderByDescending(contact => contact.IsPrimary).ThenBy(contact => contact.Name).Select(contact => new PartnerContactDto(contact.Id, contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary)).ToArray(),
+            partner.Contacts.OrderByDescending(contact => contact.IsPrimary).ThenBy(contact => contact.Name).Select(contact => new PartnerContactDto(contact.Id, contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary, contact.Notes)).ToArray(),
             partner.ProjectLinks.Count(link => link.IsActive),
             partner.IsActive,
             partner.ConcurrencyStamp);
 
-    private static object Snapshot(BusinessPartner item) => new { item.PartnerNumber, item.Name, item.ShortName, item.UnifiedSocialCreditCode, item.Notes, item.IsActive, Roles = item.Roles.Select(role => new { role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms }).ToArray(), Contacts = item.Contacts.Select(contact => new { contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary }).ToArray() };
+    private static object Snapshot(BusinessPartner item) => new { item.PartnerNumber, item.Name, item.ShortName, item.UnifiedSocialCreditCode, item.Notes, item.IsActive, Roles = item.Roles.Select(role => new { role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms }).ToArray(), Contacts = item.Contacts.Select(contact => new { contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary, contact.Notes }).ToArray() };
 
     private static string NormalizeRequired(string value, string parameterName)
     {

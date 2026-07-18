@@ -5,6 +5,26 @@
     var currentPage = Context.Request.Path.Value ?? string.Empty;
     string Nav(string prefix) => currentPage.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? "nav-link is-active" : "nav-link";
     string NavExact(string path) => string.Equals(currentPage.TrimEnd('/'), path.TrimEnd('/'), StringComparison.OrdinalIgnoreCase) ? "nav-link is-active" : "nav-link";
+    string? ParentPage()
+    {
+        var returnUrl = Context.Request.Query["ReturnUrl"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//")) return returnUrl;
+        if (currentPage.StartsWith("/Projects/", StringComparison.OrdinalIgnoreCase)) return "/Projects";
+        if (currentPage.StartsWith("/Finance/", StringComparison.OrdinalIgnoreCase)) return "/Projects";
+        if (currentPage.StartsWith("/Employees/Certificates/Edit", StringComparison.OrdinalIgnoreCase)) return "/Employees/Certificates";
+        if (currentPage.StartsWith("/Employees/", StringComparison.OrdinalIgnoreCase)) return "/Employees";
+        if (currentPage.StartsWith("/Payroll/", StringComparison.OrdinalIgnoreCase)) return "/Payroll";
+        if (currentPage.StartsWith("/Crews/", StringComparison.OrdinalIgnoreCase)) return "/Crews";
+        if (currentPage.StartsWith("/TemporaryWorkers/", StringComparison.OrdinalIgnoreCase)) return "/TemporaryWorkers";
+        if (currentPage.StartsWith("/Partners/", StringComparison.OrdinalIgnoreCase)) return "/Partners";
+        if (currentPage.StartsWith("/Companies/Certificates/Edit", StringComparison.OrdinalIgnoreCase)) return "/Companies/Certificates";
+        if (currentPage.StartsWith("/Companies/", StringComparison.OrdinalIgnoreCase)) return "/Companies";
+        if (currentPage.StartsWith("/Equipment/", StringComparison.OrdinalIgnoreCase)) return "/Equipment";
+        if (currentPage.StartsWith("/StageResults/", StringComparison.OrdinalIgnoreCase)) return "/Projects";
+        if (currentPage.StartsWith("/Admin/", StringComparison.OrdinalIgnoreCase) || currentPage.StartsWith("/Backups", StringComparison.OrdinalIgnoreCase)) return "/Admin";
+        return null;
+    }
+    var parentPage = ParentPage();
 }
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -27,14 +47,12 @@
             <div class="nav-group"><span class="nav-group-label">经营总览</span><a class="@(currentPage == "/" ? "nav-link is-active" : "nav-link")" asp-page="/Index"><svg><use href="/img/icons.svg#home"></use></svg><span>系统总览</span></a></div>
             <div class="nav-group"><span class="nav-group-label">项目经营</span>
                 <a class='@Nav("/Projects")' asp-page="/Projects/Index"><svg><use href="/img/icons.svg#projects"></use></svg><span>项目管理</span></a>
-                <a class='@Nav("/StageResults")' asp-page="/StageResults/Index"><svg><use href="/img/icons.svg#results"></use></svg><span>阶段成果</span></a>
-                <a class='@Nav("/Finance")' asp-page="/Finance/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>经营台账</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">人员与合作方</span>
                 <a class='@NavExact("/Employees")' asp-page="/Employees/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>员工管理</span></a>
-                <a class='@Nav("/Employees/Certificates")' asp-page="/Employees/Certificates/Index"><svg><use href="/img/icons.svg#reminder"></use></svg><span>员工证书</span></a>
-                <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#payroll"></use></svg><span>工资台账</span></a>
-                <a class='@Nav("/EmployeeLedger")' asp-page="/EmployeeLedger/Index"><svg><use href="/img/icons.svg#ledger"></use></svg><span>员工往来</span></a>
+                <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>工资台账</span></a>
+                <a class='@Nav("/Crews")' asp-page="/Crews/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>施工班组</span></a>
+                <a class='@Nav("/TemporaryWorkers")' asp-page="/TemporaryWorkers/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>临时人员</span></a>
                 <a class='@Nav("/Partners")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">公司与设备</span>
@@ -61,7 +79,13 @@
                 <div class="app-header-tools"><a class="header-icon-button" asp-page="/Reminders/Index" aria-label="提醒中心"><svg><use href="/img/icons.svg#reminder"></use></svg></a><partial name="_LoginPartial" /></div>
             </div>
         </header>
-        <main class="main-content app-main" role="main">@RenderBody()</main>
+        <main class="main-content app-main" role="main">
+            @if (parentPage is not null)
+            {
+                <nav class="page-parent-nav" aria-label="返回上级"><a class="button button--secondary button--back" href="@parentPage" data-smart-back>← 返回上级</a></nav>
+            }
+            @RenderBody()
+        </main>
         <footer class="app-footer">工程项目经营管理系统 · 内部经营管理</footer>
     </div>
     <div class="toast-region" aria-live="polite" data-pwa-status></div>

@@ -20,6 +20,10 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .Include(item => item.Branch)
             .Include(item => item.LegalEntities).ThenInclude(item => item.LegalEntity)
             .Include(item => item.Contracts).ThenInclude(item => item.LineItems)
+            .Include(item => item.Milestones)
+            .Include(item => item.Assignments).ThenInclude(item => item.User)
+            .Include(item => item.Partners).ThenInclude(item => item.Partner)
+            .Include(item => item.Partners).ThenInclude(item => item.Contract)
             .SingleOrDefaultAsync(item => item.Id == projectId && item.IsActive, cancellationToken);
         if (project is null) return null;
 
@@ -28,7 +32,8 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .Where(item => item.ProjectId == projectId)
             .OrderByDescending(item => item.EntryDate)
             .Select(item => new ProjectReceivableItemDto(item.Id, item.EntryDate, item.DueDate, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.LegalEntity.ShortName, item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.Amount, item.Description, item.IsVoided))
+                item.LegalEntity.ShortName, item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.Amount, item.Description, item.IsVoided,
+                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.ConcurrencyStamp))
             .ToListAsync(cancellationToken);
         var collections = await db.CollectionEntries.AsNoTracking()
             .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account)
@@ -36,7 +41,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .OrderByDescending(item => item.CollectionDate)
             .Select(item => new ProjectCollectionItemDto(item.Id, item.CollectionDate, item.Contract == null ? null : item.Contract.ContractNumber,
                 item.LegalEntity.ShortName, item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.Account.AccountName,
-                item.Amount, item.PaymentMethod, item.Notes))
+                item.Amount, item.PaymentMethod, item.Notes, item.ReceivableEntryId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp))
             .ToListAsync(cancellationToken);
         var invoices = await db.InvoiceEntries.AsNoTracking()
             .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
@@ -44,22 +49,79 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .OrderByDescending(item => item.InvoiceDate)
             .Select(item => new ProjectInvoiceItemDto(item.Id, item.InvoiceDate, item.InvoiceNumber, item.Direction,
                 item.Contract == null ? null : item.Contract.ContractNumber, item.LegalEntity.ShortName,
-                item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status))
+                item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status,
+                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.InvoiceType, item.ConcurrencyStamp))
             .ToListAsync(cancellationToken);
         var payables = await db.PayableEntries.AsNoTracking()
             .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
             .Where(item => item.ProjectId == projectId)
             .OrderByDescending(item => item.EntryDate)
             .Select(item => new ProjectPayableItemDto(item.Id, item.EntryDate, item.DueDate, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.LegalEntity.ShortName, item.BusinessPartner.Name, item.Amount, item.Description, item.IsVoided))
+                item.LegalEntity.ShortName, item.BusinessPartner.Name, item.Amount, item.Description, item.IsVoided,
+                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.ConcurrencyStamp))
             .ToListAsync(cancellationToken);
         var payments = await db.PaymentEntries.AsNoTracking()
             .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account)
             .Where(item => item.ProjectId == projectId)
             .OrderByDescending(item => item.PaymentDate)
             .Select(item => new ProjectPaymentItemDto(item.Id, item.PaymentDate, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.LegalEntity.ShortName, item.BusinessPartner.Name, item.Account.AccountName, item.Amount, item.PaymentMethod, item.Notes))
+                item.LegalEntity.ShortName, item.BusinessPartner.Name, item.Account.AccountName, item.Amount, item.PaymentMethod, item.Notes,
+                item.PayableEntryId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp))
             .ToListAsync(cancellationToken);
+        var payrollCrewRows = await db.PayrollPayments.AsNoTracking()
+            .Where(item => item.RecipientType == EngineeringManager.Domain.Employees.PayrollRecipientType.CrewWorker &&
+                item.CrewBusinessPartnerId.HasValue && item.Batch.ProjectId == projectId &&
+                item.Batch.Status != EngineeringManager.Domain.Employees.PayrollBatchStatus.Voided &&
+                (item.Batch.PaymentDate.HasValue || item.PaymentDate.HasValue))
+            .Select(item => new
+            {
+                item.Id,
+                item.PayrollBatchId,
+                PaymentDate = item.Batch.PaymentDate ?? item.PaymentDate!.Value,
+                item.Batch.LegalEntityId,
+                LegalEntityName = item.Batch.LegalEntity != null ? item.Batch.LegalEntity.ShortName : "未填写公司",
+                item.CrewBusinessPartnerId,
+                BusinessPartnerName = item.CrewBusinessPartner != null ? item.CrewBusinessPartner.Name : item.CrewNameSnapshot ?? "施工班组",
+                item.Batch.AccountId,
+                AccountName = item.Batch.Account != null ? item.Batch.Account.AccountName : "未填写账户",
+                item.Batch.PaymentMethod,
+                item.Amount,
+                item.Batch.BatchNumber
+            })
+            .ToListAsync(cancellationToken);
+        var payrollKeys = payrollCrewRows.Select(item => new { item.PayrollBatchId, CrewId = item.CrewBusinessPartnerId!.Value }).Distinct().ToArray();
+        var payrollBatchIds = payrollKeys.Select(item => item.PayrollBatchId).Distinct().ToArray();
+        var payrollAllocations = await db.PayrollCrewAllocations.AsNoTracking()
+            .Include(item => item.Contract)
+            .Where(item => payrollBatchIds.Contains(item.PayrollBatchId))
+            .ToListAsync(cancellationToken);
+        payments.AddRange(payrollCrewRows
+            .GroupBy(item => new { item.PayrollBatchId, CrewId = item.CrewBusinessPartnerId!.Value })
+            .Select(group =>
+            {
+                var first = group.First();
+                var allocation = payrollAllocations.SingleOrDefault(item => item.PayrollBatchId == group.Key.PayrollBatchId && item.CrewBusinessPartnerId == group.Key.CrewId);
+                return new ProjectPaymentItemDto(
+                    first.Id,
+                    first.PaymentDate,
+                    allocation?.Contract?.ContractNumber,
+                    first.LegalEntityName,
+                    first.BusinessPartnerName,
+                    first.AccountName,
+                    group.Sum(item => item.Amount),
+                    first.PaymentMethod,
+                    $"民工工资代发 · {first.BatchNumber}",
+                    allocation?.PayableEntryId,
+                    allocation?.ContractId,
+                    first.LegalEntityId,
+                    group.Key.CrewId,
+                    first.AccountId,
+                    default,
+                    "PayrollCrewDisbursement",
+                    group.Key.PayrollBatchId,
+                    first.Id);
+            }));
+        payments = payments.OrderByDescending(item => item.PaymentDate).ThenBy(item => item.BusinessPartnerName).ToList();
 
         var projectSummary = ProjectSummaryService.Calculate(project);
         var financeSummary = await new FinanceLedgerService(db).GetProjectSummaryAsync(projectId, cancellationToken);
@@ -74,7 +136,14 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             invoices,
             payables,
             payments,
-            activities);
+            activities,
+            project.Milestones.OrderBy(item => item.SortOrder).ThenBy(item => item.PlannedDate).Select(item => new ProjectMilestoneDto(
+                item.Id, item.Name, item.PlannedDate, item.ActualDate, item.IsCompleted, item.SortOrder, item.Notes)).ToArray(),
+            project.Assignments.OrderBy(item => item.AssignmentType).ThenBy(item => item.User.DisplayName).Select(item => new ProjectAssignmentDto(
+                item.Id, item.UserId, item.User.DisplayName, item.AssignmentType, item.IsActive, item.Notes)).ToArray(),
+            project.Partners.OrderByDescending(item => item.IsPrimary).ThenBy(item => item.Partner.Name).Select(item => new ProjectPartnerLinkDto(
+                item.Id, item.BusinessPartnerId, item.Partner.Name, item.RoleType, item.ContractId, item.Contract == null ? null : item.Contract.ContractNumber,
+                item.IsPrimary, item.IsActive, item.Notes)).ToArray());
     }
 
     public async Task<ProjectEditOptionsDto> GetEditOptionsAsync(CancellationToken cancellationToken)
@@ -101,6 +170,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         if (project.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("项目资料已被其他用户修改，请刷新后重试。");
         if (await db.Projects.AnyAsync(item => item.Id != request.Id && item.ProjectNumber == number, cancellationToken))
             throw new InvalidOperationException($"项目编号已存在：{number}");
+        ValidateActualDates(request.ActualStartDate, request.ActualCompletionDate);
         await ValidateReferencesAsync(request, cancellationToken);
 
         var before = Snapshot(project);
@@ -116,6 +186,9 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         project.Stage = request.Stage;
         project.AffiliationType = request.AffiliationType;
         project.ArchiveStatus = request.ArchiveStatus;
+        project.ActualStartDate = request.ActualStartDate;
+        project.ActualCompletionDate = request.ActualCompletionDate;
+        project.Notes = Optional(request.Notes);
         project.UpdatedAt = DateTimeOffset.UtcNow;
         db.Entry(project).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
         project.ConcurrencyStamp = Guid.NewGuid();
@@ -194,21 +267,28 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         project.GeneralContractorContact, project.GeneralContractorPhone, project.ResponsibleUserId, project.ResponsibleUser?.DisplayName,
         project.DepartmentId, project.Department?.Name, project.BranchId, project.Branch?.Name, project.Stage, project.AffiliationType, project.ArchiveStatus,
         project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => new ProjectWorkspaceOptionDto(item.LegalEntityId.ToString(), item.LegalEntity.ShortName)).ToArray(),
-        project.UpdatedAt, project.ConcurrencyStamp);
+        project.UpdatedAt, project.ConcurrencyStamp, project.ActualStartDate, project.ActualCompletionDate, project.Notes);
 
     private static ContractDto ToContractDto(Contract contract) => new(
         contract.Id, contract.ContractNumber, contract.Name, contract.ContractType, contract.AllocationMode, contract.TotalAmount,
         contract.LineItems.OrderBy(item => item.SortOrder).ThenBy(item => item.Code).Select(item => new ContractLineItemDto(
             item.Id, item.Code, item.Name, item.Unit, item.EstimatedQuantity, item.EstimatedUnitPrice,
             (item.EstimatedQuantity ?? 0m) * (item.EstimatedUnitPrice ?? 0m), item.SettledQuantity, item.SettledUnitPrice,
-            item.IsSettlementConfirmed ? (item.SettledQuantity ?? 0m) * (item.SettledUnitPrice ?? 0m) : 0m, item.IsSettlementConfirmed)).ToArray());
+            item.IsSettlementConfirmed ? (item.SettledQuantity ?? 0m) * (item.SettledUnitPrice ?? 0m) : 0m, item.IsSettlementConfirmed, item.ConcurrencyStamp, item.Notes)).ToArray(), contract.Notes);
 
     private static object Snapshot(Project item) => new
     {
         item.ProjectNumber, item.Name, item.ParentProjectName, item.GeneralContractorName, item.GeneralContractorContact,
         item.GeneralContractorPhone, item.ResponsibleUserId, item.DepartmentId, item.BranchId, item.Stage, item.AffiliationType, item.ArchiveStatus,
+        item.ActualStartDate, item.ActualCompletionDate, item.Notes,
         LegalEntityIds = item.LegalEntities.Select(link => link.LegalEntityId).Order().ToArray()
     };
+
+    private static void ValidateActualDates(DateOnly? actualStartDate, DateOnly? actualCompletionDate)
+    {
+        if (actualStartDate.HasValue && actualCompletionDate.HasValue && actualCompletionDate.Value < actualStartDate.Value)
+            throw new ArgumentException("实际完工日期不得早于开工日期。");
+    }
 
     private static DateTimeOffset ToTimestamp(DateOnly date) => new(date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     private static string Required(string value, string parameter) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException("值不能为空。", parameter);

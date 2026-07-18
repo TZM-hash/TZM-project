@@ -14,6 +14,8 @@ public sealed class DataWorkbenchAssetTests
         js.Should().Contain("data-column-key");
         js.Should().Contain("data-column-order");
         js.Should().Contain("row-spacing-compact");
+        js.Should().Contain("table.classList.remove(...rowSpacingClasses)");
+        js.Should().Contain("table.classList.add(`row-spacing-${value}`)");
         js.Should().Contain("data-filter-chip");
         js.Should().Contain("data-saved-view-filter-json");
         js.Should().Contain("data-current-page-size");

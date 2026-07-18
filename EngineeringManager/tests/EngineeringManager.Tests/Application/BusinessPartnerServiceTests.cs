@@ -5,11 +5,33 @@ using EngineeringManager.Infrastructure.Partners;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Tests.Application;
 
 public sealed class BusinessPartnerServiceTests
 {
+    [Fact]
+    public async Task ProjectLinkNotesRoundTripAndEnterAuditLog()
+    {
+        await using var fixture = await PartnerFixture.CreateAsync();
+        var partner = await fixture.Service.CreateAsync(
+            new CreateBusinessPartnerRequest("BP-LINK", "关联单位", "关联", null, null, [new PartnerRoleRequest(BusinessPartnerRoleType.ConstructionCrew, null, null, null)], []),
+            CancellationToken.None);
+        var project = new Project { ProjectNumber = "P-LINK", Name = "关联项目" };
+        fixture.Db.Projects.Add(project);
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Service.LinkToProjectAsync(
+            new LinkPartnerToProjectRequest(partner.Id, project.Id, BusinessPartnerRoleType.ConstructionCrew, null, true, "合作备注"),
+            CancellationToken.None);
+
+        (await fixture.Db.ProjectPartners.SingleAsync()).Notes.Should().Be("合作备注");
+        var audit = await fixture.Db.AuditLogs.SingleAsync(item => item.EntityType == nameof(ProjectPartner));
+        using var after = JsonDocument.Parse(audit.AfterJson!);
+        after.RootElement.GetProperty("Notes").GetString().Should().Be("合作备注");
+    }
+
     [Fact]
     public async Task OnePartnerCanHaveMultipleRolesWithoutDuplicateMasterRecords()
     {
@@ -76,11 +98,12 @@ public sealed class BusinessPartnerServiceTests
         await using var fixture = await PartnerFixture.CreateAsync();
         var partner = await fixture.Service.CreateAsync(new CreateBusinessPartnerRequest("BP-UPD", "原单位", "原单位", null, null, [new PartnerRoleRequest(BusinessPartnerRoleType.ConstructionCrew, "土建", null, null)], []), CancellationToken.None);
 
-        var updated = await fixture.Service.UpdateAsync("admin", new UpdateBusinessPartnerRequest(partner.Id, partner.PartnerNumber, "修改后单位", "修改后", null, "更新备注", new PartnerRoleRequest(BusinessPartnerRoleType.MaterialSupplier, "材料", null, null), new PartnerContactRequest("新联系人", "13800000002", null, null, true), true, partner.ConcurrencyStamp, "维护合作单位"), CancellationToken.None);
+        var updated = await fixture.Service.UpdateAsync("admin", new UpdateBusinessPartnerRequest(partner.Id, partner.PartnerNumber, "修改后单位", "修改后", null, "更新备注", new PartnerRoleRequest(BusinessPartnerRoleType.MaterialSupplier, "材料", null, null), new PartnerContactRequest("新联系人", "13800000002", null, null, true, "联系人备注"), true, partner.ConcurrencyStamp, "维护合作单位"), CancellationToken.None);
 
         updated.Name.Should().Be("修改后单位");
         updated.Roles.Should().Contain(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew);
         updated.Roles.Should().Contain(item => item.RoleType == BusinessPartnerRoleType.MaterialSupplier);
+        updated.Contacts.Should().ContainSingle().Which.Notes.Should().Be("联系人备注");
         (await fixture.Db.AuditLogs.SingleAsync()).Action.Should().Be("UpdateBusinessPartner");
     }
 

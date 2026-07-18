@@ -10,4 +10,5 @@ public sealed class ProjectMilestone
     public DateOnly? ActualDate { get; set; }
     public bool IsCompleted { get; set; }
     public int SortOrder { get; set; }
+    public string? Notes { get; set; }
 }

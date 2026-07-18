@@ -8,11 +8,30 @@ using EngineeringManager.Infrastructure.Equipment;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Tests.Application;
 
 public sealed class EquipmentSettlementServiceTests
 {
+    [Fact]
+    public async Task SettlementNotesRoundTripAndEnterAuditLog()
+    {
+        await using var scope = await CreateScopeAsync();
+        var usage = await SeedUsageAsync(scope.Db, new DateOnly(2026, 7, 10), true);
+
+        var result = await scope.Service.FinalizeAsync(
+            EquipmentActor.Administrator("admin"),
+            new FinalizeEquipmentSettlementRequest(usage.Id, new DateOnly(2026, 7, 10), [], false, "结算", null, "结算备注"),
+            default);
+
+        result.Notes.Should().Be("结算备注");
+        (await scope.Db.EquipmentSettlements.SingleAsync(item => item.Id == result.Id)).Notes.Should().Be("结算备注");
+        var audit = await scope.Db.AuditLogs.SingleAsync(item => item.EntityType == nameof(EquipmentSettlement));
+        using var after = JsonDocument.Parse(audit.AfterJson!);
+        after.RootElement.GetProperty("Notes").GetString().Should().Be("结算备注");
+    }
+
     [Fact]
     public async Task FinalSettlementCalculatesAdjustmentsOffsetsAndCreatesOnlyOnePayable()
     {

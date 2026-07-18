@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
@@ -9,6 +10,132 @@ namespace EngineeringManager.Infrastructure.Payroll;
 
 public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
 {
+    public async Task<PayrollDisbursementBatchDetailsDto> SaveDisbursementBatchAsync(
+        string userId,
+        SavePayrollDisbursementBatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        var number = NormalizeRequired(request.BatchNumber, nameof(request.BatchNumber));
+        var name = NormalizeRequired(request.Name, nameof(request.Name));
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        if (await db.PayrollBatches.AnyAsync(item => item.BatchNumber == number && item.Id != request.Id, cancellationToken))
+        {
+            throw new InvalidOperationException($"工资批次编号已存在：{number}");
+        }
+
+        await ValidateDisbursementDimensionsAsync(request, cancellationToken);
+        var resolvedLines = await ResolveDisbursementLinesAsync(request, cancellationToken);
+        var inputs = resolvedLines.Select(item => item.Input).ToArray();
+        var summary = request.Status == PayrollBatchStatus.Confirmed
+            ? PayrollDisbursementRules.EnsureCanReview(request.ActualAmount, request.ProjectId, inputs)
+            : PayrollDisbursementRules.Calculate(request.ActualAmount, inputs);
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var batch = request.Id.HasValue
+            ? await db.PayrollBatches
+                .Include(item => item.Payments)
+                .Include(item => item.CrewAllocations)
+                .SingleOrDefaultAsync(item => item.Id == request.Id.Value, cancellationToken)
+                ?? throw new InvalidOperationException("工资批次不存在。")
+            : new PayrollBatch();
+        if (request.Id.HasValue && request.ConcurrencyStamp != batch.ConcurrencyStamp)
+        {
+            throw new DbUpdateConcurrencyException("工资批次已被其他用户修改，请刷新后重试。");
+        }
+
+        var before = request.Id.HasValue ? BatchSnapshot(batch) : null;
+        var effectiveDate = request.PaymentDate ?? DateOnly.FromDateTime(DateTime.Today);
+        batch.BatchNumber = number;
+        batch.Name = name;
+        batch.BatchType = PayrollBatchType.Temporary;
+        batch.StartDate = effectiveDate;
+        batch.EndDate = effectiveDate;
+        batch.PaymentDate = request.PaymentDate;
+        batch.ProjectId = request.ProjectId;
+        batch.LegalEntityId = request.LegalEntityId;
+        batch.AccountId = request.AccountId;
+        batch.ActualAmount = request.ActualAmount;
+        batch.PaymentMethod = request.PaymentMethod;
+        batch.VoucherNumber = NormalizeOptional(request.VoucherNumber);
+        batch.Status = request.Status;
+        batch.Notes = NormalizeOptional(request.Notes);
+        batch.IsUnifiedDisbursement = true;
+        batch.UpdatedAt = DateTimeOffset.UtcNow;
+        batch.ConcurrencyStamp = Guid.NewGuid();
+        if (request.Status == PayrollBatchStatus.Confirmed)
+        {
+            batch.ReviewedAt = DateTimeOffset.UtcNow;
+            batch.ReviewedByUserId = userId;
+        }
+
+        if (!request.Id.HasValue)
+        {
+            db.PayrollBatches.Add(batch);
+        }
+
+        ApplyDisbursementLines(batch, request.Lines, resolvedLines);
+        await ApplyCrewAllocationsAsync(batch, request.CrewAllocations, summary, cancellationToken);
+        await ApplyBatchTransactionAsync(batch, cancellationToken);
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = userId,
+            Action = request.Id.HasValue ? "UpdatePayrollDisbursementBatch" : "CreatePayrollDisbursementBatch",
+            EntityType = nameof(PayrollBatch),
+            EntityId = batch.Id.ToString(),
+            Reason = reason,
+            BeforeJson = before is null ? null : JsonSerializer.Serialize(before),
+            AfterJson = JsonSerializer.Serialize(BatchSnapshot(batch))
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return (await GetDisbursementBatchAsync(batch.Id, cancellationToken))!;
+    }
+
+    public async Task<PayrollDisbursementBatchDetailsDto?> GetDisbursementBatchAsync(Guid batchId, CancellationToken cancellationToken)
+    {
+        var batch = await db.PayrollBatches.AsNoTracking()
+            .Include(item => item.Payments)
+            .Include(item => item.CrewAllocations)
+            .SingleOrDefaultAsync(item => item.Id == batchId, cancellationToken);
+        if (batch is null) return null;
+        var lines = batch.Payments.Select(ToDisbursementLineDto).OrderBy(item => item.RecipientType).ThenBy(item => item.RecipientNameSnapshot).ToArray();
+        var summary = PayrollDisbursementRules.Calculate(batch.ActualAmount, lines.Select(item => new PayrollDisbursementLineInput(
+            item.RecipientType,
+            item.EmployeeId,
+            item.ConstructionWorkerId,
+            item.TemporaryWorkerId,
+            item.CrewBusinessPartnerId,
+            item.Amount)));
+        return new PayrollDisbursementBatchDetailsDto(
+            ToDisbursementBatchDto(batch),
+            summary,
+            lines,
+            batch.CrewAllocations.Select(item => new PayrollCrewAllocationDto(item.Id, item.CrewBusinessPartnerId, item.ContractId, item.PayableEntryId, item.Notes, item.ConcurrencyStamp)).ToArray());
+    }
+
+    public async Task<PayrollDisbursementOverviewDto> GetDisbursementOverviewAsync(CancellationToken cancellationToken)
+    {
+        var ids = await db.PayrollBatches.AsNoTracking()
+            .Where(item => item.IsUnifiedDisbursement && item.Status != PayrollBatchStatus.Voided)
+            .OrderByDescending(item => item.PaymentDate)
+            .ThenBy(item => item.BatchNumber)
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+        var batches = new List<PayrollDisbursementBatchListItemDto>(ids.Count);
+        foreach (var id in ids)
+        {
+            var details = (await GetDisbursementBatchAsync(id, cancellationToken))!;
+            batches.Add(new PayrollDisbursementBatchListItemDto(details.Batch, details.Summary, details.Lines.Count));
+        }
+        return new PayrollDisbursementOverviewDto(
+            batches.Sum(item => item.Batch.ActualAmount),
+            batches.Sum(item => item.Summary.EmployeeAmount),
+            batches.Sum(item => item.Summary.CrewAmount),
+            batches.Sum(item => item.Summary.TemporaryAmount),
+            batches.Sum(item => item.Summary.Difference),
+            batches);
+    }
+
     public async Task<PayrollBatchDto> CreateBatchAsync(CreatePayrollBatchRequest request, CancellationToken cancellationToken)
     {
         var number = NormalizeRequired(request.BatchNumber, nameof(request.BatchNumber));
@@ -167,7 +294,10 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             .Include(item => item.Payments)
             .SingleOrDefaultAsync(item => item.Id == batchId, cancellationToken)
             ?? throw new InvalidOperationException("工资批次不存在。");
-        var employeeIds = batch.Items.Select(item => item.EmployeeId).Concat(batch.Payments.Select(item => item.EmployeeId)).Distinct().ToArray();
+        var employeeIds = batch.Items.Select(item => item.EmployeeId)
+            .Concat(batch.Payments.Where(item => item.EmployeeId.HasValue).Select(item => item.EmployeeId!.Value))
+            .Distinct()
+            .ToArray();
         var summaries = employeeIds.Select(employeeId =>
         {
             var employeeItems = batch.Items.Where(item => item.EmployeeId == employeeId).ToArray();
@@ -279,6 +409,249 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
 
     private static PayrollBatchDto ToDto(PayrollBatch batch) =>
         new(batch.Id, batch.BatchNumber, batch.Name, batch.BatchType, batch.StartDate, batch.EndDate, batch.ProjectId, batch.LegalEntityId, batch.Status);
+
+    private async Task ValidateDisbursementDimensionsAsync(SavePayrollDisbursementBatchRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Status == PayrollBatchStatus.Confirmed && (!request.PaymentDate.HasValue || !request.LegalEntityId.HasValue || !request.AccountId.HasValue))
+        {
+            throw new InvalidOperationException("已核对工资批次必须填写发放日期、发放公司和付款账户。");
+        }
+        if (request.LegalEntityId.HasValue && !await db.LegalEntities.AnyAsync(item => item.Id == request.LegalEntityId && item.IsActive, cancellationToken))
+        {
+            throw new InvalidOperationException("发放公司不存在或已停用。");
+        }
+        if (request.ProjectId.HasValue && !await db.Projects.AnyAsync(item => item.Id == request.ProjectId && item.IsActive, cancellationToken))
+        {
+            throw new InvalidOperationException("发放项目不存在或已停用。");
+        }
+        if (request.AccountId.HasValue && (!request.LegalEntityId.HasValue || !await db.FinancialAccounts.AnyAsync(item =>
+                item.Id == request.AccountId && item.LegalEntityId == request.LegalEntityId && item.IsActive,
+                cancellationToken)))
+        {
+            throw new InvalidOperationException("付款账户不存在、已停用或不属于发放公司。");
+        }
+    }
+
+    private async Task<IReadOnlyList<ResolvedDisbursementLine>> ResolveDisbursementLinesAsync(
+        SavePayrollDisbursementBatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        var employeeIds = request.Lines.Where(item => item.EmployeeId.HasValue).Select(item => item.EmployeeId!.Value).Distinct().ToArray();
+        var workerIds = request.Lines.Where(item => item.ConstructionWorkerId.HasValue).Select(item => item.ConstructionWorkerId!.Value).Distinct().ToArray();
+        var temporaryIds = request.Lines.Where(item => item.TemporaryWorkerId.HasValue).Select(item => item.TemporaryWorkerId!.Value).Distinct().ToArray();
+        var crewIds = request.Lines.Where(item => item.CrewBusinessPartnerId.HasValue).Select(item => item.CrewBusinessPartnerId!.Value).Distinct().ToArray();
+        var employees = await db.Employees.Where(item => employeeIds.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
+        var workers = await db.ConstructionWorkers.Where(item => workerIds.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
+        var temporaryWorkers = await db.TemporaryWorkers.Where(item => temporaryIds.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
+        var crews = await db.BusinessPartners.Where(item => crewIds.Contains(item.Id) && item.IsActive && item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew)).ToDictionaryAsync(item => item.Id, cancellationToken);
+        var memberships = await db.ConstructionCrewMemberships.AsNoTracking()
+            .Where(item => workerIds.Contains(item.ConstructionWorkerId) && crewIds.Contains(item.CrewBusinessPartnerId))
+            .ToListAsync(cancellationToken);
+        var result = new List<ResolvedDisbursementLine>(request.Lines.Count);
+        foreach (var line in request.Lines)
+        {
+            var input = new PayrollDisbursementLineInput(line.RecipientType, line.EmployeeId, line.ConstructionWorkerId, line.TemporaryWorkerId, line.CrewBusinessPartnerId, line.Amount);
+            switch (line.RecipientType)
+            {
+                case PayrollRecipientType.Employee:
+                    if (!line.EmployeeId.HasValue || !employees.TryGetValue(line.EmployeeId.Value, out var employee)) throw new InvalidOperationException("员工不存在或已停用。");
+                    result.Add(new ResolvedDisbursementLine(input, $"employee:{employee.Id:N}", employee.Name, employee.IdentityNumber, employee.Phone, employee.BankAccountNumber, employee.PositionTitle, null));
+                    break;
+                case PayrollRecipientType.CrewWorker:
+                    if (!line.ConstructionWorkerId.HasValue || !workers.TryGetValue(line.ConstructionWorkerId.Value, out var worker)) throw new InvalidOperationException("班组人员不存在或已停用。");
+                    if (!line.CrewBusinessPartnerId.HasValue || !crews.TryGetValue(line.CrewBusinessPartnerId.Value, out var crew)) throw new InvalidOperationException("施工班组不存在或已停用。");
+                    var validMembership = memberships.Any(item => item.ConstructionWorkerId == worker.Id && item.CrewBusinessPartnerId == crew.Id &&
+                        (!request.PaymentDate.HasValue || item.StartDate <= request.PaymentDate.Value && (!item.EndDate.HasValue || item.EndDate.Value >= request.PaymentDate.Value)));
+                    if (!validMembership) throw new InvalidOperationException("班组人员在发放日期不属于所选施工班组。");
+                    result.Add(new ResolvedDisbursementLine(input, $"crew-worker:{worker.Id:N}", worker.Name, worker.IdentityNumber, worker.Phone, worker.BankAccountNumber, worker.Trade, crew.Name));
+                    break;
+                case PayrollRecipientType.TemporaryWorker:
+                    if (!line.TemporaryWorkerId.HasValue || !temporaryWorkers.TryGetValue(line.TemporaryWorkerId.Value, out var temporaryWorker)) throw new InvalidOperationException("临时人员不存在或已停用。");
+                    result.Add(new ResolvedDisbursementLine(input, $"temporary-worker:{temporaryWorker.Id:N}", temporaryWorker.Name, temporaryWorker.IdentityNumber, temporaryWorker.Phone, temporaryWorker.BankAccountNumber, temporaryWorker.Trade, null));
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(request), $"不支持的人员来源：{line.RecipientType}。");
+            }
+        }
+        return result;
+    }
+
+    private void ApplyDisbursementLines(
+        PayrollBatch batch,
+        IReadOnlyList<PayrollDisbursementLineRequest> requests,
+        IReadOnlyList<ResolvedDisbursementLine> resolved)
+    {
+        var requestedIds = requests.Where(item => item.Id.HasValue).Select(item => item.Id!.Value).ToHashSet();
+        foreach (var obsolete in batch.Payments.Where(item => !requestedIds.Contains(item.Id)).ToArray())
+        {
+            db.PayrollPayments.Remove(obsolete);
+        }
+        for (var index = 0; index < requests.Count; index++)
+        {
+            var request = requests[index];
+            var data = resolved[index];
+            var line = request.Id.HasValue
+                ? batch.Payments.SingleOrDefault(item => item.Id == request.Id.Value) ?? throw new InvalidOperationException("工资人员明细不存在或不属于当前批次。")
+                : new PayrollPayment { Batch = batch };
+            line.RecipientType = request.RecipientType;
+            line.RecipientKey = data.RecipientKey;
+            line.EmployeeId = request.EmployeeId;
+            line.ConstructionWorkerId = request.ConstructionWorkerId;
+            line.TemporaryWorkerId = request.TemporaryWorkerId;
+            line.CrewBusinessPartnerId = request.CrewBusinessPartnerId;
+            line.Amount = request.Amount;
+            line.PayeeType = request.RecipientType == PayrollRecipientType.Employee ? PayrollPayeeType.Employee : request.RecipientType == PayrollRecipientType.CrewWorker ? PayrollPayeeType.CrewLeader : PayrollPayeeType.EntrustedRecipient;
+            line.PayeeName = data.Name;
+            line.RecipientNameSnapshot = data.Name;
+            line.IdentityNumberSnapshot = data.IdentityNumber;
+            line.PhoneSnapshot = data.Phone;
+            line.BankAccountSnapshot = data.BankAccountNumber;
+            line.TradeSnapshot = data.Trade;
+            line.CrewNameSnapshot = data.CrewName;
+            line.Notes = NormalizeOptional(request.Notes);
+            line.AccountId = null;
+            line.PaymentDate = null;
+            line.AccountTransactionId = null;
+            line.ConcurrencyStamp = Guid.NewGuid();
+            if (!request.Id.HasValue)
+            {
+                batch.Payments.Add(line);
+                db.PayrollPayments.Add(line);
+            }
+        }
+    }
+
+    private async Task ApplyCrewAllocationsAsync(
+        PayrollBatch batch,
+        IReadOnlyList<PayrollCrewAllocationRequest> requests,
+        PayrollDisbursementSummary summary,
+        CancellationToken cancellationToken)
+    {
+        var requestMap = requests.ToDictionary(item => item.CrewBusinessPartnerId);
+        var crewIds = summary.CrewAmounts.Select(item => item.CrewBusinessPartnerId).ToArray();
+        if (requestMap.Keys.Except(crewIds).Any()) throw new InvalidOperationException("班组工程款关联包含没有人员明细的施工班组。");
+        foreach (var obsolete in batch.CrewAllocations.Where(item => !crewIds.Contains(item.CrewBusinessPartnerId)).ToArray())
+        {
+            db.PayrollCrewAllocations.Remove(obsolete);
+        }
+        foreach (var crewId in crewIds)
+        {
+            var request = requestMap.GetValueOrDefault(crewId) ?? new PayrollCrewAllocationRequest(crewId, null, null, null);
+            if (request.ContractId.HasValue && !await db.Contracts.AnyAsync(item => item.Id == request.ContractId && item.ProjectId == batch.ProjectId && item.BusinessPartnerId == crewId, cancellationToken))
+                throw new InvalidOperationException("班组施工合同与工资批次项目或班组不匹配。");
+            if (request.PayableEntryId.HasValue && !await db.PayableEntries.AnyAsync(item => item.Id == request.PayableEntryId && item.ProjectId == batch.ProjectId && item.BusinessPartnerId == crewId && !item.IsVoided, cancellationToken))
+                throw new InvalidOperationException("班组应付记录与工资批次项目或班组不匹配。");
+            var allocation = batch.CrewAllocations.SingleOrDefault(item => item.CrewBusinessPartnerId == crewId);
+            if (allocation is null)
+            {
+                allocation = new PayrollCrewAllocation { Batch = batch, CrewBusinessPartnerId = crewId };
+                batch.CrewAllocations.Add(allocation);
+                db.PayrollCrewAllocations.Add(allocation);
+            }
+            allocation.ContractId = request.ContractId;
+            allocation.PayableEntryId = request.PayableEntryId;
+            allocation.Notes = NormalizeOptional(request.Notes);
+            allocation.ConcurrencyStamp = Guid.NewGuid();
+        }
+    }
+
+    private async Task ApplyBatchTransactionAsync(PayrollBatch batch, CancellationToken cancellationToken)
+    {
+        var shouldPost = batch.Status is PayrollBatchStatus.Confirmed or PayrollBatchStatus.Closed or PayrollBatchStatus.ModifiedPendingReview;
+        if (!shouldPost)
+        {
+            if (!batch.AccountTransactionId.HasValue) return;
+            var original = await db.AccountTransactions.SingleOrDefaultAsync(item => item.Id == batch.AccountTransactionId.Value, cancellationToken)
+                ?? throw new InvalidOperationException("工资批次关联的账户流水不存在。");
+            var reversal = await db.AccountTransactions.SingleOrDefaultAsync(
+                item => item.SourceType == AccountTransactionSourceType.PayrollPaymentReversal && item.SourceId == batch.Id,
+                cancellationToken);
+            if (reversal is null)
+            {
+                reversal = new AccountTransaction
+                {
+                    Direction = AccountTransactionDirection.Inflow,
+                    SourceType = AccountTransactionSourceType.PayrollPaymentReversal,
+                    SourceId = batch.Id
+                };
+                db.AccountTransactions.Add(reversal);
+            }
+            reversal.AccountId = original.AccountId;
+            reversal.TransactionDate = batch.PaymentDate ?? original.TransactionDate;
+            reversal.Amount = original.Amount;
+            reversal.Description = $"工资批次冲销：{batch.BatchNumber} · {batch.Name}";
+            return;
+        }
+
+        if (!batch.AccountId.HasValue || !batch.PaymentDate.HasValue) throw new InvalidOperationException("有效工资批次必须填写付款账户和发放日期。");
+        AccountTransaction accountTransaction;
+        if (batch.AccountTransactionId.HasValue)
+        {
+            accountTransaction = await db.AccountTransactions.SingleOrDefaultAsync(item => item.Id == batch.AccountTransactionId.Value, cancellationToken)
+                ?? throw new InvalidOperationException("工资批次关联的账户流水不存在。");
+        }
+        else
+        {
+            accountTransaction = new AccountTransaction
+            {
+                Direction = AccountTransactionDirection.Outflow,
+                SourceType = AccountTransactionSourceType.PayrollPayment,
+                SourceId = batch.Id
+            };
+            batch.AccountTransactionId = accountTransaction.Id;
+            db.AccountTransactions.Add(accountTransaction);
+        }
+        accountTransaction.AccountId = batch.AccountId.Value;
+        accountTransaction.TransactionDate = batch.PaymentDate.Value;
+        accountTransaction.Amount = batch.ActualAmount;
+        accountTransaction.Description = $"工资批次：{batch.BatchNumber} · {batch.Name}";
+        var existingReversal = await db.AccountTransactions.SingleOrDefaultAsync(
+            item => item.SourceType == AccountTransactionSourceType.PayrollPaymentReversal && item.SourceId == batch.Id,
+            cancellationToken);
+        if (existingReversal is not null)
+        {
+            existingReversal.AccountId = batch.AccountId.Value;
+            existingReversal.TransactionDate = batch.PaymentDate.Value;
+            existingReversal.Amount = 0m;
+            existingReversal.Description = $"工资批次已恢复有效：{batch.BatchNumber} · {batch.Name}";
+        }
+    }
+
+    private static PayrollDisbursementBatchDto ToDisbursementBatchDto(PayrollBatch batch) => new(
+        batch.Id, batch.BatchNumber, batch.Name, batch.PaymentDate, batch.ProjectId, batch.LegalEntityId, batch.AccountId,
+        batch.ActualAmount, batch.PaymentMethod, batch.VoucherNumber, batch.Status, batch.Notes, batch.IsUnifiedDisbursement, batch.ConcurrencyStamp);
+
+    private static PayrollDisbursementLineDto ToDisbursementLineDto(PayrollPayment item) => new(
+        item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.TemporaryWorkerId, item.CrewBusinessPartnerId,
+        item.Amount, item.RecipientNameSnapshot ?? item.PayeeName, item.IdentityNumberSnapshot, item.PhoneSnapshot, item.BankAccountSnapshot,
+        item.TradeSnapshot, item.CrewNameSnapshot, item.Notes, item.ConcurrencyStamp);
+
+    private static object BatchSnapshot(PayrollBatch batch) => new
+    {
+        batch.BatchNumber,
+        batch.Name,
+        batch.PaymentDate,
+        batch.ProjectId,
+        batch.LegalEntityId,
+        batch.AccountId,
+        batch.ActualAmount,
+        batch.PaymentMethod,
+        batch.VoucherNumber,
+        batch.Status,
+        batch.Notes,
+        Lines = batch.Payments.Select(item => new { item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.TemporaryWorkerId, item.CrewBusinessPartnerId, item.Amount, item.RecipientNameSnapshot, item.Notes }),
+        CrewAllocations = batch.CrewAllocations.Select(item => new { item.CrewBusinessPartnerId, item.ContractId, item.PayableEntryId, item.Notes })
+    };
+
+    private sealed record ResolvedDisbursementLine(
+        PayrollDisbursementLineInput Input,
+        string RecipientKey,
+        string Name,
+        string? IdentityNumber,
+        string? Phone,
+        string? BankAccountNumber,
+        string? Trade,
+        string? CrewName);
 
     private static PayrollItemDto ToDto(PayrollItem item) =>
         new(item.Id, item.EmployeeId, item.ItemType, item.Nature, item.Quantity, item.UnitPrice, item.Amount, item.Description);

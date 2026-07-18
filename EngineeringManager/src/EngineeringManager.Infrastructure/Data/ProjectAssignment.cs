@@ -12,4 +12,5 @@ public sealed class ProjectAssignment
     public ProjectAssignmentType AssignmentType { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset AssignedAt { get; set; } = DateTimeOffset.UtcNow;
+    public string? Notes { get; set; }
 }

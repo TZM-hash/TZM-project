@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.DataViews;
+using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Application.Settings;
 using EngineeringManager.Domain.DataExchange;
@@ -17,16 +18,19 @@ namespace EngineeringManager.Web.Pages.Projects;
 [Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.SiteStaff + "," + SystemRoles.QueryOnly + "," + SystemRoles.EquipmentManager)]
 public sealed class IndexModel(
     IProjectService projectService,
+    IFinanceLedgerService financeService,
     ISavedDataViewService savedViewService,
     IExportService exportService) : PageModel
 {
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
         new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
-        new HashSet<string>(["project_number", "project_name", "stage", "affiliation_type", "contract_amount", "current_project_amount", "settlement_status", "actions"], StringComparer.Ordinal),
+        new HashSet<string>(["project_number", "project_name", "stage", "affiliation_type", "contract_amount", "current_project_amount", "settlement_status", "collection_progress", "payment_progress", "invoice_progress", "notes", "actions"], StringComparer.Ordinal),
         new HashSet<string>(["ProjectNumber", "Name", "Stage", "ContractAmount", "CurrentAmount", "SettlementStatus"], StringComparer.Ordinal));
 
     public ProjectListPageDto Result { get; private set; } = new([], new ProjectListAggregateDto(0, 0m, 0m, 0), 1, 20, 0, 1, []);
+    public FinanceProjectSummaryDto FinanceTotal { get; private set; } = EmptyFinanceSummary();
+    public IReadOnlyDictionary<Guid, FinanceProjectSummaryDto> FinanceByProjectId { get; private set; } = new Dictionary<Guid, FinanceProjectSummaryDto>();
     public DataWorkbenchViewModel Workbench { get; private set; } = null!;
 
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
@@ -87,6 +91,12 @@ public sealed class IndexModel(
 
         var actor = Actor();
         Result = await projectService.SearchProjectsAsync(actor, Query(), cancellationToken);
+        var allowedProjectIds = Result.MatchingProjectIds.ToHashSet();
+        var financeItems = (await financeService.ListProjectSummariesAsync(cancellationToken))
+            .Where(item => allowedProjectIds.Contains(item.ProjectId))
+            .ToArray();
+        FinanceByProjectId = financeItems.ToDictionary(item => item.ProjectId, item => item.Summary);
+        FinanceTotal = SumFinance(financeItems.Select(item => item.Summary));
         var options = await projectService.GetListOptionsAsync(actor, cancellationToken);
         Workbench = BuildWorkbench(views, options, selected);
     }
@@ -146,6 +156,10 @@ public sealed class IndexModel(
                 new("contract_amount", "合同金额"),
                 new("current_project_amount", "当前工程金额"),
                 new("settlement_status", "结算状态"),
+                new("collection_progress", "收款（应/已/未）"),
+                new("payment_progress", "付款（应/已/未）"),
+                new("invoice_progress", "开票（已/未）"),
+                new("notes", "备注摘要"),
                 new("actions", "操作", false, false)
             ],
             filters,
@@ -211,4 +225,26 @@ public sealed class IndexModel(
         ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方",
         _ => "自营项目"
     };
+
+    private static FinanceProjectSummaryDto SumFinance(IEnumerable<FinanceProjectSummaryDto> summaries)
+    {
+        var items = summaries.ToArray();
+        return new FinanceProjectSummaryDto(
+            Guid.Empty,
+            items.Sum(item => item.ReceivableAmount),
+            items.Sum(item => item.CollectedAmount),
+            items.Sum(item => item.UncollectedAmount),
+            items.Sum(item => item.PayableAmount),
+            items.Sum(item => item.PaidAmount),
+            items.Sum(item => item.DeductionAmount),
+            items.Sum(item => item.UnpaidAmount),
+            items.Sum(item => item.OutputInvoiceAmount),
+            items.Sum(item => item.UninvoicedAmount),
+            items.Sum(item => item.InputInvoiceAmount),
+            items.Any(item => item.HasCollectionRisk),
+            items.Any(item => item.HasPaymentRisk));
+    }
+
+    private static FinanceProjectSummaryDto EmptyFinanceSummary() =>
+        new(Guid.Empty, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, false, false);
 }

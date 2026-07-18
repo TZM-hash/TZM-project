@@ -15,6 +15,100 @@ public sealed record CreatePayrollBatchRequest(
 
 public sealed record PayrollCostAllocationRequest(Guid ProjectId, Guid LegalEntityId, decimal Amount);
 
+public sealed record PayrollDisbursementLineRequest(
+    Guid? Id,
+    PayrollRecipientType RecipientType,
+    Guid? EmployeeId,
+    Guid? ConstructionWorkerId,
+    Guid? TemporaryWorkerId,
+    Guid? CrewBusinessPartnerId,
+    decimal Amount,
+    string? Notes);
+
+public sealed record PayrollCrewAllocationRequest(
+    Guid CrewBusinessPartnerId,
+    Guid? ContractId,
+    Guid? PayableEntryId,
+    string? Notes);
+
+public sealed record SavePayrollDisbursementBatchRequest(
+    Guid? Id,
+    string BatchNumber,
+    string Name,
+    DateOnly? PaymentDate,
+    Guid? ProjectId,
+    Guid? LegalEntityId,
+    Guid? AccountId,
+    decimal ActualAmount,
+    PaymentMethod PaymentMethod,
+    string? VoucherNumber,
+    PayrollBatchStatus Status,
+    string? Notes,
+    Guid? ConcurrencyStamp,
+    string Reason,
+    IReadOnlyList<PayrollDisbursementLineRequest> Lines,
+    IReadOnlyList<PayrollCrewAllocationRequest> CrewAllocations);
+
+public sealed record PayrollDisbursementLineDto(
+    Guid Id,
+    PayrollRecipientType RecipientType,
+    Guid? EmployeeId,
+    Guid? ConstructionWorkerId,
+    Guid? TemporaryWorkerId,
+    Guid? CrewBusinessPartnerId,
+    decimal Amount,
+    string RecipientNameSnapshot,
+    string? IdentityNumberSnapshot,
+    string? PhoneSnapshot,
+    string? BankAccountSnapshot,
+    string? TradeSnapshot,
+    string? CrewNameSnapshot,
+    string? Notes,
+    Guid ConcurrencyStamp);
+
+public sealed record PayrollCrewAllocationDto(
+    Guid Id,
+    Guid CrewBusinessPartnerId,
+    Guid? ContractId,
+    Guid? PayableEntryId,
+    string? Notes,
+    Guid ConcurrencyStamp);
+
+public sealed record PayrollDisbursementBatchDto(
+    Guid Id,
+    string BatchNumber,
+    string Name,
+    DateOnly? PaymentDate,
+    Guid? ProjectId,
+    Guid? LegalEntityId,
+    Guid? AccountId,
+    decimal ActualAmount,
+    PaymentMethod PaymentMethod,
+    string? VoucherNumber,
+    PayrollBatchStatus Status,
+    string? Notes,
+    bool IsUnifiedDisbursement,
+    Guid ConcurrencyStamp);
+
+public sealed record PayrollDisbursementBatchDetailsDto(
+    PayrollDisbursementBatchDto Batch,
+    PayrollDisbursementSummary Summary,
+    IReadOnlyList<PayrollDisbursementLineDto> Lines,
+    IReadOnlyList<PayrollCrewAllocationDto> CrewAllocations);
+
+public sealed record PayrollDisbursementBatchListItemDto(
+    PayrollDisbursementBatchDto Batch,
+    PayrollDisbursementSummary Summary,
+    int RecipientCount);
+
+public sealed record PayrollDisbursementOverviewDto(
+    decimal ActualAmount,
+    decimal EmployeeAmount,
+    decimal CrewAmount,
+    decimal TemporaryAmount,
+    decimal Difference,
+    IReadOnlyList<PayrollDisbursementBatchListItemDto> Batches);
+
 public sealed record CreatePayrollItemRequest(
     Guid PayrollBatchId,
     Guid EmployeeId,

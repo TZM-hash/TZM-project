@@ -8,11 +8,32 @@ using EngineeringManager.Infrastructure.Equipment;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Tests.Application;
 
 public sealed class EquipmentServiceTests
 {
+    [Fact]
+    public async Task EquipmentNotesRoundTripAndEnterAuditLog()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "EQ-N", Name = "设备备注公司", ShortName = "设备备注" };
+        scope.Db.LegalEntities.Add(company);
+        await scope.Db.SaveChangesAsync();
+
+        var saved = await scope.Service.SaveEquipmentAsync(
+            EquipmentActor.Administrator("admin"),
+            new SaveEquipmentRequest(null, "EQ-NOTES", "备注设备", null, null, EquipmentOwnershipType.SelfOwned, company.Id, null, null, null, "新增", "设备备注"),
+            default);
+
+        saved.Notes.Should().Be("设备备注");
+        (await scope.Db.Equipment.SingleAsync(item => item.Id == saved.Id)).Notes.Should().Be("设备备注");
+        var audit = await scope.Db.AuditLogs.SingleAsync(item => item.EntityType == nameof(Equipment));
+        using var after = JsonDocument.Parse(audit.AfterJson!);
+        after.RootElement.GetProperty("Notes").GetString().Should().Be("设备备注");
+    }
+
     [Fact]
     public async Task EquipmentCanBeSavedCopiedAndAssignedWithoutOverlappingUsage()
     {

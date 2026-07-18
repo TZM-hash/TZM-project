@@ -6,6 +6,7 @@ using EngineeringManager.Infrastructure.Projects;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Tests.Application;
 
@@ -133,6 +134,63 @@ public sealed class ProjectServiceTests
         details.Summary.SettledAmount.Should().Be(30m);
         details.Summary.CurrentAmount.Should().Be(80m);
         details.Summary.SettlementStatus.Should().Be(ProjectSettlementStatus.PartiallySettled);
+    }
+
+    [Fact]
+    public async Task ExistingLineItemCanBeUpdatedInPlaceWithConcurrencyControl()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var legalEntity = await fixture.AddLegalEntityAsync();
+        var project = await fixture.Service.CreateProjectAsync(
+            new CreateProjectRequest("P-SVC-04", "原位编辑项目", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [legalEntity.Id]),
+            CancellationToken.None);
+        var contract = await fixture.Service.AddContractAsync(
+            new CreateContractRequest(project.Id, "C-SVC-04", "原位编辑合同", ContractType.MainContract,
+                ContractAllocationMode.SingleCompany, "测试总包", 100m, [new ContractAllocationRequest(legalEntity.Id, 100m, null)]),
+            CancellationToken.None);
+        var line = await fixture.Service.AddLineItemAsync(
+            new CreateContractLineItemRequest(contract.Id, "001", "原工程量", "m", 10m, 5m, null, null, false),
+            CancellationToken.None);
+
+        var updated = await fixture.Service.UpdateLineItemAsync(
+            new UpdateContractLineItemRequest(line.Id, "001-A", "修改后工程量", "m³", 12m, 6m, 11m, 7m, true, line.ConcurrencyStamp),
+            CancellationToken.None);
+
+        updated.Code.Should().Be("001-A");
+        updated.Name.Should().Be("修改后工程量");
+        updated.EstimatedAmount.Should().Be(72m);
+        updated.SettledAmount.Should().Be(77m);
+        updated.IsSettlementConfirmed.Should().BeTrue();
+        updated.ConcurrencyStamp.Should().NotBe(line.ConcurrencyStamp);
+    }
+
+    [Fact]
+    public async Task ProjectContractAndQuantityNotesRoundTrip()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var legalEntity = await fixture.AddLegalEntityAsync();
+        var project = await fixture.Service.CreateProjectAsync(
+            new CreateProjectRequest("P-NOTES", "备注项目", null, null, null, null, ProjectStage.UnderConstruction, ArchiveStatus.NotArchived, [legalEntity.Id], Notes: "项目备注"),
+            CancellationToken.None);
+        var contract = await fixture.Service.AddContractAsync(
+            new CreateContractRequest(project.Id, "C-NOTES", "备注合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, "总包", 100m, [new ContractAllocationRequest(legalEntity.Id, 100m, null)], "合同备注"),
+            CancellationToken.None);
+        var line = await fixture.Service.AddLineItemAsync(
+            new CreateContractLineItemRequest(contract.Id, "001", "备注工程量", "m", 1m, 2m, null, null, false, "工程量备注"),
+            CancellationToken.None);
+        var updatedLine = await fixture.Service.UpdateLineItemAsync(
+            new UpdateContractLineItemRequest(line.Id, line.Code, line.Name, line.Unit, 2m, 3m, null, null, false, line.ConcurrencyStamp, "工程量更新备注", "admin", "修改工程量备注"),
+            CancellationToken.None);
+
+        project.Notes.Should().Be("项目备注");
+        contract.Notes.Should().Be("合同备注");
+        line.Notes.Should().Be("工程量备注");
+        updatedLine.Notes.Should().Be("工程量更新备注");
+        var audit = await fixture.Db.AuditLogs.SingleAsync(item => item.EntityType == nameof(ContractLineItem));
+        audit.UserId.Should().Be("admin");
+        audit.Reason.Should().Be("修改工程量备注");
+        using var after = JsonDocument.Parse(audit.AfterJson!);
+        after.RootElement.GetProperty("Notes").GetString().Should().Be("工程量更新备注");
     }
 
     private sealed class ProjectFixture : IAsyncDisposable

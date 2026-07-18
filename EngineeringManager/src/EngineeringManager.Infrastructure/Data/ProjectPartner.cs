@@ -14,4 +14,5 @@ public sealed class ProjectPartner
     public Contract? Contract { get; set; }
     public bool IsPrimary { get; set; }
     public bool IsActive { get; set; } = true;
+    public string? Notes { get; set; }
 }

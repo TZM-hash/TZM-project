@@ -1,29 +1,39 @@
 @page
 @model EngineeringManager.Web.Pages.Projects.IndexModel
+@using EngineeringManager.Web.Presentation
 @{
     ViewData["Title"] = "项目管理";
 }
 
-<section class="page-heading">
+<section class="page-heading project-index-heading">
     <div>
         <p class="eyebrow">项目经营台账</p>
         <h1>项目管理</h1>
-        <p class="page-lead">统一查看项目阶段、合同和当前工程金额，可按权限范围筛选、排序并导出。</p>
+        <p class="page-lead">项目主档、工程金额、收付款和开票数据统一在这里查看与处理。</p>
     </div>
-    @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager"))
-    {
-        <a class="button button--primary" asp-page="/Projects/Edit">新建项目</a>
-    }
+    <div class="page-actions-inline">
+        @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("Finance"))
+        {
+            <a class="button button--secondary" asp-page="/Finance/Accounts">资金账户</a><a class="button button--secondary" asp-page="/Finance/Entries/Create">录入经营数据</a>
+        }
+        @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager"))
+        {
+            <a class="button button--primary" asp-page="/Projects/Edit">新建项目</a>
+        }
+    </div>
 </section>
 
-<section class="metric-grid" aria-label="项目汇总">
-    <article class="metric-card"><span class="metric-label">项目数量</span><strong class="metric-value">@Model.Result.Aggregate.ProjectCount</strong><span class="metric-hint">当前筛选与授权范围</span></article>
-    <article class="metric-card"><span class="metric-label">合同金额</span><strong class="metric-value">@Model.Result.Aggregate.ContractAmount.ToString("N2")</strong><span class="metric-hint">有效合同汇总</span></article>
-    <article class="metric-card"><span class="metric-label">当前工程金额</span><strong class="metric-value">@Model.Result.Aggregate.CurrentAmount.ToString("N2")</strong><span class="metric-hint">自动标记暂估或结算口径</span></article>
-    <article class="metric-card"><span class="metric-label">已结算项目</span><strong class="metric-value">@Model.Result.Aggregate.SettledProjectCount</strong><span class="metric-hint">由工程量清单状态计算</span></article>
+<section class="overview-strip project-overview-strip" aria-label="项目经营汇总">
+    <article><span>项目数</span><strong>@Model.Result.Aggregate.ProjectCount</strong></article>
+    <article><span>合同金额</span><strong>@Model.Result.Aggregate.ContractAmount.ToString("N2")</strong></article>
+    <article class="is-accent"><span>当前工程金额</span><strong>@Model.Result.Aggregate.CurrentAmount.ToString("N2")</strong></article>
+    <article><span>应收款</span><strong>@Model.FinanceTotal.ReceivableAmount.ToString("N2")</strong></article>
+    <article class="is-success"><span>已收款</span><strong>@Model.FinanceTotal.CollectedAmount.ToString("N2")</strong></article>
+    <article class="is-warning"><span>未收款</span><strong>@Model.FinanceTotal.UncollectedAmount.ToString("N2")</strong></article>
+    <article><span>已开票</span><strong>@Model.FinanceTotal.OutputInvoiceAmount.ToString("N2")</strong></article>
+    <article><span>未开票</span><strong>@Model.FinanceTotal.UninvoicedAmount.ToString("N2")</strong></article>
+    <article><span>未付款</span><strong>@Model.FinanceTotal.UnpaidAmount.ToString("N2")</strong></article>
 </section>
-
-<section class="panel chart-summary" data-chart data-chart-kind="progress-ring" data-chart-value="@(Model.Result.Aggregate.ProjectCount == 0 ? 0 : (decimal)Model.Result.Aggregate.SettledProjectCount / Model.Result.Aggregate.ProjectCount * 100m)" data-chart-label="项目结算完成率"><div class="panel-heading"><div><p class="eyebrow">图形摘要</p><h2>项目结算完成率</h2></div></div><div data-chart-canvas></div></section>
 
 <section class="panel data-work-surface">
     <div class="panel-heading"><div><p class="eyebrow">项目清单</p><h2>当前项目</h2></div><span class="result-count">共 @Model.Result.TotalCount 个项目</span></div>
@@ -39,6 +49,15 @@
         <input type="hidden" name="SelectedFields" value="affiliation_type" data-export-column-key="affiliation_type" />
         <input type="hidden" name="SelectedFields" value="contract_amount" data-export-column-key="contract_amount" />
         <input type="hidden" name="SelectedFields" value="current_project_amount" data-export-column-key="current_project_amount" />
+        <input type="hidden" name="SelectedFields" value="receivable_amount" data-export-column-key="collection_progress" />
+        <input type="hidden" name="SelectedFields" value="collected_amount" data-export-column-key="collection_progress" />
+        <input type="hidden" name="SelectedFields" value="uncollected_amount" data-export-column-key="collection_progress" />
+        <input type="hidden" name="SelectedFields" value="payable_amount" data-export-column-key="payment_progress" />
+        <input type="hidden" name="SelectedFields" value="paid_amount" data-export-column-key="payment_progress" />
+        <input type="hidden" name="SelectedFields" value="unpaid_amount" data-export-column-key="payment_progress" />
+        <input type="hidden" name="SelectedFields" value="output_invoice_amount" data-export-column-key="invoice_progress" />
+        <input type="hidden" name="SelectedFields" value="uninvoiced_amount" data-export-column-key="invoice_progress" />
+        <input type="hidden" name="SelectedFields" value="notes" data-export-column-key="notes" />
     </form>
     @if (Model.Result.Items.Count == 0)
     {
@@ -54,18 +73,34 @@
                     <th data-column-key="stage"><button class="table-sort-button" type="button" data-sort-key="Stage">阶段</button></th><th data-column-key="affiliation_type">合作方式</th>
                     <th data-column-key="contract_amount"><button class="table-sort-button" type="button" data-sort-key="ContractAmount">合同金额</button></th>
                     <th data-column-key="current_project_amount"><button class="table-sort-button" type="button" data-sort-key="CurrentAmount">当前工程金额</button></th>
-                    <th data-column-key="settlement_status"><button class="table-sort-button" type="button" data-sort-key="SettlementStatus">结算状态</button></th><th data-column-key="actions">操作</th>
+                    <th data-column-key="settlement_status"><button class="table-sort-button" type="button" data-sort-key="SettlementStatus">结算状态</button></th>
+                    <th data-column-key="collection_progress"><span class="mini-progress-label">收款率（应 / 已 / 未）</span></th><th data-column-key="payment_progress"><span class="mini-progress-label">付款率（应 / 已 / 未）</span></th><th data-column-key="invoice_progress"><span class="mini-progress-label">开票率（已 / 未）</span></th><th data-column-key="notes">备注摘要</th><th data-column-key="actions">操作</th>
                 </tr></thead>
                 <tbody>
                 @foreach (var item in Model.Result.Items)
                 {
+                    Model.FinanceByProjectId.TryGetValue(item.Project.Id, out var finance);
+                    var receivableAmount = finance?.ReceivableAmount ?? 0m;
+                    var collectedAmount = finance?.CollectedAmount ?? 0m;
+                    var payableAmount = finance?.PayableAmount ?? 0m;
+                    var paidAmount = finance?.PaidAmount ?? 0m;
+                    var invoicedAmount = finance?.OutputInvoiceAmount ?? 0m;
+                    var invoiceBasis = item.Summary.CurrentAmount > 0m ? item.Summary.CurrentAmount : item.Summary.ContractAmount;
+                    var collectionRate = receivableAmount > 0m ? Math.Clamp(collectedAmount / receivableAmount * 100m, 0m, 100m) : 0m;
+                    var paymentRate = payableAmount > 0m ? Math.Clamp(paidAmount / payableAmount * 100m, 0m, 100m) : 0m;
+                    var invoiceRate = invoiceBasis > 0m ? Math.Clamp(invoicedAmount / invoiceBasis * 100m, 0m, 100m) : 0m;
                     <tr>
                         <td data-column-key="project_number"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.ProjectNumber</a></td>
                         <td data-column-key="project_name">@item.Project.Name</td>
-                        <td data-column-key="stage"><span class="pill">@item.Project.Stage</span></td><td data-column-key="affiliation_type">@(item.Project.AffiliationType switch { EngineeringManager.Domain.Projects.ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方", EngineeringManager.Domain.Projects.ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方", _ => "自营项目" })</td>
+                        <td data-column-key="stage" class="project-stage-cell"><span class="pill">@item.Project.Stage.ToChinese()</span></td><td data-column-key="affiliation_type">@item.Project.AffiliationType.ToChinese()</td>
                         <td data-column-key="contract_amount">@item.Summary.ContractAmount.ToString("N2")</td>
                         <td data-column-key="current_project_amount">@item.Summary.CurrentAmount.ToString("N2")</td>
-                        <td data-column-key="settlement_status">@item.Summary.SettlementStatus</td><td data-column-key="actions"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">查看</a>@if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager")) { <span> · </span><a asp-page="/Projects/Edit" asp-route-id="@item.Project.Id">编辑</a> }</td>
+                        <td data-column-key="settlement_status">@item.Summary.SettlementStatus.ToChinese()</td>
+                        <td data-column-key="collection_progress"><div class="mini-progress mini-progress--success"><div class="mini-progress-head"><span>收款率</span><strong>@collectionRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @collectionRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span><span class="mini-progress-values">@receivableAmount.ToString("N2") / @collectedAmount.ToString("N2") / @((finance?.UncollectedAmount ?? 0m).ToString("N2"))</span></div></td>
+                        <td data-column-key="payment_progress"><div class="mini-progress mini-progress--warning"><div class="mini-progress-head"><span>付款率</span><strong>@paymentRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @paymentRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span><span class="mini-progress-values">@payableAmount.ToString("N2") / @paidAmount.ToString("N2") / @((finance?.UnpaidAmount ?? 0m).ToString("N2"))</span></div></td>
+                        <td data-column-key="invoice_progress"><div class="mini-progress"><div class="mini-progress-head"><span>开票率</span><strong>@invoiceRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @invoiceRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span><span class="mini-progress-values">@invoicedAmount.ToString("N2") / @((finance?.UninvoicedAmount ?? 0m).ToString("N2"))</span></div></td>
+                        <td data-column-key="notes">@(string.IsNullOrWhiteSpace(item.Project.Notes) ? "—" : item.Project.Notes.Length > 40 ? item.Project.Notes[..40] + "…" : item.Project.Notes)</td>
+                        <td data-column-key="actions"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">查看</a>@if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("ProjectManager")) { <span> · </span><a asp-page="/Projects/Edit" asp-route-id="@item.Project.Id">详细编辑</a> }</td>
                     </tr>
                 }
                 </tbody>

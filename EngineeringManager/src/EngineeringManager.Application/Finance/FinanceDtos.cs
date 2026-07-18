@@ -21,7 +21,8 @@ public sealed record CreateFinancialAccountRequest(
     string? AccountNumber,
     string? BankName,
     FinancialAccountType AccountType,
-    decimal OpeningBalance);
+    decimal OpeningBalance,
+    string? Notes = null);
 
 public sealed record FinancialAccountDto(
     Guid Id,
@@ -33,7 +34,8 @@ public sealed record FinancialAccountDto(
     FinancialAccountType AccountType,
     decimal OpeningBalance,
     decimal CurrentBalance,
-    bool IsActive);
+    bool IsActive,
+    string? Notes = null);
 
 public sealed record ProjectFinanceListItemDto(
     Guid ProjectId,
@@ -174,6 +176,34 @@ public sealed record CreateInvoiceRequest(
     InvoiceStatus Status,
     IReadOnlyList<InvoiceAllocationRequest> ReceivableAllocations,
     IReadOnlyList<InvoiceAllocationRequest> LineItemAllocations);
+
+public sealed record FinanceRecordActor(string UserId, string? UserName);
+
+public sealed record UpdateReceivableRequest(
+    Guid Id, Guid ProjectId, Guid? ContractId, Guid LegalEntityId, Guid? BusinessPartnerId,
+    DateOnly EntryDate, DateOnly? DueDate, decimal Amount, string? Description,
+    Guid ConcurrencyStamp, string Reason);
+
+public sealed record UpdateCollectionRequest(
+    Guid Id, Guid? ReceivableEntryId, Guid ProjectId, Guid? ContractId, Guid LegalEntityId,
+    Guid? BusinessPartnerId, Guid AccountId, DateOnly CollectionDate, decimal Amount,
+    PaymentMethod PaymentMethod, string? Notes, Guid ConcurrencyStamp, string Reason);
+
+public sealed record UpdateInvoiceRequest(
+    Guid Id, Guid ProjectId, Guid? ContractId, Guid LegalEntityId, Guid? BusinessPartnerId,
+    InvoiceDirection Direction, string InvoiceNumber, DateOnly InvoiceDate, string? InvoiceType,
+    decimal TaxRate, decimal NetAmount, decimal TaxAmount, decimal GrossAmount, InvoiceStatus Status,
+    Guid ConcurrencyStamp, string Reason);
+
+public sealed record UpdatePayableRequest(
+    Guid Id, Guid ProjectId, Guid? ContractId, Guid LegalEntityId, Guid BusinessPartnerId,
+    DateOnly EntryDate, DateOnly? DueDate, decimal Amount, string? Description,
+    Guid ConcurrencyStamp, string Reason);
+
+public sealed record UpdatePaymentRequest(
+    Guid Id, Guid? PayableEntryId, Guid ProjectId, Guid? ContractId, Guid LegalEntityId,
+    Guid BusinessPartnerId, Guid AccountId, DateOnly PaymentDate, decimal Amount,
+    PaymentMethod PaymentMethod, string? Notes, Guid ConcurrencyStamp, string Reason);
 
 public sealed record FinanceSummaryFilter(
     Guid ProjectId,

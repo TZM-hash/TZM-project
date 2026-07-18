@@ -1,0 +1,19 @@
+@page
+@model EngineeringManager.Web.Pages.Employees.LedgerModel
+@{ ViewData["Title"] = "员工年度总账"; }
+
+<partial name="_EmployeeSubNavigation" />
+<section class="page-heading"><div><p class="eyebrow">员工管理</p><h1>年度总账总览</h1><p class="page-lead">正余额表示公司欠员工，负余额表示员工多领或待抵扣；领款按最早欠款优先抵扣。</p></div></section>
+<form method="get" class="panel form-grid">
+    <label>业务年度<select asp-for="BusinessYearId" onchange="this.form.submit()">@foreach (var year in Model.BusinessYears) { <option value="@year.Id">@year.Name（@year.StartDate 至 @year.EndDate）</option> }</select></label>
+</form>
+<section class="overview-strip" aria-label="年度总账汇总"><article><span>员工数</span><strong>@Model.Rows.Count</strong></article><article><span>往年结转</span><strong>@Model.Rows.Sum(item => item.Ledger.Summary.PriorYearCarryForward).ToString("N2")</strong></article><article><span>本年新增应付</span><strong>@Model.Rows.Sum(item => item.Ledger.Summary.CurrentYearNewPayable).ToString("N2")</strong></article><article><span>当前余额</span><strong>@Model.Rows.Sum(item => item.Ledger.Summary.CurrentBalance).ToString("N2")</strong></article></section>
+<section class="panel" style="margin-top: var(--space-3)">
+    <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.EmployeeAnnualLedger" />
+    <div class="table-wrap"><table class="data-table" id="employee-annual-ledger-table"><thead><tr><th data-column-key="employee">员工</th><th data-column-key="carry_forward">往年结转</th><th data-column-key="new_payable">本年新增应付</th><th data-column-key="received">已领总额</th><th data-column-key="balance">当前余额</th><th data-column-key="progress">结算进度</th><th data-column-key="actions">操作</th></tr></thead><tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr><td data-column-key="employee">@row.Employee.EmployeeNumber · @row.Employee.Name</td><td data-column-key="carry_forward">@row.Ledger.Summary.PriorYearCarryForward.ToString("N2")</td><td data-column-key="new_payable">@row.Ledger.Summary.CurrentYearNewPayable.ToString("N2")</td><td data-column-key="received">@row.Ledger.Summary.ReceivedAmount.ToString("N2")</td><td data-column-key="balance">@row.Ledger.Summary.CurrentBalance.ToString("N2")</td><td data-column-key="progress">@row.Ledger.Summary.SettlementProgressPercent.ToString("N2")%</td><td data-column-key="actions"><a asp-page="/Employees/Details" asp-route-id="@row.Employee.Id" asp-route-businessYearId="@Model.BusinessYearId">查看详情</a></td></tr>
+    }
+    </tbody></table></div>
+</section>

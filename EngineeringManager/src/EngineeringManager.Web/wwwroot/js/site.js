@@ -2,6 +2,7 @@ import { initShell } from "./core/shell.js";
 import { initEffects } from "./core/effects.js";
 
 const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard()];
+initSmartBack();
 if (document.querySelector("[data-theme-option], [data-motion-option], [data-global-font-picker]")) {
   jobs.push(import("./pages/settings.js").then((module) => module.initSettingsPreview()));
 }
@@ -19,7 +20,20 @@ if (document.querySelector("[data-workbench]")) {
 if (document.querySelector("[data-chart]")) {
   jobs.push(import("./components/charts.js").then((module) => module.initCharts()));
 }
+if (document.querySelector("[data-inline-edit], [data-inline-edit-table]")) {
+  jobs.push(import("./components/quick-edit.js").then((module) => module.initInlineEditors()));
+}
 await Promise.all(jobs);
+
+function initSmartBack() {
+  document.querySelectorAll("[data-smart-back]").forEach((link) => link.addEventListener("click", (event) => {
+    if (!document.referrer) return;
+    const referrer = new URL(document.referrer);
+    if (referrer.origin !== window.location.origin || window.history.length <= 1) return;
+    event.preventDefault();
+    window.history.back();
+  }));
+}
 
 async function initPwaStatus() {
   const badge = document.querySelector("[data-pwa-badge]");

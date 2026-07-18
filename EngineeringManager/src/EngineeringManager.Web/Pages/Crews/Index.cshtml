@@ -1,0 +1,5 @@
+@page
+@model EngineeringManager.Web.Pages.Crews.IndexModel
+@{ ViewData["Title"] = "施工班组管理"; }
+<section class="page-heading"><div><p class="eyebrow">合作单位专属视图</p><h1>施工班组管理</h1><p class="page-lead">施工班组继续共用合作单位主档，人员名册和工资代发工程款在此集中管理。</p></div><a class="button button--secondary" asp-page="/Partners/Create">新增施工班组单位</a></section>
+<section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>班组</th><th>专业</th><th>负责人</th><th>当前人员</th><th>参与项目</th><th>累计代发工程款</th><th>最近发放</th><th>操作</th></tr></thead><tbody>@foreach (var item in Model.Crews) { <tr><td>@item.PartnerNumber · @item.Name</td><td>@(item.TradeCategory ?? "未填写")</td><td>@(item.PrimaryContact ?? "未设置") @item.PrimaryPhone</td><td>@item.CurrentWorkerCount</td><td>@item.ProjectCount</td><td>@item.TotalPaidAmount.ToString("N2")</td><td>@(item.LastPaymentDate?.ToString() ?? "暂无")</td><td><a asp-page="/Crews/Details" asp-route-id="@item.Id">人员名册与工程款</a></td></tr> }</tbody></table></div></section>

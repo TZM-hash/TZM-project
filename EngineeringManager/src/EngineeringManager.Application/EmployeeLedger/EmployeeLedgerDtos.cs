@@ -3,6 +3,8 @@ using EngineeringManager.Domain.Finance;
 
 namespace EngineeringManager.Application.EmployeeLedger;
 
+public sealed record ExpenseAttachmentUpload(string OriginalFileName, string ContentType, byte[] Content);
+
 public sealed record CreateExpenseRequest(
     Guid EmployeeId,
     Guid? ProjectId,
@@ -11,7 +13,10 @@ public sealed record CreateExpenseRequest(
     DateOnly ExpenseDate,
     string Category,
     decimal Amount,
-    string? Description);
+    string? Description,
+    decimal AdjustmentAmount = 0m,
+    string? ReceiptNumber = null,
+    ExpenseAttachmentUpload? Attachment = null);
 
 public sealed record RecordExpensePaymentRequest(
     Guid ExpenseRecordId,

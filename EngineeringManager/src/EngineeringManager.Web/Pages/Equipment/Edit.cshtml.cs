@@ -37,9 +37,10 @@ public sealed class EditModel(IEquipmentService service) : EquipmentPageModel
         public Guid? OwnerLegalEntityId { get; set; }
         public Guid? LessorBusinessPartnerId { get; set; }
         public decimal? InternalDailyRate { get; set; }
+        public string? Notes { get; set; }
         public Guid? ConcurrencyStamp { get; set; }
         [Required] public string Reason { get; set; } = "维护设备档案";
-        public SaveEquipmentRequest ToRequest() => new(Id, EquipmentNumber, Name, Model, Category, OwnershipType, OwnerLegalEntityId, LessorBusinessPartnerId, InternalDailyRate, ConcurrencyStamp, Reason);
-        public static InputModel From(EquipmentDetailsDto item) => new() { Id = item.Id == Guid.Empty ? null : item.Id, EquipmentNumber = item.EquipmentNumber, Name = item.Name, Model = item.Model, Category = item.Category, OwnershipType = item.OwnershipType, OwnerLegalEntityId = item.OwnerLegalEntityId, LessorBusinessPartnerId = item.LessorBusinessPartnerId, InternalDailyRate = item.InternalDailyRate, ConcurrencyStamp = item.ConcurrencyStamp };
+        public SaveEquipmentRequest ToRequest() => new(Id, EquipmentNumber, Name, Model, Category, OwnershipType, OwnerLegalEntityId, LessorBusinessPartnerId, InternalDailyRate, ConcurrencyStamp, Reason, Notes);
+        public static InputModel From(EquipmentDetailsDto item) => new() { Id = item.Id == Guid.Empty ? null : item.Id, EquipmentNumber = item.EquipmentNumber, Name = item.Name, Model = item.Model, Category = item.Category, OwnershipType = item.OwnershipType, OwnerLegalEntityId = item.OwnerLegalEntityId, LessorBusinessPartnerId = item.LessorBusinessPartnerId, InternalDailyRate = item.InternalDailyRate, Notes = item.Notes, ConcurrencyStamp = item.ConcurrencyStamp };
     }
 }

@@ -39,4 +39,17 @@ public sealed class PermissionCatalogTests
         PermissionKeys.DefaultsForRole(SystemRoles.Finance).Should().Contain(PermissionKeys.CompaniesRead);
         PermissionKeys.DefaultsForRole(SystemRoles.QueryOnly).Should().Contain(PermissionKeys.CompaniesRead);
     }
+
+    [Fact]
+    public void CrewTemporaryWorkerAndSensitivePayrollPermissionsAreCatalogued()
+    {
+        PermissionKeys.IsKnown(PermissionKeys.ConstructionCrewsRead).Should().BeTrue();
+        PermissionKeys.IsKnown(PermissionKeys.ConstructionCrewsManage).Should().BeTrue();
+        PermissionKeys.IsKnown(PermissionKeys.TemporaryWorkersRead).Should().BeTrue();
+        PermissionKeys.IsKnown(PermissionKeys.TemporaryWorkersManage).Should().BeTrue();
+        PermissionKeys.IsKnown(PermissionKeys.SensitivePersonnelRead).Should().BeTrue();
+        PermissionKeys.DefaultsForRole(SystemRoles.ApplicationAdministrator).Should().Contain(PermissionKeys.ConstructionCrewsManage);
+        PermissionKeys.DefaultsForRole(SystemRoles.Finance).Should().Contain(PermissionKeys.TemporaryWorkersManage);
+        PermissionKeys.DefaultsForRole(SystemRoles.QueryOnly).Should().Contain(PermissionKeys.ConstructionCrewsRead);
+    }
 }

@@ -1,20 +1,12 @@
 @page
 @model EngineeringManager.Web.Pages.Payroll.IndexModel
-@{
-    ViewData["Title"] = "工资台账";
-}
+@{ ViewData["Title"] = "工资台账"; }
 
-<section class="page-heading"><div><p class="eyebrow">阶段工资</p><h1>工资台账</h1><p class="page-lead">工资批次支持自然月、任意区间、项目阶段、节点和临时结算；应付工资与实际支付分开保存。</p></div></section>
-<section class="metric-grid" aria-label="工资汇总">
-    <article class="metric-card"><span class="metric-label">工资收入项</span><strong class="metric-value">@Model.Overview.GrossEarnings.ToString("N2")</strong><span class="metric-hint">月薪、计日、计件、奖金等</span></article>
-    <article class="metric-card"><span class="metric-label">扣款项</span><strong class="metric-value">@Model.Overview.DeductionAmount.ToString("N2")</strong><span class="metric-hint">借支、请假、罚款等</span></article>
-    <article class="metric-card"><span class="metric-label">已发工资</span><strong class="metric-value metric-value--good">@Model.Overview.PaidAmount.ToString("N2")</strong><span class="metric-hint">实际多次支付合计</span></article>
-    <article class="metric-card"><span class="metric-label">未发工资</span><strong class="metric-value">@Model.Overview.UnpaidAmount.ToString("N2")</strong><span class="metric-hint">应发减已发</span></article>
-</section>
-<section class="panel chart-summary" data-chart data-chart-kind="progress-ring" data-chart-value="@(Model.Overview.PayableAmount == 0 ? 0 : Model.Overview.PaidAmount / Model.Overview.PayableAmount * 100m)" data-chart-label="工资支付完成率"><div class="panel-heading"><div><p class="eyebrow">图形摘要</p><h2>工资支付完成率</h2></div></div><div data-chart-canvas></div></section>
-<section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">工资批次</p><h2>批次汇总</h2></div></div><partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Payroll" /><div class="table-wrap"><table class="data-table" id="payroll-table"><thead><tr><th data-column-key="batch">批次</th><th data-column-key="period">区间</th><th data-column-key="type">类型</th><th data-column-key="payable">应发</th><th data-column-key="paid">已发</th><th data-column-key="unpaid">未发</th><th data-column-key="risk">风险</th></tr></thead><tbody>
+<section class="page-heading"><div><p class="eyebrow">真实付款批次</p><h1>工资台账</h1><p class="page-lead">员工、施工班组人员和临时人员共用一套发放明细；一个批次对应一次真实账户支出。</p></div><a class="button button--primary button--action" asp-page="/Payroll/Edit">新建工资批次</a></section>
+<section class="overview-strip" aria-label="工资发放汇总"><article><span>实际发放总额</span><strong>@Model.Overview.ActualAmount.ToString("N2")</strong></article><article><span>员工发放</span><strong>@Model.Overview.EmployeeAmount.ToString("N2")</strong></article><article><span>班组工程款</span><strong>@Model.Overview.CrewAmount.ToString("N2")</strong></article><article><span>临时人工</span><strong>@Model.Overview.TemporaryAmount.ToString("N2")</strong></article><article><span>待核对差额</span><strong>@Model.Overview.Difference.ToString("N2")</strong></article></section>
+<section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">批次记录</p><h2>真实工资发放</h2></div></div><div class="table-wrap"><table class="data-table" id="payroll-disbursement-table"><thead><tr><th>批次</th><th>发放日期</th><th>人数</th><th>实际总额</th><th>员工</th><th>班组</th><th>临时人员</th><th>差额</th><th>状态</th><th>操作</th></tr></thead><tbody>
 @foreach (var item in Model.Overview.Batches)
 {
-    <tr><td data-column-key="batch">@item.Batch.BatchNumber · @item.Batch.Name</td><td data-column-key="period">@item.Batch.StartDate 至 @item.Batch.EndDate</td><td data-column-key="type">@item.Batch.BatchType</td><td data-column-key="payable">@item.Summary.PayableAmount.ToString("N2")</td><td data-column-key="paid">@item.Summary.PaidAmount.ToString("N2")</td><td data-column-key="unpaid">@item.Summary.UnpaidAmount.ToString("N2")</td><td data-column-key="risk">@(item.Summary.HasOverpaymentRisk || item.Summary.HasDeductionRisk ? "需关注" : "正常")</td></tr>
+    <tr><td>@item.Batch.BatchNumber · @item.Batch.Name</td><td>@(item.Batch.PaymentDate?.ToString() ?? "暂未填写")</td><td>@item.RecipientCount</td><td>@item.Batch.ActualAmount.ToString("N2")</td><td>@item.Summary.EmployeeAmount.ToString("N2")</td><td>@item.Summary.CrewAmount.ToString("N2")</td><td>@item.Summary.TemporaryAmount.ToString("N2")</td><td>@item.Summary.Difference.ToString("N2")</td><td>@item.Batch.Status</td><td><a class="button button--secondary button--small" asp-page="/Payroll/Edit" asp-route-id="@item.Batch.Id">查看并修改</a></td></tr>
 }
 </tbody></table></div></section>

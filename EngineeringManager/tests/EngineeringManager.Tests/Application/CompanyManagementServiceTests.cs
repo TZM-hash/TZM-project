@@ -7,11 +7,47 @@ using EngineeringManager.Infrastructure.Data;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Tests.Application;
 
 public sealed class CompanyManagementServiceTests
 {
+    [Fact]
+    public async Task CompanyAccountNotesRoundTripAndEnterAuditLog()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "LE-NOTES", Name = "备注公司", ShortName = "备注" };
+        scope.Db.LegalEntities.Add(company);
+        await scope.Db.SaveChangesAsync();
+
+        var saved = await scope.Service.SaveAccountAsync(
+            CompanyActor.Administrator("admin"),
+            new SaveCompanyAccountRequest(
+                null,
+                company.Id,
+                "备注账户",
+                null,
+                null,
+                (int)FinancialAccountType.Bank,
+                0m,
+                false,
+                false,
+                false,
+                true,
+                null,
+                "新增账户",
+                "账户备注"),
+            default);
+
+        var details = await scope.Service.GetAsync(CompanyActor.Administrator("admin"), company.Id, default);
+        saved.Notes.Should().Be("账户备注");
+        details.Accounts.Should().ContainSingle(item => item.Id == saved.Id && item.Notes == "账户备注");
+        var audit = await scope.Db.AuditLogs.SingleAsync(item => item.EntityType == nameof(FinancialAccount));
+        using var after = JsonDocument.Parse(audit.AfterJson!);
+        after.RootElement.GetProperty("Notes").GetString().Should().Be("账户备注");
+    }
+
     [Fact]
     public async Task CompanyCanBeCreatedListedAndPreparedForCopyWithoutUniqueFields()
     {

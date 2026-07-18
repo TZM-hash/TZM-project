@@ -13,6 +13,25 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ProjectWorkspaceServiceTests
 {
     [Fact]
+    public async Task WorkspaceIncludesMilestoneAssignmentAndPartnerNotes()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var user = new ApplicationUser { Id = "project-member", UserName = "project-member", DisplayName = "项目成员", IsEnabled = true };
+        var partner = await fixture.Db.BusinessPartners.SingleAsync();
+        var milestone = new ProjectMilestone { ProjectId = fixture.Project.Id, Name = "节点一", PlannedDate = new DateOnly(2026, 8, 1), Notes = "节点备注" };
+        var assignment = new ProjectAssignment { ProjectId = fixture.Project.Id, User = user, UserId = user.Id, AssignmentType = ProjectAssignmentType.SiteStaff, Notes = "人员备注" };
+        var projectPartner = new ProjectPartner { ProjectId = fixture.Project.Id, BusinessPartnerId = partner.Id, RoleType = EngineeringManager.Domain.Partners.BusinessPartnerRoleType.ConstructionCrew, Notes = "合作备注" };
+        fixture.Db.AddRange(user, milestone, assignment, projectPartner);
+        await fixture.Db.SaveChangesAsync();
+
+        var workspace = await fixture.Service.GetAsync(fixture.Project.Id, CancellationToken.None);
+
+        workspace!.Milestones.Should().ContainSingle(item => item.Notes == "节点备注");
+        workspace.Assignments.Should().ContainSingle(item => item.UserName == "项目成员" && item.Notes == "人员备注");
+        workspace.Partners.Should().ContainSingle(item => item.PartnerName == partner.Name && item.Notes == "合作备注");
+    }
+
+    [Fact]
     public async Task WorkspaceCombinesQuantityFinanceDetailsAndActivity()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
@@ -62,12 +81,14 @@ public sealed class ProjectWorkspaceServiceTests
                 ArchiveStatus.PendingArchive,
                 [fixture.SecondLegalEntity.Id, fixture.LegalEntity.Id],
                 originalStamp,
-                "调整合作方式和签约公司"),
+                "调整合作方式和签约公司",
+                Notes: "项目总览备注"),
             CancellationToken.None);
 
         updated.Overview.Name.Should().Be("更新后的项目名称");
         updated.Overview.AffiliationType.Should().Be(ProjectAffiliationType.WeAttachedToExternalParty);
         updated.Overview.ConcurrencyStamp.Should().NotBe(originalStamp);
+        updated.Overview.Notes.Should().Be("项目总览备注");
         var links = await fixture.Db.ProjectLegalEntities.AsNoTracking().Where(item => item.ProjectId == fixture.Project.Id).ToListAsync();
         links.Should().HaveCount(2);
         links.Should().ContainSingle(item => item.LegalEntityId == fixture.SecondLegalEntity.Id && item.IsPrimary);
@@ -77,6 +98,7 @@ public sealed class ProjectWorkspaceServiceTests
         audit.Reason.Should().Be("调整合作方式和签约公司");
         audit.BeforeJson.Should().Contain("\"AffiliationType\":2");
         audit.AfterJson.Should().Contain("\"AffiliationType\":3");
+        audit.AfterJson.Should().Contain("Notes");
         updated.Activities.Should().Contain(item => item.Title == "编辑项目资料" && item.UserName == "项目管理员");
     }
 
@@ -105,6 +127,78 @@ public sealed class ProjectWorkspaceServiceTests
         var action = () => fixture.Service.UpdateAsync(new ProjectWorkspaceActor("workspace-user", "项目管理员"), request, CancellationToken.None);
 
         await action.Should().ThrowAsync<DbUpdateConcurrencyException>().WithMessage("*刷新后重试*");
+    }
+
+    [Fact]
+    public async Task UpdatePersistsActualProjectDatesAndIncludesThemInAuditSnapshot()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var actualStartDate = new DateOnly(2026, 7, 8);
+        var actualCompletionDate = new DateOnly(2026, 7, 16);
+
+        var updated = await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id,
+                fixture.Project.ProjectNumber,
+                fixture.Project.Name,
+                null,
+                fixture.Project.GeneralContractorName,
+                fixture.Project.GeneralContractorContact,
+                fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId,
+                fixture.Project.DepartmentId,
+                fixture.Project.BranchId,
+                fixture.Project.Stage,
+                fixture.Project.AffiliationType,
+                fixture.Project.ArchiveStatus,
+                [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp,
+                "补录实际工期",
+                actualStartDate,
+                actualCompletionDate),
+            CancellationToken.None);
+
+        updated.Overview.ActualStartDate.Should().Be(actualStartDate);
+        updated.Overview.ActualCompletionDate.Should().Be(actualCompletionDate);
+        var project = await fixture.Db.Projects.AsNoTracking().SingleAsync(item => item.Id == fixture.Project.Id);
+        project.ActualStartDate.Should().Be(actualStartDate);
+        project.ActualCompletionDate.Should().Be(actualCompletionDate);
+        var audit = await fixture.Db.AuditLogs.AsNoTracking().SingleAsync(item => item.Action == "UpdateProject");
+        audit.AfterJson.Should().Contain("\"ActualStartDate\":\"2026-07-08\"");
+        audit.AfterJson.Should().Contain("\"ActualCompletionDate\":\"2026-07-16\"");
+    }
+
+    [Fact]
+    public async Task UpdateRejectsActualCompletionBeforeActualStart()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var request = new UpdateProjectRequest(
+            fixture.Project.Id,
+            fixture.Project.ProjectNumber,
+            fixture.Project.Name,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            fixture.Project.Stage,
+            fixture.Project.AffiliationType,
+            fixture.Project.ArchiveStatus,
+            [fixture.LegalEntity.Id],
+            fixture.Project.ConcurrencyStamp,
+            "错误工期",
+            new DateOnly(2026, 7, 10),
+            new DateOnly(2026, 7, 9));
+
+        var action = () => fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            request,
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<ArgumentException>().WithMessage("*完工日期不得早于开工日期*");
     }
 
     private sealed class ProjectWorkspaceFixture : IAsyncDisposable

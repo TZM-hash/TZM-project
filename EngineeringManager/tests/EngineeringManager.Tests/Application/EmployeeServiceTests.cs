@@ -1,11 +1,14 @@
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Employees;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Tests.Application;
 
@@ -78,11 +81,37 @@ public sealed class EmployeeServiceTests
         await using var fixture = await EmployeeFixture.CreateAsync();
         var employee = await fixture.Service.CreateAsync(CreateRequest("E-SVC-005", "待修改员工"), CancellationToken.None);
 
-        var updated = await fixture.Service.UpdateAsync("admin", new UpdateEmployeeRequest(employee.Id, employee.EmployeeNumber, "已修改员工", EmployeeType.Labor, "13800000001", null, null, null, null, null, "操作员", null, null, 320m, null, null, true, employee.ConcurrencyStamp, "调整员工主档"), CancellationToken.None);
+        var updated = await fixture.Service.UpdateAsync("admin", new UpdateEmployeeRequest(employee.Id, employee.EmployeeNumber, "已修改员工", EmployeeType.Labor, "13800000001", null, null, null, null, null, "操作员", null, null, 320m, null, null, true, employee.ConcurrencyStamp, "调整员工主档", "员工主档备注"), CancellationToken.None);
 
         updated.Name.Should().Be("已修改员工");
         updated.EmployeeType.Should().Be(EmployeeType.Labor);
+        updated.Notes.Should().Be("员工主档备注");
         (await fixture.Db.AuditLogs.SingleAsync()).Action.Should().Be("UpdateEmployee");
+        using var auditJson = JsonDocument.Parse((await fixture.Db.AuditLogs.SingleAsync()).AfterJson!);
+        auditJson.RootElement.GetProperty("Notes").GetString().Should().Be("员工主档备注");
+    }
+
+    [Fact]
+    public async Task EmployeeDetailsReturnAffiliationDisplayNames()
+    {
+        await using var fixture = await EmployeeFixture.CreateAsync();
+        var project = new Project { ProjectNumber = "EMP-SVC-P", Name = "员工服务项目", Stage = ProjectStage.UnderConstruction };
+        var crew = new BusinessPartner { PartnerNumber = "EMP-SVC-C", Name = "员工服务班组", ShortName = "服务班组" };
+        crew.Roles.Add(new BusinessPartnerRole { Partner = crew, RoleType = BusinessPartnerRoleType.ConstructionCrew });
+        fixture.Db.AddRange(project, crew);
+        await fixture.Db.SaveChangesAsync();
+        var employee = await fixture.Service.CreateAsync(CreateRequest("E-SVC-006", "详情员工"), CancellationToken.None);
+        await fixture.Service.AddAffiliationAsync(
+            new CreateEmployeeAffiliationRequest(employee.Id, new DateOnly(2026, 1, 1), null, fixture.Department.Id, project.Id, crew.Id, fixture.LegalEntity.Id, "施工员", true, null),
+            CancellationToken.None);
+
+        var details = await fixture.Service.GetAsync(employee.Id, CancellationToken.None);
+        var affiliation = details!.Affiliations.Single();
+
+        affiliation.DepartmentName.Should().Be(fixture.Department.Name);
+        affiliation.ProjectName.Should().Be(project.Name);
+        affiliation.CrewBusinessPartnerName.Should().Be(crew.Name);
+        affiliation.LegalEntityName.Should().Be(fixture.LegalEntity.ShortName);
     }
 
     private static CreateEmployeeRequest CreateRequest(string number, string name) =>

@@ -4,7 +4,7 @@
     ViewData["Title"] = "录入财务业务";
 }
 
-<section class="page-heading"><div><p class="eyebrow">经营台账录入</p><h1>录入财务业务</h1><p class="page-lead">先选择业务类型，再填写对应字段。收付款会自动生成账户流水；退款、冲销和内部转账使用独立记录保存完整修改痕迹。</p></div><a class="button button--secondary" asp-page="/Finance/Index">返回台账</a></section>
+<section class="page-heading"><div><p class="eyebrow">项目经营录入</p><h1>录入经营数据</h1><p class="page-lead">先选择业务类型，再填写对应字段。收付款会自动生成账户流水；退款、冲销和内部转账使用独立记录保存完整修改痕迹。</p></div><a class="button button--secondary" asp-page="/Projects/Index">返回项目管理</a></section>
 
 <form method="post" class="panel form-grid">
     <input type="hidden" asp-for="ReturnUrl" />

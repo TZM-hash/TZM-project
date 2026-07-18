@@ -28,7 +28,8 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             AccountNumber = NormalizeOptional(request.AccountNumber),
             BankName = NormalizeOptional(request.BankName),
             AccountType = request.AccountType,
-            OpeningBalance = request.OpeningBalance
+            OpeningBalance = request.OpeningBalance,
+            Notes = NormalizeOptional(request.Notes)
         };
         db.FinancialAccounts.Add(account);
         await db.SaveChangesAsync(cancellationToken);
@@ -64,7 +65,8 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
                 account.AccountType,
                 account.OpeningBalance,
                 account.OpeningBalance + inflow - outflow,
-                account.IsActive);
+                account.IsActive,
+                account.Notes);
         }).ToArray();
     }
 
@@ -491,6 +493,161 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         return invoice.Id;
     }
 
+    public async Task UpdateReceivableAsync(FinanceRecordActor actor, UpdateReceivableRequest request, CancellationToken cancellationToken)
+    {
+        EnsurePositive(request.Amount);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var entry = await db.ReceivableEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("应收记录不存在。");
+        EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "应收记录");
+        var before = ReceivableSnapshot(entry);
+        entry.ProjectId = request.ProjectId;
+        entry.ContractId = request.ContractId;
+        entry.LegalEntityId = request.LegalEntityId;
+        entry.BusinessPartnerId = request.BusinessPartnerId;
+        entry.EntryDate = request.EntryDate;
+        entry.DueDate = request.DueDate;
+        entry.Amount = request.Amount;
+        entry.Description = NormalizeOptional(request.Description);
+        entry.ConcurrencyStamp = Guid.NewGuid();
+        AddUpdateAudit(actor, "UpdateReceivable", nameof(ReceivableEntry), entry.Id, entry.ProjectId, reason, before, ReceivableSnapshot(entry));
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UpdateCollectionAsync(FinanceRecordActor actor, UpdateCollectionRequest request, CancellationToken cancellationToken)
+    {
+        EnsurePositive(request.Amount);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
+        await ValidateAccountAsync(request.AccountId, request.LegalEntityId, cancellationToken);
+        if (request.ReceivableEntryId.HasValue && !await db.ReceivableEntries.AnyAsync(item => item.Id == request.ReceivableEntryId && item.ProjectId == request.ProjectId && !item.IsVoided, cancellationToken))
+            throw new InvalidOperationException("应收记录不存在、已作废或不属于当前项目。");
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var entry = await db.CollectionEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("收款记录不存在。");
+        EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "收款记录");
+        var before = CollectionSnapshot(entry);
+        entry.ReceivableEntryId = request.ReceivableEntryId;
+        entry.ProjectId = request.ProjectId;
+        entry.ContractId = request.ContractId;
+        entry.LegalEntityId = request.LegalEntityId;
+        entry.BusinessPartnerId = request.BusinessPartnerId;
+        entry.AccountId = request.AccountId;
+        entry.CollectionDate = request.CollectionDate;
+        entry.Amount = request.Amount;
+        entry.PaymentMethod = request.PaymentMethod;
+        entry.Notes = NormalizeOptional(request.Notes);
+        entry.ConcurrencyStamp = Guid.NewGuid();
+        var cash = await db.AccountTransactions.SingleOrDefaultAsync(item => item.SourceType == AccountTransactionSourceType.Collection && item.SourceId == entry.Id, cancellationToken)
+            ?? throw new InvalidOperationException("收款对应的账户流水不存在。");
+        cash.AccountId = entry.AccountId;
+        cash.TransactionDate = entry.CollectionDate;
+        cash.Amount = entry.Amount;
+        cash.Description = entry.Notes;
+        AddUpdateAudit(actor, "UpdateCollection", nameof(CollectionEntry), entry.Id, entry.ProjectId, reason, before, CollectionSnapshot(entry));
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UpdateInvoiceAsync(FinanceRecordActor actor, UpdateInvoiceRequest request, CancellationToken cancellationToken)
+    {
+        EnsurePositive(request.GrossAmount);
+        InvoiceAmountValidator.Validate(request.NetAmount, request.TaxAmount, request.GrossAmount, request.TaxRate);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        var invoiceNumber = NormalizeRequired(request.InvoiceNumber, nameof(request.InvoiceNumber));
+        await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
+        if (await db.InvoiceEntries.AnyAsync(item => item.Id != request.Id && item.LegalEntityId == request.LegalEntityId && item.Direction == request.Direction && item.InvoiceNumber == invoiceNumber, cancellationToken))
+            throw new InvalidOperationException($"发票号码已存在：{invoiceNumber}");
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var entry = await db.InvoiceEntries.Include(item => item.ReceivableLinks).Include(item => item.LineItemLinks)
+            .SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("发票记录不存在。");
+        EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "发票记录");
+        var before = InvoiceSnapshot(entry);
+        var previousGross = entry.GrossAmount;
+        entry.ProjectId = request.ProjectId;
+        entry.ContractId = request.ContractId;
+        entry.LegalEntityId = request.LegalEntityId;
+        entry.BusinessPartnerId = request.BusinessPartnerId;
+        entry.Direction = request.Direction;
+        entry.InvoiceNumber = invoiceNumber;
+        entry.InvoiceDate = request.InvoiceDate;
+        entry.InvoiceType = NormalizeOptional(request.InvoiceType);
+        entry.TaxRate = request.TaxRate;
+        entry.NetAmount = request.NetAmount;
+        entry.TaxAmount = request.TaxAmount;
+        entry.GrossAmount = request.GrossAmount;
+        entry.Status = request.Status;
+        entry.ConcurrencyStamp = Guid.NewGuid();
+        RescaleAllocations(entry.ReceivableLinks, previousGross, request.GrossAmount, link => link.AllocatedAmount, (link, amount) => link.AllocatedAmount = amount);
+        RescaleAllocations(entry.LineItemLinks, previousGross, request.GrossAmount, link => link.AllocatedAmount, (link, amount) => link.AllocatedAmount = amount);
+        AddUpdateAudit(actor, "UpdateInvoice", nameof(InvoiceEntry), entry.Id, entry.ProjectId, reason, before, InvoiceSnapshot(entry));
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UpdatePayableAsync(FinanceRecordActor actor, UpdatePayableRequest request, CancellationToken cancellationToken)
+    {
+        EnsurePositive(request.Amount);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, true, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var entry = await db.PayableEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("应付记录不存在。");
+        EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "应付记录");
+        var before = PayableSnapshot(entry);
+        entry.ProjectId = request.ProjectId;
+        entry.ContractId = request.ContractId;
+        entry.LegalEntityId = request.LegalEntityId;
+        entry.BusinessPartnerId = request.BusinessPartnerId;
+        entry.EntryDate = request.EntryDate;
+        entry.DueDate = request.DueDate;
+        entry.Amount = request.Amount;
+        entry.Description = NormalizeOptional(request.Description);
+        entry.ConcurrencyStamp = Guid.NewGuid();
+        AddUpdateAudit(actor, "UpdatePayable", nameof(PayableEntry), entry.Id, entry.ProjectId, reason, before, PayableSnapshot(entry));
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UpdatePaymentAsync(FinanceRecordActor actor, UpdatePaymentRequest request, CancellationToken cancellationToken)
+    {
+        EnsurePositive(request.Amount);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, true, cancellationToken);
+        await ValidateAccountAsync(request.AccountId, request.LegalEntityId, cancellationToken);
+        if (request.PayableEntryId.HasValue && !await db.PayableEntries.AnyAsync(item => item.Id == request.PayableEntryId && item.ProjectId == request.ProjectId && !item.IsVoided, cancellationToken))
+            throw new InvalidOperationException("应付记录不存在、已作废或不属于当前项目。");
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var entry = await db.PaymentEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("付款记录不存在。");
+        EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "付款记录");
+        var before = PaymentSnapshot(entry);
+        entry.PayableEntryId = request.PayableEntryId;
+        entry.ProjectId = request.ProjectId;
+        entry.ContractId = request.ContractId;
+        entry.LegalEntityId = request.LegalEntityId;
+        entry.BusinessPartnerId = request.BusinessPartnerId;
+        entry.AccountId = request.AccountId;
+        entry.PaymentDate = request.PaymentDate;
+        entry.Amount = request.Amount;
+        entry.PaymentMethod = request.PaymentMethod;
+        entry.Notes = NormalizeOptional(request.Notes);
+        entry.ConcurrencyStamp = Guid.NewGuid();
+        var cash = await db.AccountTransactions.SingleOrDefaultAsync(item => item.SourceType == AccountTransactionSourceType.Payment && item.SourceId == entry.Id, cancellationToken)
+            ?? throw new InvalidOperationException("付款对应的账户流水不存在。");
+        cash.AccountId = entry.AccountId;
+        cash.TransactionDate = entry.PaymentDate;
+        cash.Amount = entry.Amount;
+        cash.Description = entry.Notes;
+        AddUpdateAudit(actor, "UpdatePayment", nameof(PaymentEntry), entry.Id, entry.ProjectId, reason, before, PaymentSnapshot(entry));
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<FinanceProjectSummaryDto> GetProjectSummaryAsync(Guid projectId, CancellationToken cancellationToken)
         => await GetSummaryAsync(new FinanceSummaryFilter(projectId), cancellationToken);
 
@@ -505,6 +662,11 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         var collections = db.CollectionEntries.Where(item => item.ProjectId == filter.ProjectId);
         var payables = db.PayableEntries.Where(item => item.ProjectId == filter.ProjectId && !item.IsVoided);
         var payments = db.PaymentEntries.Where(item => item.ProjectId == filter.ProjectId);
+        var payrollCrewPayments = db.PayrollPayments.Where(item =>
+            item.RecipientType == EngineeringManager.Domain.Employees.PayrollRecipientType.CrewWorker &&
+            item.CrewBusinessPartnerId.HasValue &&
+            item.Batch.ProjectId == filter.ProjectId &&
+            item.Batch.Status != EngineeringManager.Domain.Employees.PayrollBatchStatus.Voided);
         var deductions = db.DeductionEntries.Where(item => item.ProjectId == filter.ProjectId);
         var invoices = db.InvoiceEntries.Where(item => item.ProjectId == filter.ProjectId && item.Status != InvoiceStatus.Voided);
         var refunds = db.RefundOrReversalEntries.AsQueryable();
@@ -515,6 +677,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             collections = collections.Where(item => item.CollectionDate <= filter.CutoffDate);
             payables = payables.Where(item => item.EntryDate <= filter.CutoffDate);
             payments = payments.Where(item => item.PaymentDate <= filter.CutoffDate);
+            payrollCrewPayments = payrollCrewPayments.Where(item => (item.Batch.PaymentDate ?? item.PaymentDate) <= filter.CutoffDate);
             deductions = deductions.Where(item => item.EntryDate <= filter.CutoffDate);
             invoices = invoices.Where(item => item.InvoiceDate <= filter.CutoffDate);
             refunds = refunds.Where(item => item.EntryDate <= filter.CutoffDate);
@@ -526,6 +689,8 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             collections = collections.Where(item => item.ContractId == filter.ContractId);
             payables = payables.Where(item => item.ContractId == filter.ContractId);
             payments = payments.Where(item => item.ContractId == filter.ContractId);
+            payrollCrewPayments = payrollCrewPayments.Where(item => item.Batch.CrewAllocations.Any(allocation =>
+                allocation.CrewBusinessPartnerId == item.CrewBusinessPartnerId && allocation.ContractId == filter.ContractId));
             deductions = deductions.Where(item => item.Payable.ContractId == filter.ContractId);
             invoices = invoices.Where(item => item.ContractId == filter.ContractId);
         }
@@ -536,6 +701,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             collections = collections.Where(item => item.LegalEntityId == filter.LegalEntityId);
             payables = payables.Where(item => item.LegalEntityId == filter.LegalEntityId);
             payments = payments.Where(item => item.LegalEntityId == filter.LegalEntityId);
+            payrollCrewPayments = payrollCrewPayments.Where(item => item.Batch.LegalEntityId == filter.LegalEntityId);
             deductions = deductions.Where(item => item.LegalEntityId == filter.LegalEntityId);
             invoices = invoices.Where(item => item.LegalEntityId == filter.LegalEntityId);
         }
@@ -546,6 +712,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             collections = collections.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
             payables = payables.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
             payments = payments.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
+            payrollCrewPayments = payrollCrewPayments.Where(item => item.CrewBusinessPartnerId == filter.BusinessPartnerId);
             deductions = deductions.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
             invoices = invoices.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
         }
@@ -561,6 +728,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
         var payableAmount = await payables.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
         var paymentAmount = await payments.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        paymentAmount += await payrollCrewPayments.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
         var reversalAmount = await reversals.Where(item => paymentIds.Contains(item.PaymentEntryId)).SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
         var deductionAmount = await deductions.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
         var outputInvoiceAmount = await invoices.Where(item => item.Direction == InvoiceDirection.Output).SumAsync(item => (decimal?)item.GrossAmount, cancellationToken) ?? 0m;
@@ -615,6 +783,58 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             Reason = reason,
             AfterJson = JsonSerializer.Serialize(after)
         });
+
+    private void AddUpdateAudit(FinanceRecordActor actor, string action, string entityType, Guid entityId, Guid projectId, string reason, object before, object after) =>
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = NormalizeRequired(actor.UserId, nameof(actor.UserId)),
+            UserName = NormalizeOptional(actor.UserName),
+            Action = action,
+            EntityType = entityType,
+            EntityId = entityId.ToString(),
+            RelatedProjectId = projectId.ToString(),
+            Reason = reason,
+            BeforeJson = JsonSerializer.Serialize(before),
+            AfterJson = JsonSerializer.Serialize(after)
+        });
+
+    private static object ReceivableSnapshot(ReceivableEntry item) => new { item.ProjectId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.SourceType, item.EntryDate, item.DueDate, item.Amount, item.Description, item.IsVoided, item.ConcurrencyStamp };
+    private static object CollectionSnapshot(CollectionEntry item) => new { item.ReceivableEntryId, item.ProjectId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.CollectionDate, item.Amount, item.PaymentMethod, item.Notes, item.ConcurrencyStamp };
+    private static object PayableSnapshot(PayableEntry item) => new { item.ProjectId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.SourceType, item.EntryDate, item.DueDate, item.Amount, item.Description, item.IsVoided, item.ConcurrencyStamp };
+    private static object PaymentSnapshot(PaymentEntry item) => new { item.PayableEntryId, item.ProjectId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.PaymentDate, item.Amount, item.PaymentMethod, item.Notes, item.ConcurrencyStamp };
+    private static object InvoiceSnapshot(InvoiceEntry item) => new
+    {
+        item.ProjectId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.Direction, item.InvoiceNumber,
+        item.InvoiceDate, item.InvoiceType, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status, item.ConcurrencyStamp,
+        ReceivableAllocations = item.ReceivableLinks.Select(link => new { link.ReceivableEntryId, link.AllocatedAmount }).ToArray(),
+        LineItemAllocations = item.LineItemLinks.Select(link => new { link.ContractLineItemId, link.AllocatedAmount }).ToArray()
+    };
+
+    private static void EnsureCurrent(Guid actual, Guid expected, string label)
+    {
+        if (actual != expected) throw new DbUpdateConcurrencyException($"{label}已被其他用户修改，请刷新后重试。");
+    }
+
+    private static void RescaleAllocations<T>(ICollection<T> links, decimal previousGross, decimal newGross, Func<T, decimal> getAmount, Action<T, decimal> setAmount)
+    {
+        if (links.Count == 0) return;
+        var ordered = links.ToArray();
+        if (previousGross <= 0m)
+        {
+            setAmount(ordered[^1], newGross);
+            for (var index = 0; index < ordered.Length - 1; index++) setAmount(ordered[index], 0m);
+            return;
+        }
+        decimal allocated = 0m;
+        for (var index = 0; index < ordered.Length; index++)
+        {
+            var amount = index == ordered.Length - 1
+                ? newGross - allocated
+                : Math.Round(getAmount(ordered[index]) / previousGross * newGross, 2, MidpointRounding.AwayFromZero);
+            setAmount(ordered[index], amount);
+            allocated += amount;
+        }
+    }
 
     private async Task ValidateDimensionsAsync(
         Guid projectId,

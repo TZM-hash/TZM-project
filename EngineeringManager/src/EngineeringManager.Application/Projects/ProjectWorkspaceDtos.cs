@@ -1,5 +1,6 @@
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 
 namespace EngineeringManager.Application.Projects;
@@ -27,7 +28,10 @@ public sealed record ProjectWorkspaceOverviewDto(
     ArchiveStatus ArchiveStatus,
     IReadOnlyList<ProjectWorkspaceOptionDto> LegalEntities,
     DateTimeOffset UpdatedAt,
-    Guid ConcurrencyStamp);
+    Guid ConcurrencyStamp,
+    DateOnly? ActualStartDate = null,
+    DateOnly? ActualCompletionDate = null,
+    string? Notes = null);
 
 public sealed record ProjectEditOptionsDto(
     IReadOnlyList<ProjectWorkspaceOptionDto> ResponsibleUsers,
@@ -51,7 +55,10 @@ public sealed record UpdateProjectRequest(
     ArchiveStatus ArchiveStatus,
     IReadOnlyCollection<Guid> LegalEntityIds,
     Guid ConcurrencyStamp,
-    string Reason);
+    string Reason,
+    DateOnly? ActualStartDate = null,
+    DateOnly? ActualCompletionDate = null,
+    string? Notes = null);
 
 public sealed record ProjectReceivableItemDto(
     Guid Id,
@@ -62,7 +69,11 @@ public sealed record ProjectReceivableItemDto(
     string? BusinessPartnerName,
     decimal Amount,
     string? Description,
-    bool IsVoided);
+    bool IsVoided,
+    Guid? ContractId = null,
+    Guid? LegalEntityId = null,
+    Guid? BusinessPartnerId = null,
+    Guid ConcurrencyStamp = default);
 
 public sealed record ProjectCollectionItemDto(
     Guid Id,
@@ -73,7 +84,13 @@ public sealed record ProjectCollectionItemDto(
     string AccountName,
     decimal Amount,
     PaymentMethod PaymentMethod,
-    string? Notes);
+    string? Notes,
+    Guid? ReceivableEntryId = null,
+    Guid? ContractId = null,
+    Guid? LegalEntityId = null,
+    Guid? BusinessPartnerId = null,
+    Guid? AccountId = null,
+    Guid ConcurrencyStamp = default);
 
 public sealed record ProjectInvoiceItemDto(
     Guid Id,
@@ -87,7 +104,12 @@ public sealed record ProjectInvoiceItemDto(
     decimal NetAmount,
     decimal TaxAmount,
     decimal GrossAmount,
-    InvoiceStatus Status);
+    InvoiceStatus Status,
+    Guid? ContractId = null,
+    Guid? LegalEntityId = null,
+    Guid? BusinessPartnerId = null,
+    string? InvoiceType = null,
+    Guid ConcurrencyStamp = default);
 
 public sealed record ProjectPayableItemDto(
     Guid Id,
@@ -98,7 +120,11 @@ public sealed record ProjectPayableItemDto(
     string BusinessPartnerName,
     decimal Amount,
     string? Description,
-    bool IsVoided);
+    bool IsVoided,
+    Guid? ContractId = null,
+    Guid? LegalEntityId = null,
+    Guid? BusinessPartnerId = null,
+    Guid ConcurrencyStamp = default);
 
 public sealed record ProjectPaymentItemDto(
     Guid Id,
@@ -109,7 +135,16 @@ public sealed record ProjectPaymentItemDto(
     string AccountName,
     decimal Amount,
     PaymentMethod PaymentMethod,
-    string? Notes);
+    string? Notes,
+    Guid? PayableEntryId = null,
+    Guid? ContractId = null,
+    Guid? LegalEntityId = null,
+    Guid? BusinessPartnerId = null,
+    Guid? AccountId = null,
+    Guid ConcurrencyStamp = default,
+    string SourceType = "FinancePayment",
+    Guid? PayrollBatchId = null,
+    Guid? PayrollPaymentId = null);
 
 public sealed record ProjectActivityItemDto(
     DateTimeOffset OccurredAt,
@@ -118,6 +153,34 @@ public sealed record ProjectActivityItemDto(
     string? Detail,
     string? UserName,
     string Tone);
+
+public sealed record ProjectMilestoneDto(
+    Guid Id,
+    string Name,
+    DateOnly? PlannedDate,
+    DateOnly? ActualDate,
+    bool IsCompleted,
+    int SortOrder,
+    string? Notes);
+
+public sealed record ProjectAssignmentDto(
+    Guid Id,
+    string UserId,
+    string UserName,
+    ProjectAssignmentType AssignmentType,
+    bool IsActive,
+    string? Notes);
+
+public sealed record ProjectPartnerLinkDto(
+    Guid Id,
+    Guid PartnerId,
+    string PartnerName,
+    BusinessPartnerRoleType RoleType,
+    Guid? ContractId,
+    string? ContractNumber,
+    bool IsPrimary,
+    bool IsActive,
+    string? Notes);
 
 public sealed record ProjectWorkspaceDto(
     ProjectWorkspaceOverviewDto Overview,
@@ -129,4 +192,7 @@ public sealed record ProjectWorkspaceDto(
     IReadOnlyList<ProjectInvoiceItemDto> Invoices,
     IReadOnlyList<ProjectPayableItemDto> Payables,
     IReadOnlyList<ProjectPaymentItemDto> Payments,
-    IReadOnlyList<ProjectActivityItemDto> Activities);
+    IReadOnlyList<ProjectActivityItemDto> Activities,
+    IReadOnlyList<ProjectMilestoneDto>? Milestones = null,
+    IReadOnlyList<ProjectAssignmentDto>? Assignments = null,
+    IReadOnlyList<ProjectPartnerLinkDto>? Partners = null);

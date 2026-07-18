@@ -2,17 +2,58 @@ using EngineeringManager.Application.EmployeeLedger;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Files;
+using EngineeringManager.Domain.StageResults;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.EmployeeLedger;
 
-public sealed class EmployeeLedgerService(ApplicationDbContext db) : IEmployeeLedgerService
+public sealed class EmployeeLedgerService(ApplicationDbContext db, IFileStore? fileStore = null) : IEmployeeLedgerService
 {
     public async Task<Guid> CreateExpenseAsync(CreateExpenseRequest request, CancellationToken cancellationToken)
     {
         EnsurePositive(request.Amount);
         var category = NormalizeRequired(request.Category, nameof(request.Category));
         await ValidateDimensionsAsync(request.EmployeeId, request.ProjectId, request.DepartmentId, request.LegalEntityId, cancellationToken);
+        var finalAmount = request.Amount + request.AdjustmentAmount;
+        if (finalAmount < 0m)
+        {
+            throw new ArgumentException("报销最终金额不能小于零。", nameof(request));
+        }
+
+        Attachment? attachment = null;
+        if (request.Attachment is not null)
+        {
+            if (fileStore is null)
+            {
+                throw new InvalidOperationException("当前环境未配置附件存储。");
+            }
+
+            if (request.Attachment.Content.Length == 0)
+            {
+                throw new ArgumentException("报销附件不能为空。", nameof(request));
+            }
+
+            var safeName = Path.GetFileName(request.Attachment.OriginalFileName);
+            if (!string.Equals(safeName, request.Attachment.OriginalFileName, StringComparison.Ordinal) || string.IsNullOrWhiteSpace(safeName))
+            {
+                throw new ArgumentException("报销附件文件名无效。", nameof(request));
+            }
+
+            await using var content = new MemoryStream(request.Attachment.Content, writable: false);
+            var storedName = await fileStore.SaveAsync(content, safeName, cancellationToken);
+            attachment = new Attachment
+            {
+                StoredName = storedName,
+                OriginalFileName = safeName,
+                ContentType = string.IsNullOrWhiteSpace(request.Attachment.ContentType) ? "application/octet-stream" : request.Attachment.ContentType.Trim(),
+                SizeBytes = request.Attachment.Content.LongLength,
+                Category = AttachmentCategory.General,
+                Description = "员工报销附件"
+            };
+            db.Attachments.Add(attachment);
+        }
+
         var expense = new ExpenseRecord
         {
             EmployeeId = request.EmployeeId,
@@ -21,7 +62,11 @@ public sealed class EmployeeLedgerService(ApplicationDbContext db) : IEmployeeLe
             LegalEntityId = request.LegalEntityId,
             ExpenseDate = request.ExpenseDate,
             Category = category,
-            Amount = request.Amount,
+            OriginalAmount = request.Amount,
+            AdjustmentAmount = request.AdjustmentAmount,
+            Amount = finalAmount,
+            ReceiptNumber = NormalizeOptional(request.ReceiptNumber),
+            Attachment = attachment,
             Description = NormalizeOptional(request.Description)
         };
         db.ExpenseRecords.Add(expense);

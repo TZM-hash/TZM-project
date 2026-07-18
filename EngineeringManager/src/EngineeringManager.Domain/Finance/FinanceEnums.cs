@@ -21,5 +21,7 @@ public enum AccountTransactionSourceType
     ExpensePayment = 9,
     EmployeeAdvanceDisbursement = 10,
     EmployeeAdvanceRepayment = 11,
-    EmployeeOtherPayment = 12
+    EmployeeOtherPayment = 12,
+    EmployeeReceipt = 13,
+    PayrollPaymentReversal = 14
 }

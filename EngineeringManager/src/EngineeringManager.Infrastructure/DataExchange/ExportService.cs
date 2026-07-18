@@ -33,7 +33,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("unpaid_amount", "未付款", ExportFieldDataType.Number, true),
                 new("expected_invoice_amount", "应开票", ExportFieldDataType.Number, true),
                 new("output_invoice_amount", "已开票", ExportFieldDataType.Number, true),
-                new("uninvoiced_amount", "未开票", ExportFieldDataType.Number, true)
+                new("uninvoiced_amount", "未开票", ExportFieldDataType.Number, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Employees] =
             [
@@ -42,7 +43,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("employee_type", "员工类型", ExportFieldDataType.Text, true),
                 new("position", "岗位", ExportFieldDataType.Text, true),
                 new("phone", "电话", ExportFieldDataType.Text, false),
-                new("is_active", "状态", ExportFieldDataType.Boolean, true)
+                new("is_active", "状态", ExportFieldDataType.Boolean, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.EmployeeCertificates] =
             [
@@ -62,7 +64,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("name", "单位名称", ExportFieldDataType.Text, true),
                 new("short_name", "简称", ExportFieldDataType.Text, true),
                 new("roles", "业务角色", ExportFieldDataType.Text, true),
-                new("is_active", "状态", ExportFieldDataType.Boolean, true)
+                new("is_active", "状态", ExportFieldDataType.Boolean, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Payroll] =
             [
@@ -71,9 +74,19 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("batch_type", "批次类型", ExportFieldDataType.Text, true),
                 new("start_date", "开始日期", ExportFieldDataType.Date, true),
                 new("end_date", "结束日期", ExportFieldDataType.Date, true),
+                new("payment_date", "发放日期", ExportFieldDataType.Date, true),
+                new("project", "发放项目", ExportFieldDataType.Text, false),
+                new("legal_entity", "发放公司", ExportFieldDataType.Text, false),
+                new("account", "付款账户", ExportFieldDataType.Text, false),
+                new("recipient_type", "人员来源", ExportFieldDataType.Text, true),
+                new("recipient_name", "人员姓名", ExportFieldDataType.Text, true),
+                new("crew", "施工班组", ExportFieldDataType.Text, false),
+                new("amount", "个人金额", ExportFieldDataType.Number, true),
+                new("actual_amount", "批次实际总额", ExportFieldDataType.Number, true),
                 new("payable_amount", "应发工资", ExportFieldDataType.Number, true),
                 new("paid_amount", "已发工资", ExportFieldDataType.Number, true),
-                new("unpaid_amount", "未发工资", ExportFieldDataType.Number, true)
+                new("unpaid_amount", "未发工资", ExportFieldDataType.Number, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Collections] =
             [
@@ -83,7 +96,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("partner", "合作单位", ExportFieldDataType.Text, false),
                 new("account", "收款账户", ExportFieldDataType.Text, true),
                 new("amount", "收款金额", ExportFieldDataType.Number, true),
-                new("payment_method", "收款方式", ExportFieldDataType.Text, true)
+                new("payment_method", "收款方式", ExportFieldDataType.Text, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Payments] =
             [
@@ -93,7 +107,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("partner", "合作单位", ExportFieldDataType.Text, true),
                 new("account", "付款账户", ExportFieldDataType.Text, true),
                 new("amount", "付款金额", ExportFieldDataType.Number, true),
-                new("payment_method", "付款方式", ExportFieldDataType.Text, true)
+                new("payment_method", "付款方式", ExportFieldDataType.Text, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Invoices] =
             [
@@ -112,7 +127,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("account_type", "账户类型", ExportFieldDataType.Text, true),
                 new("opening_balance", "期初余额", ExportFieldDataType.Number, true),
                 new("current_balance", "当前余额", ExportFieldDataType.Number, true),
-                new("is_active", "状态", ExportFieldDataType.Boolean, true)
+                new("is_active", "状态", ExportFieldDataType.Boolean, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Companies] =
             [
@@ -126,7 +142,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("registered_address", "注册地址", ExportFieldDataType.Text, false),
                 new("business_address", "经营地址", ExportFieldDataType.Text, false),
                 new("invoice_title", "开票抬头", ExportFieldDataType.Text, false),
-                new("is_active", "状态", ExportFieldDataType.Boolean, true)
+                new("is_active", "状态", ExportFieldDataType.Boolean, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.CompanyAccounts] =
             [
@@ -139,7 +156,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("default_collection", "默认收款", ExportFieldDataType.Boolean, true),
                 new("default_payment", "默认付款", ExportFieldDataType.Boolean, true),
                 new("default_invoice", "默认开票", ExportFieldDataType.Boolean, true),
-                new("is_active", "状态", ExportFieldDataType.Boolean, true)
+                new("is_active", "状态", ExportFieldDataType.Boolean, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.CompanyCertificates] =
             [
@@ -162,7 +180,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("owner_company", "所属公司", ExportFieldDataType.Text, true),
                 new("lessor", "出租方", ExportFieldDataType.Text, true),
                 new("status", "状态", ExportFieldDataType.Text, true),
-                new("internal_daily_rate", "内部参考日价", ExportFieldDataType.Number, false)
+                new("internal_daily_rate", "内部参考日价", ExportFieldDataType.Number, false),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.EquipmentLeases] =
             [
@@ -178,7 +197,7 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ],
             [ExportDataset.EquipmentSettlements] =
             [
-                new("equipment_number", "设备编号", ExportFieldDataType.Text, true), new("project_number", "项目编号", ExportFieldDataType.Text, true), new("settlement_date", "结算日期", ExportFieldDataType.Date, true), new("base_amount", "基础租金", ExportFieldDataType.Number, true), new("total_amount", "结算总额", ExportFieldDataType.Number, true), new("offset_amount", "抵扣金额", ExportFieldDataType.Number, true), new("payable_id", "应付记录", ExportFieldDataType.Text, false)
+                new("equipment_number", "设备编号", ExportFieldDataType.Text, true), new("project_number", "项目编号", ExportFieldDataType.Text, true), new("settlement_date", "结算日期", ExportFieldDataType.Date, true), new("base_amount", "基础租金", ExportFieldDataType.Number, true), new("total_amount", "结算总额", ExportFieldDataType.Number, true), new("offset_amount", "抵扣金额", ExportFieldDataType.Number, true), new("payable_id", "应付记录", ExportFieldDataType.Text, false), new("notes", "备注", ExportFieldDataType.Text, false)
             ]
         };
 
@@ -309,7 +328,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 ["unpaid_amount"] = finance.UnpaidAmount,
                 ["expected_invoice_amount"] = finance.ReceivableAmount,
                 ["output_invoice_amount"] = finance.OutputInvoiceAmount,
-                ["uninvoiced_amount"] = finance.UninvoicedAmount
+                ["uninvoiced_amount"] = finance.UninvoicedAmount,
+                ["notes"] = project.Notes
             };
             rows.Add(fields.Select(field => values[field.Key]).ToArray());
             contractTotal += projectSummary.ContractAmount;
@@ -355,7 +375,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["employee_type"] = item.EmployeeType.ToString(),
             ["position"] = item.PositionTitle,
             ["phone"] = item.Phone,
-            ["is_active"] = item.IsActive
+            ["is_active"] = item.IsActive,
+            ["notes"] = item.Notes
         })), "员工台账");
     }
 
@@ -368,35 +389,67 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["name"] = item.Name,
             ["short_name"] = item.ShortName,
             ["roles"] = string.Join("、", item.Roles.Select(role => role.RoleType.ToString())),
-            ["is_active"] = item.IsActive
+            ["is_active"] = item.IsActive,
+            ["notes"] = item.Notes
         })), "合作单位台账");
     }
 
     private async Task<ExportFileResult> ExportPayrollAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
-        var query = db.PayrollBatches.AsNoTracking().Include(item => item.Items).Include(item => item.Payments).AsQueryable();
+        var query = db.PayrollBatches.AsNoTracking()
+            .Include(item => item.Items)
+            .Include(item => item.Payments)
+            .Include(item => item.Project)
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Account)
+            .AsQueryable();
         if (cutoffDate.HasValue)
         {
-            query = query.Where(item => item.EndDate <= cutoffDate);
+            query = query.Where(item => (item.IsUnifiedDisbursement ? item.PaymentDate : item.EndDate) <= cutoffDate);
         }
 
-        var batches = await query.OrderByDescending(item => item.EndDate).ToListAsync(cancellationToken);
-        return CreateSingleSheet("工资", fields, batches.Select(batch =>
+        var batches = await query.OrderByDescending(item => item.PaymentDate ?? item.EndDate).ToListAsync(cancellationToken);
+        var rows = new List<IReadOnlyList<object?>>();
+        foreach (var batch in batches)
         {
             var summary = PayrollCalculator.Calculate(batch.Items.Select(item => new PayrollComponentInput(item.Nature, item.Amount)), batch.Payments.Sum(item => item.Amount));
-            return Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+            if (batch.IsUnifiedDisbursement)
             {
-                ["batch_number"] = batch.BatchNumber,
-                ["batch_name"] = batch.Name,
-                ["batch_type"] = batch.BatchType.ToString(),
-                ["start_date"] = batch.StartDate,
-                ["end_date"] = batch.EndDate,
-                ["payable_amount"] = summary.PayableAmount,
-                ["paid_amount"] = summary.PaidAmount,
-                ["unpaid_amount"] = summary.UnpaidAmount
-            });
-        }), "工资台账");
+                foreach (var payment in batch.Payments.OrderBy(item => item.RecipientType).ThenBy(item => item.RecipientNameSnapshot ?? item.PayeeName))
+                {
+                    rows.Add(Project(fields, PayrollValues(batch, summary, payment)));
+                }
+            }
+            else
+            {
+                rows.Add(Project(fields, PayrollValues(batch, summary, null)));
+            }
+        }
+        return CreateSingleSheet("工资", fields, rows, "工资台账");
     }
+
+    private static Dictionary<string, object?> PayrollValues(PayrollBatch batch, PayrollSummary summary, PayrollPayment? payment) =>
+        new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["batch_number"] = batch.BatchNumber,
+            ["batch_name"] = batch.Name,
+            ["batch_type"] = batch.BatchType.ToString(),
+            ["start_date"] = batch.StartDate,
+            ["end_date"] = batch.EndDate,
+            ["payment_date"] = batch.PaymentDate ?? payment?.PaymentDate,
+            ["project"] = batch.Project?.Name,
+            ["legal_entity"] = batch.LegalEntity?.ShortName,
+            ["account"] = batch.Account?.AccountName ?? payment?.Account?.AccountName,
+            ["recipient_type"] = payment?.RecipientType.ToString(),
+            ["recipient_name"] = payment?.RecipientNameSnapshot ?? payment?.PayeeName,
+            ["crew"] = payment?.CrewNameSnapshot,
+            ["amount"] = payment?.Amount,
+            ["actual_amount"] = batch.IsUnifiedDisbursement ? batch.ActualAmount : summary.PaidAmount,
+            ["payable_amount"] = summary.PayableAmount,
+            ["paid_amount"] = summary.PaidAmount,
+            ["unpaid_amount"] = summary.UnpaidAmount,
+            ["notes"] = payment?.Notes ?? batch.Notes
+        };
 
     private async Task<ExportFileResult> ExportCollectionsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
@@ -411,7 +464,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["partner"] = item.BusinessPartner?.ShortName,
             ["account"] = item.Account.AccountName,
             ["amount"] = item.Amount,
-            ["payment_method"] = item.PaymentMethod.ToString()
+            ["payment_method"] = item.PaymentMethod.ToString(),
+            ["notes"] = item.Notes
         })), "收款台账");
     }
 
@@ -428,7 +482,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["partner"] = item.BusinessPartner.ShortName,
             ["account"] = item.Account.AccountName,
             ["amount"] = item.Amount,
-            ["payment_method"] = item.PaymentMethod.ToString()
+            ["payment_method"] = item.PaymentMethod.ToString(),
+            ["notes"] = item.Notes
         })), "付款台账");
     }
 
@@ -467,7 +522,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 ["account_type"] = item.AccountType.ToString(),
                 ["opening_balance"] = item.OpeningBalance,
                 ["current_balance"] = item.OpeningBalance + inflow - outflow,
-                ["is_active"] = item.IsActive
+                ["is_active"] = item.IsActive,
+                ["notes"] = item.Notes
             });
         }), "资金账户台账");
     }
@@ -487,7 +543,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["registered_address"] = item.RegisteredAddress,
             ["business_address"] = item.BusinessAddress,
             ["invoice_title"] = item.InvoiceTitle,
-            ["is_active"] = item.IsActive
+            ["is_active"] = item.IsActive,
+            ["notes"] = item.Notes
         })), "自有公司");
     }
 
@@ -505,7 +562,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["default_collection"] = item.IsDefaultCollection,
             ["default_payment"] = item.IsDefaultPayment,
             ["default_invoice"] = item.IsDefaultInvoice,
-            ["is_active"] = item.IsActive
+            ["is_active"] = item.IsActive,
+            ["notes"] = item.Notes
         })), "公司账户");
     }
 
@@ -547,7 +605,7 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
     private async Task<ExportFileResult> ExportEquipmentAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
     {
         var items = await db.Equipment.AsNoTracking().Include(item => item.OwnerLegalEntity).Include(item => item.LessorBusinessPartner).OrderBy(item => item.EquipmentNumber).ToListAsync(token);
-        return CreateSingleSheet("设备档案", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.EquipmentNumber, ["name"] = item.Name, ["model"] = item.Model, ["category"] = item.Category, ["ownership"] = item.OwnershipType.ToString(), ["owner_company"] = item.OwnerLegalEntity?.Name, ["lessor"] = item.LessorBusinessPartner?.Name, ["status"] = item.Status.ToString(), ["internal_daily_rate"] = item.InternalDailyRate })), "设备档案");
+        return CreateSingleSheet("设备档案", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.EquipmentNumber, ["name"] = item.Name, ["model"] = item.Model, ["category"] = item.Category, ["ownership"] = item.OwnershipType.ToString(), ["owner_company"] = item.OwnerLegalEntity?.Name, ["lessor"] = item.LessorBusinessPartner?.Name, ["status"] = item.Status.ToString(), ["internal_daily_rate"] = item.InternalDailyRate, ["notes"] = item.Notes })), "设备档案");
     }
 
     private async Task<ExportFileResult> ExportEquipmentLeasesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
@@ -571,7 +629,7 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
     private async Task<ExportFileResult> ExportEquipmentSettlementsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
     {
         var items = await db.EquipmentSettlements.AsNoTracking().Include(item => item.Usage).ThenInclude(item => item.Equipment).Include(item => item.Usage).ThenInclude(item => item.Project).OrderBy(item => item.SettlementDate).ToListAsync(token);
-        return CreateSingleSheet("设备结算", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Usage.Equipment.EquipmentNumber, ["project_number"] = item.Usage.Project.ProjectNumber, ["settlement_date"] = item.SettlementDate, ["base_amount"] = item.BaseAmount, ["total_amount"] = item.TotalAmount, ["offset_amount"] = item.OffsetAmount, ["payable_id"] = item.PayableEntryId?.ToString() })), "设备结算");
+        return CreateSingleSheet("设备结算", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Usage.Equipment.EquipmentNumber, ["project_number"] = item.Usage.Project.ProjectNumber, ["settlement_date"] = item.SettlementDate, ["base_amount"] = item.BaseAmount, ["total_amount"] = item.TotalAmount, ["offset_amount"] = item.OffsetAmount, ["payable_id"] = item.PayableEntryId?.ToString(), ["notes"] = item.Notes })), "设备结算");
     }
 
     private static object?[] Project(IReadOnlyList<ExportFieldDefinition> fields, Dictionary<string, object?> values) =>

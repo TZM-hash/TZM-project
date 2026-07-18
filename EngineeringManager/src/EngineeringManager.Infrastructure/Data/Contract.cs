@@ -16,6 +16,7 @@ public sealed class Contract
     public string? CounterpartyName { get; set; }
     public DateOnly? SignedDate { get; set; }
     public decimal TotalAmount { get; set; }
+    public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

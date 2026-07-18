@@ -21,10 +21,10 @@ public sealed class PartnerStageResultAuthorizationTests
     public async Task QueryUserCanReadPartnerAndStageResultLists()
     {
         await using var factory = CreateFactory("QueryOnly");
-        using var client = factory.CreateClient();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         (await client.GetAsync("/Partners")).StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
-        (await client.GetAsync("/StageResults")).StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        (await client.GetAsync("/StageResults")).StatusCode.Should().Be(System.Net.HttpStatusCode.Redirect);
     }
 
     [Fact]
@@ -45,6 +45,18 @@ public sealed class PartnerStageResultAuthorizationTests
 
         (await client.GetAsync("/Partners/Create")).StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         (await client.GetAsync("/StageResults/Create")).StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task ProjectManagerSeesPartnerQuickEdit()
+    {
+        await using var factory = CreateFactory("ProjectManager");
+        using var client = factory.CreateClient();
+
+        var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync("/Partners"));
+
+        html.Should().Contain("快捷编辑合作单位");
+        html.Should().NotContain("data-quick-edit-dialog");
     }
 
     private static WebApplicationFactory<Program> CreateFactory(string role) =>

@@ -36,6 +36,7 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             DefaultDailyRate = request.DefaultDailyRate,
             DefaultHourlyRate = request.DefaultHourlyRate,
             DefaultPieceworkRate = request.DefaultPieceworkRate,
+            Notes = NormalizeOptional(request.Notes),
             IsActive = request.IsActive
         };
         db.Employees.Add(employee);
@@ -57,7 +58,8 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
                 DefaultDailyRate: source.DefaultDailyRate,
                 DefaultPieceworkRate: source.DefaultPieceworkRate,
                 DefaultMonthlySalary: source.DefaultMonthlySalary,
-                DefaultHourlyRate: source.DefaultHourlyRate),
+                DefaultHourlyRate: source.DefaultHourlyRate,
+                Notes: source.Notes),
             cancellationToken);
     }
 
@@ -88,6 +90,7 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
         employee.DefaultDailyRate = request.DefaultDailyRate;
         employee.DefaultHourlyRate = request.DefaultHourlyRate;
         employee.DefaultPieceworkRate = request.DefaultPieceworkRate;
+        employee.Notes = NormalizeOptional(request.Notes);
         employee.IsActive = request.IsActive;
         employee.UpdatedAt = DateTimeOffset.UtcNow;
         db.Entry(employee).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
@@ -132,7 +135,7 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
 
     public async Task<IReadOnlyList<EmployeeDto>> ListAsync(string? search, CancellationToken cancellationToken)
     {
-        var query = db.Employees.AsNoTracking().Include(item => item.AffiliationHistory).AsQueryable();
+        var query = EmployeeQuery().AsQueryable();
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
@@ -145,7 +148,7 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
 
     public async Task<EmployeeDto?> GetAsync(Guid employeeId, CancellationToken cancellationToken)
     {
-        var employee = await db.Employees.AsNoTracking().Include(item => item.AffiliationHistory).SingleOrDefaultAsync(item => item.Id == employeeId, cancellationToken);
+        var employee = await EmployeeQuery().SingleOrDefaultAsync(item => item.Id == employeeId, cancellationToken);
         return employee is null ? null : ToDto(employee);
     }
 
@@ -212,9 +215,10 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             employee.BankName,
             employee.HireDate,
             employee.LeaveDate,
-            employee.ConcurrencyStamp);
+            employee.ConcurrencyStamp,
+            employee.Notes);
 
-    private static object Snapshot(Employee employee) => new { employee.EmployeeNumber, employee.Name, employee.EmployeeType, employee.Phone, employee.IdentityNumber, employee.BankAccountNumber, employee.BankName, employee.HireDate, employee.LeaveDate, employee.PositionTitle, employee.DefaultLegalEntityId, employee.DefaultMonthlySalary, employee.DefaultDailyRate, employee.DefaultHourlyRate, employee.DefaultPieceworkRate, employee.IsActive };
+    private static object Snapshot(Employee employee) => new { employee.EmployeeNumber, employee.Name, employee.EmployeeType, employee.Phone, employee.IdentityNumber, employee.BankAccountNumber, employee.BankName, employee.HireDate, employee.LeaveDate, employee.PositionTitle, employee.DefaultLegalEntityId, employee.DefaultMonthlySalary, employee.DefaultDailyRate, employee.DefaultHourlyRate, employee.DefaultPieceworkRate, employee.Notes, employee.IsActive };
 
     private static EmployeeAffiliationDto ToDto(EmployeeAffiliationHistory affiliation) =>
         new(
@@ -227,7 +231,19 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             affiliation.LegalEntityId,
             affiliation.PositionTitle,
             affiliation.IsPrimary,
-            affiliation.Notes);
+            affiliation.Notes,
+            affiliation.Department?.Name,
+            affiliation.Project?.Name,
+            affiliation.CrewBusinessPartner?.Name,
+            affiliation.LegalEntity?.ShortName);
+
+    private IQueryable<Employee> EmployeeQuery() =>
+        db.Employees
+            .AsNoTracking()
+            .Include(item => item.AffiliationHistory).ThenInclude(item => item.Department)
+            .Include(item => item.AffiliationHistory).ThenInclude(item => item.Project)
+            .Include(item => item.AffiliationHistory).ThenInclude(item => item.CrewBusinessPartner)
+            .Include(item => item.AffiliationHistory).ThenInclude(item => item.LegalEntity);
 
     private static string NormalizeRequired(string value, string parameterName)
     {

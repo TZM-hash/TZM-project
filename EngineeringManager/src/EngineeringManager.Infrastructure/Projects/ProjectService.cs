@@ -2,6 +2,7 @@ using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.Projects;
 
@@ -17,6 +18,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         }
 
         await ValidateProjectReferencesAsync(request, cancellationToken);
+        ValidateActualDates(request.ActualStartDate, request.ActualCompletionDate);
         var project = new Project
         {
             ProjectNumber = projectNumber,
@@ -30,7 +32,10 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             BranchId = request.BranchId,
             Stage = request.Stage,
             AffiliationType = request.AffiliationType,
-            ArchiveStatus = request.ArchiveStatus
+            ArchiveStatus = request.ArchiveStatus,
+            ActualStartDate = request.ActualStartDate,
+            ActualCompletionDate = request.ActualCompletionDate,
+            Notes = NormalizeOptional(request.Notes)
         };
         foreach (var legalEntityId in request.LegalEntityIds.Distinct())
         {
@@ -82,7 +87,8 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             ContractType = request.ContractType,
             AllocationMode = request.AllocationMode,
             CounterpartyName = NormalizeOptional(request.CounterpartyName),
-            TotalAmount = request.TotalAmount
+            TotalAmount = request.TotalAmount,
+            Notes = NormalizeOptional(request.Notes)
         };
         foreach (var allocation in request.Allocations)
         {
@@ -135,9 +141,59 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             EstimatedUnitPrice = request.EstimatedUnitPrice,
             SettledQuantity = request.SettledQuantity,
             SettledUnitPrice = request.SettledUnitPrice,
-            IsSettlementConfirmed = request.IsSettlementConfirmed
+            IsSettlementConfirmed = request.IsSettlementConfirmed,
+            Notes = NormalizeOptional(request.Notes)
         };
         db.ContractLineItems.Add(lineItem);
+        await db.SaveChangesAsync(cancellationToken);
+        return ToLineItemDto(lineItem);
+    }
+
+    public async Task<ContractLineItemDto> UpdateLineItemAsync(
+        UpdateContractLineItemRequest request,
+        CancellationToken cancellationToken)
+    {
+        var code = NormalizeRequired(request.Code, nameof(request.Code));
+        var name = NormalizeRequired(request.Name, nameof(request.Name));
+        var unit = NormalizeRequired(request.Unit, nameof(request.Unit));
+        if (request.IsSettlementConfirmed && (!request.SettledQuantity.HasValue || !request.SettledUnitPrice.HasValue))
+        {
+            throw new ArgumentException("确认结算时必须填写结算工程量和结算单价。", nameof(request));
+        }
+
+        var lineItem = await db.ContractLineItems.Include(item => item.Contract).SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("工程量明细不存在。");
+        if (lineItem.ConcurrencyStamp != request.ConcurrencyStamp)
+        {
+            throw new DbUpdateConcurrencyException("工程量明细已被其他用户修改，请刷新后重试。");
+        }
+        if (await db.ContractLineItems.AnyAsync(item => item.ContractId == lineItem.ContractId && item.Id != lineItem.Id && item.Code == code, cancellationToken))
+        {
+            throw new InvalidOperationException($"合同下的清单编码已存在：{code}");
+        }
+
+        var before = JsonSerializer.Serialize(LineItemSnapshot(lineItem));
+        lineItem.Code = code;
+        lineItem.Name = name;
+        lineItem.Unit = unit;
+        lineItem.EstimatedQuantity = request.EstimatedQuantity;
+        lineItem.EstimatedUnitPrice = request.EstimatedUnitPrice;
+        lineItem.SettledQuantity = request.SettledQuantity;
+        lineItem.SettledUnitPrice = request.SettledUnitPrice;
+        lineItem.IsSettlementConfirmed = request.IsSettlementConfirmed;
+        lineItem.Notes = NormalizeOptional(request.Notes);
+        lineItem.ConcurrencyStamp = Guid.NewGuid();
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = NormalizeOptional(request.UserId),
+            Action = "UpdateContractLineItem",
+            EntityType = nameof(ContractLineItem),
+            EntityId = lineItem.Id.ToString(),
+            RelatedProjectId = lineItem.Contract.ProjectId.ToString(),
+            Reason = NormalizeOptional(request.Reason) ?? "修改工程量明细",
+            BeforeJson = before,
+            AfterJson = JsonSerializer.Serialize(LineItemSnapshot(lineItem))
+        });
         await db.SaveChangesAsync(cancellationToken);
         return ToLineItemDto(lineItem);
     }
@@ -292,7 +348,13 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
     }
 
     private static ProjectDto ToProjectDto(Project project) =>
-        new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage, project.ArchiveStatus, project.AffiliationType);
+        new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage, project.ArchiveStatus, project.AffiliationType, project.ActualStartDate, project.ActualCompletionDate, project.Notes);
+
+    private static void ValidateActualDates(DateOnly? actualStartDate, DateOnly? actualCompletionDate)
+    {
+        if (actualStartDate.HasValue && actualCompletionDate.HasValue && actualCompletionDate.Value < actualStartDate.Value)
+            throw new ArgumentException("实际完工日期不得早于开工日期。");
+    }
 
     private static ContractDto ToContractDto(Contract contract) =>
         new(
@@ -302,7 +364,8 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             contract.ContractType,
             contract.AllocationMode,
             contract.TotalAmount,
-            contract.LineItems.OrderBy(item => item.SortOrder).ThenBy(item => item.Code).Select(ToLineItemDto).ToArray());
+            contract.LineItems.OrderBy(item => item.SortOrder).ThenBy(item => item.Code).Select(ToLineItemDto).ToArray(),
+            contract.Notes);
 
     private static ContractLineItemDto ToLineItemDto(ContractLineItem item)
     {
@@ -321,8 +384,25 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             item.SettledQuantity,
             item.SettledUnitPrice,
             settledAmount,
-            item.IsSettlementConfirmed);
+            item.IsSettlementConfirmed,
+            item.ConcurrencyStamp,
+            item.Notes);
     }
+
+    private static object LineItemSnapshot(ContractLineItem item) => new
+    {
+        item.ContractId,
+        item.Code,
+        item.Name,
+        item.Unit,
+        item.EstimatedQuantity,
+        item.EstimatedUnitPrice,
+        item.SettledQuantity,
+        item.SettledUnitPrice,
+        item.IsSettlementConfirmed,
+        item.Notes,
+        item.ConcurrencyStamp
+    };
 
     private static string NormalizeRequired(string value, string parameterName)
     {

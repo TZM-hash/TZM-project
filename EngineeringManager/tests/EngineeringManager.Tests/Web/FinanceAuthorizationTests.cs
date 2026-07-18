@@ -21,14 +21,15 @@ public sealed class FinanceAuthorizationTests
     [InlineData("ApplicationAdministrator")]
     [InlineData("Finance")]
     [InlineData("QueryOnly")]
-    public async Task FinanceReadersCanOpenOverview(string role)
+    public async Task FinanceOverviewRedirectsToUnifiedProjectManagement(string role)
     {
         await using var factory = CreateFactory(role);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         using var response = await client.GetAsync("/Finance");
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.Redirect);
+        response.Headers.Location?.OriginalString.Should().Be("/Projects");
     }
 
     [Theory]
@@ -92,6 +93,11 @@ public sealed class FinanceAuthorizationTests
         public Task<Guid> RecordPaymentReversalAsync(RecordPaymentReversalRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> TransferAsync(CreateAccountTransferRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> AddInvoiceAsync(CreateInvoiceRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpdateReceivableAsync(FinanceRecordActor actor, UpdateReceivableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpdateCollectionAsync(FinanceRecordActor actor, UpdateCollectionRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpdateInvoiceAsync(FinanceRecordActor actor, UpdateInvoiceRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpdatePayableAsync(FinanceRecordActor actor, UpdatePayableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpdatePaymentAsync(FinanceRecordActor actor, UpdatePaymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<FinanceProjectSummaryDto> GetSummaryAsync(FinanceSummaryFilter filter, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<FinanceProjectSummaryDto> GetProjectSummaryAsync(Guid projectId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

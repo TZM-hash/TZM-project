@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $Server = 'localhost\SQLEXPRESS'
 $SourceDatabase = 'EngineeringManager_Test'

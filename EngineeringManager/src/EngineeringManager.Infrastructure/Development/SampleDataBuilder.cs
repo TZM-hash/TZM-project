@@ -53,10 +53,19 @@ public sealed class SampleDataBuilder(
         ProjectStage.Closed
     ];
 
+    private static readonly (Guid Id, string Code, string Name, int SortOrder)[] CompanyCategoryDefinitions =
+    [
+        (CompanyCategoryDefaults.GeneralTaxpayerCompanyId, "GENERAL_COMPANY", "一般纳税人有限公司", 10),
+        (CompanyCategoryDefaults.SmallScaleCompanyId, "SMALL_COMPANY", "小规模纳税人有限公司", 20),
+        (CompanyCategoryDefaults.SmallScaleSoleProprietorId, "SMALL_SOLE", "小规模个体工商户", 30),
+        (CompanyCategoryDefaults.OtherId, "OTHER", "其他主体", 90)
+    ];
+
     public async Task<SampleDataContext> BuildCoreAsync(CancellationToken token)
     {
         var anchor = SampleDataCatalog.AnchorDate(timeProvider);
         var (users, credentials) = await EnsureUsersAsync(token);
+        await EnsureCompanyCategoriesAsync(token);
         var companies = await EnsureCompaniesAsync(token);
         var partners = await EnsurePartnersAsync(token);
         var employees = await EnsureEmployeesAsync(anchor, companies, token);
@@ -72,6 +81,7 @@ public sealed class SampleDataBuilder(
         var accounts = await EnsureFinancialAccountsAsync(context, token);
         await EnsureFinanceAsync(context, accounts, token);
         await EnsurePayrollAndEmployeeLedgerAsync(context, accounts, token);
+        await EnsureAnnualLedgerAsync(context, accounts, token);
         await EnsureEquipmentAsync(context, token);
         await EnsureStageResultsAsync(context, contentRootPath, token);
         await EnsureRemindersAsync(context, token);
@@ -180,6 +190,21 @@ public sealed class SampleDataBuilder(
         return (users, credentials);
     }
 
+    private async Task EnsureCompanyCategoriesAsync(CancellationToken token)
+    {
+        var requiredIds = CompanyCategoryDefinitions.Select(item => item.Id).ToArray();
+        var existingIds = await db.CompanyCategories.Where(item => requiredIds.Contains(item.Id)).Select(item => item.Id).ToListAsync(token);
+        var missing = CompanyCategoryDefinitions.Where(item => !existingIds.Contains(item.Id)).Select(item => new CompanyCategory
+        {
+            Id = item.Id,
+            Code = item.Code,
+            Name = item.Name,
+            SortOrder = item.SortOrder
+        });
+        db.CompanyCategories.AddRange(missing);
+        await db.SaveChangesAsync(token);
+    }
+
     private async Task<IReadOnlyList<LegalEntity>> EnsureCompaniesAsync(CancellationToken token)
     {
         var categories = new[]
@@ -278,10 +303,16 @@ public sealed class SampleDataBuilder(
                 DefaultLegalEntity = companies[index % companies.Count],
                 DefaultMonthlySalary = formal ? 6500m + index * 180m : null,
                 DefaultDailyRate = formal ? null : 260m + index * 8m,
-                IsActive = number != 30
+                IsActive = number != 30,
+                Notes = "演示员工主档备注，仅用于 EngineeringManager_Test。"
             };
             db.Employees.Add(employee);
             employees.Add(employee);
+        }
+
+        foreach (var employee in employees)
+        {
+            employee.Notes ??= "演示员工主档备注，仅用于 EngineeringManager_Test。";
         }
 
         await db.SaveChangesAsync(token);
@@ -318,6 +349,7 @@ public sealed class SampleDataBuilder(
                 GeneralContractorPhone = $"1390000{number:0000}",
                 ResponsibleUserId = manager.Id,
                 Stage = stage,
+                Notes = "演示项目主档备注，仅用于 EngineeringManager_Test。",
                 CreatedAt = anchor.AddMonths(-(index % 12 + 1)).ToDateTime(TimeOnly.MinValue),
                 UpdatedAt = anchor.AddDays(-(index % 35)).ToDateTime(TimeOnly.MinValue)
             };
@@ -338,6 +370,7 @@ public sealed class SampleDataBuilder(
 
         for (var index = 0; index < projects.Count; index++)
         {
+            projects[index].Notes ??= "演示项目主档备注，仅用于 EngineeringManager_Test。";
             projects[index].AffiliationType = index % 7 == 2
                 ? ProjectAffiliationType.ExternalPartyAttachedToUs
                 : index % 11 == 5
@@ -527,55 +560,219 @@ public sealed class SampleDataBuilder(
 
     private async Task EnsurePayrollAndEmployeeLedgerAsync(SampleDataContext context, IReadOnlyDictionary<Guid, FinancialAccount> accounts, CancellationToken token)
     {
-        if (await db.PayrollBatches.AnyAsync(item => item.BatchNumber.StartsWith("DEMO-PB-"), token)) return;
-        for (var monthOffset = 11; monthOffset >= 0; monthOffset--)
+        if (!await db.PayrollBatches.AnyAsync(item => item.BatchNumber.StartsWith("DEMO-PB-"), token))
         {
-            var month = context.AnchorDate.AddMonths(-monthOffset);
-            var start = new DateOnly(month.Year, month.Month, 1);
-            var end = start.AddMonths(1).AddDays(-1);
-            var company = context.Companies[(11 - monthOffset) % context.Companies.Count];
-            var account = accounts[company.Id];
-            var batch = new PayrollBatch
+            for (var monthOffset = 11; monthOffset >= 0; monthOffset--)
             {
-                BatchNumber = $"DEMO-PB-{start:yyyy-MM}",
-                Name = $"{start:yyyy年MM月}演示工资",
-                BatchType = PayrollBatchType.Monthly,
-                StartDate = start,
-                EndDate = end,
-                LegalEntity = company,
-                Project = context.Projects[(11 - monthOffset) % context.Projects.Count],
-                Status = monthOffset == 0 ? PayrollBatchStatus.Confirmed : PayrollBatchStatus.Closed,
-                Notes = "演示工资批次"
-            };
-            for (var employeeOffset = 0; employeeOffset < 10; employeeOffset++)
-            {
-                var employee = context.Employees[((11 - monthOffset) * 2 + employeeOffset) % context.Employees.Count];
-                var earning = employee.EmployeeType == EmployeeType.Formal
-                    ? employee.DefaultMonthlySalary ?? 7000m
-                    : (employee.DefaultDailyRate ?? 300m) * (18 + employeeOffset % 6);
-                var item = new PayrollItem { Batch = batch, Employee = employee, ItemType = employee.EmployeeType == EmployeeType.Formal ? PayrollItemType.FixedSalary : PayrollItemType.DailyWage, Nature = PayrollItemNature.Earning, Quantity = employee.EmployeeType == EmployeeType.Labor ? 18 + employeeOffset % 6 : null, UnitPrice = employee.EmployeeType == EmployeeType.Labor ? employee.DefaultDailyRate : null, Amount = earning, Description = "演示应发工资" };
-                item.CostAllocations.Add(new PayrollCostAllocation { PayrollItem = item, Project = batch.Project!, LegalEntity = company, Amount = earning });
-                batch.Items.Add(item);
-                if (employeeOffset % 4 == 0) batch.Items.Add(new PayrollItem { Batch = batch, Employee = employee, ItemType = PayrollItemType.AdvanceDeduction, Nature = PayrollItemNature.Deduction, Amount = 500m, Description = "演示借支抵扣" });
-                var paymentAmount = monthOffset == 0 && employeeOffset >= 7 ? decimal.Round(earning * 0.55m, 2) : Math.Max(earning - (employeeOffset % 4 == 0 ? 500m : 0m), 0m);
-                batch.Payments.Add(new PayrollPayment { Batch = batch, Employee = employee, Account = account, PaymentDate = end.AddDays(5), Amount = paymentAmount, PaymentMethod = employeeOffset % 5 == 0 ? PaymentMethod.WeChat : PaymentMethod.BankTransfer, PayeeType = PayrollPayeeType.Employee, PayeeName = employee.Name, Notes = "演示工资发放" });
+                var month = context.AnchorDate.AddMonths(-monthOffset);
+                var start = new DateOnly(month.Year, month.Month, 1);
+                var end = start.AddMonths(1).AddDays(-1);
+                var company = context.Companies[(11 - monthOffset) % context.Companies.Count];
+                var account = accounts[company.Id];
+                var batch = new PayrollBatch
+                {
+                    BatchNumber = $"DEMO-PB-{start:yyyy-MM}",
+                    Name = $"{start:yyyy年MM月}演示工资",
+                    BatchType = PayrollBatchType.Monthly,
+                    StartDate = start,
+                    EndDate = end,
+                    LegalEntity = company,
+                    Project = context.Projects[(11 - monthOffset) % context.Projects.Count],
+                    Status = monthOffset == 0 ? PayrollBatchStatus.Confirmed : PayrollBatchStatus.Closed,
+                    Notes = "演示工资批次"
+                };
+                for (var employeeOffset = 0; employeeOffset < 10; employeeOffset++)
+                {
+                    var employee = context.Employees[((11 - monthOffset) * 2 + employeeOffset) % context.Employees.Count];
+                    var earning = employee.EmployeeType == EmployeeType.Formal
+                        ? employee.DefaultMonthlySalary ?? 7000m
+                        : (employee.DefaultDailyRate ?? 300m) * (18 + employeeOffset % 6);
+                    var item = new PayrollItem { Batch = batch, Employee = employee, ItemType = employee.EmployeeType == EmployeeType.Formal ? PayrollItemType.FixedSalary : PayrollItemType.DailyWage, Nature = PayrollItemNature.Earning, Quantity = employee.EmployeeType == EmployeeType.Labor ? 18 + employeeOffset % 6 : null, UnitPrice = employee.EmployeeType == EmployeeType.Labor ? employee.DefaultDailyRate : null, Amount = earning, Description = "演示应发工资" };
+                    item.CostAllocations.Add(new PayrollCostAllocation { PayrollItem = item, Project = batch.Project!, LegalEntity = company, Amount = earning });
+                    batch.Items.Add(item);
+                    if (employeeOffset % 4 == 0) batch.Items.Add(new PayrollItem { Batch = batch, Employee = employee, ItemType = PayrollItemType.AdvanceDeduction, Nature = PayrollItemNature.Deduction, Amount = 500m, Description = "演示借支抵扣" });
+                    var paymentAmount = monthOffset == 0 && employeeOffset >= 7 ? decimal.Round(earning * 0.55m, 2) : Math.Max(earning - (employeeOffset % 4 == 0 ? 500m : 0m), 0m);
+                    batch.Payments.Add(new PayrollPayment { Batch = batch, Employee = employee, Account = account, PaymentDate = end.AddDays(5), Amount = paymentAmount, PaymentMethod = employeeOffset % 5 == 0 ? PaymentMethod.WeChat : PaymentMethod.BankTransfer, PayeeType = PayrollPayeeType.Employee, PayeeName = employee.Name, Notes = "演示工资发放" });
+                }
+                db.PayrollBatches.Add(batch);
             }
-            db.PayrollBatches.Add(batch);
+
+            for (var index = 0; index < 8; index++)
+            {
+                var employee = context.Employees[index];
+                var company = context.Companies[index % context.Companies.Count];
+                var account = accounts[company.Id];
+                var project = context.Projects[index % context.Projects.Count];
+                var expense = new ExpenseRecord { Employee = employee, Project = project, LegalEntity = company, ExpenseDate = context.AnchorDate.AddDays(-(index * 11 + 3)), Category = index % 2 == 0 ? "差旅费" : "现场材料垫付", Amount = 800m + index * 260m, Description = "演示员工报销" };
+                if (index % 3 != 0) expense.Payments.Add(new ExpensePayment { Expense = expense, Account = account, PaymentDate = expense.ExpenseDate.AddDays(7), Amount = expense.Amount, PaymentMethod = PaymentMethod.BankTransfer, RecordKind = EmployeeLedgerRecordKind.Payment, Notes = "演示报销付款" });
+                db.ExpenseRecords.Add(expense);
+                db.EmployeeAdvances.Add(new EmployeeAdvance { Employee = employee, Project = project, LegalEntity = company, Account = account, EntryDate = context.AnchorDate.AddDays(-(index * 9 + 5)), Amount = 1_500m + index * 300m, Action = EmployeeAdvanceAction.Disbursement, Description = "演示员工借支" });
+                var type = index % 2 == 0 ? EmployeeLedgerEntryType.Dividend : EmployeeLedgerEntryType.Interest;
+                db.EmployeeOtherPayments.Add(new EmployeeOtherPayment { Employee = employee, Project = project, LegalEntity = company, EntryType = type, RecordKind = EmployeeLedgerRecordKind.Payable, EntryDate = context.AnchorDate.AddDays(-(index * 15 + 2)), Amount = 2_000m + index * 650m, Description = type == EmployeeLedgerEntryType.Dividend ? "演示分红应付" : "演示利息应付" });
+            }
+            await db.SaveChangesAsync(token);
         }
 
-        for (var index = 0; index < 8; index++)
+        if (!await db.PayrollBatches.AnyAsync(item => item.BatchNumber == "DEMO-UPB-001", token))
+        {
+            var company = context.Companies[0];
+            var account = accounts[company.Id];
+            var project = context.Projects.First(item => item.Stage == ProjectStage.UnderConstruction);
+            var crew = await db.BusinessPartners.FirstAsync(
+                item => item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew),
+                token);
+            var workers = new[]
+            {
+                new ConstructionWorker { Name = "演示班组工人甲", IdentityNumber = "530102199001010011", Phone = "13900001001", BankAccountNumber = "6222000000001001", BankName = "演示银行", Trade = "钢筋工", Notes = "统一工资批次演示人员" },
+                new ConstructionWorker { Name = "演示班组工人乙", Phone = "13900001002", BankAccountNumber = "6222000000001002", BankName = "演示银行", Trade = "混凝土工", Notes = "统一工资批次演示人员" }
+            };
+            foreach (var worker in workers)
+            {
+                db.ConstructionWorkers.Add(worker);
+                db.ConstructionCrewMemberships.Add(new ConstructionCrewMembership { Worker = worker, CrewBusinessPartner = crew, StartDate = context.AnchorDate.AddMonths(-6), IsPrimary = true, Notes = "演示班组花名册" });
+            }
+
+            var temporaryWorker = new TemporaryWorker
+            {
+                Name = "演示临时人员甲",
+                Phone = "13900002001",
+                BankAccountNumber = "6222000000002001",
+                BankName = "演示银行",
+                Trade = "临时杂工",
+                DefaultProject = project,
+                Notes = "统一工资批次演示人员"
+            };
+            db.TemporaryWorkers.Add(temporaryWorker);
+
+            var paymentDate = context.AnchorDate.AddDays(-3);
+            var employee = context.Employees[0];
+            var batch = new PayrollBatch
+            {
+                BatchNumber = "DEMO-UPB-001",
+                Name = "员工、班组与临时人员混合发放演示",
+                BatchType = PayrollBatchType.Temporary,
+                StartDate = paymentDate,
+                EndDate = paymentDate,
+                PaymentDate = paymentDate,
+                Project = project,
+                LegalEntity = company,
+                Account = account,
+                ActualAmount = 18_600m,
+                PaymentMethod = PaymentMethod.BankTransfer,
+                VoucherNumber = "DEMO-VCH-UPB-001",
+                IsUnifiedDisbursement = true,
+                Status = PayrollBatchStatus.Confirmed,
+                ReviewedAt = DateTimeOffset.UtcNow,
+                ReviewedByUserId = "demo-finance",
+                Notes = "统一明细是金额唯一维护源，其他模块只读关联。"
+            };
+            batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.Employee, RecipientKey = $"employee:{employee.Id:N}", Employee = employee, Amount = 6_800m, PayeeType = PayrollPayeeType.Employee, PayeeName = employee.Name, RecipientNameSnapshot = employee.Name, PhoneSnapshot = employee.Phone, Notes = "自有员工工资" });
+            batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.CrewWorker, RecipientKey = $"crew:{workers[0].Id:N}", ConstructionWorker = workers[0], CrewBusinessPartner = crew, Amount = 4_500m, PayeeType = PayrollPayeeType.CrewLeader, PayeeName = workers[0].Name, RecipientNameSnapshot = workers[0].Name, IdentityNumberSnapshot = workers[0].IdentityNumber, PhoneSnapshot = workers[0].Phone, BankAccountSnapshot = workers[0].BankAccountNumber, TradeSnapshot = workers[0].Trade, CrewNameSnapshot = crew.Name, Notes = "班组民工工资代发" });
+            batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.CrewWorker, RecipientKey = $"crew:{workers[1].Id:N}", ConstructionWorker = workers[1], CrewBusinessPartner = crew, Amount = 4_200m, PayeeType = PayrollPayeeType.CrewLeader, PayeeName = workers[1].Name, RecipientNameSnapshot = workers[1].Name, PhoneSnapshot = workers[1].Phone, BankAccountSnapshot = workers[1].BankAccountNumber, TradeSnapshot = workers[1].Trade, CrewNameSnapshot = crew.Name, Notes = "班组民工工资代发" });
+            batch.Payments.Add(new PayrollPayment { Batch = batch, RecipientType = PayrollRecipientType.TemporaryWorker, RecipientKey = $"temporary:{temporaryWorker.Id:N}", TemporaryWorker = temporaryWorker, Amount = 3_100m, PayeeType = PayrollPayeeType.Employee, PayeeName = temporaryWorker.Name, RecipientNameSnapshot = temporaryWorker.Name, PhoneSnapshot = temporaryWorker.Phone, BankAccountSnapshot = temporaryWorker.BankAccountNumber, TradeSnapshot = temporaryWorker.Trade, Notes = "临时人员工资" });
+            batch.CrewAllocations.Add(new PayrollCrewAllocation { Batch = batch, CrewBusinessPartner = crew, Notes = "按班组汇总映射至项目工程款明细" });
+
+            var transaction = new AccountTransaction
+            {
+                Account = account,
+                Direction = AccountTransactionDirection.Outflow,
+                SourceType = AccountTransactionSourceType.PayrollPayment,
+                SourceId = batch.Id,
+                TransactionDate = paymentDate,
+                Amount = batch.ActualAmount,
+                Description = $"工资批次：{batch.BatchNumber} · {batch.Name}"
+            };
+            batch.AccountTransactionId = transaction.Id;
+            db.PayrollBatches.Add(batch);
+            db.AccountTransactions.Add(transaction);
+            await db.SaveChangesAsync(token);
+        }
+    }
+
+    private async Task EnsureAnnualLedgerAsync(
+        SampleDataContext context,
+        IReadOnlyDictionary<Guid, FinancialAccount> accounts,
+        CancellationToken token)
+    {
+        const string marker = "演示年度总账";
+        if (await db.BusinessYears.AnyAsync(item => item.Name.StartsWith(marker), token)) return;
+
+        var year = new BusinessYear
+        {
+            Name = $"{marker} {context.AnchorDate.Year}",
+            StartDate = new DateOnly(context.AnchorDate.Year, 1, 1),
+            EndDate = new DateOnly(context.AnchorDate.Year, 12, 31)
+        };
+        db.BusinessYears.Add(year);
+
+        for (var index = 0; index < 3; index++)
+        {
+            var startDate = new DateOnly(context.AnchorDate.Year, Math.Max(context.AnchorDate.Month - index, 1), 1);
+            var quantity = index == 1 ? 2m : 1m;
+            var unitPrice = index == 1 ? 380m : 6800m + index * 450m;
+            var nature = index == 1 ? PayrollItemNature.Deduction : PayrollItemNature.Earning;
+            var automaticAmount = quantity * unitPrice * (nature == PayrollItemNature.Deduction ? -1m : 1m);
+            db.EmployeeWageEntries.Add(new EmployeeWageEntry
+            {
+                Employee = context.Employees[index],
+                BusinessYear = year,
+                StartDate = startDate,
+                EndDate = startDate.AddMonths(1).AddDays(-1),
+                WageCategory = index == 2 ? EmployeeWageCategory.MigrantWorkerWage : EmployeeWageCategory.SocialSecurityWage,
+                CalculationMethod = index == 1 ? EmployeeWageCalculationMethod.Daily : EmployeeWageCalculationMethod.Monthly,
+                Nature = nature,
+                Quantity = quantity,
+                Unit = index == 1 ? "天" : "月",
+                UnitPrice = unitPrice,
+                AutomaticAmount = automaticAmount,
+                LegalEntity = context.Companies[index % context.Companies.Count],
+                Project = index == 2 ? null : context.Projects[index],
+                AdjustmentAmount = index == 2 ? 200m : 0m,
+                FinalAmount = automaticAmount + (index == 2 ? 200m : 0m),
+                Notes = $"{marker}工资明细"
+            });
+        }
+
+        for (var index = 0; index < 2; index++)
         {
             var employee = context.Employees[index];
             var company = context.Companies[index % context.Companies.Count];
-            var account = accounts[company.Id];
-            var project = context.Projects[index % context.Projects.Count];
-            var expense = new ExpenseRecord { Employee = employee, Project = project, LegalEntity = company, ExpenseDate = context.AnchorDate.AddDays(-(index * 11 + 3)), Category = index % 2 == 0 ? "差旅费" : "现场材料垫付", Amount = 800m + index * 260m, Description = "演示员工报销" };
-            if (index % 3 != 0) expense.Payments.Add(new ExpensePayment { Expense = expense, Account = account, PaymentDate = expense.ExpenseDate.AddDays(7), Amount = expense.Amount, PaymentMethod = PaymentMethod.BankTransfer, RecordKind = EmployeeLedgerRecordKind.Payment, Notes = "演示报销付款" });
-            db.ExpenseRecords.Add(expense);
-            db.EmployeeAdvances.Add(new EmployeeAdvance { Employee = employee, Project = project, LegalEntity = company, Account = account, EntryDate = context.AnchorDate.AddDays(-(index * 9 + 5)), Amount = 1_500m + index * 300m, Action = EmployeeAdvanceAction.Disbursement, Description = "演示员工借支" });
-            var type = index % 2 == 0 ? EmployeeLedgerEntryType.Dividend : EmployeeLedgerEntryType.Interest;
-            db.EmployeeOtherPayments.Add(new EmployeeOtherPayment { Employee = employee, Project = project, LegalEntity = company, EntryType = type, RecordKind = EmployeeLedgerRecordKind.Payable, EntryDate = context.AnchorDate.AddDays(-(index * 15 + 2)), Amount = 2_000m + index * 650m, Description = type == EmployeeLedgerEntryType.Dividend ? "演示分红应付" : "演示利息应付" });
+            db.EmployeeReceipts.Add(new EmployeeReceipt
+            {
+                Employee = employee,
+                BusinessYear = year,
+                ReceiptDate = context.AnchorDate.AddDays(-(index + 1) * 6),
+                ReceiptType = index == 0 ? EmployeeReceiptType.Wage : EmployeeReceiptType.General,
+                Amount = 2400m + index * 600m,
+                PaymentLegalEntity = company,
+                Account = accounts[company.Id],
+                PaymentMethod = PaymentMethod.BankTransfer,
+                ActualRecipientName = employee.Name,
+                Project = context.Projects[index],
+                Notes = $"{marker}领款明细"
+            });
         }
+
+        var adjustment = new EmployeeFinancialAdjustment
+        {
+            Employee = context.Employees[0],
+            BusinessYear = year,
+            AdjustmentDate = context.AnchorDate.AddDays(-12),
+            Amount = 800m,
+            AdjustmentType = EmployeeFinancialAdjustmentType.AdministratorAdjustment,
+            Notes = $"{marker}管理员调整"
+        };
+        db.EmployeeFinancialAdjustments.Add(adjustment);
+        db.EmployeeFinancialAdjustments.Add(new EmployeeFinancialAdjustment
+        {
+            Employee = context.Employees[0],
+            BusinessYear = year,
+            AdjustmentDate = context.AnchorDate.AddDays(-10),
+            Amount = -800m,
+            AdjustmentType = EmployeeFinancialAdjustmentType.Reversal,
+            Notes = $"{marker}调整冲销",
+            ReversalOf = adjustment
+        });
         await db.SaveChangesAsync(token);
     }
 
@@ -697,6 +894,7 @@ public sealed class SampleDataBuilder(
     {
         SampleDataAssertions.Require(await db.Equipment.CountAsync(item => item.EquipmentNumber.StartsWith("DEMO-EQ-"), token) == SampleDataCatalog.EquipmentCount, "设备数量不是 15 台");
         SampleDataAssertions.Require(await db.PayrollBatches.CountAsync(item => item.BatchNumber.StartsWith("DEMO-PB-"), token) == 12, "工资批次不是 12 个月");
+        SampleDataAssertions.Require(await db.PayrollBatches.CountAsync(item => item.BatchNumber == "DEMO-UPB-001" && item.IsUnifiedDisbursement, token) == 1, "统一工资发放演示批次缺失");
         var receivable = await db.ReceivableEntries.Where(item => item.Description != null && item.Description.StartsWith("DEMO-RCV-")).SumAsync(item => item.Amount, token);
         var collected = await db.CollectionEntries.Where(item => item.Notes != null && item.Notes.StartsWith("DEMO-COL-")).SumAsync(item => item.Amount, token);
         var invoiced = await db.InvoiceEntries.Where(item => item.InvoiceNumber.StartsWith("DEMO-INV-")).SumAsync(item => item.GrossAmount, token);

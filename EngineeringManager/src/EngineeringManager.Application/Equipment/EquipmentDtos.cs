@@ -25,7 +25,8 @@ public sealed record SaveEquipmentRequest(
     Guid? LessorBusinessPartnerId,
     decimal? InternalDailyRate,
     Guid? ConcurrencyStamp,
-    string Reason);
+    string Reason,
+    string? Notes = null);
 
 public sealed record EquipmentDetailsDto(
     Guid Id,
@@ -38,7 +39,8 @@ public sealed record EquipmentDetailsDto(
     Guid? OwnerLegalEntityId,
     Guid? LessorBusinessPartnerId,
     decimal? InternalDailyRate,
-    Guid ConcurrencyStamp);
+    Guid ConcurrencyStamp,
+    string? Notes = null);
 
 public sealed record EquipmentPeriodRequest(
     DateOnly StartDate,
@@ -100,7 +102,8 @@ public sealed record FinalizeEquipmentSettlementRequest(
     IReadOnlyCollection<EquipmentSettlementAdjustmentRequest> Adjustments,
     bool GeneratePayable,
     string ModificationReason,
-    Guid? ConcurrencyStamp);
+    Guid? ConcurrencyStamp,
+    string? Notes = null);
 
 public sealed record EquipmentSettlementDto(
     Guid Id,
@@ -110,7 +113,8 @@ public sealed record EquipmentSettlementDto(
     decimal OffsetAmount,
     decimal PayableAmount,
     Guid? PayableEntryId,
-    Guid ConcurrencyStamp);
+    Guid ConcurrencyStamp,
+    string? Notes = null);
 
 public sealed record TransferEquipmentOwnershipRequest(
     Guid EquipmentId,

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EngineeringManager.Application.EmployeeLedger;
+using EngineeringManager.Application.EmployeeAnnualLedger;
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Application.Payroll;
 using EngineeringManager.Web;
@@ -55,6 +56,22 @@ public sealed class EmployeePayrollAuthorizationTests
         (await client.GetAsync("/Employees/Create")).StatusCode.Should().Be(System.Net.HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task AdministratorSeesEmployeeQuickEditWhileFinanceDoesNot()
+    {
+        await using var administratorFactory = CreateFactory("ApplicationAdministrator");
+        using var administratorClient = administratorFactory.CreateClient();
+        var administratorHtml = System.Net.WebUtility.HtmlDecode(await administratorClient.GetStringAsync("/Employees"));
+
+        await using var financeFactory = CreateFactory("Finance");
+        using var financeClient = financeFactory.CreateClient();
+        var financeHtml = System.Net.WebUtility.HtmlDecode(await financeClient.GetStringAsync("/Employees"));
+
+        administratorHtml.Should().Contain("快捷编辑员工");
+        administratorHtml.Should().NotContain("data-quick-edit-dialog");
+        financeHtml.Should().NotContain("快捷编辑员工");
+    }
+
     [Theory]
     [InlineData("SystemAdministrator")]
     [InlineData("ApplicationAdministrator")]
@@ -93,9 +110,13 @@ public sealed class EmployeePayrollAuthorizationTests
                 services.RemoveAll<IEmployeeService>();
                 services.RemoveAll<IPayrollService>();
                 services.RemoveAll<IEmployeeLedgerService>();
+                services.RemoveAll<IBusinessYearService>();
+                services.RemoveAll<IEmployeeAnnualLedgerService>();
                 services.AddSingleton<IEmployeeService, FakeEmployeeService>();
                 services.AddSingleton<IPayrollService, FakePayrollService>();
                 services.AddSingleton<IEmployeeLedgerService, FakeEmployeeLedgerService>();
+                services.AddSingleton<IBusinessYearService, FakeBusinessYearService>();
+                services.AddSingleton<IEmployeeAnnualLedgerService, FakeEmployeeAnnualLedgerService>();
             });
             builder.UseSetting(EmployeePayrollTestHandler.RoleSetting, role);
         });
@@ -112,6 +133,9 @@ public sealed class EmployeePayrollAuthorizationTests
 
     private sealed class FakePayrollService : IPayrollService
     {
+        public Task<PayrollDisbursementBatchDetailsDto> SaveDisbursementBatchAsync(string userId, SavePayrollDisbursementBatchRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<PayrollDisbursementBatchDetailsDto?> GetDisbursementBatchAsync(Guid batchId, CancellationToken cancellationToken) => Task.FromResult<PayrollDisbursementBatchDetailsDto?>(null);
+        public Task<PayrollDisbursementOverviewDto> GetDisbursementOverviewAsync(CancellationToken cancellationToken) => Task.FromResult(new PayrollDisbursementOverviewDto(0m, 0m, 0m, 0m, 0m, []));
         public Task<PayrollBatchDto> CreateBatchAsync(CreatePayrollBatchRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<PayrollItemDto> AddItemAsync(CreatePayrollItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> RecordPaymentAsync(RecordPayrollPaymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -129,6 +153,22 @@ public sealed class EmployeePayrollAuthorizationTests
         public Task<Guid> RecordOtherPaymentAsync(RecordEmployeeOtherPaymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeLedgerSummaryDto> GetEmployeeSummaryAsync(Guid employeeId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeLedgerOverviewDto> GetOverviewAsync(CancellationToken cancellationToken) => Task.FromResult(new EmployeeLedgerOverviewDto(0m, 0m, 0m, 0m, 0m, 0m, 0m, false, []));
+    }
+
+    private sealed class FakeBusinessYearService : IBusinessYearService
+    {
+        public Task<BusinessYearDto> CreateAsync(CreateBusinessYearRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<BusinessYearDto>> ListAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BusinessYearDto>>([]);
+        public Task<BusinessYearDto?> GetByDateAsync(DateOnly businessDate, CancellationToken cancellationToken) => Task.FromResult<BusinessYearDto?>(null);
+    }
+
+    private sealed class FakeEmployeeAnnualLedgerService : IEmployeeAnnualLedgerService
+    {
+        public Task<EmployeeWageEntryDto> AddWageEntryAsync(CreateEmployeeWageEntryRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<EmployeeReceiptDto> RecordReceiptAsync(RecordEmployeeReceiptRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<EmployeeFinancialAdjustmentDto> AddAdjustmentAsync(CreateEmployeeFinancialAdjustmentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<EmployeeFinancialAdjustmentDto> ReverseAdjustmentAsync(Guid adjustmentId, DateOnly reversalDate, string notes, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<EmployeeAnnualLedgerDto> GetAnnualLedgerAsync(Guid employeeId, Guid businessYearId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class EmployeePayrollTestHandler(

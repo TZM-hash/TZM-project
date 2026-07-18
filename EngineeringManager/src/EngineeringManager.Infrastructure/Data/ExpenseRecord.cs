@@ -15,7 +15,12 @@ public sealed class ExpenseRecord
     public LegalEntity LegalEntity { get; set; } = null!;
     public DateOnly ExpenseDate { get; set; }
     public string Category { get; set; } = string.Empty;
+    public decimal OriginalAmount { get; set; }
+    public decimal AdjustmentAmount { get; set; }
     public decimal Amount { get; set; }
+    public string? ReceiptNumber { get; set; }
+    public Guid? AttachmentId { get; set; }
+    public Attachment? Attachment { get; set; }
     public string? Description { get; set; }
     public bool IsVoided { get; set; }
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();

@@ -26,16 +26,34 @@ public sealed class ChartAssetTests
     }
 
     [Theory]
-    [InlineData("Projects")]
     [InlineData("Finance")]
-    [InlineData("Employees")]
-    [InlineData("Payroll")]
     [InlineData("Companies")]
     [InlineData("Equipment")]
     public void CoreModulesExposeChartData(string module)
     {
         var path = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "Pages", module, "Index.cshtml");
         File.ReadAllText(path).Should().Contain("data-chart");
+    }
+
+    [Theory]
+    [InlineData("Projects")]
+    [InlineData("Employees")]
+    public void HighFrequencyModulesUseCompactOverviewInsteadOfLargeCharts(string module)
+    {
+        var path = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "Pages", module, "Index.cshtml");
+        var page = File.ReadAllText(path);
+
+        page.Should().Contain("overview-strip")
+            .And.NotContain("data-chart");
+    }
+
+    [Fact]
+    public void EmployeeAnnualLedgerUsesCompactOverviewInsteadOfLegacyPayrollChart()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Ledger.cshtml");
+
+        page.Should().Contain("overview-strip")
+            .And.NotContain("data-chart");
     }
 
     private static string ReadJavaScript()

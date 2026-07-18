@@ -1,0 +1,27 @@
+@page
+@model EngineeringManager.Web.Pages.Admin.BusinessYears.IndexModel
+@{ ViewData["Title"] = "业务年度"; }
+
+<section class="page-heading"><div><p class="eyebrow">员工总账配置</p><h1>业务年度</h1><p class="page-lead">统一维护自定义起止日期的业务年度；日期不能重叠，系统按当前日期自动识别当前年度。</p></div></section>
+
+<section class="content-grid">
+    <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">新增年度</p><h2>日期范围</h2></div></div>
+        <form method="post" class="form-grid">
+            <div asp-validation-summary="All"></div>
+            <label>年度名称<input asp-for="Input.Name" required /></label>
+            <label>开始日期<input asp-for="Input.StartDate" type="date" required /></label>
+            <label>结束日期<input asp-for="Input.EndDate" type="date" required /></label>
+            <div class="form-actions"><button class="button button--primary" type="submit">保存业务年度</button></div>
+        </form>
+    </article>
+    <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">年度清单</p><h2>已配置年度</h2></div></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>名称</th><th>开始日期</th><th>结束日期</th></tr></thead><tbody>
+        @foreach (var item in Model.BusinessYears)
+        {
+            <tr><td>@item.Name</td><td>@item.StartDate</td><td>@item.EndDate</td></tr>
+        }
+        </tbody></table></div>
+    </article>
+</section>

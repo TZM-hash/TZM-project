@@ -10,6 +10,8 @@ public interface IProjectService
 
     Task<ContractLineItemDto> AddLineItemAsync(CreateContractLineItemRequest request, CancellationToken cancellationToken);
 
+    Task<ContractLineItemDto> UpdateLineItemAsync(UpdateContractLineItemRequest request, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<ProjectListItemDto>> ListProjectsAsync(
         string? search,
         ProjectStage? stage,

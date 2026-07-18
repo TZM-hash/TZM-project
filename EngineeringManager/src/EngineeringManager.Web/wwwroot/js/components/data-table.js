@@ -62,8 +62,13 @@ function applyColumns(root, columns) {
 
 function applyRowSpacing(root, spacing) {
   const value = ["compact", "standard", "spacious"].includes(spacing) ? spacing : "standard";
+  const table = tableFor(root);
   root.classList.remove(...rowSpacingClasses);
   root.classList.add(`row-spacing-${value}`);
+  if (table) {
+    table.classList.remove(...rowSpacingClasses);
+    table.classList.add(`row-spacing-${value}`);
+  }
   root.dataset.rowDensity = value;
   root.querySelectorAll("[data-row-spacing]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.rowSpacing === value)));
 }

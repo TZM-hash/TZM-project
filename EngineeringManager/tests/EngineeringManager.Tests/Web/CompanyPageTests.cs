@@ -57,6 +57,34 @@ public sealed class CompanyPageTests
         edit.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task AdministratorSeesCompanyQuickEditAndDetailedEdit()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync($"/Companies/Details/{FakeCompanyService.CompanyId}"));
+
+        html.Should().Contain("快捷编辑公司");
+        html.Should().Contain("进入详细编辑");
+        html.Should().Contain("data-inline-edit=\"company-details\"");
+        html.Should().Contain("data-inline-cell-edit");
+        html.Should().Contain("data-inline-edit-control");
+        html.Should().NotContain("data-quick-edit-dialog");
+    }
+
+    [Fact]
+    public async Task AdministratorSeesCompanyAccountNotesInputAndDetails()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync($"/Companies/Details/{FakeCompanyService.CompanyId}"));
+
+        html.Should().Contain("name=\"Account.Notes\"");
+        html.Should().Contain("账户备注");
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string role) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -83,7 +111,7 @@ public sealed class CompanyPageTests
 
     private sealed class FakeCompanyService : ICompanyManagementService
     {
-        private static readonly Guid CompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        public static readonly Guid CompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         public Task<IReadOnlyList<CompanyListItemDto>> ListAsync(CompanyActor actor, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanyListItemDto>>([new(CompanyId, "TEST", "测试自有公司", "测试公司", "一般纳税人有限公司", "测试法人", true)]);
@@ -91,8 +119,8 @@ public sealed class CompanyPageTests
         public Task<CompanyDashboardDto> GetDashboardAsync(CompanyActor actor, Guid? companyId, CancellationToken cancellationToken) =>
             Task.FromResult(new CompanyDashboardDto(1, 1000m, 800m, 0m, 600m, 400m, 300m, 100m, 200m, 50m, 80m, 0m, 500m, DateTimeOffset.UtcNow));
 
-        public Task<IReadOnlyList<CompanyCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<CompanyCategoryDto>>([]);
-        public Task<CompanyDetailsDto> GetAsync(CompanyActor actor, Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<CompanyCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<CompanyCategoryDto>>([new(Guid.Parse("22222222-2222-2222-2222-222222222222"), "GENERAL", "一般纳税人有限公司", 10, true, Guid.NewGuid())]);
+        public Task<CompanyDetailsDto> GetAsync(CompanyActor actor, Guid id, CancellationToken cancellationToken) => Task.FromResult(new CompanyDetailsDto(CompanyId, "TEST", "测试自有公司", "测试公司", Guid.Parse("22222222-2222-2222-2222-222222222222"), "一般纳税人有限公司", "测试法人", "913000000000000001", "注册地址", "经营地址", "13800000000", "测试开票抬头", null, true, Guid.NewGuid(), [new(Guid.NewGuid(), "基本户", null, null, "Bank", 0m, false, false, false, true, "账户备注")], []));
         public Task<CompanyDetailsDto> SaveCompanyAsync(CompanyActor actor, SaveCompanyRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<SaveCompanyRequest> PrepareCopyAsync(CompanyActor actor, Guid sourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CompanyCategoryDto> SaveCategoryAsync(CompanyActor actor, SaveCompanyCategoryRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -76,6 +76,18 @@ public sealed class DevelopmentSampleDataSeederTests
     }
 
     [Fact]
+    public async Task SeederRecreatesRequiredCompanyCategoriesAfterBusinessDataReset()
+    {
+        await using var fixture = await SampleSeederFixture.CreateAsync();
+        await fixture.Db.CompanyCategories.ExecuteDeleteAsync();
+
+        await fixture.SeedAsync();
+
+        (await fixture.Db.CompanyCategories.CountAsync()).Should().BeGreaterThanOrEqualTo(4);
+        (await fixture.Db.LegalEntities.CountAsync()).Should().Be(SampleDataCatalog.CompanyCount);
+    }
+
+    [Fact]
     public async Task SeederCreatesTwelveMonthBalancedBusinessScenario()
     {
         await using var fixture = await SampleSeederFixture.CreateAsync();
@@ -88,9 +100,32 @@ public sealed class DevelopmentSampleDataSeederTests
         (await fixture.Db.ReceivableEntries.CountAsync()).Should().BeGreaterThan(20);
         (await fixture.Db.CollectionEntries.CountAsync()).Should().BeGreaterThan(15);
         (await fixture.Db.InvoiceEntries.CountAsync()).Should().BeGreaterThan(15);
-        (await fixture.Db.PayrollBatches.CountAsync()).Should().Be(12);
+        (await fixture.Db.PayrollBatches.CountAsync()).Should().Be(13);
+        (await fixture.Db.PayrollBatches.CountAsync(item => item.IsUnifiedDisbursement)).Should().Be(1);
+        (await fixture.Db.ConstructionWorkers.CountAsync()).Should().BeGreaterThanOrEqualTo(2);
+        (await fixture.Db.TemporaryWorkers.CountAsync()).Should().BeGreaterThanOrEqualTo(1);
+        var unified = await fixture.Db.PayrollBatches.Include(item => item.Payments).SingleAsync(item => item.IsUnifiedDisbursement);
+        unified.Payments.Sum(item => item.Amount).Should().Be(unified.ActualAmount);
+        (await fixture.Db.AccountTransactions.CountAsync(item => item.SourceType == EngineeringManager.Domain.Finance.AccountTransactionSourceType.PayrollPayment && item.SourceId == unified.Id)).Should().Be(1);
         (await fixture.Db.StageResults.CountAsync()).Should().BeGreaterThan(10);
         (await fixture.Db.ReminderItems.CountAsync()).Should().BeGreaterThan(5);
+    }
+
+    [Fact]
+    public async Task SeederCreatesAnnualLedgerAndNotesScenarioWithoutDuplicates()
+    {
+        await using var fixture = await SampleSeederFixture.CreateAsync();
+
+        await fixture.SeedCompleteAsync();
+        await fixture.SeedCompleteAsync();
+
+        (await fixture.Db.BusinessYears.CountAsync()).Should().Be(1);
+        (await fixture.Db.EmployeeWageEntries.CountAsync()).Should().BeGreaterThanOrEqualTo(3);
+        (await fixture.Db.EmployeeReceipts.CountAsync()).Should().BeGreaterThanOrEqualTo(2);
+        (await fixture.Db.EmployeeFinancialAdjustments.CountAsync()).Should().BeGreaterThanOrEqualTo(2);
+        (await fixture.Db.EmployeeFinancialAdjustments.CountAsync(item => item.ReversalOfId != null)).Should().BeGreaterThanOrEqualTo(1);
+        (await fixture.Db.Employees.CountAsync(item => item.Notes != null && item.Notes != string.Empty)).Should().Be(SampleDataCatalog.EmployeeCount);
+        (await fixture.Db.Projects.CountAsync(item => item.Notes != null && item.Notes != string.Empty)).Should().Be(SampleDataCatalog.ProjectCount);
     }
 
     [Fact]

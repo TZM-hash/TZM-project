@@ -28,6 +28,9 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
     [BindProperty] public ProjectStage Stage { get; set; } = ProjectStage.Preliminary;
     [BindProperty] public ProjectAffiliationType AffiliationType { get; set; } = ProjectAffiliationType.SelfOperated;
     [BindProperty] public ArchiveStatus ArchiveStatus { get; set; } = ArchiveStatus.NotArchived;
+    [BindProperty] public DateOnly? ActualStartDate { get; set; }
+    [BindProperty] public DateOnly? ActualCompletionDate { get; set; }
+    [BindProperty] public string? Notes { get; set; }
     [BindProperty] public List<Guid> LegalEntityIds { get; set; } = [];
     [BindProperty] public Guid ConcurrencyStamp { get; set; }
     [BindProperty] public string Reason { get; set; } = "维护项目资料";
@@ -59,14 +62,15 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
             {
                 var created = await projectService.CreateProjectAsync(new CreateProjectRequest(
                     ProjectNumber, Name, GeneralContractorName, ResponsibleUserId, DepartmentId, BranchId, Stage, ArchiveStatus,
-                    LegalEntityIds, ParentProjectName, GeneralContractorContact, GeneralContractorPhone, AffiliationType), token);
+                    LegalEntityIds, ParentProjectName, GeneralContractorContact, GeneralContractorPhone, AffiliationType,
+                    ActualStartDate, ActualCompletionDate, Notes), token);
                 return RedirectToPage("Details", new { id = created.Id });
             }
             await workspaceService.UpdateAsync(
                 new ProjectWorkspaceActor(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.Identity?.Name),
                 new UpdateProjectRequest(Id.Value, ProjectNumber, Name, ParentProjectName, GeneralContractorName,
                     GeneralContractorContact, GeneralContractorPhone, ResponsibleUserId, DepartmentId, BranchId, Stage, AffiliationType,
-                    ArchiveStatus, LegalEntityIds, ConcurrencyStamp, Reason), token);
+                    ArchiveStatus, LegalEntityIds, ConcurrencyStamp, Reason, ActualStartDate, ActualCompletionDate, Notes), token);
             return RedirectToPage("Details", new { id = Id.Value });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
@@ -92,6 +96,9 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
         Stage = item.Stage;
         AffiliationType = item.AffiliationType;
         ArchiveStatus = item.ArchiveStatus;
+        ActualStartDate = item.ActualStartDate;
+        ActualCompletionDate = item.ActualCompletionDate;
+        Notes = item.Notes;
         LegalEntityIds = item.LegalEntities.Select(option => Guid.Parse(option.Value)).ToList();
         ConcurrencyStamp = item.ConcurrencyStamp;
     }

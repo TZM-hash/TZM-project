@@ -29,6 +29,7 @@ public sealed class CreateModel(IEmployeeService employeeService) : PageModel
     [BindProperty] public decimal? DefaultPieceworkRate { get; set; }
     [BindProperty] public Guid? DefaultLegalEntityId { get; set; }
     [BindProperty] public bool IsActive { get; set; } = true;
+    [BindProperty] public string? Notes { get; set; }
     [BindProperty] public Guid ConcurrencyStamp { get; set; }
     [BindProperty] public string Reason { get; set; } = "维护员工资料";
 
@@ -51,9 +52,9 @@ public sealed class CreateModel(IEmployeeService employeeService) : PageModel
         try
         {
             if (Id.HasValue)
-                await employeeService.UpdateAsync(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", new UpdateEmployeeRequest(Id.Value, EmployeeNumber, Name, EmployeeType, Phone, IdentityNumber, BankAccountNumber, BankName, HireDate, LeaveDate, PositionTitle, DefaultLegalEntityId, DefaultMonthlySalary, DefaultDailyRate, DefaultHourlyRate, DefaultPieceworkRate, IsActive, ConcurrencyStamp, Reason), cancellationToken);
+                await employeeService.UpdateAsync(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", new UpdateEmployeeRequest(Id.Value, EmployeeNumber, Name, EmployeeType, Phone, IdentityNumber, BankAccountNumber, BankName, HireDate, LeaveDate, PositionTitle, DefaultLegalEntityId, DefaultMonthlySalary, DefaultDailyRate, DefaultHourlyRate, DefaultPieceworkRate, IsActive, ConcurrencyStamp, Reason, Notes), cancellationToken);
             else
-                await employeeService.CreateAsync(new CreateEmployeeRequest(EmployeeNumber, Name, EmployeeType, Phone, IdentityNumber, BankAccountNumber, BankName, HireDate, LeaveDate, PositionTitle, DefaultLegalEntityId, DefaultDailyRate, DefaultPieceworkRate, IsActive, DefaultMonthlySalary, DefaultHourlyRate), cancellationToken);
+                await employeeService.CreateAsync(new CreateEmployeeRequest(EmployeeNumber, Name, EmployeeType, Phone, IdentityNumber, BankAccountNumber, BankName, HireDate, LeaveDate, PositionTitle, DefaultLegalEntityId, DefaultDailyRate, DefaultPieceworkRate, IsActive, DefaultMonthlySalary, DefaultHourlyRate, Notes), cancellationToken);
             return RedirectToPage("/Employees/Index");
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
@@ -65,6 +66,6 @@ public sealed class CreateModel(IEmployeeService employeeService) : PageModel
 
     private void Populate(EmployeeDto item)
     {
-        Id = item.Id; EmployeeNumber = item.EmployeeNumber; Name = item.Name; EmployeeType = item.EmployeeType; Phone = item.Phone; IdentityNumber = item.IdentityNumber; BankAccountNumber = item.BankAccountNumber; BankName = item.BankName; HireDate = item.HireDate; LeaveDate = item.LeaveDate; PositionTitle = item.PositionTitle; DefaultLegalEntityId = item.DefaultLegalEntityId; DefaultMonthlySalary = item.DefaultMonthlySalary; DefaultDailyRate = item.DefaultDailyRate; DefaultHourlyRate = item.DefaultHourlyRate; DefaultPieceworkRate = item.DefaultPieceworkRate; IsActive = item.IsActive; ConcurrencyStamp = item.ConcurrencyStamp;
+        Id = item.Id; EmployeeNumber = item.EmployeeNumber; Name = item.Name; EmployeeType = item.EmployeeType; Phone = item.Phone; IdentityNumber = item.IdentityNumber; BankAccountNumber = item.BankAccountNumber; BankName = item.BankName; HireDate = item.HireDate; LeaveDate = item.LeaveDate; PositionTitle = item.PositionTitle; DefaultLegalEntityId = item.DefaultLegalEntityId; DefaultMonthlySalary = item.DefaultMonthlySalary; DefaultDailyRate = item.DefaultDailyRate; DefaultHourlyRate = item.DefaultHourlyRate; DefaultPieceworkRate = item.DefaultPieceworkRate; IsActive = item.IsActive; ConcurrencyStamp = item.ConcurrencyStamp; Notes = item.Notes;
     }
 }

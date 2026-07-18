@@ -13,7 +13,8 @@ public sealed record PartnerContactRequest(
     string? Phone,
     string? Email,
     string? Address,
-    bool IsPrimary);
+    bool IsPrimary,
+    string? Notes = null);
 
 public sealed record CreateBusinessPartnerRequest(
     string PartnerNumber,
@@ -48,7 +49,8 @@ public sealed record LinkPartnerToProjectRequest(
     Guid ProjectId,
     BusinessPartnerRoleType RoleType,
     Guid? ContractId,
-    bool IsPrimary);
+    bool IsPrimary,
+    string? Notes = null);
 
 public sealed record PartnerRoleDto(
     BusinessPartnerRoleType RoleType,
@@ -62,7 +64,8 @@ public sealed record PartnerContactDto(
     string? Phone,
     string? Email,
     string? Address,
-    bool IsPrimary);
+    bool IsPrimary,
+    string? Notes = null);
 
 public sealed record BusinessPartnerDto(
     Guid Id,
