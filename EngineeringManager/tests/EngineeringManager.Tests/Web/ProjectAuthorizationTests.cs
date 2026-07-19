@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EngineeringManager.Application.DataViews;
+using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Partners;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using EngineeringManager.Domain.DataExchange;
 
 namespace EngineeringManager.Tests.Web;
 
@@ -180,6 +182,34 @@ public sealed class ProjectAuthorizationTests
     }
 
     [Fact]
+    public async Task ProjectManagerSeesWorkbookExportButSiteStaffDoesNot()
+    {
+        await using var managerFactory = CreateFactory("ProjectManager");
+        using var managerClient = managerFactory.CreateClient();
+        var managerHtml = System.Net.WebUtility.HtmlDecode(await (await managerClient.GetAsync("/Projects")).Content.ReadAsStringAsync());
+
+        await using var staffFactory = CreateFactory("SiteStaff");
+        using var staffClient = staffFactory.CreateClient();
+        var staffHtml = System.Net.WebUtility.HtmlDecode(await (await staffClient.GetAsync("/Projects")).Content.ReadAsStringAsync());
+
+        managerHtml.Should().Contain("ExportWorkbook").And.Contain("选择项目工作簿细项");
+        staffHtml.Should().NotContain("ExportWorkbook").And.NotContain("选择项目工作簿细项");
+    }
+
+    [Fact]
+    public void ProjectWorkbookSelectionDefaultsToManualAndHasMutualExclusionHooks()
+    {
+        var root = RepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml"));
+        var model = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml.cs"));
+        var script = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "components", "check-selector.js"));
+
+        model.Should().Contain("SelectAllMatching { get; set; }").And.NotContain("SelectAllMatching { get; set; } = true");
+        page.Should().Contain("data-project-export-all-matching").And.Contain("data-project-export-item");
+        script.Should().Contain("data-project-export-all-matching").And.Contain("data-project-export-item");
+    }
+
+    [Fact]
     public void ProjectListExposesStableSerialColumnAndCompleteOverviewColumns()
     {
         var root = RepositoryRoot();
@@ -251,6 +281,8 @@ public sealed class ProjectAuthorizationTests
                 services.AddSingleton<IProjectConstructionService, FakeProjectConstructionService>();
                 services.RemoveAll<ISavedDataViewService>();
                 services.AddSingleton<ISavedDataViewService, EmptySavedViewService>();
+                services.RemoveAll<IProjectWorkbookService>();
+                services.AddSingleton<IProjectWorkbookService, FakeProjectWorkbookService>();
             });
             builder.UseSetting(ProjectTestAuthenticationHandler.RoleSetting, role ?? string.Empty);
         });
@@ -286,6 +318,15 @@ public sealed class ProjectAuthorizationTests
         public Task<IReadOnlyList<SavedDataViewDto>> ListAsync(string userId, DataViewDefinition definition, CancellationToken token) => Task.FromResult<IReadOnlyList<SavedDataViewDto>>([]);
         public Task<SavedDataViewDto> SaveAsync(string userId, SaveDataViewRequest request, DataViewDefinition definition, CancellationToken token) => throw new NotSupportedException();
         public Task DeleteAsync(string userId, Guid id, CancellationToken token) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeProjectWorkbookService : IProjectWorkbookService
+    {
+        public IReadOnlyList<ProjectWorkbookSheetDefinition> GetSheets() => [];
+        public Task<ExportFileResult> ExportAsync(ProjectWorkbookExportRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new ExportFileResult("projects.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", []));
+        public Task<ProjectWorkbookImportPreviewDto> PreviewAsync(ProjectWorkbookImportRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ConfirmAsync(ProjectWorkbookActor actor, Guid batchId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeProjectWorkspaceService : IProjectWorkspaceService

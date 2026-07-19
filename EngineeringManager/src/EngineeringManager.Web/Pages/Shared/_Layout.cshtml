@@ -10,7 +10,8 @@
         var returnUrl = Context.Request.Query["ReturnUrl"].FirstOrDefault();
         if (!string.IsNullOrWhiteSpace(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//")) return returnUrl;
         if (currentPage.StartsWith("/Projects/", StringComparison.OrdinalIgnoreCase)) return "/Projects";
-        if (currentPage.StartsWith("/Finance/", StringComparison.OrdinalIgnoreCase)) return "/Projects";
+        if (currentPage.StartsWith("/Finance/", StringComparison.OrdinalIgnoreCase)) return "/Ledger/External";
+        if (currentPage.StartsWith("/Ledger/", StringComparison.OrdinalIgnoreCase)) return "/Ledger/External";
         if (currentPage.StartsWith("/Employees/Certificates/Edit", StringComparison.OrdinalIgnoreCase)) return "/Employees/Certificates";
         if (currentPage.StartsWith("/Employees/", StringComparison.OrdinalIgnoreCase)) return "/Employees";
         if (currentPage.StartsWith("/Payroll/", StringComparison.OrdinalIgnoreCase)) return "/Payroll";
@@ -47,6 +48,13 @@
             <div class="nav-group"><span class="nav-group-label">项目经营</span>
                 <a class='@Nav("/Projects")' asp-page="/Projects/Index"><svg><use href="/img/icons.svg#projects"></use></svg><span>项目管理</span></a>
             </div>
+            @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator") || User.IsInRole("Finance") || User.IsInRole("QueryOnly"))
+            {
+                <details class="nav-group nav-disclosure" data-central-ledger-nav @(currentPage.StartsWith("/Ledger", StringComparison.OrdinalIgnoreCase) ? "open" : null)>
+                    <summary class="nav-link"><svg><use href="/img/icons.svg#finance"></use></svg><span>中央账本</span><span class="nav-disclosure-chevron" aria-hidden="true">⌄</span></summary>
+                    <div class="nav-submenu"><a class='@Nav("/Ledger/External")' asp-page="/Ledger/External/Index">外部账本</a><a class='@Nav("/Ledger/Internal")' asp-page="/Ledger/Internal/Index">内部账本</a></div>
+                </details>
+            }
             <div class="nav-group"><span class="nav-group-label">人员与合作方</span>
                 <a class='@NavExact("/Employees")' asp-page="/Employees/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>员工管理</span></a>
                 <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>工资台账</span></a>

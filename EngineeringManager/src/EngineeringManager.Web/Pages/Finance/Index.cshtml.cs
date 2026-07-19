@@ -40,7 +40,7 @@ public sealed class IndexModel(
     [BindProperty] public SavedDataViewInput SavedView { get; set; } = new();
     [BindProperty] public List<string> SelectedFields { get; set; } = [];
 
-    public IActionResult OnGet() => RedirectToPage("/Projects/Index");
+    public IActionResult OnGet() => RedirectToPage("/Ledger/External/Index");
 
     public async Task<IActionResult> OnPostSaveViewAsync(CancellationToken cancellationToken)
     {

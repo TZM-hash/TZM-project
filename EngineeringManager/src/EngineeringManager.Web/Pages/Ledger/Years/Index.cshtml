@@ -1,0 +1,10 @@
+@page
+@model EngineeringManager.Web.Pages.Ledger.Years.IndexModel
+@{
+    ViewData["Title"] = "财务业务年度";
+}
+<section class="page-heading"><div><h1>财务业务年度（仅中央账本）</h1><p class="page-lead">支持自定义跨年度开始和结束日期；本设置不影响员工年度，也不改变项目全生命周期统计。</p></div></section>
+@if (TempData["Success"] is string success) { <div class="alert alert--success">@success</div> }
+@if (TempData["Error"] is string error) { <div class="alert alert--danger">@error</div> }
+<section class="panel"><div class="panel-heading"><div><h2>新增财务年度</h2><p>年度范围不能重叠，但历史财务记录仍可修正并保留日志。</p></div></div><form method="post" asp-page-handler="Create" class="ledger-year-form"><label>年度名称<input asp-for="Name" required /></label><label>开始日期<input asp-for="StartDate" type="date" required /></label><label>结束日期<input asp-for="EndDate" type="date" required /></label><button class="button button--primary" type="submit">创建年度</button></form></section>
+<section class="panel data-work-surface"><div class="panel-heading"><div><h2>年度列表</h2></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>名称</th><th>开始日期</th><th>结束日期</th><th>中央账本记录数</th><th>操作</th></tr></thead><tbody>@foreach (var item in Model.Items) { <tr><td>@item.Name</td><td>@item.StartDate</td><td>@item.EndDate</td><td>@item.RecordCount</td><td><form method="post" asp-page-handler="Delete" class="inline-form"><input type="hidden" name="DeleteId" value="@item.Id" /><input type="hidden" name="DeleteConcurrencyStamp" value="@item.ConcurrencyStamp" /><input name="DeleteReason" placeholder="填写删除原因" required /><button class="button button--danger" type="submit">删除</button></form></td></tr> }</tbody></table></div></section>

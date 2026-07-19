@@ -1,0 +1,42 @@
+@page
+@using EngineeringManager.Domain.Finance
+@model EngineeringManager.Web.Pages.Ledger.External.IndexModel
+@{
+    ViewData["Title"] = "中央账本 · 外部账本";
+}
+
+<section class="page-heading ledger-heading">
+    <div><h1>外部账本</h1><p class="page-lead">统一查看项目、施工班组、合作商和中央录入形成的同一套外部财务记录。</p></div>
+    <div class="page-actions-inline">
+        <a class="button button--secondary" asp-page="/Ledger/Years/Index">财务年度</a>
+        @if (Model.CanManage) { <a class="button button--primary" asp-page="/Ledger/Entries/Edit" asp-route-scope="External">新增财务记录</a> }
+    </div>
+</section>
+
+<partial name="../_LedgerMetrics" model="Model.Result.Totals" />
+
+<section class="panel ledger-filter-panel">
+    <form method="get" class="ledger-filter-grid">
+        <label>财务年度<select asp-for="FinanceBusinessYearId"><option value="">全部年度</option>@foreach (var item in Model.Years) { <option value="@item.Id">@item.Name</option> }</select></label>
+        <label>开始日期<input asp-for="StartDate" type="date" /></label><label>结束日期<input asp-for="EndDate" type="date" /></label>
+        <label>自有公司<select asp-for="LegalEntityId"><option value="">全部公司</option>@foreach (var item in Model.Options.LegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
+        <label>合作商筛选<select asp-for="BusinessPartnerId"><option value="">全部客户/班组/合作商</option>@foreach (var item in Model.Options.BusinessPartners) { <option value="@item.Id">@item.Label</option> }</select></label>
+        <label>项目<select asp-for="ProjectId"><option value="">全部项目</option>@foreach (var item in Model.Options.Projects) { <option value="@item.Id">@item.Label</option> }</select></label>
+        <label>方向<select asp-for="Direction"><option value="">应收与应付</option><option value="Receivable">应收</option><option value="Payable">应付</option></select></label>
+        <label>结算状态<select asp-for="SettlementState"><option value="">暂估与正式</option><option value="Provisional">暂估</option><option value="Final">正式</option></select></label>
+        <label class="ledger-search">关键词<input asp-for="Search" placeholder="公司、项目、合同、合作单位或说明" /></label>
+        <div class="ledger-anomaly-filters"><label><input asp-for="HasAdvanceInvoiceCash" type="checkbox" value="true" /> 超前发票收款/付款</label><label><input asp-for="HasOverSettlementCash" type="checkbox" value="true" /> 超结算收款/付款</label><label><input asp-for="HasOverInvoiced" type="checkbox" value="true" /> 超额开票</label></div>
+        <div class="ledger-filter-actions"><button class="button button--primary" type="submit">筛选</button><a class="button button--secondary" asp-page="/Ledger/External/Index">重置</a></div>
+    </form>
+</section>
+
+<nav class="ledger-tabs" aria-label="外部账本分类">
+    @foreach (var tab in new[] { "总览", "应收款", "应付款", "收款", "付款", "销项发票", "进项发票", "扣款", "待分摊", "异常", "年度账", "对账", "修改日志" }) { <a href="#ledger-table">@tab</a> }
+</nav>
+
+<section class="panel data-work-surface" id="ledger-table">
+    <div class="panel-heading"><div><h2>结算明细</h2><p>共 @Model.Result.TotalCount 条，合计基于全部筛选结果。</p></div></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>方向</th><th>自有公司</th><th>合作单位</th><th>项目</th><th>结算状态</th><th>实际应收/应付</th><th>已收/已付</th><th>未收/未付</th><th>应开票</th><th>已开票</th><th>异常</th></tr></thead>
+    <tbody>@foreach (var row in Model.Result.Rows) { <tr><td>@row.BusinessDate</td><td>@(row.Direction == LedgerDirection.Receivable ? "应收" : "应付")</td><td>@row.LegalEntityName</td><td>@row.BusinessPartnerName</td><td>@row.ProjectName</td><td>@(row.SettlementState == LedgerSettlementState.Provisional ? "暂估" : "正式")</td><td>@row.Metrics.ActualAmount.ToString("N2")</td><td>@row.Metrics.CashAmount.ToString("N2")</td><td>@row.Metrics.UncollectedOrUnpaid.ToString("N2")</td><td>@row.Metrics.ShouldInvoiceAmount.ToString("N2")</td><td>@row.Metrics.InvoicedAmount.ToString("N2")</td><td>@if (row.Metrics.AdvanceInvoiceCash > 0 || row.Metrics.OverSettlementCash > 0 || row.Metrics.OverInvoiced > 0) { <span class="pill pill--danger">需关注</span> } else { <span class="pill pill--success">正常</span> }</td></tr> }</tbody></table></div>
+    @if (Model.Result.Rows.Count == 0) { <div class="empty-state"><strong>没有符合条件的外部财务记录</strong><p>调整筛选条件，或从项目、班组、合作商及中央账本新增业务。</p></div> }
+</section>

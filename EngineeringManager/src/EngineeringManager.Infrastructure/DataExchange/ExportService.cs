@@ -731,37 +731,49 @@ public sealed class ExportService : IExportService
 
     private async Task<ExportFileResult> ExportCollectionsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
-        var query = db.CollectionEntries.AsNoTracking().Include(item => item.Project).Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account).AsQueryable();
-        if (cutoffDate.HasValue) query = query.Where(item => item.CollectionDate <= cutoffDate);
-        var entries = await query.OrderByDescending(item => item.CollectionDate).ToListAsync(cancellationToken);
+        var query = db.FinanceCashAllocations.AsNoTracking()
+            .Include(item => item.Project)
+            .Include(item => item.CashEntry).ThenInclude(item => item.LegalEntity)
+            .Include(item => item.CashEntry).ThenInclude(item => item.BusinessPartner)
+            .Include(item => item.CashEntry).ThenInclude(item => item.Account)
+            .Where(item => item.CashEntry.Direction == LedgerDirection.Receivable && item.CashEntry.CashType == LedgerCashType.Collection &&
+                !item.CashEntry.IsReversal && item.CashEntry.Status == LedgerRecordStatus.Active);
+        if (cutoffDate.HasValue) query = query.Where(item => item.CashEntry.BusinessDate <= cutoffDate);
+        var entries = await query.OrderByDescending(item => item.CashEntry.BusinessDate).ThenBy(item => item.AllocationOrder).ToListAsync(cancellationToken);
         return CreateSingleSheet("收款", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["project_number"] = item.Project.ProjectNumber,
-            ["collection_date"] = item.CollectionDate,
-            ["legal_entity"] = item.LegalEntity.ShortName,
-            ["partner"] = item.BusinessPartner?.ShortName,
-            ["account"] = item.Account.AccountName,
+            ["project_number"] = item.Project?.ProjectNumber,
+            ["collection_date"] = item.CashEntry.BusinessDate,
+            ["legal_entity"] = item.CashEntry.LegalEntity.ShortName,
+            ["partner"] = item.CashEntry.BusinessPartner?.ShortName,
+            ["account"] = item.CashEntry.Account?.AccountName,
             ["amount"] = item.Amount,
-            ["payment_method"] = item.PaymentMethod.ToString(),
-            ["notes"] = item.Notes
+            ["payment_method"] = item.CashEntry.PaymentMethod,
+            ["notes"] = item.CashEntry.Notes
         })), "收款台账");
     }
 
     private async Task<ExportFileResult> ExportPaymentsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
-        var query = db.PaymentEntries.AsNoTracking().Include(item => item.Project).Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account).AsQueryable();
-        if (cutoffDate.HasValue) query = query.Where(item => item.PaymentDate <= cutoffDate);
-        var entries = await query.OrderByDescending(item => item.PaymentDate).ToListAsync(cancellationToken);
+        var query = db.FinanceCashAllocations.AsNoTracking()
+            .Include(item => item.Project)
+            .Include(item => item.CashEntry).ThenInclude(item => item.LegalEntity)
+            .Include(item => item.CashEntry).ThenInclude(item => item.BusinessPartner)
+            .Include(item => item.CashEntry).ThenInclude(item => item.Account)
+            .Where(item => item.CashEntry.Direction == LedgerDirection.Payable && item.CashEntry.CashType == LedgerCashType.Payment &&
+                !item.CashEntry.IsReversal && item.CashEntry.Status == LedgerRecordStatus.Active);
+        if (cutoffDate.HasValue) query = query.Where(item => item.CashEntry.BusinessDate <= cutoffDate);
+        var entries = await query.OrderByDescending(item => item.CashEntry.BusinessDate).ThenBy(item => item.AllocationOrder).ToListAsync(cancellationToken);
         return CreateSingleSheet("付款", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["project_number"] = item.Project.ProjectNumber,
-            ["payment_date"] = item.PaymentDate,
-            ["legal_entity"] = item.LegalEntity.ShortName,
-            ["partner"] = item.BusinessPartner.ShortName,
-            ["account"] = item.Account.AccountName,
+            ["project_number"] = item.Project?.ProjectNumber,
+            ["payment_date"] = item.CashEntry.BusinessDate,
+            ["legal_entity"] = item.CashEntry.LegalEntity.ShortName,
+            ["partner"] = item.CashEntry.BusinessPartner?.ShortName,
+            ["account"] = item.CashEntry.Account?.AccountName,
             ["amount"] = item.Amount,
-            ["payment_method"] = item.PaymentMethod.ToString(),
-            ["notes"] = item.Notes
+            ["payment_method"] = item.CashEntry.PaymentMethod,
+            ["notes"] = item.CashEntry.Notes
         })), "付款台账");
     }
 

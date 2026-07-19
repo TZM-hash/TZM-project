@@ -1,0 +1,16 @@
+@model EngineeringManager.Domain.Finance.CentralLedgerMetrics
+<section class="ledger-metrics" aria-label="中央账本财务指标">
+    <article><span>结算金额</span><strong>@Model.GrossSettlementAmount.ToString("N2")</strong></article>
+    <article><span>扣款</span><strong>@Model.Deductions.ToString("N2")</strong></article>
+    <article><span>实际应收/应付</span><strong>@Model.ActualAmount.ToString("N2")</strong></article>
+    <article><span>当前应开票</span><strong>@Model.ShouldInvoiceAmount.ToString("N2")</strong></article>
+    <article><span>已开票</span><strong>@Model.InvoicedAmount.ToString("N2")</strong></article>
+    <article><span>已收/已付</span><strong>@Model.CashAmount.ToString("N2")</strong></article>
+    <article><span>未收/未付</span><strong>@Model.UncollectedOrUnpaid.ToString("N2")</strong></article>
+    <article><span>未开票</span><strong>@Model.Uninvoiced.ToString("N2")</strong></article>
+    <article><span>开票已收/已付</span><strong>@Model.InvoicedAndCollectedOrPaid.ToString("N2")</strong></article>
+    <article><span>开票未收/未付</span><strong>@Model.InvoicedAndUncollectedOrUnpaid.ToString("N2")</strong></article>
+    <article><span>超前发票收款/付款</span><strong>@Model.AdvanceInvoiceCash.ToString("N2")</strong></article>
+    <article><span>超结算收款/付款</span><strong>@Model.OverSettlementCash.ToString("N2")</strong></article>
+    <article><span>超额开票</span><strong>@Model.OverInvoiced.ToString("N2")</strong></article>
+</section>

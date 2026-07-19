@@ -137,30 +137,25 @@ public sealed class DashboardService : IDashboardService
         var months = Enumerable.Range(0, 12).Select(index => firstMonth.AddMonths(index)).ToArray();
         if (projectIds.Length == 0) return months.Select(month => MonthPoint(month)).ToArray();
 
-        var collections = await db.CollectionEntries.AsNoTracking()
-            .Where(item => projectIds.Contains(item.ProjectId) && item.CollectionDate >= firstMonth)
-            .Select(item => new { item.CollectionDate, item.Amount }).ToListAsync(cancellationToken);
-        var refunds = await db.RefundOrReversalEntries.AsNoTracking()
-            .Where(item => item.EntryDate >= firstMonth && ((item.Collection != null && projectIds.Contains(item.Collection.ProjectId)) || (item.Receivable != null && projectIds.Contains(item.Receivable.ProjectId))))
-            .Select(item => new { item.EntryDate, item.Amount }).ToListAsync(cancellationToken);
-        var payments = await db.PaymentEntries.AsNoTracking()
-            .Where(item => projectIds.Contains(item.ProjectId) && item.PaymentDate >= firstMonth)
-            .Select(item => new { item.PaymentDate, item.Amount }).ToListAsync(cancellationToken);
-        var reversals = await db.PaymentReversalEntries.AsNoTracking()
-            .Where(item => projectIds.Contains(item.Payment.ProjectId) && item.EntryDate >= firstMonth)
-            .Select(item => new { item.EntryDate, item.Amount }).ToListAsync(cancellationToken);
-        var invoices = await db.InvoiceEntries.AsNoTracking()
-            .Where(item => projectIds.Contains(item.ProjectId) && item.InvoiceDate >= firstMonth && item.Direction == InvoiceDirection.Output && item.Status != InvoiceStatus.Voided)
-            .Select(item => new { item.InvoiceDate, item.GrossAmount }).ToListAsync(cancellationToken);
+        var cash = await db.FinanceCashAllocations.AsNoTracking()
+            .Where(item => item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value) &&
+                item.CashEntry.BusinessDate >= firstMonth && item.CashEntry.Status == LedgerRecordStatus.Active)
+            .Select(item => new { Date = item.CashEntry.BusinessDate, item.CashEntry.Direction, item.CashEntry.IsReversal, item.Amount })
+            .ToListAsync(cancellationToken);
+        var invoices = await db.FinanceInvoiceAllocations.AsNoTracking()
+            .Where(item => item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value) &&
+                item.Invoice.InvoiceDate >= firstMonth && item.Invoice.Direction == LedgerDirection.Receivable && item.Invoice.Status == LedgerRecordStatus.Active)
+            .Select(item => new { Date = item.Invoice.InvoiceDate, item.Amount })
+            .ToListAsync(cancellationToken);
 
         return months.Select(month =>
         {
             var end = month.AddMonths(1);
-            var collected = collections.Where(item => item.CollectionDate >= month && item.CollectionDate < end).Sum(item => item.Amount)
-                - refunds.Where(item => item.EntryDate >= month && item.EntryDate < end).Sum(item => item.Amount);
-            var paid = payments.Where(item => item.PaymentDate >= month && item.PaymentDate < end).Sum(item => item.Amount)
-                - reversals.Where(item => item.EntryDate >= month && item.EntryDate < end).Sum(item => item.Amount);
-            var invoiced = invoices.Where(item => item.InvoiceDate >= month && item.InvoiceDate < end).Sum(item => item.GrossAmount);
+            var collected = cash.Where(item => item.Direction == LedgerDirection.Receivable && item.Date >= month && item.Date < end)
+                .Sum(item => item.IsReversal ? -item.Amount : item.Amount);
+            var paid = cash.Where(item => item.Direction == LedgerDirection.Payable && item.Date >= month && item.Date < end)
+                .Sum(item => item.IsReversal ? -item.Amount : item.Amount);
+            var invoiced = invoices.Where(item => item.Date >= month && item.Date < end).Sum(item => item.Amount);
             return MonthPoint(month, collected, paid, invoiced);
         }).ToArray();
     }

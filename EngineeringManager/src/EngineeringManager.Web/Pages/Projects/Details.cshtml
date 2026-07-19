@@ -1,6 +1,8 @@
 @page "{id:guid}"
 @model EngineeringManager.Web.Pages.Projects.DetailsModel
 @using EngineeringManager.Application.Finance
+@using EngineeringManager.Application.DataExchange
+@using EngineeringManager.Web.Pages.DataExchange
 @using EngineeringManager.Domain.Finance
 @using EngineeringManager.Domain.Projects
 @using EngineeringManager.Web.Presentation
@@ -27,7 +29,7 @@ else
     var overviewEquipment = item.OverviewEquipment ?? [];
     <section class="page-heading project-heading compact-page-heading">
         <div><p class="eyebrow">@item.Overview.ProjectNumber</p><h1>@item.Overview.Name</h1><p class="page-lead">@(item.Overview.GeneralContractorName ?? "未填写总包单位") · @(item.Overview.ResponsibleUserName ?? "未设置负责人")</p></div>
-        <div class="button-row"><span class="pill pill--success">@item.Overview.Stage.ToChinese()</span>@if (Model.CanManage) { <a class="button button--secondary button--action" asp-page="Edit" asp-route-id="@item.Overview.Id">详细编辑</a><a class="button button--secondary button--action" asp-page="Edit" asp-route-copyFrom="@item.Overview.Id">复制</a> }</div>
+        <div class="button-row"><span class="pill pill--success">@item.Overview.Stage.ToChinese()</span>@if (Model.CanExportWorkbook) { <form method="post" asp-page-handler="ExportWorkbook" asp-route-id="@item.Overview.Id" class="inline-form"><details class="selection-dropdown"><summary class="button button--secondary button--action">导出工作簿</summary><div class="selection-dropdown-menu">@if (Model.CanExportWorkbookAttachments) { <label class="check-label"><input asp-for="IncludeWorkbookAttachments" /> 包含附件</label> }@foreach (var sheet in Enum.GetValues<ProjectWorkbookSheet>().Where(sheet => Model.CanExportFullWorkbook || sheet != ProjectWorkbookSheet.ProjectSummary && sheet != ProjectWorkbookSheet.Attachments)) { <label class="check-label"><input type="checkbox" name="SelectedWorkbookSheets" value="@sheet" checked="@(Model.SelectedWorkbookSheets.Count == 0 || Model.SelectedWorkbookSheets.Contains(sheet) ? "checked" : null)" /> @DataExchangeLabels.ProjectSheet(sheet)</label> }<button class="button button--primary button--small" type="submit">生成</button></div></details></form> }@if (Model.CanManage) { <a class="button button--secondary button--action" asp-page="Edit" asp-route-id="@item.Overview.Id">详细编辑</a><a class="button button--secondary button--action" asp-page="Edit" asp-route-copyFrom="@item.Overview.Id">复制</a> }</div>
     </section>
 
     <div class="project-workspace-shell">
@@ -162,11 +164,11 @@ else
                     </article>
 
                     <article class="project-tab-panel project-tab-panel--invoice inline-edit-shell" data-inline-edit="project-invoice" data-inline-cell-edit data-project-finance-edit data-inline-edit-active="@(Model.ActiveInlineEditor == "project-invoice" ? "true" : "false")">
-                        <div class="tab-panel-heading"><div><h2>发票明细</h2><p>每张发票独立选择开票公司，以及项目允许的税率与发票类型。</p></div>@if (Model.CanManageFinance) { <div class="button-row"><button class="button button--primary button--action" type="button" data-inline-edit-open>快捷编辑</button><a class="button button--secondary button--action" asp-page="/Finance/Entries/Create" asp-route-EntryKind="@FinanceEntryKind.Invoice" asp-route-ProjectId="@item.Overview.Id" asp-route-ReturnUrl="@Request.Path">详细编辑</a><button class="button button--secondary button--action" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消编辑</button></div> }</div>
+                        <div class="tab-panel-heading"><div><h2>发票明细</h2><p>项目开票仅录入销项发票；进项发票请从施工班组或合作商页面录入。</p></div>@if (Model.CanManageFinance) { <div class="button-row"><button class="button button--primary button--action" type="button" data-inline-edit-open>快捷编辑</button><a class="button button--secondary button--action" asp-page="/Ledger/Entries/Edit" asp-route-scope="@LedgerScope.External" asp-route-recordType="@FinanceRecordType.Invoice" asp-route-direction="@LedgerDirection.Receivable" asp-route-projectId="@item.Overview.Id">在中央账本详细录入</a><button class="button button--secondary button--action" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消编辑</button></div> }</div>
                         @if (Model.CanManageFinance)
                         {
                             <details class="inline-create-details"><summary>新增发票记录</summary><form method="post" asp-page-handler="Invoice" asp-route-id="@item.Overview.Id" class="inline-edit-panel"><div asp-validation-summary="All" class="panel-copy"></div><div class="inline-edit-grid">
-                                <label>发票方向<select asp-for="InvoiceEdit.Direction">@foreach (var value in Enum.GetValues<InvoiceDirection>()) { <option value="@value">@value.ToChinese()</option> }</select></label>
+                                <label>发票方向<span class="form-static-value">销项发票</span></label>
                                 <label>发票号码<input asp-for="InvoiceEdit.InvoiceNumber" required /></label>
                                 <label>发票日期<input asp-for="InvoiceEdit.InvoiceDate" type="date" /></label>
                                 <label>合同<select asp-for="InvoiceEdit.ContractId"><option value="">不指定合同</option>@foreach (var contract in item.Contracts) { <option value="@contract.Id">@contract.ContractNumber · @contract.Name</option> }</select></label>
@@ -176,7 +178,7 @@ else
                                 <label>不含税金额<input asp-for="InvoiceEdit.NetAmount" type="number" step="0.01" /></label>
                                 <label>税额<input asp-for="InvoiceEdit.TaxAmount" type="number" step="0.01" /></label>
                                 <label>含税金额<input asp-for="InvoiceEdit.GrossAmount" type="number" step="0.01" /></label>
-                            </div>@if (taxConfigurations.Length == 0) { <p class="form-hint form-hint--warning">请先在项目总览配置至少一种税率与发票类型。</p> }<div class="inline-edit-actions"><a class="button button--secondary button--action inline-edit-detail" asp-page="/Finance/Entries/Create" asp-route-EntryKind="@FinanceEntryKind.Invoice" asp-route-ProjectId="@item.Overview.Id" asp-route-ReturnUrl="@Request.Path">进入详细编辑</a><button type="submit" class="button button--primary button--action" disabled="@(taxConfigurations.Length == 0 ? "disabled" : null)">保存</button></div></form></details>
+                            </div>@if (taxConfigurations.Length == 0) { <p class="form-hint form-hint--warning">请先在项目总览配置至少一种税率与发票类型。</p> }<div class="inline-edit-actions"><a class="button button--secondary button--action inline-edit-detail" asp-page="/Ledger/Entries/Edit" asp-route-scope="@LedgerScope.External" asp-route-recordType="@FinanceRecordType.Invoice" asp-route-direction="@LedgerDirection.Receivable" asp-route-projectId="@item.Overview.Id">在中央账本详细录入</a><button type="submit" class="button button--primary button--action" disabled="@(taxConfigurations.Length == 0 ? "disabled" : null)">保存</button></div></form></details>
                         }
                         <div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>号码</th><th>方向</th><th>合同</th><th>开票公司</th><th>往来单位</th><th>税率</th><th>发票类型</th><th>不含税</th><th>税额</th><th>含税金额</th><th>状态</th><th data-inline-edit-actions hidden>操作</th></tr></thead><tbody>
                         @foreach (var row in item.Invoices)
@@ -185,7 +187,7 @@ else
                             <tr>
                                 <td><span data-inline-edit-value>@row.InvoiceDate</span><input class="inline-cell-control" name="FinanceRowEdit.EntryDate" value="@row.InvoiceDate.ToString("yyyy-MM-dd")" type="date" form="@formId" data-inline-edit-control hidden /></td>
                                 <td><span data-inline-edit-value>@row.InvoiceNumber</span><input class="inline-cell-control" name="FinanceRowEdit.InvoiceNumber" value="@row.InvoiceNumber" form="@formId" data-inline-edit-control hidden /></td>
-                                <td><span data-inline-edit-value>@row.Direction.ToChinese()</span><select class="inline-cell-control" name="FinanceRowEdit.Direction" form="@formId" data-inline-edit-control hidden>@foreach (var value in Enum.GetValues<InvoiceDirection>()) { <option value="@value" selected="@(value == row.Direction ? "selected" : null)">@value.ToChinese()</option> }</select></td>
+                                <td><span data-inline-edit-value>销项发票</span></td>
                                 <td>@(row.ContractNumber ?? "-")</td>
                                 <td><span data-inline-edit-value>@row.LegalEntityName</span><select class="inline-cell-control" name="FinanceRowEdit.LegalEntityId" form="@formId" data-inline-edit-control hidden>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value" selected="@(company.Value == row.LegalEntityId?.ToString() ? "selected" : null)">@company.Label</option> }</select></td>
                                 <td>@(row.BusinessPartnerName ?? "-")</td>

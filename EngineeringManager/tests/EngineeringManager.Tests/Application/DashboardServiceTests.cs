@@ -123,14 +123,24 @@ public sealed class DashboardServiceTests
             var legalEntity = new LegalEntity { Code = "LE-01", Name = "自有公司", ShortName = "公司" };
             var partner = new BusinessPartner { PartnerNumber = "BP-DASH", Name = "经营合作单位", ShortName = "合作单位" };
             var project = new Project { ProjectNumber = "P-DASH", Name = "驾驶舱项目", Stage = ProjectStage.UnderConstruction };
-            var contract = new Contract { Project = project, ContractNumber = "C-DASH", Name = "主合同", TotalAmount = 1000m };
+            var contract = new Contract { Project = project, BusinessPartner = partner, ContractNumber = "C-DASH", Name = "主合同", TotalAmount = 1000m };
             contract.LineItems.Add(new ContractLineItem { Contract = contract, Code = "001", Name = "工程量", Unit = "m", EstimatedQuantity = 100m, EstimatedUnitPrice = 10m });
             project.Contracts.Add(contract);
+            project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = legalEntity, IsPrimary = true });
             var account = new FinancialAccount { LegalEntity = legalEntity, AccountName = "基本户", AccountType = FinancialAccountType.Bank };
-            var receivable = new ReceivableEntry { Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, SourceType = ReceivableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 1), Amount = 1000m };
-            var collection = new CollectionEntry { Receivable = receivable, Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, Account = account, CollectionDate = new DateOnly(2026, 7, 2), Amount = 600m };
-            var payable = new PayableEntry { Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, SourceType = PayableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 1), Amount = 400m };
-            var payment = new PaymentEntry { Payable = payable, Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, Account = account, PaymentDate = new DateOnly(2026, 7, 3), Amount = 250m };
+            var receivable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 1000m, OriginalInvoiceAmount = 1000m };
+            var collection = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, LegalEntity = legalEntity, BusinessPartner = partner, Account = account, BusinessDate = new DateOnly(2026, 7, 2), Amount = 600m };
+            collection.Allocations.Add(new FinanceCashAllocation { CashEntry = collection, Settlement = receivable, Project = project, Contract = contract, Amount = 600m, AllocationOrder = 1 });
+            var refund = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, LegalEntity = legalEntity, BusinessPartner = partner, Account = account, IsReversal = true, ReversesCashEntry = collection, BusinessDate = new DateOnly(2026, 7, 4), Amount = 100m, Notes = "退款" };
+            refund.Allocations.Add(new FinanceCashAllocation { CashEntry = refund, Settlement = receivable, Project = project, Contract = contract, Amount = 100m, AllocationOrder = 1 });
+            var payable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 400m, OriginalInvoiceAmount = 400m };
+            payable.Deductions.Add(new FinanceDeduction { Settlement = payable, BusinessDate = new DateOnly(2026, 7, 5), Amount = 20m, Reason = "扣款" });
+            var payment = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment, LegalEntity = legalEntity, BusinessPartner = partner, Account = account, BusinessDate = new DateOnly(2026, 7, 3), Amount = 250m };
+            payment.Allocations.Add(new FinanceCashAllocation { CashEntry = payment, Settlement = payable, Project = project, Contract = contract, Amount = 250m, AllocationOrder = 1 });
+            var paymentReversal = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment, LegalEntity = legalEntity, BusinessPartner = partner, Account = account, IsReversal = true, ReversesCashEntry = payment, BusinessDate = new DateOnly(2026, 7, 4), Amount = 50m, Notes = "冲销" };
+            paymentReversal.Allocations.Add(new FinanceCashAllocation { CashEntry = paymentReversal, Settlement = payable, Project = project, Contract = contract, Amount = 50m, AllocationOrder = 1 });
+            var invoice = new FinanceInvoice { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, LegalEntity = legalEntity, BusinessPartner = partner, InvoiceNumber = "INV-DASH", InvoiceDate = new DateOnly(2026, 7, 5), Amount = 300m };
+            invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = receivable, Project = project, Contract = contract, Amount = 300m, AllocationOrder = 1 });
             Db.AddRange(
                 project,
                 legalEntity,
@@ -138,12 +148,11 @@ public sealed class DashboardServiceTests
                 account,
                 receivable,
                 collection,
-                new RefundOrReversalEntry { Collection = collection, Receivable = receivable, Account = account, EntryDate = new DateOnly(2026, 7, 4), Amount = 100m, AdjustmentType = FinancialAdjustmentType.Refund, Reason = "退款" },
+                refund,
                 payable,
                 payment,
-                new PaymentReversalEntry { Payment = payment, Account = account, EntryDate = new DateOnly(2026, 7, 4), Amount = 50m, AdjustmentType = FinancialAdjustmentType.Reversal, Reason = "冲销" },
-                new DeductionEntry { Payable = payable, Project = project, LegalEntity = legalEntity, BusinessPartner = partner, EntryDate = new DateOnly(2026, 7, 5), Amount = 20m, Reason = "扣款" },
-                new InvoiceEntry { Project = project, Contract = contract, LegalEntity = legalEntity, BusinessPartner = partner, Direction = InvoiceDirection.Output, InvoiceNumber = "INV-DASH", InvoiceDate = new DateOnly(2026, 7, 5), GrossAmount = 300m, Status = InvoiceStatus.IssuedOrReceived },
+                paymentReversal,
+                invoice,
                 new ReminderItem { DeduplicationKey = "dashboard-risk", Type = ReminderType.UncollectedReceivable, Severity = ReminderSeverity.Warning, Title = "经营风险", Message = "存在未收款" });
 
             var equipment = new Equipment { EquipmentNumber = "EQ-DASH", Name = "租赁吊车", OwnershipType = EquipmentOwnershipType.Rented, Status = EquipmentStatus.InUse };

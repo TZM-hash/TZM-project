@@ -2410,6 +2410,790 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.ToTable("ExportTemplates");
                 });
 
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceBusinessYear", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartDate", "EndDate");
+
+                    b.ToTable("FinanceBusinessYears", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceBusinessYears_DateRange", "[StartDate] <= [EndDate]");
+                        });
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceCashAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AllocationOrder")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CashEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractLineItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractId");
+
+                    b.HasIndex("ContractLineItemId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("SettlementId");
+
+                    b.HasIndex("CashEntryId", "AllocationOrder")
+                        .IsUnique();
+
+                    b.ToTable("FinanceCashAllocations");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceCashEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CashType")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterAccountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsReversal")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("PaymentMethod")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("ReversesCashEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("BusinessPartnerId");
+
+                    b.HasIndex("CounterAccountId");
+
+                    b.HasIndex("CounterLegalEntityId");
+
+                    b.HasIndex("ReversesCashEntryId");
+
+                    b.HasIndex("LegalEntityId", "BusinessDate");
+
+                    b.ToTable("FinanceCashEntries", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceCashEntries_Party", "([Scope] = 1 AND [BusinessPartnerId] IS NOT NULL AND [CounterLegalEntityId] IS NULL) OR ([Scope] = 2 AND [BusinessPartnerId] IS NULL AND [CounterLegalEntityId] IS NOT NULL AND [LegalEntityId] <> [CounterLegalEntityId])");
+                        });
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceDeduction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("ReduceInvoiceAmount")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId", "BusinessDate");
+
+                    b.ToTable("FinanceDeductions");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceDeletionLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AfterMetricsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BeforeMetricsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("DeletedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("DeletedByUserName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("EntryPoint")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid?>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("RecordType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeletedAt");
+
+                    b.HasIndex("RecordType", "RecordId");
+
+                    b.ToTable("FinanceDeletionLogs");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("InvoiceDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InvoiceType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("NetAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("ProjectTaxConfigurationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("TaxAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("TaxRate")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("decimal(9,4)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessPartnerId");
+
+                    b.HasIndex("CounterLegalEntityId");
+
+                    b.HasIndex("ProjectTaxConfigurationId");
+
+                    b.HasIndex("LegalEntityId", "InvoiceNumber", "InvoiceDate");
+
+                    b.ToTable("FinanceInvoices", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceInvoices_Party", "([Scope] = 1 AND [BusinessPartnerId] IS NOT NULL AND [CounterLegalEntityId] IS NULL) OR ([Scope] = 2 AND [BusinessPartnerId] IS NULL AND [CounterLegalEntityId] IS NOT NULL AND [LegalEntityId] <> [CounterLegalEntityId])");
+                        });
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceInvoiceAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AllocationOrder")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractLineItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractId");
+
+                    b.HasIndex("ContractLineItemId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("SettlementId");
+
+                    b.HasIndex("InvoiceId", "AllocationOrder")
+                        .IsUnique();
+
+                    b.ToTable("FinanceInvoiceAllocations");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceLegacyMap", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CentralRecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CentralRecordType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("LegacyEntityType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("LegacyId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CentralRecordType", "CentralRecordId");
+
+                    b.HasIndex("LegacyEntityType", "LegacyId")
+                        .IsUnique();
+
+                    b.ToTable("FinanceLegacyMaps");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceReconciliation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("AsOfDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("CreatedByUserName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid?>("FinanceBusinessYearId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("MetricsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("QueryJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ReconciliationScope")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessPartnerId");
+
+                    b.HasIndex("FinanceBusinessYearId");
+
+                    b.HasIndex("LegalEntityId");
+
+                    b.HasIndex("Scope", "AsOfDate", "Version");
+
+                    b.ToTable("FinanceReconciliations");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceReconciliationLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractLineItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("MetricsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ReconciliationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReconciliationId", "SettlementId");
+
+                    b.ToTable("FinanceReconciliationLines");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceSettlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("BusinessPartnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ContractLineItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CounterLegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("OriginalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("OriginalInvoiceAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("SettlementDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("SettlementState")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractId");
+
+                    b.HasIndex("ContractLineItemId");
+
+                    b.HasIndex("CounterLegalEntityId");
+
+                    b.HasIndex("LegalEntityId");
+
+                    b.HasIndex("BusinessPartnerId", "BusinessDate");
+
+                    b.HasIndex("ProjectId", "BusinessDate");
+
+                    b.HasIndex("SourceType", "SourceId")
+                        .IsUnique()
+                        .HasFilter("[SourceId] IS NOT NULL");
+
+                    b.HasIndex("Scope", "Direction", "LegalEntityId", "BusinessDate");
+
+                    b.ToTable("FinanceSettlements", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceSettlements_Party", "([Scope] = 1 AND [BusinessPartnerId] IS NOT NULL AND [CounterLegalEntityId] IS NULL) OR ([Scope] = 2 AND [BusinessPartnerId] IS NULL AND [CounterLegalEntityId] IS NOT NULL AND [LegalEntityId] <> [CounterLegalEntityId])");
+                        });
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceSettlementAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ActorUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ActorUserName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("AdjustmentType")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("AmountDelta")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<decimal>("InvoiceAmountDelta")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId", "BusinessDate");
+
+                    b.ToTable("FinanceSettlementAdjustments");
+                });
+
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinancialAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5183,6 +5967,267 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceCashAllocation", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceCashEntry", "CashEntry")
+                        .WithMany("Allocations")
+                        .HasForeignKey("CashEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ContractLineItem", "ContractLineItem")
+                        .WithMany()
+                        .HasForeignKey("ContractLineItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceSettlement", "Settlement")
+                        .WithMany("CashAllocations")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CashEntry");
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("ContractLineItem");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceCashEntry", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinancialAccount", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.BusinessPartner", "BusinessPartner")
+                        .WithMany()
+                        .HasForeignKey("BusinessPartnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinancialAccount", "CounterAccount")
+                        .WithMany()
+                        .HasForeignKey("CounterAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "CounterLegalEntity")
+                        .WithMany()
+                        .HasForeignKey("CounterLegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "LegalEntity")
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceCashEntry", "ReversesCashEntry")
+                        .WithMany()
+                        .HasForeignKey("ReversesCashEntryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Account");
+
+                    b.Navigation("BusinessPartner");
+
+                    b.Navigation("CounterAccount");
+
+                    b.Navigation("CounterLegalEntity");
+
+                    b.Navigation("LegalEntity");
+
+                    b.Navigation("ReversesCashEntry");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceDeduction", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceSettlement", "Settlement")
+                        .WithMany("Deductions")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceInvoice", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.BusinessPartner", "BusinessPartner")
+                        .WithMany()
+                        .HasForeignKey("BusinessPartnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "CounterLegalEntity")
+                        .WithMany()
+                        .HasForeignKey("CounterLegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "LegalEntity")
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ProjectTaxConfiguration", "ProjectTaxConfiguration")
+                        .WithMany()
+                        .HasForeignKey("ProjectTaxConfigurationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("BusinessPartner");
+
+                    b.Navigation("CounterLegalEntity");
+
+                    b.Navigation("LegalEntity");
+
+                    b.Navigation("ProjectTaxConfiguration");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceInvoiceAllocation", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ContractLineItem", "ContractLineItem")
+                        .WithMany()
+                        .HasForeignKey("ContractLineItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceInvoice", "Invoice")
+                        .WithMany("Allocations")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceSettlement", "Settlement")
+                        .WithMany("InvoiceAllocations")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("ContractLineItem");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceReconciliation", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.BusinessPartner", "BusinessPartner")
+                        .WithMany()
+                        .HasForeignKey("BusinessPartnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceBusinessYear", "FinanceBusinessYear")
+                        .WithMany("Reconciliations")
+                        .HasForeignKey("FinanceBusinessYearId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "LegalEntity")
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("BusinessPartner");
+
+                    b.Navigation("FinanceBusinessYear");
+
+                    b.Navigation("LegalEntity");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceReconciliationLine", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceReconciliation", "Reconciliation")
+                        .WithMany("Lines")
+                        .HasForeignKey("ReconciliationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Reconciliation");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceSettlement", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.BusinessPartner", "BusinessPartner")
+                        .WithMany()
+                        .HasForeignKey("BusinessPartnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ContractLineItem", "ContractLineItem")
+                        .WithMany()
+                        .HasForeignKey("ContractLineItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "CounterLegalEntity")
+                        .WithMany()
+                        .HasForeignKey("CounterLegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "LegalEntity")
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("BusinessPartner");
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("ContractLineItem");
+
+                    b.Navigation("CounterLegalEntity");
+
+                    b.Navigation("LegalEntity");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceSettlementAdjustment", b =>
+                {
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceSettlement", "Settlement")
+                        .WithMany("Adjustments")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinancialAccount", b =>
                 {
                     b.HasOne("EngineeringManager.Domain.Organization.LegalEntity", "LegalEntity")
@@ -6108,6 +7153,37 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.ExpenseRecord", b =>
                 {
                     b.Navigation("Payments");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceBusinessYear", b =>
+                {
+                    b.Navigation("Reconciliations");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceCashEntry", b =>
+                {
+                    b.Navigation("Allocations");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceInvoice", b =>
+                {
+                    b.Navigation("Allocations");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceReconciliation", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceSettlement", b =>
+                {
+                    b.Navigation("Adjustments");
+
+                    b.Navigation("CashAllocations");
+
+                    b.Navigation("Deductions");
+
+                    b.Navigation("InvoiceAllocations");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.ImportBatch", b =>

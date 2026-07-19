@@ -5,7 +5,7 @@ using System.Xml.Linq;
 
 namespace EngineeringManager.Infrastructure.DataExchange;
 
-public sealed record SimpleXlsxSheet(string Name, IReadOnlyList<IReadOnlyList<object?>> Rows);
+public sealed record SimpleXlsxSheet(string Name, IReadOnlyList<IReadOnlyList<object?>> Rows, bool IsVeryHidden = false);
 
 public static class SimpleXlsxReader
 {
@@ -31,7 +31,7 @@ public static class SimpleXlsxReader
             var relationshipId = (string)sheet.Attribute(OfficeRelationshipsNamespace + "id")!;
             var target = relationships[relationshipId].Replace('\\', '/');
             var path = target.StartsWith('/') ? target.TrimStart('/') : "xl/" + target.TrimStart('/');
-            result.Add(new SimpleXlsxSheet(name, ReadRows(LoadXml(archive, path), sharedStrings)));
+            result.Add(new SimpleXlsxSheet(name, ReadRows(LoadXml(archive, path), sharedStrings), string.Equals((string?)sheet.Attribute("state"), "veryHidden", StringComparison.OrdinalIgnoreCase)));
         }
 
         return result;

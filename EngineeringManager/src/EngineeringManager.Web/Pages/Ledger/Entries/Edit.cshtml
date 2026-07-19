@@ -1,0 +1,38 @@
+@page
+@using EngineeringManager.Domain.Finance
+@model EngineeringManager.Web.Pages.Ledger.Entries.EditModel
+@{
+    ViewData["Title"] = "中央账本财务录入";
+}
+<section class="page-heading"><div><h1>中央账本财务录入</h1><p class="page-lead">这里新增的数据与项目、施工班组、合作商页面使用同一套底层财务记录。</p></div></section>
+@if (TempData["Success"] is string success) { <div class="alert alert--success">@success</div> }
+<div asp-validation-summary="All" class="validation-summary"></div>
+<section class="panel"><form method="post" asp-page-handler="Save" class="ledger-entry-form">
+    <label>账本范围<select asp-for="Scope"><option value="External">外部账本</option><option value="Internal">内部账本</option></select></label>
+    <label>记录类型<select asp-for="RecordType"><option value="Settlement">应收/应付</option><option value="Deduction">扣款</option><option value="Invoice">发票</option><option value="Cash">收款/付款</option></select></label>
+    <label>方向<select asp-for="Direction"><option value="Receivable">应收/收款/销项</option><option value="Payable">应付/付款/进项</option></select></label>
+    <label>结算状态<select asp-for="SettlementState"><option value="Final">正式</option><option value="Provisional">暂估</option></select></label>
+    <label>自有公司<select asp-for="LegalEntityId" required><option value="">请选择</option>@foreach (var item in Model.Options.LegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>客户/班组/合作商<select asp-for="BusinessPartnerId"><option value="">外部账请选择</option>@foreach (var item in Model.Options.BusinessPartners) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>对方自有公司<select asp-for="CounterLegalEntityId"><option value="">内部账请选择</option>@foreach (var item in Model.Options.CounterLegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>项目<select asp-for="ProjectId"><option value="">可不选</option>@foreach (var item in Model.Options.Projects) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>合同<select asp-for="ContractId"><option value="">可不选</option>@foreach (var item in Model.Options.Contracts) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>业务日期<input asp-for="BusinessDate" type="date" required /></label>
+    <label>金额<input asp-for="Amount" type="number" step="0.01" min="0.01" required /></label>
+    <label>应开票金额<input asp-for="InvoiceAmount" type="number" step="0.01" min="0" /></label>
+    <label>关联结算ID<input asp-for="SettlementId" placeholder="扣款时必填" /></label>
+    <label>结算并发版本<input asp-for="SettlementConcurrencyStamp" placeholder="扣款时填写" /></label>
+    <label class="checkbox-field"><input asp-for="ReduceInvoiceAmount" /> 同时扣减应开票金额</label>
+    <label>发票号码<input asp-for="InvoiceNumber" /></label><label>发票类型<input asp-for="InvoiceType" /></label>
+    <label>未税金额<input asp-for="NetAmount" type="number" step="0.01" /></label><label>税额<input asp-for="TaxAmount" type="number" step="0.01" /></label><label>税率<input asp-for="TaxRate" type="number" step="0.0001" /></label>
+    <label>资金账户<select asp-for="AccountId"><option value="">请选择</option>@foreach (var item in Model.Options.Accounts) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>对方资金账户<select asp-for="CounterAccountId"><option value="">内部转账可选</option>@foreach (var item in Model.Options.Accounts) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>收付款方式<input asp-for="PaymentMethod" placeholder="银行转账、现金等" /></label>
+    <label class="ledger-entry-wide">原因<input asp-for="Reason" placeholder="扣款或调整时填写" /></label><label class="ledger-entry-wide">说明<textarea asp-for="Notes" rows="3"></textarea></label>
+    <fieldset class="ledger-entry-wide allocation-editor"><legend>跨项目/结算分摊</legend><label class="checkbox-field"><input asp-for="AutoAllocate" /> 未填写手工分摊时按 FIFO 自动分摊</label>
+        @for (var index = 0; index < Model.Allocations.Count; index++) { <div class="allocation-row"><label>分摊结算ID<input asp-for="Allocations[index].SettlementId" /></label><label>分摊金额<input asp-for="Allocations[index].Amount" type="number" step="0.01" min="0" /></label></div> }
+    </fieldset>
+    <div class="ledger-entry-wide"><button class="button button--primary" type="submit">保存到中央账本</button></div>
+</form></section>
+
+<section class="panel"><div class="panel-heading"><div><h2>物理删除财务记录</h2><p>删除单头会解除分摊，不级联删除另一侧发票或资金单头；系统永久保留删除日志。</p></div></div><form method="post" asp-page-handler="Delete" class="ledger-delete-form"><label>记录类型<select asp-for="DeleteRecordType"><option value="Settlement">结算</option><option value="Deduction">扣款</option><option value="Invoice">发票</option><option value="Cash">资金</option><option value="Adjustment">调整</option></select></label><label>记录ID<input asp-for="DeleteRecordId" required /></label><label>并发版本<input asp-for="DeleteConcurrencyStamp" required /></label><label>删除原因<input asp-for="DeleteReason" required /></label><button class="button button--danger" type="submit">确认物理删除</button></form></section>

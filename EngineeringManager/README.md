@@ -1,6 +1,6 @@
 # EngineeringManager
 
-工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。阶段 0～10 已完成，本地测试库、发布包、性能基线、备份恢复演练和部署手册均已形成；尚未实际部署生产环境。
+工程项目经营管理系统的新项目目录，采用 ASP.NET Core 模块化单体架构。阶段 0～10、中央账本、多入口统一财务、项目工作簿、本地测试库、发布包、性能基线、备份恢复演练和部署手册均已形成；尚未实际部署生产环境。
 
 ## 本地工具
 
@@ -34,7 +34,17 @@ $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 & .\.tools\dotnet-tools\dotnet-ef.exe database update --project .\src\EngineeringManager.Infrastructure\EngineeringManager.Infrastructure.csproj --startup-project .\src\EngineeringManager.Web\EngineeringManager.Web.csproj
 ```
 
-阶段 0～8 的历史迁移、阶段 9 的 `EquipmentManagement` 和 `EquipmentOfflinePhotos` 已应用到 `EngineeringManager_Test`。该测试库会保留到未来实际生产部署并确认正式系统可用后再删除；自动开发不操作生产数据库。
+阶段 0～10 的历史迁移以及中央账本迁移 `20260719182035_CentralLedgerMultiEntryFinance` 已应用到 `EngineeringManager_Test`。该测试库会保留到未来实际生产部署并确认正式系统可用后再删除；自动开发不操作生产数据库。
+
+旧财务数据迁移使用幂等命令。命令会迁移旧应收、应付、收付款、退款/冲销、扣款、发票和跨公司调拨，并为每条旧记录保存稳定映射；疑似重复的工程量应收只生成预检报告，不自动回填：
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+& .\scripts\dotnet.ps1 run --project .\src\EngineeringManager.Web\EngineeringManager.Web.csproj --configuration Release --no-build -- --migrate-central-ledger
+```
+
+存在待人工复核的工程量时，命令以退出码 `2` 结束并生成 `artifacts/central-ledger-migration/preflight-conflicts.json`；这表示预检按设计阻止重复应收，不代表程序故障。
 
 阶段 1 的角色模板可以通过一次性环境变量启用幂等种子；系统不会自动生成带密码的管理员账号：
 
@@ -88,6 +98,6 @@ $ErrorActionPreference = 'Stop'
 
 ## 当前范围边界
 
-阶段 8 已扩展现有 `LegalEntity` 为轻量自有公司管理。阶段 9 已交付完整设备管理与现场有限离线。阶段 10 已交付幂等测试样例、最终权限/业务回归、代表性性能基线、SQL Server + 附件备份恢复演练、Release 发布包和 Windows Server + IIS 部署手册。公开注册已关闭；系统不建设公司内部往来台账。生产服务器、域名、TLS 和正式数据导入须在实际部署窗口按发布清单执行。
+阶段 8 已扩展现有 `LegalEntity` 为轻量自有公司管理。阶段 9 已交付完整设备管理与现场有限离线。阶段 10 已交付幂等测试样例、最终权限/业务回归、代表性性能基线、SQL Server + 附件备份恢复演练、Release 发布包和 Windows Server + IIS 部署手册。中央账本现包含可折叠的外部账本与内部账本，项目、施工班组、合作商和中央录入共用唯一财务记录，并支持独立财务年度、暂估/正式结算、扣款开票规则、分摊、复杂开票收付统计、可修正对账快照、修改差异和物理删除日志。公开注册已关闭；生产服务器、域名、TLS 和正式数据导入须在实际部署窗口按发布清单执行。
 
 部署顺序、局域网防火墙、备份升级和云端迁移操作见 [项目部署手册](docs/项目部署手册.md)。

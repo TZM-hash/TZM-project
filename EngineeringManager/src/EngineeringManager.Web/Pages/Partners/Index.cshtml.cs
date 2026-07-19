@@ -14,6 +14,7 @@ public sealed class IndexModel(IBusinessPartnerService partnerService) : PageMod
 {
     public IReadOnlyList<BusinessPartnerDto> Partners { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
+    public bool CanManageFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
     public bool QuickEditOpen { get; private set; }
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty] public QuickEditInput QuickEdit { get; set; } = new();

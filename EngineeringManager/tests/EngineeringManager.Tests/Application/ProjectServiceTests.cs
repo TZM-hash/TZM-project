@@ -15,6 +15,52 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ProjectServiceTests
 {
     [Fact]
+    public async Task LineItemWithConfiguredCompanyAndCustomerPostsCentralReceivable()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var legalEntity = await fixture.AddLegalEntityAsync();
+        var partner = new BusinessPartner { PartnerNumber = "QTY-BP", Name = "工程量客户", ShortName = "客户" };
+        var project = new Project { ProjectNumber = "QTY-P", Name = "工程量自动入账项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = legalEntity, IsPrimary = true });
+        var contract = new Contract { Project = project, BusinessPartner = partner, ContractNumber = "QTY-C", Name = "工程量合同", TotalAmount = 1_000m };
+        project.Contracts.Add(contract);
+        fixture.Db.AddRange(partner, project);
+        await fixture.Db.SaveChangesAsync();
+
+        var line = await fixture.Service.AddLineItemAsync(
+            new CreateContractLineItemRequest(contract.Id, "001", "暂估工程量", "项", 2m, 300m, null, null, false),
+            CancellationToken.None);
+
+        var settlement = await fixture.Db.FinanceSettlements.SingleAsync(item => item.SourceId == line.Id);
+        settlement.SettlementState.Should().Be(LedgerSettlementState.Provisional);
+        settlement.OriginalAmount.Should().Be(600m);
+        settlement.BusinessPartnerId.Should().Be(partner.Id);
+        settlement.LegalEntityId.Should().Be(legalEntity.Id);
+    }
+
+    [Fact]
+    public async Task ProjectQueryCanIncludeInactiveWithoutBypassingUserScope()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var manager = new ApplicationUser { Id = "inactive-scope-manager", UserName = "inactive-scope-manager", DisplayName = "停用项目负责人" };
+        fixture.Db.Users.Add(manager);
+        fixture.Db.Projects.AddRange(
+            new Project { ProjectNumber = "ACTIVE-SCOPE", Name = "活动项目", ResponsibleUser = manager, IsActive = true },
+            new Project { ProjectNumber = "INACTIVE-SCOPE", Name = "停用项目", ResponsibleUser = manager, IsActive = false },
+            new Project { ProjectNumber = "INACTIVE-HIDDEN", Name = "无权停用项目", IsActive = false });
+        await fixture.Db.SaveChangesAsync();
+        var actor = new ProjectListActor(manager.Id, false);
+        var query = new ProjectListQuery(null, [], null, null, null, null, null, false);
+
+        var activeOnly = await fixture.Service.SearchProjectsAsync(actor, query, CancellationToken.None);
+        var includingInactive = await fixture.Service.SearchProjectsAsync(actor, query with { IncludeInactive = true }, CancellationToken.None);
+
+        activeOnly.Items.Should().ContainSingle(item => item.Project.ProjectNumber == "ACTIVE-SCOPE");
+        includingInactive.Items.Select(item => item.Project.ProjectNumber).Should().BeEquivalentTo(["ACTIVE-SCOPE", "INACTIVE-SCOPE"]);
+        includingInactive.Items.Should().NotContain(item => item.Project.ProjectNumber == "INACTIVE-HIDDEN");
+    }
+
+    [Fact]
     public async Task SearchProjectsAppliesUserScopeAmountSortAndPaging()
     {
         await using var fixture = await ProjectFixture.CreateAsync();

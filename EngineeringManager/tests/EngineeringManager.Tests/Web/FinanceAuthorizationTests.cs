@@ -21,7 +21,7 @@ public sealed class FinanceAuthorizationTests
     [InlineData("ApplicationAdministrator")]
     [InlineData("Finance")]
     [InlineData("QueryOnly")]
-    public async Task FinanceOverviewRedirectsToUnifiedProjectManagement(string role)
+    public async Task FinanceOverviewRedirectsToCentralExternalLedger(string role)
     {
         await using var factory = CreateFactory(role);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
@@ -29,7 +29,7 @@ public sealed class FinanceAuthorizationTests
         using var response = await client.GetAsync("/Finance");
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.Redirect);
-        response.Headers.Location?.OriginalString.Should().Be("/Projects");
+        response.Headers.Location?.OriginalString.Should().Be("/Ledger/External");
     }
 
     [Theory]

@@ -2,6 +2,7 @@
 @model EngineeringManager.Web.Pages.DataExchange.IndexModel
 @using EngineeringManager.Domain.DataExchange
 @using EngineeringManager.Web.Pages.DataExchange
+@using EngineeringManager.Application.DataExchange
 @{
     ViewData["Title"] = "导入导出";
     var datasets = Enum.GetValues<EngineeringManager.Domain.DataExchange.ExportDataset>();
@@ -51,6 +52,41 @@
             @if (Model.Templates.Count > 0) { <p class="exchange-help">已有模板：@string.Join("、", Model.Templates.Select(item => item.Name))</p> }
         </section>
     </div>
+</section>
+
+<section class="data-exchange-panel" data-project-workbook>
+    <div class="data-exchange-section-heading"><div><p class="eyebrow">项目管理工作簿</p><h2>按项目范围和细项交换</h2></div><span>支持筛选、手动勾选和多工作表</span></div>
+    <div class="data-exchange-layout data-exchange-layout--export">
+        @if (Model.CanExportProjectWorkbook)
+        {
+        <form method="post" asp-page-handler="ExportProjectWorkbook" class="exchange-card">
+            <div class="exchange-card-heading"><strong>导出项目工作簿</strong><span>全部授权状态</span></div>
+            <div class="compact-form-grid"><label>关键词<input asp-for="ProjectSearch" /></label><label>项目阶段<select asp-for="ProjectStages" multiple>@foreach (var stage in Enum.GetValues<EngineeringManager.Domain.Projects.ProjectStage>()) { <option value="@stage">@stage</option> }</select></label><label>合作方式<select asp-for="ProjectAffiliationType"><option value="">全部</option>@foreach (var value in Enum.GetValues<EngineeringManager.Domain.Projects.ProjectAffiliationType>()) { <option value="@value">@value</option> }</select></label><label>签约公司<select asp-for="ProjectLegalEntityId"><option value="">全部</option>@foreach (var company in Model.ProjectWorkbookOptions.LegalEntities) { <option value="@company.Value">@company.Label</option> }</select></label><label>负责人<select asp-for="ProjectResponsibleUserId"><option value="">全部</option>@foreach (var user in Model.ProjectWorkbookOptions.ResponsibleUsers) { <option value="@user.Value">@user.Label</option> }</select></label><label>当前金额下限<input asp-for="ProjectMinimumCurrentAmount" type="number" step="0.01" /></label><label>当前金额上限<input asp-for="ProjectMaximumCurrentAmount" type="number" step="0.01" /></label></div>
+            <p class="exchange-help">筛选命中 @Model.ProjectWorkbookProjects.TotalCount 个项目；已手动选择 <strong data-project-export-selected-count>0</strong> 个；手动勾选时以勾选项目为准。</p>
+            <label class="check-label"><input asp-for="SelectAllMatchingProjects" data-project-export-all-matching /> 导出筛选命中的全部项目</label>
+            <div class="project-workbook-project-list">@foreach (var project in Model.ProjectWorkbookProjects.Items) { <label><input type="checkbox" name="SelectedProjectIds" value="@project.Project.Id" data-project-export-item /> @project.Project.ProjectNumber · @project.Project.Name</label> }</div>
+            @if (Model.CanExportProjectWorkbookAttachments) { <label class="check-label"><input asp-for="IncludeProjectAttachments" data-project-export-attachments /> 包含附件并生成 ZIP</label> }
+            <details class="selection-dropdown"><summary>选择项目细项</summary><div class="check-grid">@foreach (var sheet in Model.ProjectWorkbookSheets.Where(sheet => Model.CanExportFullProjectWorkbook || sheet.Sheet != ProjectWorkbookSheet.ProjectSummary && sheet.Sheet != ProjectWorkbookSheet.Attachments)) { <label><input type="checkbox" name="SelectedProjectSheets" value="@sheet.Sheet" checked="@(Model.SelectedProjectSheets.Count == 0 || Model.SelectedProjectSheets.Contains(sheet.Sheet) ? "checked" : null)" data-project-workbook-sheet="@sheet.Sheet" /> @sheet.WorksheetName@(sheet.CanImport ? null : " · 只读")</label> }</div></details>
+            <button class="button button--primary" type="submit">生成项目工作簿</button>
+        </form>
+        }
+        @if (Model.CanManage)
+        {
+            <form method="post" enctype="multipart/form-data" asp-page-handler="PreviewProjectWorkbook" class="exchange-card">
+                <div class="exchange-card-heading"><strong>导入项目工作簿</strong><span>整份文件原子校验</span></div>
+                <label>Excel 或 ZIP<input asp-for="ProjectWorkbookFile" type="file" accept=".xlsx,.zip" /></label>
+                <label>导入模式<select asp-for="ProjectWorkbookImportMode">@foreach (var value in Enum.GetValues<ImportMode>()) { <option value="@value">@DataExchangeLabels.ImportMode(value)</option> }</select></label>
+                <label>任意 Excel 的目标细项<select asp-for="MappingTargetSheet">@foreach (var sheet in Model.ProjectWorkbookSheets.Where(item => item.CanImport)) { <option value="@sheet.Sheet">@sheet.WorksheetName</option> }</select></label>
+                <label>字段映射 JSON（标准工作簿留空）<textarea asp-for="SourceMappingJson" rows="3"></textarea></label>
+                <label class="check-label"><input asp-for="BlankMeansNoChange" /> 任意 Excel 空白时不更新</label>
+                <button class="button button--primary" type="submit">上传并全量预览</button>
+            </form>
+        }
+    </div>
+    @if (Model.ProjectWorkbookPreview is not null)
+    {
+        <div class="import-result"><div class="table-wrap"><table class="data-table"><thead><tr><th>工作表</th><th>总行数</th><th>新增</th><th>更新</th><th>未变化</th><th>错误</th></tr></thead><tbody>@foreach (var sheet in Model.ProjectWorkbookPreview.Sheets) { <tr><td>@sheet.WorksheetName</td><td>@sheet.TotalRows</td><td>@sheet.NewRows</td><td>@sheet.UpdatedRows</td><td>@sheet.UnchangedRows</td><td>@sheet.ErrorRows</td></tr> }</tbody></table></div>@if (Model.ProjectWorkbookPreview.Errors.Count == 0) { <form method="post" asp-page-handler="ConfirmProjectWorkbook"><input type="hidden" name="batchId" value="@Model.ProjectWorkbookPreview.BatchId" /><button class="button button--primary" type="submit">确认整批导入</button></form> } else { <p class="validation-summary">存在 @Model.ProjectWorkbookPreview.Errors.Count 个错误，整份文件不会写入。</p><div class="table-wrap"><table class="data-table"><thead><tr><th>源行</th><th>源列</th><th>原值</th><th>错误与修正建议</th></tr></thead><tbody>@foreach (var error in Model.ProjectWorkbookPreview.Errors) { <tr><td>@error.RowNumber</td><td>@error.ColumnName</td><td>@error.RawValue</td><td>@error.Message</td></tr> }</tbody></table></div> }</div>
+    }
 </section>
 
 @if (Model.CanManage)

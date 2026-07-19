@@ -1,0 +1,18 @@
+@page
+@using EngineeringManager.Domain.Finance
+@model EngineeringManager.Web.Pages.Ledger.Internal.IndexModel
+@{
+    ViewData["Title"] = "中央账本 · 内部账本";
+}
+<section class="page-heading ledger-heading"><div><h1>内部账本</h1><p class="page-lead">仅显示自有公司之间的内部往来，和外部客户、班组、合作商账目分开管理。</p></div>@if (Model.CanManage) { <a class="button button--primary" asp-page="/Ledger/Entries/Edit" asp-route-scope="Internal">新增内部往来</a> }</section>
+<partial name="../_LedgerMetrics" model="Model.Result.Totals" />
+<section class="panel ledger-filter-panel"><form method="get" class="ledger-filter-grid">
+    <label>财务年度<select asp-for="FinanceBusinessYearId"><option value="">全部年度</option>@foreach (var item in Model.Years) { <option value="@item.Id">@item.Name</option> }</select></label>
+    <label>开始日期<input asp-for="StartDate" type="date" /></label><label>结束日期<input asp-for="EndDate" type="date" /></label>
+    <label>本方自有公司<select asp-for="LegalEntityId"><option value="">全部公司</option>@foreach (var item in Model.Options.LegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>对方自有公司<select asp-for="CounterLegalEntityId"><option value="">全部公司</option>@foreach (var item in Model.Options.CounterLegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
+    <label>方向<select asp-for="Direction"><option value="">应收与应付</option><option value="Receivable">应收</option><option value="Payable">应付</option></select></label>
+    <label class="ledger-search">关键词<input asp-for="Search" placeholder="自有公司、说明" /></label><div class="ledger-filter-actions"><button class="button button--primary" type="submit">筛选</button><a class="button button--secondary" asp-page="/Ledger/Internal/Index">重置</a></div>
+</form></section>
+<nav class="ledger-tabs" aria-label="内部账本分类"><a href="#internal-table">总览</a><a href="#internal-table">内部应收</a><a href="#internal-table">内部应付</a><a href="#internal-table">内部收付</a><a href="#internal-table">年度账</a><a href="#internal-table">对账</a><a href="#internal-table">修改日志</a></nav>
+<section class="panel data-work-surface" id="internal-table"><div class="panel-heading"><div><h2>自有公司内部往来</h2><p>内部账不显示外部合作单位。</p></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>方向</th><th>本方自有公司</th><th>对方自有公司</th><th>结算金额</th><th>已收/已付</th><th>未收/未付</th><th>发票状态</th></tr></thead><tbody>@foreach (var row in Model.Result.Rows) { <tr><td>@row.BusinessDate</td><td>@(row.Direction == LedgerDirection.Receivable ? "应收" : "应付")</td><td>@row.LegalEntityName</td><td>@row.CounterLegalEntityName</td><td>@row.Metrics.ActualAmount.ToString("N2")</td><td>@row.Metrics.CashAmount.ToString("N2")</td><td>@row.Metrics.UncollectedOrUnpaid.ToString("N2")</td><td>@row.InvoiceAllocationStatus</td></tr> }</tbody></table></div>@if (Model.Result.Rows.Count == 0) { <div class="empty-state"><strong>暂无内部往来</strong><p>新增自有公司之间的应收、应付、收付款或内部发票后在此统一查看。</p></div> }</section>

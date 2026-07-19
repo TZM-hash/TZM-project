@@ -29,6 +29,9 @@ if (document.querySelector("[data-inline-edit], [data-inline-edit-table], [data-
 if (document.querySelector("[data-check-selector]")) {
   jobs.push(import("./components/check-selector.js").then((module) => module.initCheckSelectors()));
 }
+if (document.querySelector("[data-central-ledger-nav]")) {
+  jobs.push(import("./components/collapsible-nav.js").then((module) => module.initCollapsibleNavigation()));
+}
 await Promise.all(jobs);
 
 function initSmartBack() {

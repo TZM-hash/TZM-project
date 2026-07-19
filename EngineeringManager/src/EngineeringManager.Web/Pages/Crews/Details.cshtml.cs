@@ -16,6 +16,7 @@ public sealed class DetailsModel(IConstructionCrewService crewService) : PageMod
     public ConstructionCrewDetailsDto Details { get; private set; } = null!;
     public IReadOnlyList<ConstructionCrewListItemDto> CrewOptions { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
+    public bool CanManageFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken) ? Page() : NotFound();
 

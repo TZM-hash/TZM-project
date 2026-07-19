@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Globalization;
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
@@ -17,7 +18,8 @@ public sealed class DetailsModel(
     IProjectWorkspaceService workspaceService,
     IProjectService projectService,
     IFinanceLedgerService financeService,
-    IProjectConstructionService constructionService) : PageModel
+    IProjectConstructionService constructionService,
+    IProjectWorkbookService projectWorkbookService) : PageModel
 {
     public ProjectWorkspaceDto? Workspace { get; private set; }
     public ProjectEditOptionsDto Options { get; private set; } = new([], [], [], []);
@@ -25,6 +27,9 @@ public sealed class DetailsModel(
     public ProjectConstructionWorkspaceDto ConstructionWorkspace { get; private set; } = new([], [], [], []);
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
     public bool CanManageFinance => CanManage || User.IsInRole(SystemRoles.Finance);
+    public bool CanExportWorkbook => WorkbookActor().CanExport;
+    public bool CanExportFullWorkbook => WorkbookActor().CanExportFullWorkbook;
+    public bool CanExportWorkbookAttachments => WorkbookActor().CanExportAttachments;
     public string? ActiveInlineEditor { get; private set; }
     [BindProperty(SupportsGet = true)] public string? Tab { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? RecordId { get; set; }
@@ -37,12 +42,27 @@ public sealed class DetailsModel(
     [BindProperty] public ConstructionEditInput ConstructionEdit { get; set; } = new();
     [BindProperty] public NewEquipmentInput NewEquipment { get; set; } = new();
     [BindProperty] public NewCrewInput NewCrew { get; set; } = new();
+    [BindProperty] public List<ProjectWorkbookSheet> SelectedWorkbookSheets { get; set; } = [];
+    [BindProperty] public bool IncludeWorkbookAttachments { get; set; }
 
     public async Task<IActionResult> OnGetAsync(Guid id, CancellationToken cancellationToken)
     {
         if (RecordId.HasValue) Tab = "construction";
         await LoadAsync(id, true, cancellationToken);
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostExportWorkbookAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanExportWorkbook) return Forbid();
+        if (Workspace is null) await LoadAsync(id, false, cancellationToken);
+        if (Workspace is null) return NotFound();
+        var file = await projectWorkbookService.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(WorkbookProjectActor(), new ProjectListQuery(Workspace.Overview.ProjectNumber, [], null, null, null, null, null, false, IncludeInactive: true), false, [id]),
+            SelectedWorkbookSheets,
+            IncludeAttachments: IncludeWorkbookAttachments,
+            Actor: WorkbookActor()), cancellationToken);
+        return File(file.Content, file.ContentType, file.FileName);
     }
 
     public async Task<IActionResult> OnPostQuickEditAsync(Guid id, CancellationToken cancellationToken)
@@ -152,7 +172,7 @@ public sealed class DetailsModel(
         {
             await financeService.AddInvoiceAsync(new CreateInvoiceRequest(
                 id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), InvoiceEdit.BusinessPartnerId,
-                InvoiceEdit.Direction, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
+                InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
                 Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), InvoiceEdit.NetAmount, InvoiceEdit.TaxAmount, Positive(InvoiceEdit.GrossAmount),
                 InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
             return RedirectToPage(new { id, tab = "invoice" });
@@ -220,7 +240,7 @@ public sealed class DetailsModel(
                 case FinanceEntryKind.Invoice:
                     await financeService.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(
                         FinanceRowEdit.Id, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), FinanceRowEdit.BusinessPartnerId,
-                        FinanceRowEdit.Direction, RequiredText(FinanceRowEdit.InvoiceNumber, "请填写发票号码。"), FinanceRowEdit.EntryDate,
+                        InvoiceDirection.Output, RequiredText(FinanceRowEdit.InvoiceNumber, "请填写发票号码。"), FinanceRowEdit.EntryDate,
                         Required(FinanceRowEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), FinanceRowEdit.NetAmount, FinanceRowEdit.TaxAmount, Positive(FinanceRowEdit.Amount), FinanceRowEdit.InvoiceStatus,
                         FinanceRowEdit.ConcurrencyStamp, reason), cancellationToken);
                     break;
@@ -347,6 +367,14 @@ public sealed class DetailsModel(
     }
 
     private ProjectWorkspaceActor Actor() => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.Identity?.Name);
+    private ProjectListActor WorkbookProjectActor()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
+        var canAccessAll = User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance) || User.IsInRole(SystemRoles.QueryOnly) || User.IsInRole(SystemRoles.EquipmentManager);
+        return new ProjectListActor(userId, canAccessAll);
+    }
+    private ProjectWorkbookActor WorkbookActor() =>
+        new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.FindAll(ClaimTypes.Role).Select(item => item.Value).Distinct(StringComparer.Ordinal).ToArray());
     private ProjectConstructionActor ConstructionActor() => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.Identity?.Name);
     private static bool IsEditableException(Exception exception) => exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException;
     private static Guid Required(Guid? value, string message) => value is { } id && id != Guid.Empty ? id : throw new ArgumentException(message);

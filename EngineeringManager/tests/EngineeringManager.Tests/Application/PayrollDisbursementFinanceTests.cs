@@ -65,7 +65,34 @@ public sealed class PayrollDisbursementFinanceTests
             Amount = batch.ActualAmount
         };
         batch.AccountTransactionId = transaction.Id;
-        db.AddRange(company, project, crew, worker, account, batch, transaction);
+        var payable = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Payable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.Crew,
+            LegalEntity = company,
+            BusinessPartner = crew,
+            Project = project,
+            BusinessDate = batch.PaymentDate.Value,
+            OriginalAmount = 4_000m,
+            OriginalInvoiceAmount = 4_000m
+        };
+        var centralPayment = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Payable,
+            CashType = LedgerCashType.Payment,
+            SourceType = LedgerSourceType.Crew,
+            SourceId = batch.Id,
+            LegalEntity = company,
+            BusinessPartner = crew,
+            Account = account,
+            BusinessDate = batch.PaymentDate.Value,
+            Amount = 4_000m
+        };
+        centralPayment.Allocations.Add(new FinanceCashAllocation { CashEntry = centralPayment, Settlement = payable, Project = project, Amount = 4_000m, AllocationOrder = 1 });
+        db.AddRange(company, project, crew, worker, account, batch, transaction, payable, centralPayment);
         await db.SaveChangesAsync();
         var service = new FinanceLedgerService(db);
 
@@ -76,5 +103,6 @@ public sealed class PayrollDisbursementFinanceTests
         crewSummary.PaidAmount.Should().Be(4_000m);
         (await db.AccountTransactions.CountAsync()).Should().Be(1);
         (await db.PaymentEntries.CountAsync()).Should().Be(0);
+        (await db.FinanceCashEntries.CountAsync()).Should().Be(1);
     }
 }

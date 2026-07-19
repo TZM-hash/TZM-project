@@ -200,22 +200,26 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
     {
         EnsurePositive(request.Amount);
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
-        var entry = new ReceivableEntry
-        {
-            ProjectId = request.ProjectId,
-            ContractId = request.ContractId,
-            LegalEntityId = request.LegalEntityId,
-            BusinessPartnerId = request.BusinessPartnerId,
-            SourceType = request.SourceType,
-            EntryDate = request.EntryDate,
-            DueDate = request.DueDate,
-            Amount = request.Amount,
-            Description = NormalizeOptional(request.Description)
-        };
-        db.ReceivableEntries.Add(entry);
-        AddProjectAudit("CreateReceivable", nameof(ReceivableEntry), entry.Id, entry.ProjectId, $"新增应收 {entry.Amount:N2}", new { entry.EntryDate, entry.DueDate, entry.Amount, entry.Description });
-        await db.SaveChangesAsync(cancellationToken);
-        return entry.Id;
+        var command = new CentralLedgerCommandService(db);
+        return await command.CreateSettlementAsync(
+            CreateCompatibilityActor(request.LegalEntityId, request.ProjectId),
+            new CreateSettlementRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSettlementState.Final,
+                LedgerSourceType.CentralLedger,
+                null,
+                request.LegalEntityId,
+                request.BusinessPartnerId,
+                null,
+                request.ProjectId,
+                request.ContractId,
+                null,
+                request.EntryDate,
+                request.Amount,
+                request.Amount,
+                request.Description),
+            cancellationToken);
     }
 
     public async Task<Guid> RecordCollectionAsync(RecordCollectionRequest request, CancellationToken cancellationToken)
@@ -223,77 +227,90 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         EnsurePositive(request.Amount);
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
         await ValidateAccountAsync(request.AccountId, request.LegalEntityId, cancellationToken);
-        if (request.ReceivableEntryId.HasValue && !await db.ReceivableEntries.AnyAsync(
-                item => item.Id == request.ReceivableEntryId && item.ProjectId == request.ProjectId && !item.IsVoided,
+        if (request.ReceivableEntryId.HasValue && !await db.FinanceSettlements.AnyAsync(
+                item => item.Id == request.ReceivableEntryId && item.ProjectId == request.ProjectId &&
+                    item.Direction == LedgerDirection.Receivable && item.Status == LedgerRecordStatus.Active,
                 cancellationToken))
         {
             throw new InvalidOperationException("应收记录不存在、已作废或不属于当前项目。");
         }
-
-        var entry = new CollectionEntry
-        {
-            ReceivableEntryId = request.ReceivableEntryId,
-            ProjectId = request.ProjectId,
-            ContractId = request.ContractId,
-            LegalEntityId = request.LegalEntityId,
-            BusinessPartnerId = request.BusinessPartnerId,
-            AccountId = request.AccountId,
-            CollectionDate = request.CollectionDate,
-            Amount = request.Amount,
-            PaymentMethod = request.PaymentMethod,
-            Notes = NormalizeOptional(request.Notes)
-        };
-        db.CollectionEntries.Add(entry);
-        db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Inflow, AccountTransactionSourceType.Collection, entry.Id, entry.CollectionDate, entry.Amount, entry.Notes));
-        AddProjectAudit("RecordCollection", nameof(CollectionEntry), entry.Id, entry.ProjectId, $"登记收款 {entry.Amount:N2}", new { entry.CollectionDate, entry.Amount, entry.PaymentMethod, entry.Notes });
-        await db.SaveChangesAsync(cancellationToken);
-        return entry.Id;
+        var allocations = request.ReceivableEntryId.HasValue
+            ? new[] { new FinanceAllocationRequest(request.ReceivableEntryId.Value, request.Amount, 1) }
+            : [];
+        var command = new CentralLedgerCommandService(db);
+        return await command.CreateCashAsync(
+            CreateCompatibilityActor(request.LegalEntityId, request.ProjectId),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.CentralLedger,
+                null,
+                request.LegalEntityId,
+                request.BusinessPartnerId,
+                null,
+                request.AccountId,
+                null,
+                request.CollectionDate,
+                request.Amount,
+                request.PaymentMethod.ToString(),
+                request.Notes,
+                allocations),
+            cancellationToken);
     }
 
     public async Task<Guid> RecordRefundAsync(RecordRefundRequest request, CancellationToken cancellationToken)
     {
         EnsurePositive(request.Amount);
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
-        CollectionEntry? collection = null;
-        if (request.CollectionEntryId.HasValue)
+        var original = request.CollectionEntryId.HasValue
+            ? await db.FinanceCashEntries.Include(item => item.Allocations)
+                .SingleOrDefaultAsync(item => item.Id == request.CollectionEntryId && item.CashType == LedgerCashType.Collection, cancellationToken)
+                ?? throw new InvalidOperationException("原收款记录不存在。")
+            : null;
+        if (original is not null && original.AccountId != request.AccountId)
+            throw new InvalidOperationException("退款或收款冲销必须使用原收款账户。");
+        var settlement = request.ReceivableEntryId.HasValue
+            ? await db.FinanceSettlements.SingleOrDefaultAsync(item => item.Id == request.ReceivableEntryId && item.Direction == LedgerDirection.Receivable, cancellationToken)
+                ?? throw new InvalidOperationException("关联应收记录不存在。")
+            : original?.Allocations.Select(item => item.Settlement).FirstOrDefault();
+        if (settlement is null && original is not null && original.Allocations.Count > 0)
         {
-            collection = await db.CollectionEntries.SingleOrDefaultAsync(item => item.Id == request.CollectionEntryId, cancellationToken)
-                ?? throw new InvalidOperationException("原收款记录不存在。");
-            if (collection.AccountId != request.AccountId)
-            {
-                throw new InvalidOperationException("退款或收款冲销必须使用原收款账户。");
-            }
+            settlement = await db.FinanceSettlements.SingleAsync(item => item.Id == original.Allocations.First().SettlementId, cancellationToken);
         }
+        if (settlement is null) throw new ArgumentException("退款或收款冲销至少需要关联原收款或应收记录。", nameof(request));
+        await ValidateAccountAsync(request.AccountId, settlement.LegalEntityId, cancellationToken);
 
-        if (request.ReceivableEntryId.HasValue && !await db.ReceivableEntries.AnyAsync(item => item.Id == request.ReceivableEntryId, cancellationToken))
+        var entry = new FinanceCashEntry
         {
-            throw new InvalidOperationException("关联应收记录不存在。");
-        }
-
-        if (collection is null && !request.ReceivableEntryId.HasValue)
-        {
-            throw new ArgumentException("退款或收款冲销至少需要关联原收款或应收记录。", nameof(request));
-        }
-
-        if (!await db.FinancialAccounts.AnyAsync(item => item.Id == request.AccountId && item.IsActive, cancellationToken))
-        {
-            throw new InvalidOperationException("资金账户不存在或已停用。");
-        }
-
-        var entry = new RefundOrReversalEntry
-        {
-            CollectionEntryId = request.CollectionEntryId,
-            ReceivableEntryId = request.ReceivableEntryId,
+            Scope = settlement.Scope,
+            Direction = LedgerDirection.Receivable,
+            CashType = LedgerCashType.Collection,
+            LegalEntityId = settlement.LegalEntityId,
+            BusinessPartnerId = settlement.BusinessPartnerId,
+            CounterLegalEntityId = settlement.CounterLegalEntityId,
             AccountId = request.AccountId,
-            EntryDate = request.EntryDate,
+            IsReversal = true,
+            ReversesCashEntryId = original?.Id,
+            BusinessDate = request.EntryDate,
             Amount = request.Amount,
-            AdjustmentType = request.AdjustmentType,
-            Reason = reason
+            Notes = reason,
+            SourceType = LedgerSourceType.CentralLedger
         };
-        db.RefundOrReversalEntries.Add(entry);
-        db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Outflow, AccountTransactionSourceType.Refund, entry.Id, entry.EntryDate, entry.Amount, entry.Reason));
-        var refundProjectId = collection?.ProjectId ?? await db.ReceivableEntries.Where(item => item.Id == request.ReceivableEntryId).Select(item => (Guid?)item.ProjectId).SingleOrDefaultAsync(cancellationToken);
-        if (refundProjectId.HasValue) AddProjectAudit("RecordCollectionReversal", nameof(RefundOrReversalEntry), entry.Id, refundProjectId.Value, $"退款/收款冲销 {entry.Amount:N2}", new { entry.EntryDate, entry.Amount, entry.AdjustmentType, entry.Reason });
+        entry.Allocations.Add(new FinanceCashAllocation
+        {
+            CashEntry = entry,
+            Settlement = settlement,
+            ProjectId = settlement.ProjectId,
+            ContractId = settlement.ContractId,
+            ContractLineItemId = settlement.ContractLineItemId,
+            BusinessPartnerId = settlement.BusinessPartnerId,
+            Amount = request.Amount,
+            AllocationOrder = 1
+        });
+        db.FinanceCashEntries.Add(entry);
+        db.AccountTransactions.Add(CreateTransaction(request.AccountId, AccountTransactionDirection.Outflow, AccountTransactionSourceType.Refund, entry.Id, request.EntryDate, request.Amount, reason));
+        if (settlement.ProjectId.HasValue) AddProjectAudit("RecordCollectionReversal", nameof(FinanceCashEntry), entry.Id, settlement.ProjectId.Value, $"退款/收款冲销 {entry.Amount:N2}", new { entry.BusinessDate, entry.Amount, request.AdjustmentType, Reason = reason });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -302,22 +319,26 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
     {
         EnsurePositive(request.Amount);
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, true, cancellationToken);
-        var entry = new PayableEntry
-        {
-            ProjectId = request.ProjectId,
-            ContractId = request.ContractId,
-            LegalEntityId = request.LegalEntityId,
-            BusinessPartnerId = request.BusinessPartnerId,
-            SourceType = request.SourceType,
-            EntryDate = request.EntryDate,
-            DueDate = request.DueDate,
-            Amount = request.Amount,
-            Description = NormalizeOptional(request.Description)
-        };
-        db.PayableEntries.Add(entry);
-        AddProjectAudit("CreatePayable", nameof(PayableEntry), entry.Id, entry.ProjectId, $"新增应付 {entry.Amount:N2}", new { entry.EntryDate, entry.DueDate, entry.Amount, entry.Description });
-        await db.SaveChangesAsync(cancellationToken);
-        return entry.Id;
+        var command = new CentralLedgerCommandService(db);
+        return await command.CreateSettlementAsync(
+            CreateCompatibilityActor(request.LegalEntityId, request.ProjectId),
+            new CreateSettlementRequest(
+                LedgerScope.External,
+                LedgerDirection.Payable,
+                LedgerSettlementState.Final,
+                LedgerSourceType.CentralLedger,
+                null,
+                request.LegalEntityId,
+                request.BusinessPartnerId,
+                null,
+                request.ProjectId,
+                request.ContractId,
+                null,
+                request.EntryDate,
+                request.Amount,
+                request.Amount,
+                request.Description),
+            cancellationToken);
     }
 
     public async Task<Guid> RecordPaymentAsync(RecordPaymentRequest request, CancellationToken cancellationToken)
@@ -325,87 +346,100 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         EnsurePositive(request.Amount);
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, true, cancellationToken);
         await ValidateAccountAsync(request.AccountId, request.LegalEntityId, cancellationToken);
-        if (request.PayableEntryId.HasValue && !await db.PayableEntries.AnyAsync(
-                item => item.Id == request.PayableEntryId && item.ProjectId == request.ProjectId && !item.IsVoided,
+        if (request.PayableEntryId.HasValue && !await db.FinanceSettlements.AnyAsync(
+                item => item.Id == request.PayableEntryId && item.ProjectId == request.ProjectId &&
+                    item.Direction == LedgerDirection.Payable && item.Status == LedgerRecordStatus.Active,
                 cancellationToken))
         {
             throw new InvalidOperationException("应付记录不存在、已作废或不属于当前项目。");
         }
-
-        var entry = new PaymentEntry
-        {
-            PayableEntryId = request.PayableEntryId,
-            ProjectId = request.ProjectId,
-            ContractId = request.ContractId,
-            LegalEntityId = request.LegalEntityId,
-            BusinessPartnerId = request.BusinessPartnerId,
-            AccountId = request.AccountId,
-            PaymentDate = request.PaymentDate,
-            Amount = request.Amount,
-            PaymentMethod = request.PaymentMethod,
-            Notes = NormalizeOptional(request.Notes)
-        };
-        db.PaymentEntries.Add(entry);
-        db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Outflow, AccountTransactionSourceType.Payment, entry.Id, entry.PaymentDate, entry.Amount, entry.Notes));
-        AddProjectAudit("RecordPayment", nameof(PaymentEntry), entry.Id, entry.ProjectId, $"登记付款 {entry.Amount:N2}", new { entry.PaymentDate, entry.Amount, entry.PaymentMethod, entry.Notes });
-        await db.SaveChangesAsync(cancellationToken);
-        return entry.Id;
+        var allocations = request.PayableEntryId.HasValue
+            ? new[] { new FinanceAllocationRequest(request.PayableEntryId.Value, request.Amount, 1) }
+            : [];
+        var command = new CentralLedgerCommandService(db);
+        return await command.CreateCashAsync(
+            CreateCompatibilityActor(request.LegalEntityId, request.ProjectId),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Payable,
+                LedgerCashType.Payment,
+                LedgerSourceType.CentralLedger,
+                null,
+                request.LegalEntityId,
+                request.BusinessPartnerId,
+                null,
+                request.AccountId,
+                null,
+                request.PaymentDate,
+                request.Amount,
+                request.PaymentMethod.ToString(),
+                request.Notes,
+                allocations),
+            cancellationToken);
     }
 
     public async Task<Guid> AddDeductionAsync(CreateDeductionRequest request, CancellationToken cancellationToken)
     {
         EnsurePositive(request.Amount);
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
-        if (!await db.PayableEntries.AnyAsync(item =>
+        var settlement = await db.FinanceSettlements.SingleOrDefaultAsync(item =>
                 item.Id == request.PayableEntryId &&
                 item.ProjectId == request.ProjectId &&
                 item.LegalEntityId == request.LegalEntityId &&
                 item.BusinessPartnerId == request.BusinessPartnerId &&
-                !item.IsVoided,
-                cancellationToken))
+                item.Direction == LedgerDirection.Payable &&
+                item.Status == LedgerRecordStatus.Active,
+                cancellationToken);
+        if (settlement is null)
         {
             throw new InvalidOperationException("应付记录不存在、已作废或与扣款维度不一致。");
         }
-
-        var entry = new DeductionEntry
-        {
-            PayableEntryId = request.PayableEntryId,
-            ProjectId = request.ProjectId,
-            LegalEntityId = request.LegalEntityId,
-            BusinessPartnerId = request.BusinessPartnerId,
-            EntryDate = request.EntryDate,
-            Amount = request.Amount,
-            Reason = reason
-        };
-        db.DeductionEntries.Add(entry);
-        AddProjectAudit("CreateDeduction", nameof(DeductionEntry), entry.Id, entry.ProjectId, $"登记扣款 {entry.Amount:N2}", new { entry.EntryDate, entry.Amount, entry.Reason });
-        await db.SaveChangesAsync(cancellationToken);
-        return entry.Id;
+        return await new CentralLedgerCommandService(db).AddDeductionAsync(
+            CreateCompatibilityActor(request.LegalEntityId, request.ProjectId),
+            new AddFinanceDeductionRequest(settlement.Id, request.EntryDate, request.Amount, false, reason, settlement.ConcurrencyStamp),
+            cancellationToken);
     }
 
     public async Task<Guid> RecordPaymentReversalAsync(RecordPaymentReversalRequest request, CancellationToken cancellationToken)
     {
         EnsurePositive(request.Amount);
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
-        var payment = await db.PaymentEntries.SingleOrDefaultAsync(item => item.Id == request.PaymentEntryId, cancellationToken)
+        var payment = await db.FinanceCashEntries.Include(item => item.Allocations)
+            .SingleOrDefaultAsync(item => item.Id == request.PaymentEntryId && item.CashType == LedgerCashType.Payment, cancellationToken)
             ?? throw new InvalidOperationException("原付款记录不存在。");
-        if (payment.AccountId != request.AccountId)
+        if (payment.AccountId != request.AccountId) throw new InvalidOperationException("付款冲销必须使用原付款账户。");
+        var allocation = payment.Allocations.FirstOrDefault() ?? throw new InvalidOperationException("原付款没有可冲销的结算分摊。");
+        var settlement = await db.FinanceSettlements.SingleAsync(item => item.Id == allocation.SettlementId, cancellationToken);
+        var entry = new FinanceCashEntry
         {
-            throw new InvalidOperationException("付款冲销必须使用原付款账户。");
-        }
-
-        var entry = new PaymentReversalEntry
-        {
-            PaymentEntryId = request.PaymentEntryId,
+            Scope = payment.Scope,
+            Direction = LedgerDirection.Payable,
+            CashType = LedgerCashType.Payment,
+            LegalEntityId = payment.LegalEntityId,
+            BusinessPartnerId = payment.BusinessPartnerId,
+            CounterLegalEntityId = payment.CounterLegalEntityId,
             AccountId = request.AccountId,
-            EntryDate = request.EntryDate,
+            IsReversal = true,
+            ReversesCashEntryId = payment.Id,
+            BusinessDate = request.EntryDate,
             Amount = request.Amount,
-            AdjustmentType = request.AdjustmentType,
-            Reason = reason
+            Notes = reason,
+            SourceType = LedgerSourceType.CentralLedger
         };
-        db.PaymentReversalEntries.Add(entry);
-        db.AccountTransactions.Add(CreateTransaction(entry.AccountId, AccountTransactionDirection.Inflow, AccountTransactionSourceType.PaymentReversal, entry.Id, entry.EntryDate, entry.Amount, entry.Reason));
-        AddProjectAudit("RecordPaymentReversal", nameof(PaymentReversalEntry), entry.Id, payment.ProjectId, $"付款冲销 {entry.Amount:N2}", new { entry.EntryDate, entry.Amount, entry.AdjustmentType, entry.Reason });
+        entry.Allocations.Add(new FinanceCashAllocation
+        {
+            CashEntry = entry,
+            Settlement = settlement,
+            ProjectId = settlement.ProjectId,
+            ContractId = settlement.ContractId,
+            ContractLineItemId = settlement.ContractLineItemId,
+            BusinessPartnerId = settlement.BusinessPartnerId,
+            Amount = request.Amount,
+            AllocationOrder = 1
+        });
+        db.FinanceCashEntries.Add(entry);
+        db.AccountTransactions.Add(CreateTransaction(request.AccountId, AccountTransactionDirection.Inflow, AccountTransactionSourceType.PaymentReversal, entry.Id, request.EntryDate, request.Amount, reason));
+        if (settlement.ProjectId.HasValue) AddProjectAudit("RecordPaymentReversal", nameof(FinanceCashEntry), entry.Id, settlement.ProjectId.Value, $"付款冲销 {entry.Amount:N2}", new { entry.BusinessDate, entry.Amount, request.AdjustmentType, Reason = reason });
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
     }
@@ -452,9 +486,10 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
         var taxConfiguration = await GetTaxConfigurationAsync(request.ProjectId, request.ProjectTaxConfigurationId, cancellationToken);
         InvoiceAmountValidator.Validate(request.NetAmount, request.TaxAmount, request.GrossAmount, taxConfiguration.TaxRate);
-        if (await db.InvoiceEntries.AnyAsync(item =>
+        var ledgerDirection = request.Direction == InvoiceDirection.Output ? LedgerDirection.Receivable : LedgerDirection.Payable;
+        if (await db.FinanceInvoices.AnyAsync(item =>
                 item.LegalEntityId == request.LegalEntityId &&
-                item.Direction == request.Direction &&
+                item.Direction == ledgerDirection &&
                 item.InvoiceNumber == invoiceNumber,
                 cancellationToken))
         {
@@ -464,10 +499,11 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         ValidateAllocations(request.ReceivableAllocations, request.GrossAmount);
         ValidateAllocations(request.LineItemAllocations, request.GrossAmount);
         var receivableIds = request.ReceivableAllocations.Select(item => item.TargetId).Distinct().ToArray();
-        if (receivableIds.Length > 0 && await db.ReceivableEntries.CountAsync(item =>
+        if (receivableIds.Length > 0 && await db.FinanceSettlements.CountAsync(item =>
                 receivableIds.Contains(item.Id) &&
                 item.ProjectId == request.ProjectId &&
-                !item.IsVoided,
+                item.Direction == ledgerDirection &&
+                item.Status == LedgerRecordStatus.Active,
                 cancellationToken) != receivableIds.Length)
         {
             throw new InvalidOperationException("发票关联的应收记录不存在、已作废或不属于当前项目。");
@@ -483,47 +519,36 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             throw new InvalidOperationException("发票关联的合同清单项不存在或不属于当前项目/合同。");
         }
 
-        var invoice = new InvoiceEntry
-        {
-            ProjectId = request.ProjectId,
-            ContractId = request.ContractId,
-            LegalEntityId = request.LegalEntityId,
-            BusinessPartnerId = request.BusinessPartnerId,
-            Direction = request.Direction,
-            InvoiceNumber = invoiceNumber,
-            InvoiceDate = request.InvoiceDate,
-            ProjectTaxConfigurationId = taxConfiguration.Id,
-            InvoiceType = InvoiceTypeLabel(taxConfiguration.InvoiceType),
-            TaxRate = taxConfiguration.TaxRate,
-            NetAmount = request.NetAmount,
-            TaxAmount = request.TaxAmount,
-            GrossAmount = request.GrossAmount,
-            Status = request.Status
-        };
-        foreach (var allocation in request.ReceivableAllocations)
-        {
-            invoice.ReceivableLinks.Add(new InvoiceReceivableLink
-            {
-                Invoice = invoice,
-                ReceivableEntryId = allocation.TargetId,
-                AllocatedAmount = allocation.AllocatedAmount
-            });
-        }
-
-        foreach (var allocation in request.LineItemAllocations)
-        {
-            invoice.LineItemLinks.Add(new InvoiceLineItemLink
-            {
-                Invoice = invoice,
-                ContractLineItemId = allocation.TargetId,
-                AllocatedAmount = allocation.AllocatedAmount
-            });
-        }
-
-        db.InvoiceEntries.Add(invoice);
-        AddProjectAudit("CreateInvoice", nameof(InvoiceEntry), invoice.Id, invoice.ProjectId, $"登记发票 {invoice.InvoiceNumber}，金额 {invoice.GrossAmount:N2}", new { invoice.InvoiceDate, invoice.InvoiceNumber, invoice.Direction, invoice.TaxRate, invoice.NetAmount, invoice.TaxAmount, invoice.GrossAmount, invoice.Status });
+        var allocations = request.ReceivableAllocations
+            .Select((item, index) => new FinanceAllocationRequest(item.TargetId, item.AllocatedAmount, index + 1))
+            .ToArray();
+        var command = new CentralLedgerCommandService(db);
+        var invoiceId = await command.CreateInvoiceAsync(
+            CreateCompatibilityActor(request.LegalEntityId, request.ProjectId),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                ledgerDirection,
+                LedgerSourceType.CentralLedger,
+                null,
+                request.LegalEntityId,
+                request.BusinessPartnerId,
+                null,
+                invoiceNumber,
+                request.InvoiceDate,
+                request.GrossAmount,
+                request.NetAmount,
+                request.TaxAmount,
+                taxConfiguration.TaxRate,
+                null,
+                allocations,
+                AutoAllocate: allocations.Length == 0,
+                ProjectTaxConfigurationId: taxConfiguration.Id,
+                InvoiceType: InvoiceTypeLabel(taxConfiguration.InvoiceType),
+                Status: request.Status == InvoiceStatus.Voided ? LedgerRecordStatus.Voided : LedgerRecordStatus.Active),
+            cancellationToken);
+        AddProjectAudit("CreateInvoice", nameof(FinanceInvoice), invoiceId, request.ProjectId, $"登记发票 {invoiceNumber}，金额 {request.GrossAmount:N2}", new { request.InvoiceDate, InvoiceNumber = invoiceNumber, request.Direction, taxConfiguration.TaxRate, request.NetAmount, request.TaxAmount, request.GrossAmount, request.Status });
         await db.SaveChangesAsync(cancellationToken);
-        return invoice.Id;
+        return invoiceId;
     }
 
     public async Task UpdateReceivableAsync(FinanceRecordActor actor, UpdateReceivableRequest request, CancellationToken cancellationToken)
@@ -531,23 +556,23 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         EnsurePositive(request.Amount);
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var entry = await db.ReceivableEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+        var entry = await db.FinanceSettlements.SingleOrDefaultAsync(item => item.Id == request.Id && item.Direction == LedgerDirection.Receivable, cancellationToken)
             ?? throw new InvalidOperationException("应收记录不存在。");
         EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "应收记录");
-        var before = ReceivableSnapshot(entry);
+        var before = CentralSettlementSnapshot(entry);
         entry.ProjectId = request.ProjectId;
         entry.ContractId = request.ContractId;
         entry.LegalEntityId = request.LegalEntityId;
         entry.BusinessPartnerId = request.BusinessPartnerId;
-        entry.EntryDate = request.EntryDate;
-        entry.DueDate = request.DueDate;
-        entry.Amount = request.Amount;
-        entry.Description = NormalizeOptional(request.Description);
+        entry.BusinessDate = request.EntryDate;
+        entry.SettlementDate = request.EntryDate;
+        entry.OriginalAmount = request.Amount;
+        entry.OriginalInvoiceAmount = request.Amount;
+        entry.Notes = NormalizeOptional(request.Description);
+        entry.UpdatedAt = DateTimeOffset.UtcNow;
         entry.ConcurrencyStamp = Guid.NewGuid();
-        AddUpdateAudit(actor, "UpdateReceivable", nameof(ReceivableEntry), entry.Id, entry.ProjectId, reason, before, ReceivableSnapshot(entry));
+        AddUpdateAudit(actor, "UpdateReceivable", nameof(FinanceSettlement), entry.Id, request.ProjectId, reason, before, CentralSettlementSnapshot(entry));
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task UpdateCollectionAsync(FinanceRecordActor actor, UpdateCollectionRequest request, CancellationToken cancellationToken)
@@ -556,33 +581,47 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
         await ValidateAccountAsync(request.AccountId, request.LegalEntityId, cancellationToken);
-        if (request.ReceivableEntryId.HasValue && !await db.ReceivableEntries.AnyAsync(item => item.Id == request.ReceivableEntryId && item.ProjectId == request.ProjectId && !item.IsVoided, cancellationToken))
+        if (request.ReceivableEntryId.HasValue && !await db.FinanceSettlements.AnyAsync(item => item.Id == request.ReceivableEntryId && item.ProjectId == request.ProjectId && item.Direction == LedgerDirection.Receivable && item.Status == LedgerRecordStatus.Active, cancellationToken))
             throw new InvalidOperationException("应收记录不存在、已作废或不属于当前项目。");
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var entry = await db.CollectionEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+        var entry = await db.FinanceCashEntries.Include(item => item.Allocations)
+            .SingleOrDefaultAsync(item => item.Id == request.Id && item.CashType == LedgerCashType.Collection && !item.IsReversal, cancellationToken)
             ?? throw new InvalidOperationException("收款记录不存在。");
         EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "收款记录");
-        var before = CollectionSnapshot(entry);
-        entry.ReceivableEntryId = request.ReceivableEntryId;
-        entry.ProjectId = request.ProjectId;
-        entry.ContractId = request.ContractId;
+        var before = CentralCashSnapshot(entry);
         entry.LegalEntityId = request.LegalEntityId;
         entry.BusinessPartnerId = request.BusinessPartnerId;
         entry.AccountId = request.AccountId;
-        entry.CollectionDate = request.CollectionDate;
+        entry.BusinessDate = request.CollectionDate;
         entry.Amount = request.Amount;
-        entry.PaymentMethod = request.PaymentMethod;
+        entry.PaymentMethod = request.PaymentMethod.ToString();
         entry.Notes = NormalizeOptional(request.Notes);
+        entry.UpdatedAt = DateTimeOffset.UtcNow;
         entry.ConcurrencyStamp = Guid.NewGuid();
         var cash = await db.AccountTransactions.SingleOrDefaultAsync(item => item.SourceType == AccountTransactionSourceType.Collection && item.SourceId == entry.Id, cancellationToken)
             ?? throw new InvalidOperationException("收款对应的账户流水不存在。");
-        cash.AccountId = entry.AccountId;
-        cash.TransactionDate = entry.CollectionDate;
+        cash.AccountId = entry.AccountId!.Value;
+        cash.TransactionDate = entry.BusinessDate;
         cash.Amount = entry.Amount;
         cash.Description = entry.Notes;
-        AddUpdateAudit(actor, "UpdateCollection", nameof(CollectionEntry), entry.Id, entry.ProjectId, reason, before, CollectionSnapshot(entry));
+        db.FinanceCashAllocations.RemoveRange(entry.Allocations);
+        entry.Allocations.Clear();
+        if (request.ReceivableEntryId.HasValue)
+        {
+            var settlement = await db.FinanceSettlements.SingleAsync(item => item.Id == request.ReceivableEntryId, cancellationToken);
+            db.FinanceCashAllocations.Add(new FinanceCashAllocation
+            {
+                CashEntry = entry,
+                Settlement = settlement,
+                ProjectId = settlement.ProjectId,
+                ContractId = settlement.ContractId,
+                ContractLineItemId = settlement.ContractLineItemId,
+                BusinessPartnerId = settlement.BusinessPartnerId,
+                Amount = request.Amount,
+                AllocationOrder = 1
+            });
+        }
+        AddUpdateAudit(actor, "UpdateCollection", nameof(FinanceCashEntry), entry.Id, request.ProjectId, reason, before, CentralCashSnapshot(entry));
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task UpdateInvoiceAsync(FinanceRecordActor actor, UpdateInvoiceRequest request, CancellationToken cancellationToken)
@@ -593,20 +632,18 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, false, cancellationToken);
         var taxConfiguration = await GetTaxConfigurationAsync(request.ProjectId, request.ProjectTaxConfigurationId, cancellationToken);
         InvoiceAmountValidator.Validate(request.NetAmount, request.TaxAmount, request.GrossAmount, taxConfiguration.TaxRate);
-        if (await db.InvoiceEntries.AnyAsync(item => item.Id != request.Id && item.LegalEntityId == request.LegalEntityId && item.Direction == request.Direction && item.InvoiceNumber == invoiceNumber, cancellationToken))
+        var ledgerDirection = request.Direction == InvoiceDirection.Output ? LedgerDirection.Receivable : LedgerDirection.Payable;
+        if (await db.FinanceInvoices.AnyAsync(item => item.Id != request.Id && item.LegalEntityId == request.LegalEntityId && item.Direction == ledgerDirection && item.InvoiceNumber == invoiceNumber, cancellationToken))
             throw new InvalidOperationException($"发票号码已存在：{invoiceNumber}");
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var entry = await db.InvoiceEntries.Include(item => item.ReceivableLinks).Include(item => item.LineItemLinks)
+        var entry = await db.FinanceInvoices.Include(item => item.Allocations)
             .SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
             ?? throw new InvalidOperationException("发票记录不存在。");
         EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "发票记录");
-        var before = InvoiceSnapshot(entry);
-        var previousGross = entry.GrossAmount;
-        entry.ProjectId = request.ProjectId;
-        entry.ContractId = request.ContractId;
+        var before = CentralInvoiceSnapshot(entry);
+        var previousGross = entry.Amount;
         entry.LegalEntityId = request.LegalEntityId;
         entry.BusinessPartnerId = request.BusinessPartnerId;
-        entry.Direction = request.Direction;
+        entry.Direction = ledgerDirection;
         entry.InvoiceNumber = invoiceNumber;
         entry.InvoiceDate = request.InvoiceDate;
         entry.ProjectTaxConfigurationId = taxConfiguration.Id;
@@ -614,14 +651,13 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         entry.TaxRate = taxConfiguration.TaxRate;
         entry.NetAmount = request.NetAmount;
         entry.TaxAmount = request.TaxAmount;
-        entry.GrossAmount = request.GrossAmount;
-        entry.Status = request.Status;
+        entry.Amount = request.GrossAmount;
+        entry.Status = request.Status == InvoiceStatus.Voided ? LedgerRecordStatus.Voided : LedgerRecordStatus.Active;
+        entry.UpdatedAt = DateTimeOffset.UtcNow;
         entry.ConcurrencyStamp = Guid.NewGuid();
-        RescaleAllocations(entry.ReceivableLinks, previousGross, request.GrossAmount, link => link.AllocatedAmount, (link, amount) => link.AllocatedAmount = amount);
-        RescaleAllocations(entry.LineItemLinks, previousGross, request.GrossAmount, link => link.AllocatedAmount, (link, amount) => link.AllocatedAmount = amount);
-        AddUpdateAudit(actor, "UpdateInvoice", nameof(InvoiceEntry), entry.Id, entry.ProjectId, reason, before, InvoiceSnapshot(entry));
+        RescaleAllocations(entry.Allocations, previousGross, request.GrossAmount, link => link.Amount, (link, amount) => link.Amount = amount);
+        AddUpdateAudit(actor, "UpdateInvoice", nameof(FinanceInvoice), entry.Id, request.ProjectId, reason, before, CentralInvoiceSnapshot(entry));
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task UpdatePayableAsync(FinanceRecordActor actor, UpdatePayableRequest request, CancellationToken cancellationToken)
@@ -629,23 +665,23 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         EnsurePositive(request.Amount);
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, true, cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var entry = await db.PayableEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+        var entry = await db.FinanceSettlements.SingleOrDefaultAsync(item => item.Id == request.Id && item.Direction == LedgerDirection.Payable, cancellationToken)
             ?? throw new InvalidOperationException("应付记录不存在。");
         EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "应付记录");
-        var before = PayableSnapshot(entry);
+        var before = CentralSettlementSnapshot(entry);
         entry.ProjectId = request.ProjectId;
         entry.ContractId = request.ContractId;
         entry.LegalEntityId = request.LegalEntityId;
         entry.BusinessPartnerId = request.BusinessPartnerId;
-        entry.EntryDate = request.EntryDate;
-        entry.DueDate = request.DueDate;
-        entry.Amount = request.Amount;
-        entry.Description = NormalizeOptional(request.Description);
+        entry.BusinessDate = request.EntryDate;
+        entry.SettlementDate = request.EntryDate;
+        entry.OriginalAmount = request.Amount;
+        entry.OriginalInvoiceAmount = request.Amount;
+        entry.Notes = NormalizeOptional(request.Description);
+        entry.UpdatedAt = DateTimeOffset.UtcNow;
         entry.ConcurrencyStamp = Guid.NewGuid();
-        AddUpdateAudit(actor, "UpdatePayable", nameof(PayableEntry), entry.Id, entry.ProjectId, reason, before, PayableSnapshot(entry));
+        AddUpdateAudit(actor, "UpdatePayable", nameof(FinanceSettlement), entry.Id, request.ProjectId, reason, before, CentralSettlementSnapshot(entry));
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task UpdatePaymentAsync(FinanceRecordActor actor, UpdatePaymentRequest request, CancellationToken cancellationToken)
@@ -654,33 +690,47 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
         await ValidateDimensionsAsync(request.ProjectId, request.ContractId, request.LegalEntityId, request.BusinessPartnerId, true, cancellationToken);
         await ValidateAccountAsync(request.AccountId, request.LegalEntityId, cancellationToken);
-        if (request.PayableEntryId.HasValue && !await db.PayableEntries.AnyAsync(item => item.Id == request.PayableEntryId && item.ProjectId == request.ProjectId && !item.IsVoided, cancellationToken))
+        if (request.PayableEntryId.HasValue && !await db.FinanceSettlements.AnyAsync(item => item.Id == request.PayableEntryId && item.ProjectId == request.ProjectId && item.Direction == LedgerDirection.Payable && item.Status == LedgerRecordStatus.Active, cancellationToken))
             throw new InvalidOperationException("应付记录不存在、已作废或不属于当前项目。");
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var entry = await db.PaymentEntries.SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+        var entry = await db.FinanceCashEntries.Include(item => item.Allocations)
+            .SingleOrDefaultAsync(item => item.Id == request.Id && item.CashType == LedgerCashType.Payment && !item.IsReversal, cancellationToken)
             ?? throw new InvalidOperationException("付款记录不存在。");
         EnsureCurrent(entry.ConcurrencyStamp, request.ConcurrencyStamp, "付款记录");
-        var before = PaymentSnapshot(entry);
-        entry.PayableEntryId = request.PayableEntryId;
-        entry.ProjectId = request.ProjectId;
-        entry.ContractId = request.ContractId;
+        var before = CentralCashSnapshot(entry);
         entry.LegalEntityId = request.LegalEntityId;
         entry.BusinessPartnerId = request.BusinessPartnerId;
         entry.AccountId = request.AccountId;
-        entry.PaymentDate = request.PaymentDate;
+        entry.BusinessDate = request.PaymentDate;
         entry.Amount = request.Amount;
-        entry.PaymentMethod = request.PaymentMethod;
+        entry.PaymentMethod = request.PaymentMethod.ToString();
         entry.Notes = NormalizeOptional(request.Notes);
+        entry.UpdatedAt = DateTimeOffset.UtcNow;
         entry.ConcurrencyStamp = Guid.NewGuid();
         var cash = await db.AccountTransactions.SingleOrDefaultAsync(item => item.SourceType == AccountTransactionSourceType.Payment && item.SourceId == entry.Id, cancellationToken)
             ?? throw new InvalidOperationException("付款对应的账户流水不存在。");
-        cash.AccountId = entry.AccountId;
-        cash.TransactionDate = entry.PaymentDate;
+        cash.AccountId = entry.AccountId!.Value;
+        cash.TransactionDate = entry.BusinessDate;
         cash.Amount = entry.Amount;
         cash.Description = entry.Notes;
-        AddUpdateAudit(actor, "UpdatePayment", nameof(PaymentEntry), entry.Id, entry.ProjectId, reason, before, PaymentSnapshot(entry));
+        db.FinanceCashAllocations.RemoveRange(entry.Allocations);
+        entry.Allocations.Clear();
+        if (request.PayableEntryId.HasValue)
+        {
+            var settlement = await db.FinanceSettlements.SingleAsync(item => item.Id == request.PayableEntryId, cancellationToken);
+            db.FinanceCashAllocations.Add(new FinanceCashAllocation
+            {
+                CashEntry = entry,
+                Settlement = settlement,
+                ProjectId = settlement.ProjectId,
+                ContractId = settlement.ContractId,
+                ContractLineItemId = settlement.ContractLineItemId,
+                BusinessPartnerId = settlement.BusinessPartnerId,
+                Amount = request.Amount,
+                AllocationOrder = 1
+            });
+        }
+        AddUpdateAudit(actor, "UpdatePayment", nameof(FinanceCashEntry), entry.Id, request.ProjectId, reason, before, CentralCashSnapshot(entry));
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<FinanceProjectSummaryDto> GetProjectSummaryAsync(Guid projectId, CancellationToken cancellationToken)
@@ -692,97 +742,41 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         {
             throw new InvalidOperationException("项目不存在。");
         }
-
-        var receivables = db.ReceivableEntries.Where(item => item.ProjectId == filter.ProjectId && !item.IsVoided);
-        var collections = db.CollectionEntries.Where(item => item.ProjectId == filter.ProjectId);
-        var payables = db.PayableEntries.Where(item => item.ProjectId == filter.ProjectId && !item.IsVoided);
-        var payments = db.PaymentEntries.Where(item => item.ProjectId == filter.ProjectId);
-        var payrollCrewPayments = db.PayrollPayments.Where(item =>
-            item.RecipientType == EngineeringManager.Domain.Employees.PayrollRecipientType.CrewWorker &&
-            item.CrewBusinessPartnerId.HasValue &&
-            item.Batch.ProjectId == filter.ProjectId &&
-            item.Batch.Status != EngineeringManager.Domain.Employees.PayrollBatchStatus.Voided);
-        var deductions = db.DeductionEntries.Where(item => item.ProjectId == filter.ProjectId);
-        var invoices = db.InvoiceEntries.Where(item => item.ProjectId == filter.ProjectId && item.Status != InvoiceStatus.Voided);
-        var refunds = db.RefundOrReversalEntries.AsQueryable();
-        var reversals = db.PaymentReversalEntries.AsQueryable();
-        if (filter.CutoffDate.HasValue)
-        {
-            receivables = receivables.Where(item => item.EntryDate <= filter.CutoffDate);
-            collections = collections.Where(item => item.CollectionDate <= filter.CutoffDate);
-            payables = payables.Where(item => item.EntryDate <= filter.CutoffDate);
-            payments = payments.Where(item => item.PaymentDate <= filter.CutoffDate);
-            payrollCrewPayments = payrollCrewPayments.Where(item => (item.Batch.PaymentDate ?? item.PaymentDate) <= filter.CutoffDate);
-            deductions = deductions.Where(item => item.EntryDate <= filter.CutoffDate);
-            invoices = invoices.Where(item => item.InvoiceDate <= filter.CutoffDate);
-            refunds = refunds.Where(item => item.EntryDate <= filter.CutoffDate);
-            reversals = reversals.Where(item => item.EntryDate <= filter.CutoffDate);
-        }
-        if (filter.ContractId.HasValue)
-        {
-            receivables = receivables.Where(item => item.ContractId == filter.ContractId);
-            collections = collections.Where(item => item.ContractId == filter.ContractId);
-            payables = payables.Where(item => item.ContractId == filter.ContractId);
-            payments = payments.Where(item => item.ContractId == filter.ContractId);
-            payrollCrewPayments = payrollCrewPayments.Where(item => item.Batch.CrewAllocations.Any(allocation =>
-                allocation.CrewBusinessPartnerId == item.CrewBusinessPartnerId && allocation.ContractId == filter.ContractId));
-            deductions = deductions.Where(item => item.Payable.ContractId == filter.ContractId);
-            invoices = invoices.Where(item => item.ContractId == filter.ContractId);
-        }
-
-        if (filter.LegalEntityId.HasValue)
-        {
-            receivables = receivables.Where(item => item.LegalEntityId == filter.LegalEntityId);
-            collections = collections.Where(item => item.LegalEntityId == filter.LegalEntityId);
-            payables = payables.Where(item => item.LegalEntityId == filter.LegalEntityId);
-            payments = payments.Where(item => item.LegalEntityId == filter.LegalEntityId);
-            payrollCrewPayments = payrollCrewPayments.Where(item => item.Batch.LegalEntityId == filter.LegalEntityId);
-            deductions = deductions.Where(item => item.LegalEntityId == filter.LegalEntityId);
-            invoices = invoices.Where(item => item.LegalEntityId == filter.LegalEntityId);
-        }
-
-        if (filter.BusinessPartnerId.HasValue)
-        {
-            receivables = receivables.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
-            collections = collections.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
-            payables = payables.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
-            payments = payments.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
-            payrollCrewPayments = payrollCrewPayments.Where(item => item.CrewBusinessPartnerId == filter.BusinessPartnerId);
-            deductions = deductions.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
-            invoices = invoices.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
-        }
-
-        var receivableIds = receivables.Select(item => item.Id);
-        var collectionIds = collections.Select(item => item.Id);
-        var paymentIds = payments.Select(item => item.Id);
-        var receivableAmount = await receivables.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        var collectionAmount = await collections.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        var refundAmount = await refunds.Where(item =>
-                (item.ReceivableEntryId.HasValue && receivableIds.Contains(item.ReceivableEntryId.Value)) ||
-                (item.CollectionEntryId.HasValue && collectionIds.Contains(item.CollectionEntryId.Value)))
-            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        var payableAmount = await payables.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        var paymentAmount = await payments.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        paymentAmount += await payrollCrewPayments.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        var reversalAmount = await reversals.Where(item => paymentIds.Contains(item.PaymentEntryId)).SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        var deductionAmount = await deductions.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-        var outputInvoiceAmount = await invoices.Where(item => item.Direction == InvoiceDirection.Output).SumAsync(item => (decimal?)item.GrossAmount, cancellationToken) ?? 0m;
-        var inputInvoiceAmount = await invoices.Where(item => item.Direction == InvoiceDirection.Input).SumAsync(item => (decimal?)item.GrossAmount, cancellationToken) ?? 0m;
-        var ledger = LedgerCalculator.Calculate(receivableAmount, collectionAmount, refundAmount, payableAmount, paymentAmount, reversalAmount, deductionAmount);
+        var legalEntityIds = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).Select(item => item.Id).ToHashSetAsync(cancellationToken);
+        var actor = new CentralLedgerActor(
+            "finance-compatibility-adapter",
+            "财务兼容适配器",
+            legalEntityIds,
+            new HashSet<Guid> { filter.ProjectId },
+            true,
+            false,
+            false,
+            false);
+        var queryService = new CentralLedgerQueryService(db);
+        var common = new CentralLedgerQuery(
+            LedgerScope.External,
+            EndDate: filter.CutoffDate,
+            LegalEntityId: filter.LegalEntityId,
+            BusinessPartnerId: filter.BusinessPartnerId,
+            ProjectId: filter.ProjectId,
+            ContractId: filter.ContractId,
+            PageSize: 1);
+        var receivable = await queryService.SearchAsync(actor, common with { Direction = LedgerDirection.Receivable }, cancellationToken);
+        var payable = await queryService.SearchAsync(actor, common with { Direction = LedgerDirection.Payable }, cancellationToken);
         return new FinanceProjectSummaryDto(
             filter.ProjectId,
-            ledger.ReceivableAmount,
-            ledger.CollectedAmount,
-            ledger.UncollectedAmount,
-            ledger.PayableAmount,
-            ledger.PaidAmount,
-            ledger.DeductionAmount,
-            ledger.UnpaidAmount,
-            outputInvoiceAmount,
-            ledger.ReceivableAmount - outputInvoiceAmount,
-            inputInvoiceAmount,
-            ledger.HasCollectionRisk,
-            ledger.HasPaymentRisk);
+            receivable.Totals.GrossSettlementAmount,
+            receivable.Totals.CashAmount,
+            receivable.Totals.UncollectedOrUnpaid,
+            payable.Totals.GrossSettlementAmount,
+            payable.Totals.CashAmount,
+            payable.Totals.Deductions,
+            payable.Totals.UncollectedOrUnpaid,
+            receivable.Totals.InvoicedAmount,
+            receivable.Totals.Uninvoiced,
+            payable.Totals.InvoicedAmount,
+            receivable.Totals.OverSettlementCash > 0m,
+            payable.Totals.OverSettlementCash > 0m);
     }
 
     private static void ValidateAllocations(IReadOnlyList<InvoiceAllocationRequest> allocations, decimal grossAmount)
@@ -843,6 +837,26 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         item.InvoiceDate, item.ProjectTaxConfigurationId, item.InvoiceType, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status, item.ConcurrencyStamp,
         ReceivableAllocations = item.ReceivableLinks.Select(link => new { link.ReceivableEntryId, link.AllocatedAmount }).ToArray(),
         LineItemAllocations = item.LineItemLinks.Select(link => new { link.ContractLineItemId, link.AllocatedAmount }).ToArray()
+    };
+    private static object CentralSettlementSnapshot(FinanceSettlement item) => new
+    {
+        item.ProjectId, item.ContractId, item.ContractLineItemId, item.LegalEntityId, item.BusinessPartnerId,
+        item.Direction, item.SettlementState, item.BusinessDate, item.SettlementDate, item.OriginalAmount,
+        item.OriginalInvoiceAmount, item.Notes, item.Status, item.ConcurrencyStamp
+    };
+    private static object CentralCashSnapshot(FinanceCashEntry item) => new
+    {
+        item.LegalEntityId, item.BusinessPartnerId, item.CounterLegalEntityId, item.AccountId, item.CounterAccountId,
+        item.Direction, item.CashType, item.BusinessDate, item.Amount, item.PaymentMethod, item.Notes, item.Status,
+        item.IsReversal, item.ReversesCashEntryId, item.ConcurrencyStamp,
+        Allocations = item.Allocations.Select(link => new { link.SettlementId, link.ProjectId, link.ContractId, link.Amount, link.AllocationOrder }).ToArray()
+    };
+    private static object CentralInvoiceSnapshot(FinanceInvoice item) => new
+    {
+        item.LegalEntityId, item.BusinessPartnerId, item.CounterLegalEntityId, item.Direction, item.InvoiceNumber,
+        item.InvoiceDate, item.ProjectTaxConfigurationId, item.InvoiceType, item.TaxRate, item.NetAmount, item.TaxAmount,
+        item.Amount, item.Status, item.ConcurrencyStamp,
+        Allocations = item.Allocations.Select(link => new { link.SettlementId, link.ProjectId, link.ContractId, link.Amount, link.AllocationOrder }).ToArray()
     };
 
     private static void EnsureCurrent(Guid actual, Guid expected, string label)
@@ -954,6 +968,16 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             throw new ArgumentOutOfRangeException(nameof(amount), "金额必须大于零。");
         }
     }
+
+    private static CentralLedgerActor CreateCompatibilityActor(Guid legalEntityId, Guid projectId) => new(
+        "finance-compatibility-adapter",
+        "财务兼容适配器",
+        new HashSet<Guid> { legalEntityId },
+        new HashSet<Guid> { projectId },
+        true,
+        false,
+        false,
+        false);
 
     private static string NormalizeRequired(string value, string parameterName)
     {

@@ -88,6 +88,13 @@ public sealed class Program
         builder.Services.AddScoped<IBusinessPartnerService, BusinessPartnerService>();
         builder.Services.AddScoped<IStageResultService, StageResultService>();
         builder.Services.AddScoped<IFinanceLedgerService, FinanceLedgerService>();
+        builder.Services.AddScoped<CentralLedgerAllocationService>();
+        builder.Services.AddScoped<ICentralLedgerCommandService, CentralLedgerCommandService>();
+        builder.Services.AddScoped<ICentralLedgerQueryService, CentralLedgerQueryService>();
+        builder.Services.AddScoped<IFinancePostingService, FinancePostingService>();
+        builder.Services.AddScoped<IFinanceBusinessYearService, FinanceBusinessYearService>();
+        builder.Services.AddScoped<IFinanceReconciliationService, FinanceReconciliationService>();
+        builder.Services.AddScoped<LegacyFinanceMigrationService>();
         builder.Services.AddScoped<IEmployeeService, EmployeeService>();
         builder.Services.AddScoped<IEmployeeCertificateService, EmployeeCertificateService>();
         builder.Services.AddScoped<ICompanyCertificateService, CompanyCertificateService>();
@@ -100,6 +107,7 @@ public sealed class Program
             TimeProvider.System));
         builder.Services.AddScoped<IExportService, ExportService>();
         builder.Services.AddScoped<IImportService, ImportService>();
+        builder.Services.AddScoped<IProjectWorkbookService, ProjectWorkbookService>();
         builder.Services.AddSingleton<IDatabaseBackupExecutor>(_ => new SqlServerBackupExecutor(connectionString));
         builder.Services.AddScoped<IBackupService>(services => new BackupService(
             services.GetRequiredService<ApplicationDbContext>(),
@@ -129,6 +137,20 @@ public sealed class Program
         Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data", "attachments"));
         Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data", "backups"));
         Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data", "logs"));
+
+        if (args.Contains("--migrate-central-ledger", StringComparer.OrdinalIgnoreCase))
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var reportPath = app.Configuration["CentralLedgerMigration:PreflightReportPath"]
+                ?? Path.Combine(app.Environment.ContentRootPath, "..", "..", "artifacts", "central-ledger-migration", "preflight-conflicts.json");
+            var result = await scope.ServiceProvider.GetRequiredService<LegacyFinanceMigrationService>()
+                .MigrateAsync(new LegacyFinanceMigrationOptions(reportPath), CancellationToken.None);
+            Console.WriteLine($"CENTRAL_LEDGER_MIGRATION_CAN_APPLY={result.CanApply}");
+            Console.WriteLine($"CENTRAL_LEDGER_MIGRATION_ISSUES={result.Exceptions.Count}");
+            Console.WriteLine($"CENTRAL_LEDGER_MIGRATION_CONFLICTS={result.QuantityConflicts.Count}");
+            Environment.ExitCode = result.CanApply ? 0 : 2;
+            return;
+        }
 
         if (app.Configuration.GetValue<bool>("Identity:SeedRoles"))
         {

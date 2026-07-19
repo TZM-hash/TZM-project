@@ -1,9 +1,30 @@
 using EngineeringManager.Domain.DataExchange;
+using EngineeringManager.Application.DataExchange;
 
 namespace EngineeringManager.Web.Pages.DataExchange;
 
 public static class DataExchangeLabels
 {
+    public static string ProjectSheet(ProjectWorkbookSheet value) => value switch
+    {
+        ProjectWorkbookSheet.ProjectMaster => "项目主档",
+        ProjectWorkbookSheet.ProjectSummary => "项目经营汇总",
+        ProjectWorkbookSheet.Contracts => "合同",
+        ProjectWorkbookSheet.QuantityLines => "工程量",
+        ProjectWorkbookSheet.Milestones => "里程碑",
+        ProjectWorkbookSheet.Assignments => "项目人员",
+        ProjectWorkbookSheet.Partners => "项目合作单位",
+        ProjectWorkbookSheet.Construction => "施工详情",
+        ProjectWorkbookSheet.StageResults => "阶段成果",
+        ProjectWorkbookSheet.Receivables => "应收",
+        ProjectWorkbookSheet.Collections => "收款",
+        ProjectWorkbookSheet.Payables => "应付",
+        ProjectWorkbookSheet.Payments => "付款",
+        ProjectWorkbookSheet.Invoices => "发票",
+        ProjectWorkbookSheet.Attachments => "附件清单",
+        _ => value.ToString()
+    };
+
     public static string Dataset(ExportDataset value) => value switch
     {
         ExportDataset.ProjectOverview => "项目经营汇总",

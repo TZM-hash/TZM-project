@@ -76,6 +76,18 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<InvoiceLineItemLink> InvoiceLineItemLinks => Set<InvoiceLineItemLink>();
     public DbSet<AccountTransaction> AccountTransactions => Set<AccountTransaction>();
     public DbSet<AccountTransfer> AccountTransfers => Set<AccountTransfer>();
+    public DbSet<FinanceSettlement> FinanceSettlements => Set<FinanceSettlement>();
+    public DbSet<FinanceSettlementAdjustment> FinanceSettlementAdjustments => Set<FinanceSettlementAdjustment>();
+    public DbSet<FinanceDeduction> FinanceDeductions => Set<FinanceDeduction>();
+    public DbSet<FinanceInvoice> FinanceInvoices => Set<FinanceInvoice>();
+    public DbSet<FinanceInvoiceAllocation> FinanceInvoiceAllocations => Set<FinanceInvoiceAllocation>();
+    public DbSet<FinanceCashEntry> FinanceCashEntries => Set<FinanceCashEntry>();
+    public DbSet<FinanceCashAllocation> FinanceCashAllocations => Set<FinanceCashAllocation>();
+    public DbSet<FinanceBusinessYear> FinanceBusinessYears => Set<FinanceBusinessYear>();
+    public DbSet<FinanceReconciliation> FinanceReconciliations => Set<FinanceReconciliation>();
+    public DbSet<FinanceReconciliationLine> FinanceReconciliationLines => Set<FinanceReconciliationLine>();
+    public DbSet<FinanceDeletionLog> FinanceDeletionLogs => Set<FinanceDeletionLog>();
+    public DbSet<FinanceLegacyMap> FinanceLegacyMaps => Set<FinanceLegacyMap>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<PersonnelMigrationMap> PersonnelMigrationMaps => Set<PersonnelMigrationMap>();
     public DbSet<BusinessYear> BusinessYears => Set<BusinessYear>();
@@ -802,6 +814,195 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         ConfigurePayables(builder);
         ConfigureInvoices(builder);
         ConfigureAccountTransactions(builder);
+        ConfigureCentralLedgerModel(builder);
+    }
+
+    private static void ConfigureCentralLedgerModel(ModelBuilder builder)
+    {
+        const string partyConstraint = "([Scope] = 1 AND [BusinessPartnerId] IS NOT NULL AND [CounterLegalEntityId] IS NULL) OR ([Scope] = 2 AND [BusinessPartnerId] IS NULL AND [CounterLegalEntityId] IS NOT NULL AND [LegalEntityId] <> [CounterLegalEntityId])";
+
+        builder.Entity<FinanceSettlement>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.SourceUrl).HasMaxLength(1000);
+            entity.Property(item => item.BusinessDate).HasColumnType("date");
+            entity.Property(item => item.SettlementDate).HasColumnType("date");
+            entity.Property(item => item.OriginalAmount).HasPrecision(18, 2);
+            entity.Property(item => item.OriginalInvoiceAmount).HasPrecision(18, 2);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.CreatedByUserId).HasMaxLength(450);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.Scope, item.Direction, item.LegalEntityId, item.BusinessDate });
+            entity.HasIndex(item => new { item.BusinessPartnerId, item.BusinessDate });
+            entity.HasIndex(item => new { item.ProjectId, item.BusinessDate });
+            entity.HasIndex(item => new { item.SourceType, item.SourceId })
+                .IsUnique()
+                .HasFilter("[SourceId] IS NOT NULL");
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.BusinessPartner).WithMany().HasForeignKey(item => item.BusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CounterLegalEntity).WithMany().HasForeignKey(item => item.CounterLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Contract).WithMany().HasForeignKey(item => item.ContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ContractLineItem).WithMany().HasForeignKey(item => item.ContractLineItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint("CK_FinanceSettlements_Party", partyConstraint));
+        });
+
+        builder.Entity<FinanceSettlementAdjustment>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.AmountDelta).HasPrecision(18, 2);
+            entity.Property(item => item.InvoiceAmountDelta).HasPrecision(18, 2);
+            entity.Property(item => item.BusinessDate).HasColumnType("date");
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.ActorUserId).HasMaxLength(450);
+            entity.Property(item => item.ActorUserName).HasMaxLength(200);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.SettlementId, item.BusinessDate });
+            entity.HasOne(item => item.Settlement).WithMany(item => item.Adjustments).HasForeignKey(item => item.SettlementId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<FinanceDeduction>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.BusinessDate).HasColumnType("date");
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.CreatedByUserId).HasMaxLength(450);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.SettlementId, item.BusinessDate });
+            entity.HasOne(item => item.Settlement).WithMany(item => item.Deductions).HasForeignKey(item => item.SettlementId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<FinanceInvoice>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.InvoiceNumber).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.InvoiceDate).HasColumnType("date");
+            entity.Property(item => item.InvoiceType).HasMaxLength(100);
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.NetAmount).HasPrecision(18, 2);
+            entity.Property(item => item.TaxAmount).HasPrecision(18, 2);
+            entity.Property(item => item.TaxRate).HasPrecision(9, 4);
+            entity.Property(item => item.SourceUrl).HasMaxLength(1000);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.CreatedByUserId).HasMaxLength(450);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.LegalEntityId, item.InvoiceNumber, item.InvoiceDate });
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.BusinessPartner).WithMany().HasForeignKey(item => item.BusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CounterLegalEntity).WithMany().HasForeignKey(item => item.CounterLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ProjectTaxConfiguration).WithMany().HasForeignKey(item => item.ProjectTaxConfigurationId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint("CK_FinanceInvoices_Party", partyConstraint));
+        });
+
+        builder.Entity<FinanceInvoiceAllocation>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.InvoiceId, item.AllocationOrder }).IsUnique();
+            entity.HasIndex(item => item.SettlementId);
+            entity.HasOne(item => item.Invoice).WithMany(item => item.Allocations).HasForeignKey(item => item.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Settlement).WithMany(item => item.InvoiceAllocations).HasForeignKey(item => item.SettlementId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Contract).WithMany().HasForeignKey(item => item.ContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ContractLineItem).WithMany().HasForeignKey(item => item.ContractLineItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<FinanceCashEntry>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.BusinessDate).HasColumnType("date");
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.PaymentMethod).HasMaxLength(100);
+            entity.Property(item => item.SourceUrl).HasMaxLength(1000);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.CreatedByUserId).HasMaxLength(450);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.LegalEntityId, item.BusinessDate });
+            entity.HasIndex(item => item.ReversesCashEntryId);
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.BusinessPartner).WithMany().HasForeignKey(item => item.BusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CounterLegalEntity).WithMany().HasForeignKey(item => item.CounterLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Account).WithMany().HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CounterAccount).WithMany().HasForeignKey(item => item.CounterAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ReversesCashEntry).WithMany().HasForeignKey(item => item.ReversesCashEntryId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint("CK_FinanceCashEntries_Party", partyConstraint));
+        });
+
+        builder.Entity<FinanceCashAllocation>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.CashEntryId, item.AllocationOrder }).IsUnique();
+            entity.HasIndex(item => item.SettlementId);
+            entity.HasOne(item => item.CashEntry).WithMany(item => item.Allocations).HasForeignKey(item => item.CashEntryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Settlement).WithMany(item => item.CashAllocations).HasForeignKey(item => item.SettlementId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Contract).WithMany().HasForeignKey(item => item.ContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ContractLineItem).WithMany().HasForeignKey(item => item.ContractLineItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<FinanceBusinessYear>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.StartDate).HasColumnType("date");
+            entity.Property(item => item.EndDate).HasColumnType("date");
+            entity.Property(item => item.CreatedByUserId).HasMaxLength(450);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.StartDate, item.EndDate });
+            entity.ToTable(table => table.HasCheckConstraint("CK_FinanceBusinessYears_DateRange", "[StartDate] <= [EndDate]"));
+        });
+
+        builder.Entity<FinanceReconciliation>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.StartDate).HasColumnType("date");
+            entity.Property(item => item.AsOfDate).HasColumnType("date");
+            entity.Property(item => item.QueryJson).IsRequired();
+            entity.Property(item => item.MetricsJson).IsRequired();
+            entity.Property(item => item.CreatedByUserId).HasMaxLength(450);
+            entity.Property(item => item.CreatedByUserName).HasMaxLength(200);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.Scope, item.AsOfDate, item.Version });
+            entity.HasOne(item => item.FinanceBusinessYear).WithMany(item => item.Reconciliations).HasForeignKey(item => item.FinanceBusinessYearId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.BusinessPartner).WithMany().HasForeignKey(item => item.BusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<FinanceReconciliationLine>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.SnapshotJson).IsRequired();
+            entity.Property(item => item.MetricsJson).IsRequired();
+            entity.HasIndex(item => new { item.ReconciliationId, item.SettlementId });
+            entity.HasOne(item => item.Reconciliation).WithMany(item => item.Lines).HasForeignKey(item => item.ReconciliationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<FinanceDeletionLog>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DeletedByUserId).HasMaxLength(450);
+            entity.Property(item => item.DeletedByUserName).HasMaxLength(200);
+            entity.Property(item => item.EntryPoint).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.SnapshotJson).IsRequired();
+            entity.Property(item => item.BeforeMetricsJson).IsRequired();
+            entity.Property(item => item.AfterMetricsJson).IsRequired();
+            entity.HasIndex(item => new { item.RecordType, item.RecordId });
+            entity.HasIndex(item => item.DeletedAt);
+        });
+
+        builder.Entity<FinanceLegacyMap>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.LegacyEntityType).HasMaxLength(150).IsRequired();
+            entity.Property(item => item.LegacyId).HasMaxLength(100).IsRequired();
+            entity.HasIndex(item => new { item.LegacyEntityType, item.LegacyId }).IsUnique();
+            entity.HasIndex(item => new { item.CentralRecordType, item.CentralRecordId });
+        });
     }
 
     private static void ConfigureFinancialAccount(ModelBuilder builder)

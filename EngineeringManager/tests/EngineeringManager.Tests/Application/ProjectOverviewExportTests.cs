@@ -121,11 +121,12 @@ public sealed class ProjectOverviewExportTests
             var financeService = new FinanceLedgerService(db);
             var fixture = new ExportFixture(connection, db, new ExportService(db, financeService));
             var legalEntity = new LegalEntity { Code = "EXPORT-LE", Name = "导出测试公司", ShortName = "导出公司" };
+            var partner = new BusinessPartner { PartnerNumber = "EXPORT-BP", Name = "导出测试客户", ShortName = "导出客户" };
             fixture.Project = new Project { ProjectNumber = "EXPORT-P", Name = "导出测试项目", Stage = ProjectStage.UnderConstruction };
             fixture.Project.LegalEntities.Add(new ProjectLegalEntity { Project = fixture.Project, LegalEntity = legalEntity, IsPrimary = true });
-            db.AddRange(legalEntity, fixture.Project);
+            db.AddRange(legalEntity, partner, fixture.Project);
             await db.SaveChangesAsync();
-            await financeService.AddReceivableAsync(new CreateReceivableRequest(fixture.Project.Id, null, legalEntity.Id, null, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, null), CancellationToken.None);
+            await financeService.AddReceivableAsync(new CreateReceivableRequest(fixture.Project.Id, null, legalEntity.Id, partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, null), CancellationToken.None);
             return fixture;
         }
 

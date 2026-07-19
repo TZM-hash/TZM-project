@@ -58,6 +58,39 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task ProjectInvoiceDetailsOnlyIncludeOutputInvoices()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var payable = await fixture.Db.FinanceSettlements.SingleAsync(item => item.Direction == LedgerDirection.Payable);
+        var inputInvoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Payable,
+            LegalEntityId = payable.LegalEntityId,
+            BusinessPartnerId = payable.BusinessPartnerId,
+            InvoiceNumber = "INV-WORK-INPUT-01",
+            InvoiceDate = new DateOnly(2026, 7, 8),
+            Amount = 20m
+        };
+        inputInvoice.Allocations.Add(new FinanceInvoiceAllocation
+        {
+            Invoice = inputInvoice,
+            Settlement = payable,
+            ProjectId = fixture.Project.Id,
+            ContractId = payable.ContractId,
+            Amount = 20m,
+            AllocationOrder = 1
+        });
+        fixture.Db.FinanceInvoices.Add(inputInvoice);
+        await fixture.Db.SaveChangesAsync();
+
+        var workspace = await fixture.Service.GetAsync(fixture.Project.Id, CancellationToken.None);
+
+        workspace!.Invoices.Should().ContainSingle();
+        workspace.Invoices.Single().Direction.Should().Be(InvoiceDirection.Output);
+    }
+
+    [Fact]
     public async Task WorkspaceOnlyIncludesEquipmentMarkedForProjectOverview()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
@@ -328,8 +361,41 @@ public sealed class ProjectWorkspaceServiceTests
             Project.Contracts.Add(contract);
             Project.LegalEntities.Add(new ProjectLegalEntity { Project = Project, LegalEntity = LegalEntity, IsPrimary = true });
             var account = new FinancialAccount { LegalEntity = LegalEntity, AccountName = "工作台测试账户", AccountType = FinancialAccountType.Bank };
-            var receivable = new ReceivableEntry { Project = Project, Contract = contract, LegalEntity = LegalEntity, BusinessPartner = partner, EntryDate = new DateOnly(2026, 7, 1), Amount = 100m, Description = "进度应收" };
-            var payable = new PayableEntry { Project = Project, Contract = contract, LegalEntity = LegalEntity, BusinessPartner = partner, EntryDate = new DateOnly(2026, 7, 2), Amount = 80m, Description = "班组应付" };
+            var receivable = new FinanceSettlement
+            {
+                Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
+                SourceType = LedgerSourceType.CentralLedger, Project = Project, Contract = contract, LegalEntity = LegalEntity,
+                BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 100m,
+                OriginalInvoiceAmount = 100m, Notes = "进度应收"
+            };
+            var payable = new FinanceSettlement
+            {
+                Scope = LedgerScope.External, Direction = LedgerDirection.Payable, SettlementState = LedgerSettlementState.Final,
+                SourceType = LedgerSourceType.CentralLedger, Project = Project, Contract = contract, LegalEntity = LegalEntity,
+                BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 2), OriginalAmount = 80m,
+                OriginalInvoiceAmount = 80m, Notes = "班组应付"
+            };
+            var collection = new FinanceCashEntry
+            {
+                Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection,
+                LegalEntity = LegalEntity, BusinessPartner = partner, Account = account, BusinessDate = new DateOnly(2026, 7, 5),
+                Amount = 40m, Notes = "首笔到账"
+            };
+            collection.Allocations.Add(new FinanceCashAllocation { CashEntry = collection, Settlement = receivable, Project = Project, Contract = contract, Amount = 40m, AllocationOrder = 1 });
+            var invoice = new FinanceInvoice
+            {
+                Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, LegalEntity = LegalEntity,
+                BusinessPartner = partner, InvoiceNumber = "INV-WORK-01", InvoiceDate = new DateOnly(2026, 7, 6),
+                NetAmount = 28.30m, TaxAmount = 1.70m, Amount = 30m
+            };
+            invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = receivable, Project = Project, Contract = contract, Amount = 30m, AllocationOrder = 1 });
+            var payment = new FinanceCashEntry
+            {
+                Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment,
+                LegalEntity = LegalEntity, BusinessPartner = partner, Account = account, BusinessDate = new DateOnly(2026, 7, 7),
+                Amount = 25m, Notes = "首笔付款"
+            };
+            payment.Allocations.Add(new FinanceCashAllocation { CashEntry = payment, Settlement = payable, Project = Project, Contract = contract, Amount = 25m, AllocationOrder = 1 });
             Db.AddRange(
                 LegalEntity,
                 SecondLegalEntity,
@@ -338,9 +404,9 @@ public sealed class ProjectWorkspaceServiceTests
                 account,
                 receivable,
                 payable,
-                new CollectionEntry { Receivable = receivable, Project = Project, Contract = contract, LegalEntity = LegalEntity, BusinessPartner = partner, Account = account, CollectionDate = new DateOnly(2026, 7, 5), Amount = 40m, Notes = "首笔到账" },
-                new InvoiceEntry { Project = Project, Contract = contract, LegalEntity = LegalEntity, BusinessPartner = partner, Direction = InvoiceDirection.Output, InvoiceNumber = "INV-WORK-01", InvoiceDate = new DateOnly(2026, 7, 6), NetAmount = 28.30m, TaxAmount = 1.70m, GrossAmount = 30m, Status = InvoiceStatus.IssuedOrReceived },
-                new PaymentEntry { Payable = payable, Project = Project, Contract = contract, LegalEntity = LegalEntity, BusinessPartner = partner, Account = account, PaymentDate = new DateOnly(2026, 7, 7), Amount = 25m, Notes = "首笔付款" });
+                collection,
+                invoice,
+                payment);
             await Db.SaveChangesAsync();
         }
 

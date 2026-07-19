@@ -1,7 +1,9 @@
+using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Finance;
 using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -158,6 +160,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         };
         db.ContractLineItems.Add(lineItem);
         await db.SaveChangesAsync(cancellationToken);
+        await PostLineItemIfConfiguredAsync(lineItem.Id, cancellationToken);
         return ToLineItemDto(lineItem);
     }
 
@@ -207,6 +210,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             AfterJson = JsonSerializer.Serialize(LineItemSnapshot(lineItem))
         });
         await db.SaveChangesAsync(cancellationToken);
+        await PostLineItemIfConfiguredAsync(lineItem.Id, cancellationToken);
         return ToLineItemDto(lineItem);
     }
 
@@ -245,7 +249,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             .Include(project => project.Branch)
             .Include(project => project.LegalEntities)
                 .ThenInclude(link => link.LegalEntity)
-            .Where(project => project.IsActive);
+            .Where(project => query.IncludeInactive || project.IsActive);
         if (!actor.CanAccessAllProjects)
         {
             projectQuery = projectQuery.Where(project => project.ResponsibleUserId == actor.UserId || project.Assignments.Any(assignment => assignment.UserId == actor.UserId));
@@ -475,6 +479,37 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         item.Notes,
         item.ConcurrencyStamp
     };
+
+    private async Task PostLineItemIfConfiguredAsync(Guid lineItemId, CancellationToken token)
+    {
+        var lineItem = await db.ContractLineItems.AsNoTracking()
+            .Include(item => item.Contract).ThenInclude(item => item.LegalEntityAllocations)
+            .Include(item => item.Contract).ThenInclude(item => item.Project).ThenInclude(item => item.LegalEntities)
+            .SingleAsync(item => item.Id == lineItemId, token);
+        var legalEntityId = lineItem.Contract.LegalEntityAllocations
+            .OrderByDescending(item => item.Amount ?? 0m)
+            .ThenByDescending(item => item.Percentage ?? 0m)
+            .Select(item => (Guid?)item.LegalEntityId)
+            .FirstOrDefault()
+            ?? lineItem.Contract.Project.LegalEntities.OrderByDescending(item => item.IsPrimary)
+                .Select(item => (Guid?)item.LegalEntityId)
+                .FirstOrDefault();
+        if (!legalEntityId.HasValue || !lineItem.Contract.BusinessPartnerId.HasValue)
+        {
+            return;
+        }
+
+        var actor = new CentralLedgerActor(
+            "project-service",
+            "项目管理",
+            new HashSet<Guid> { legalEntityId.Value },
+            new HashSet<Guid> { lineItem.Contract.ProjectId },
+            true,
+            false,
+            false,
+            false);
+        await new FinancePostingService(db).UpsertProjectQuantityReceivableAsync(actor, lineItemId, token);
+    }
 
     private static string NormalizeRequired(string value, string parameterName)
     {

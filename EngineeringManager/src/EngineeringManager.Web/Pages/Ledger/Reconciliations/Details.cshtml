@@ -1,0 +1,8 @@
+@page
+@model EngineeringManager.Web.Pages.Ledger.Reconciliations.DetailsModel
+@{
+    ViewData["Title"] = "对账快照差异";
+}
+<section class="page-heading"><div><h1>对账快照差异</h1><p class="page-lead">快照 V@Model.Details.Reconciliation.Version · 截止 @Model.Details.Reconciliation.AsOfDate。历史未锁定，以下显示快照值、当前值和差异。</p></div></section>
+<section class="ledger-metrics"><article><span>快照值</span><strong>@Model.Details.Reconciliation.SnapshotMetrics.ActualAmount.ToString("N2")</strong></article><article><span>当前值</span><strong>@Model.Details.CurrentMetrics.ActualAmount.ToString("N2")</strong></article><article><span>差异</span><strong>@Model.Details.Difference.ActualAmount.ToString("N2")</strong></article></section>
+<section class="panel data-work-surface"><div class="panel-heading"><div><h2>逐笔差异</h2></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>结算ID</th><th>快照值</th><th>当前值</th><th>差异</th><th>状态</th></tr></thead><tbody>@foreach (var line in Model.Details.Lines) { <tr><td><code>@line.SettlementId</code></td><td>@line.SnapshotMetrics.ActualAmount.ToString("N2")</td><td>@line.CurrentMetrics.ActualAmount.ToString("N2")</td><td>@line.Difference.ActualAmount.ToString("N2")</td><td>@if (line.WasDeleted) { <span class="pill pill--danger">已物理删除</span> } else if (line.Difference != EngineeringManager.Domain.Finance.CentralLedgerMetrics.Zero) { <span class="pill pill--warning">已修改</span> } else { <span class="pill pill--success">无变化</span> }</td></tr> }</tbody></table></div></section>

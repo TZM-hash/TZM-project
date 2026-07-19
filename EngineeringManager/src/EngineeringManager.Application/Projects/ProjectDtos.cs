@@ -132,7 +132,8 @@ public sealed record ProjectListQuery(
     bool SortDescending,
     int Page = 1,
     int PageSize = 20,
-    ProjectAffiliationType? AffiliationType = null);
+    ProjectAffiliationType? AffiliationType = null,
+    bool IncludeInactive = false);
 
 public sealed record ProjectListPageDto(
     IReadOnlyList<ProjectListItemDto> Items,

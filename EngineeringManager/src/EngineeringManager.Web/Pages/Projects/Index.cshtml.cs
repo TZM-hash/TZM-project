@@ -20,7 +20,8 @@ public sealed class IndexModel(
     IProjectService projectService,
     IFinanceLedgerService financeService,
     ISavedDataViewService savedViewService,
-    IExportService exportService) : PageModel
+    IExportService exportService,
+    IProjectWorkbookService projectWorkbookService) : PageModel
 {
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
@@ -32,6 +33,9 @@ public sealed class IndexModel(
     public FinanceProjectSummaryDto FinanceTotal { get; private set; } = EmptyFinanceSummary();
     public IReadOnlyDictionary<Guid, FinanceProjectSummaryDto> FinanceByProjectId { get; private set; } = new Dictionary<Guid, FinanceProjectSummaryDto>();
     public DataWorkbenchViewModel Workbench { get; private set; } = null!;
+    public bool CanExportWorkbook => WorkbookActor().CanExport;
+    public bool CanExportFullWorkbook => WorkbookActor().CanExportFullWorkbook;
+    public bool CanExportWorkbookAttachments => WorkbookActor().CanExportAttachments;
 
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public List<ProjectStage> Stages { get; set; } = [];
@@ -47,6 +51,10 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public Guid? SavedViewId { get; set; }
     [BindProperty] public SavedDataViewInput SavedView { get; set; } = new();
     [BindProperty] public List<string> SelectedFields { get; set; } = [];
+    [BindProperty] public List<Guid> SelectedProjectIds { get; set; } = [];
+    [BindProperty] public bool SelectAllMatching { get; set; }
+    [BindProperty] public List<ProjectWorkbookSheet> SelectedWorkbookSheets { get; set; } = [];
+    [BindProperty] public bool IncludeWorkbookAttachments { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -68,6 +76,25 @@ public sealed class IndexModel(
         var result = await projectService.SearchProjectsAsync(Actor(), Query() with { Page = 1 }, cancellationToken);
         var fields = SelectedFields.Count > 0 ? SelectedFields : ["project_number", "project_name", "stage", "affiliation_type", "contract_amount", "current_project_amount"];
         var file = await exportService.ExportAsync(new ExportRequest(ExportDataset.ProjectOverview, UserId(), fields, null, result.MatchingProjectIds), cancellationToken);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    public async Task<IActionResult> OnPostExportWorkbookAsync(CancellationToken cancellationToken)
+    {
+        if (!CanExportWorkbook) return Forbid();
+        if (SelectedProjectIds.Count > 0) SelectAllMatching = false;
+        if (!SelectAllMatching && SelectedProjectIds.Count == 0)
+        {
+            ModelState.AddModelError(string.Empty, "请至少勾选一个项目，或选择导出当前筛选命中的全部项目。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+        var request = new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(Actor(), Query(), SelectAllMatching, SelectedProjectIds),
+            SelectedWorkbookSheets,
+            IncludeAttachments: IncludeWorkbookAttachments,
+            Actor: WorkbookActor());
+        var file = await projectWorkbookService.ExportAsync(request, cancellationToken);
         return File(file.Content, file.ContentType, file.FileName);
     }
 
@@ -119,6 +146,9 @@ public sealed class IndexModel(
         var canAccessAll = User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance) || User.IsInRole(SystemRoles.QueryOnly) || User.IsInRole(SystemRoles.EquipmentManager);
         return new ProjectListActor(UserId(), canAccessAll);
     }
+
+    private ProjectWorkbookActor WorkbookActor() =>
+        new(UserId(), User.FindAll(ClaimTypes.Role).Select(item => item.Value).Distinct(StringComparer.Ordinal).ToArray());
 
     private DataWorkbenchViewModel BuildWorkbench(IReadOnlyList<SavedDataViewDto> views, ProjectListOptionsDto options, SavedDataViewDto? selected)
     {

@@ -76,8 +76,7 @@ public sealed class FinanceSummaryTests
                 [new InvoiceAllocationRequest(fixture.FirstLine.Id, 40m), new InvoiceAllocationRequest(fixture.SecondLine.Id, 30m)]),
             CancellationToken.None);
 
-        (await fixture.Db.InvoiceReceivableLinks.CountAsync(item => item.InvoiceEntryId == invoiceId)).Should().Be(2);
-        (await fixture.Db.InvoiceLineItemLinks.CountAsync(item => item.InvoiceEntryId == invoiceId)).Should().Be(2);
+        (await fixture.Db.FinanceInvoiceAllocations.CountAsync(item => item.InvoiceId == invoiceId)).Should().Be(2);
         var summary = await fixture.Service.GetSummaryAsync(
             new FinanceSummaryFilter(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id),
             CancellationToken.None);
@@ -134,7 +133,7 @@ public sealed class FinanceSummaryTests
         var summary = await fixture.Service.GetProjectSummaryAsync(fixture.Project.Id, CancellationToken.None);
         summary.PayableAmount.Should().Be(80m);
         summary.InputInvoiceAmount.Should().Be(50m);
-        (await fixture.Db.InvoiceEntries.CountAsync()).Should().Be(1);
+        (await fixture.Db.FinanceInvoices.CountAsync()).Should().Be(1);
     }
 
     [Fact]

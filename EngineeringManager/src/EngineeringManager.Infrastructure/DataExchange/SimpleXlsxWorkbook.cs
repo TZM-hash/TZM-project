@@ -6,13 +6,24 @@ using System.Xml.Linq;
 namespace EngineeringManager.Infrastructure.DataExchange;
 
 public sealed record XlsxHyperlink(string Text, string Target, bool External = false);
+public sealed record XlsxWorksheetOptions(
+    IReadOnlyCollection<int>? HiddenColumnIndexes = null,
+    bool ProtectSheet = false,
+    bool HiddenSheet = false);
 
 public sealed class SimpleXlsxWorkbook
 {
     private static readonly XNamespace SpreadsheetNamespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private readonly List<WorksheetData> worksheets = [];
 
-    public void AddWorksheet(string name, IReadOnlyList<string> headers, IEnumerable<IReadOnlyList<object?>> rows)
+    public void AddWorksheet(string name, IReadOnlyList<string> headers, IEnumerable<IReadOnlyList<object?>> rows) =>
+        AddWorksheet(name, headers, rows, null);
+
+    public void AddWorksheet(
+        string name,
+        IReadOnlyList<string> headers,
+        IEnumerable<IReadOnlyList<object?>> rows,
+        XlsxWorksheetOptions? options)
     {
         ValidateWorksheetName(name);
         ArgumentNullException.ThrowIfNull(headers);
@@ -33,7 +44,7 @@ public sealed class SimpleXlsxWorkbook
             throw new ArgumentException("数据列数不能超过表头列数。", nameof(rows));
         }
 
-        worksheets.Add(new WorksheetData(name, headers.ToArray(), materializedRows));
+        worksheets.Add(new WorksheetData(name, headers.ToArray(), materializedRows, options ?? new XlsxWorksheetOptions()));
     }
 
     public byte[] ToArray()
@@ -50,6 +61,10 @@ public sealed class SimpleXlsxWorkbook
             WriteXml(archive, "_rels/.rels", CreateRootRelationships());
             WriteXml(archive, "xl/workbook.xml", CreateWorkbook());
             WriteXml(archive, "xl/_rels/workbook.xml.rels", CreateWorkbookRelationships());
+            if (worksheets.Any(worksheet => worksheet.Options.ProtectSheet))
+            {
+                WriteXml(archive, "xl/styles.xml", CreateStyles());
+            }
             for (var index = 0; index < worksheets.Count; index++)
             {
                 WriteXml(archive, $"xl/worksheets/sheet{index + 1}.xml", CreateWorksheet(worksheets[index]));
@@ -72,6 +87,9 @@ public sealed class SimpleXlsxWorkbook
                 new XElement(contentTypes + "Default", new XAttribute("Extension", "rels"), new XAttribute("ContentType", "application/vnd.openxmlformats-package.relationships+xml")),
                 new XElement(contentTypes + "Default", new XAttribute("Extension", "xml"), new XAttribute("ContentType", "application/xml")),
                 new XElement(contentTypes + "Override", new XAttribute("PartName", "/xl/workbook.xml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")),
+                worksheets.Any(worksheet => worksheet.Options.ProtectSheet)
+                    ? new XElement(contentTypes + "Override", new XAttribute("PartName", "/xl/styles.xml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"))
+                    : null,
                 worksheets.Select((_, index) => new XElement(contentTypes + "Override", new XAttribute("PartName", $"/xl/worksheets/sheet{index + 1}.xml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml")))));
     }
 
@@ -94,6 +112,7 @@ public sealed class SimpleXlsxWorkbook
                 worksheets.Select((sheet, index) => new XElement(SpreadsheetNamespace + "sheet",
                     new XAttribute("name", sheet.Name),
                     new XAttribute("sheetId", index + 1),
+                    sheet.Options.HiddenSheet ? new XAttribute("state", "veryHidden") : null,
                     new XAttribute(relationships + "id", $"rId{index + 1}"))))));
     }
 
@@ -102,15 +121,32 @@ public sealed class SimpleXlsxWorkbook
         XNamespace relationships = "http://schemas.openxmlformats.org/package/2006/relationships";
         return new XDocument(new XElement(relationships + "Relationships",
             worksheets.Select((_, index) => new XElement(relationships + "Relationship",
-                new XAttribute("Id", $"rId{index + 1}"),
-                new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"),
-                new XAttribute("Target", $"worksheets/sheet{index + 1}.xml")))));
+                    new XAttribute("Id", $"rId{index + 1}"),
+                    new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"),
+                    new XAttribute("Target", $"worksheets/sheet{index + 1}.xml")))
+                .Append(worksheets.Any(worksheet => worksheet.Options.ProtectSheet)
+                    ? new XElement(relationships + "Relationship",
+                        new XAttribute("Id", $"rId{worksheets.Count + 1}"),
+                        new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"),
+                        new XAttribute("Target", "styles.xml"))
+                    : null)));
     }
+
+    private static XDocument CreateStyles() => new(new XElement(SpreadsheetNamespace + "styleSheet",
+        new XElement(SpreadsheetNamespace + "fonts", new XAttribute("count", 1), new XElement(SpreadsheetNamespace + "font")),
+        new XElement(SpreadsheetNamespace + "fills", new XAttribute("count", 2),
+            new XElement(SpreadsheetNamespace + "fill", new XElement(SpreadsheetNamespace + "patternFill", new XAttribute("patternType", "none"))),
+            new XElement(SpreadsheetNamespace + "fill", new XElement(SpreadsheetNamespace + "patternFill", new XAttribute("patternType", "gray125")))),
+        new XElement(SpreadsheetNamespace + "borders", new XAttribute("count", 1), new XElement(SpreadsheetNamespace + "border")),
+        new XElement(SpreadsheetNamespace + "cellStyleXfs", new XAttribute("count", 1), new XElement(SpreadsheetNamespace + "xf")),
+        new XElement(SpreadsheetNamespace + "cellXfs", new XAttribute("count", 2),
+            new XElement(SpreadsheetNamespace + "xf", new XAttribute("xfId", 0), new XElement(SpreadsheetNamespace + "protection", new XAttribute("locked", 1))),
+            new XElement(SpreadsheetNamespace + "xf", new XAttribute("xfId", 0), new XAttribute("applyProtection", 1), new XElement(SpreadsheetNamespace + "protection", new XAttribute("locked", 0))))));
 
     private static XDocument CreateWorksheet(WorksheetData worksheet)
     {
-        var rows = new List<XElement> { CreateRow(1, worksheet.Headers.Cast<object?>().ToArray()) };
-        rows.AddRange(worksheet.Rows.Select((row, index) => CreateRow(index + 2, row)));
+        var rows = new List<XElement> { CreateRow(1, worksheet.Headers.Cast<object?>().ToArray(), worksheet.Options, isHeader: true) };
+        rows.AddRange(worksheet.Rows.Select((row, index) => CreateRow(index + 2, row, worksheet.Options, isHeader: false)));
         XNamespace relationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
         var externalIndex = 0;
         var links = worksheet.Rows.SelectMany((row, rowIndex) => row.Select((value, columnIndex) => new { value, rowIndex, columnIndex }))
@@ -123,10 +159,17 @@ public sealed class SimpleXlsxWorkbook
                 else element.Add(new XAttribute("location", link.Target.TrimStart('#')));
                 return element;
             }).ToArray();
+        var hiddenColumns = worksheet.Options.HiddenColumnIndexes?.Where(index => index >= 0 && index < worksheet.Headers.Count).Distinct().OrderBy(index => index).ToArray() ?? [];
+        var columns = hiddenColumns.Length == 0 ? null : new XElement(SpreadsheetNamespace + "cols",
+            hiddenColumns.Select(index => new XElement(SpreadsheetNamespace + "col",
+                new XAttribute("min", index + 1), new XAttribute("max", index + 1), new XAttribute("hidden", 1), new XAttribute("width", 12), new XAttribute("customWidth", 1))));
+        var protection = worksheet.Options.ProtectSheet ? new XElement(SpreadsheetNamespace + "sheetProtection", new XAttribute("sheet", 1), new XAttribute("objects", 1), new XAttribute("scenarios", 1)) : null;
         return new XDocument(new XElement(SpreadsheetNamespace + "worksheet",
             new XAttribute(XNamespace.Xmlns + "r", relationships),
+            columns,
             new XElement(SpreadsheetNamespace + "sheetData", rows),
-            links.Length == 0 ? null : new XElement(SpreadsheetNamespace + "hyperlinks", links)));
+            links.Length == 0 ? null : new XElement(SpreadsheetNamespace + "hyperlinks", links),
+            protection));
     }
 
     private static XlsxHyperlink[] GetExternalLinks(WorksheetData worksheet) => worksheet.Rows
@@ -145,26 +188,29 @@ public sealed class SimpleXlsxWorkbook
                 new XAttribute("TargetMode", "External")))));
     }
 
-    private static XElement CreateRow(int rowNumber, IReadOnlyList<object?> values) =>
+    private static XElement CreateRow(int rowNumber, IReadOnlyList<object?> values, XlsxWorksheetOptions options, bool isHeader) =>
         new(SpreadsheetNamespace + "row",
             new XAttribute("r", rowNumber),
-            values.Select((value, columnIndex) => CreateCell(ColumnName(columnIndex + 1) + rowNumber, value)));
+            values.Select((value, columnIndex) => CreateCell(
+                ColumnName(columnIndex + 1) + rowNumber,
+                value,
+                options.ProtectSheet && !isHeader && !(options.HiddenColumnIndexes?.Contains(columnIndex) ?? false) ? 1 : null)));
 
-    private static XElement CreateCell(string reference, object? value)
+    private static XElement CreateCell(string reference, object? value, int? styleIndex)
     {
         if (value is null)
         {
-            return new XElement(SpreadsheetNamespace + "c", new XAttribute("r", reference));
+            return new XElement(SpreadsheetNamespace + "c", new XAttribute("r", reference), styleIndex is null ? null : new XAttribute("s", styleIndex));
         }
 
         if (value is bool boolean)
         {
-            return new XElement(SpreadsheetNamespace + "c", new XAttribute("r", reference), new XAttribute("t", "b"), new XElement(SpreadsheetNamespace + "v", boolean ? "1" : "0"));
+            return new XElement(SpreadsheetNamespace + "c", new XAttribute("r", reference), styleIndex is null ? null : new XAttribute("s", styleIndex), new XAttribute("t", "b"), new XElement(SpreadsheetNamespace + "v", boolean ? "1" : "0"));
         }
 
         if (value is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal)
         {
-            return new XElement(SpreadsheetNamespace + "c", new XAttribute("r", reference), new XElement(SpreadsheetNamespace + "v", Convert.ToString(value, CultureInfo.InvariantCulture)));
+            return new XElement(SpreadsheetNamespace + "c", new XAttribute("r", reference), styleIndex is null ? null : new XAttribute("s", styleIndex), new XElement(SpreadsheetNamespace + "v", Convert.ToString(value, CultureInfo.InvariantCulture)));
         }
 
         var text = value switch
@@ -177,6 +223,7 @@ public sealed class SimpleXlsxWorkbook
         };
         return new XElement(SpreadsheetNamespace + "c",
             new XAttribute("r", reference),
+            styleIndex is null ? null : new XAttribute("s", styleIndex),
             new XAttribute("t", "inlineStr"),
             new XElement(SpreadsheetNamespace + "is", new XElement(SpreadsheetNamespace + "t", new XAttribute(XNamespace.Xml + "space", "preserve"), text)));
     }
@@ -210,5 +257,5 @@ public sealed class SimpleXlsxWorkbook
         }
     }
 
-    private sealed record WorksheetData(string Name, IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<object?>> Rows);
+    private sealed record WorksheetData(string Name, IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<object?>> Rows, XlsxWorksheetOptions Options);
 }

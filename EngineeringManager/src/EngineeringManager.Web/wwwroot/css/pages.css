@@ -42,6 +42,7 @@
 .selection-dropdown[open] .selection-dropdown-toggle::after { content: "▴"; }
 .selection-dropdown-menu { position: absolute; z-index: 70; top: calc(100% + .35rem); left: 0; width: min(34rem, calc(100vw - 3rem)); max-height: 24rem; padding: .65rem; overflow-y: auto; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); box-shadow: 0 18px 44px rgba(15,23,42,.18); }
 .selection-dropdown-menu--fields { right: 0; left: auto; }
+.page-heading .selection-dropdown-menu { right: 0; left: auto; }
 .selection-dropdown-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .15rem .25rem .55rem; border-bottom: 1px solid var(--app-border); color: var(--app-muted); font-size: .7rem; }
 .selection-dropdown-heading > div { display: flex; gap: .35rem; }
 .selection-dropdown-heading button { min-height: 1.8rem; padding: .2rem .4rem; border: 0; color: var(--app-primary); background: transparent; font-size: .68rem; cursor: pointer; }

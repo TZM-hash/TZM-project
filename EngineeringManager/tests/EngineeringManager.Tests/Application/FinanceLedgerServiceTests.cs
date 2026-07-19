@@ -13,6 +13,36 @@ namespace EngineeringManager.Tests.Application;
 public sealed class FinanceLedgerServiceTests
 {
     [Fact]
+    public async Task LegacyFinanceApiWritesOnlyCentralLedgerRecords()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        var receivableId = await fixture.Service.AddReceivableAsync(
+            new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+                ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, "兼容应收"),
+            CancellationToken.None);
+        var payableId = await fixture.Service.AddPayableAsync(
+            new CreatePayableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+                PayableSourceType.Manual, new DateOnly(2026, 7, 1), null, 80m, "兼容应付"),
+            CancellationToken.None);
+        await fixture.Service.RecordCollectionAsync(
+            new RecordCollectionRequest(receivableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id,
+                fixture.Partner.Id, fixture.Bank.Id, new DateOnly(2026, 7, 2), 60m, PaymentMethod.BankTransfer, null),
+            CancellationToken.None);
+        await fixture.Service.RecordPaymentAsync(
+            new RecordPaymentRequest(payableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id,
+                fixture.Partner.Id, fixture.Bank.Id, new DateOnly(2026, 7, 2), 50m, PaymentMethod.BankTransfer, null),
+            CancellationToken.None);
+
+        (await fixture.Db.ReceivableEntries.CountAsync()).Should().Be(0);
+        (await fixture.Db.PayableEntries.CountAsync()).Should().Be(0);
+        (await fixture.Db.CollectionEntries.CountAsync()).Should().Be(0);
+        (await fixture.Db.PaymentEntries.CountAsync()).Should().Be(0);
+        (await fixture.Db.FinanceSettlements.CountAsync()).Should().Be(2);
+        (await fixture.Db.FinanceCashEntries.CountAsync()).Should().Be(2);
+        (await fixture.Db.FinanceCashAllocations.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
     public async Task FinancialAccountNotesRoundTrip()
     {
         await using var fixture = await FinanceFixture.CreateAsync();
@@ -31,11 +61,11 @@ public sealed class FinanceLedgerServiceTests
         await using var fixture = await FinanceFixture.CreateAsync();
         fixture.Project.Name = "市政一标段";
         var second = new Project { ProjectNumber = "FIN-SVC-P2", Name = "房建二标段", Stage = ProjectStage.UnderConstruction };
+        second.LegalEntities.Add(new ProjectLegalEntity { Project = second, LegalEntity = fixture.LegalEntity, IsPrimary = true });
         fixture.Db.Projects.Add(second);
-        fixture.Db.ReceivableEntries.AddRange(
-            new ReceivableEntry { Project = fixture.Project, LegalEntity = fixture.LegalEntity, EntryDate = new DateOnly(2026, 7, 1), Amount = 300m },
-            new ReceivableEntry { Project = second, LegalEntity = fixture.LegalEntity, EntryDate = new DateOnly(2026, 7, 1), Amount = 100m });
         await fixture.Db.SaveChangesAsync();
+        await fixture.Service.AddReceivableAsync(new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 300m, null), CancellationToken.None);
+        await fixture.Service.AddReceivableAsync(new CreateReceivableRequest(second.Id, null, fixture.LegalEntity.Id, fixture.Partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 100m, null), CancellationToken.None);
 
         var result = await fixture.Service.SearchOverviewAsync(
             new FinanceOverviewQuery("标段", 150m, null, false, "UncollectedAmount", true, 1, 20),
@@ -186,10 +216,10 @@ public sealed class FinanceLedgerServiceTests
         var collectionId = await fixture.Service.RecordCollectionAsync(new RecordCollectionRequest(receivableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, fixture.Bank.Id, new DateOnly(2026, 7, 2), 40m, PaymentMethod.BankTransfer, "原收款"), CancellationToken.None);
         var payableId = await fixture.Service.AddPayableAsync(new CreatePayableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, PayableSourceType.Manual, new DateOnly(2026, 7, 3), null, 80m, "原应付"), CancellationToken.None);
         var paymentId = await fixture.Service.RecordPaymentAsync(new RecordPaymentRequest(payableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, fixture.Bank.Id, new DateOnly(2026, 7, 4), 25m, PaymentMethod.BankTransfer, "原付款"), CancellationToken.None);
-        var receivable = await fixture.Db.ReceivableEntries.SingleAsync(item => item.Id == receivableId);
-        var collection = await fixture.Db.CollectionEntries.SingleAsync(item => item.Id == collectionId);
-        var payable = await fixture.Db.PayableEntries.SingleAsync(item => item.Id == payableId);
-        var payment = await fixture.Db.PaymentEntries.SingleAsync(item => item.Id == paymentId);
+        var receivable = await fixture.Db.FinanceSettlements.SingleAsync(item => item.Id == receivableId);
+        var collection = await fixture.Db.FinanceCashEntries.SingleAsync(item => item.Id == collectionId);
+        var payable = await fixture.Db.FinanceSettlements.SingleAsync(item => item.Id == payableId);
+        var payment = await fixture.Db.FinanceCashEntries.SingleAsync(item => item.Id == paymentId);
         var actor = new FinanceRecordActor("project-manager", "项目经理");
 
         await fixture.Service.UpdateReceivableAsync(actor, new UpdateReceivableRequest(receivableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, new DateOnly(2026, 7, 5), new DateOnly(2026, 7, 20), 120m, "改后应收", receivable.ConcurrencyStamp, "修正应收"), CancellationToken.None);
@@ -197,8 +227,8 @@ public sealed class FinanceLedgerServiceTests
         await fixture.Service.UpdatePayableAsync(actor, new UpdatePayableRequest(payableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, new DateOnly(2026, 7, 7), new DateOnly(2026, 7, 25), 90m, "改后应付", payable.ConcurrencyStamp, "修正应付"), CancellationToken.None);
         await fixture.Service.UpdatePaymentAsync(actor, new UpdatePaymentRequest(paymentId, payableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, fixture.Cash.Id, new DateOnly(2026, 7, 8), 35m, PaymentMethod.Cash, "改后付款", payment.ConcurrencyStamp, "修正付款"), CancellationToken.None);
 
-        (await fixture.Db.ReceivableEntries.AsNoTracking().SingleAsync(item => item.Id == receivableId)).Amount.Should().Be(120m);
-        (await fixture.Db.PayableEntries.AsNoTracking().SingleAsync(item => item.Id == payableId)).Amount.Should().Be(90m);
+        (await fixture.Db.FinanceSettlements.AsNoTracking().SingleAsync(item => item.Id == receivableId)).OriginalAmount.Should().Be(120m);
+        (await fixture.Db.FinanceSettlements.AsNoTracking().SingleAsync(item => item.Id == payableId)).OriginalAmount.Should().Be(90m);
         var collectionTransaction = await fixture.Db.AccountTransactions.AsNoTracking().SingleAsync(item => item.SourceType == AccountTransactionSourceType.Collection && item.SourceId == collectionId);
         collectionTransaction.AccountId.Should().Be(fixture.Cash.Id);
         collectionTransaction.TransactionDate.Should().Be(new DateOnly(2026, 7, 6));
@@ -217,13 +247,13 @@ public sealed class FinanceLedgerServiceTests
         await using var fixture = await FinanceFixture.CreateAsync();
         var receivableId = await fixture.Service.AddReceivableAsync(new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 1), null, 200m, null), CancellationToken.None);
         var invoiceId = await fixture.Service.AddInvoiceAsync(new CreateInvoiceRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 2), fixture.TaxConfiguration.Id, 100m, 0m, 100m, InvoiceStatus.IssuedOrReceived, [new InvoiceAllocationRequest(receivableId, 100m)], []), CancellationToken.None);
-        var invoice = await fixture.Db.InvoiceEntries.SingleAsync(item => item.Id == invoiceId);
+        var invoice = await fixture.Db.FinanceInvoices.SingleAsync(item => item.Id == invoiceId);
         var originalStamp = invoice.ConcurrencyStamp;
         var actor = new FinanceRecordActor("project-manager", "项目经理");
 
         await fixture.Service.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(invoiceId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 3), fixture.TaxConfiguration.Id, 60m, 0m, 60m, InvoiceStatus.IssuedOrReceived, originalStamp, "修正开票金额"), CancellationToken.None);
 
-        (await fixture.Db.InvoiceReceivableLinks.AsNoTracking().SingleAsync(item => item.InvoiceEntryId == invoiceId)).AllocatedAmount.Should().Be(60m);
+        (await fixture.Db.FinanceInvoiceAllocations.AsNoTracking().SingleAsync(item => item.InvoiceId == invoiceId)).Amount.Should().Be(60m);
         var staleAction = () => fixture.Service.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(invoiceId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, InvoiceDirection.Output, "INV-UP-01", new DateOnly(2026, 7, 3), fixture.TaxConfiguration.Id, 50m, 0m, 50m, InvoiceStatus.IssuedOrReceived, originalStamp, "过期修改"), CancellationToken.None);
         await staleAction.Should().ThrowAsync<DbUpdateConcurrencyException>().WithMessage("*刷新后重试*");
     }
@@ -251,7 +281,7 @@ public sealed class FinanceLedgerServiceTests
                 []),
             CancellationToken.None);
 
-        var invoice = await fixture.Db.InvoiceEntries.SingleAsync(item => item.Id == invoiceId);
+        var invoice = await fixture.Db.FinanceInvoices.SingleAsync(item => item.Id == invoiceId);
         invoice.ProjectTaxConfigurationId.Should().Be(fixture.TaxConfiguration.Id);
         invoice.TaxRate.Should().Be(0.03m);
         invoice.InvoiceType.Should().Be("专票");

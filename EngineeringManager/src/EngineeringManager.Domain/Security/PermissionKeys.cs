@@ -22,6 +22,12 @@ public static class PermissionKeys
     public const string FinanceRead = "finance.read";
     public const string FinanceManage = "finance.manage";
     public const string FinancialAccountsManage = "finance.accounts.manage";
+    public const string ExternalLedgerRead = "ledger.external.read";
+    public const string ExternalLedgerManage = "ledger.external.manage";
+    public const string InternalLedgerRead = "ledger.internal.read";
+    public const string InternalLedgerManage = "ledger.internal.manage";
+    public const string FinanceYearsManage = "ledger.years.manage";
+    public const string FinanceReconciliationManage = "ledger.reconciliation.manage";
     public const string EmployeesRead = "employees.read";
     public const string EmployeesManage = "employees.manage";
     public const string EmployeeCertificatesManage = "employees.certificates.manage";
@@ -66,6 +72,12 @@ public static class PermissionKeys
         FinanceRead,
         FinanceManage,
         FinancialAccountsManage,
+        ExternalLedgerRead,
+        ExternalLedgerManage,
+        InternalLedgerRead,
+        InternalLedgerManage,
+        FinanceYearsManage,
+        FinanceReconciliationManage,
         EmployeesRead,
         EmployeesManage,
         EmployeeCertificatesManage,
@@ -113,6 +125,12 @@ public static class PermissionKeys
                 FinanceRead,
                 FinanceManage,
                 FinancialAccountsManage,
+                ExternalLedgerRead,
+                ExternalLedgerManage,
+                InternalLedgerRead,
+                InternalLedgerManage,
+                FinanceYearsManage,
+                FinanceReconciliationManage,
                 EmployeesRead,
                 EmployeesManage,
                 EmployeeCertificatesManage,
@@ -135,10 +153,10 @@ public static class PermissionKeys
                 ,EquipmentSettlementManage
                 ,EquipmentMaintenanceManage
             },
-            [SystemRoles.Finance] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, FinanceManage, FinancialAccountsManage, EmployeesRead, PayrollRead, PayrollManage, ConstructionCrewsRead, SensitivePersonnelRead, EmployeeLedgerRead, EmployeeLedgerManage, RemindersRead, CompaniesRead },
+            [SystemRoles.Finance] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, StageResultsRead, FinanceRead, FinanceManage, FinancialAccountsManage, ExternalLedgerRead, ExternalLedgerManage, InternalLedgerRead, InternalLedgerManage, FinanceYearsManage, FinanceReconciliationManage, EmployeesRead, PayrollRead, PayrollManage, ConstructionCrewsRead, SensitivePersonnelRead, EmployeeLedgerRead, EmployeeLedgerManage, RemindersRead, CompaniesRead },
             [SystemRoles.ProjectManager] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, ProjectsManage, ContractsManage, PartnersRead, PartnersManage, ConstructionCrewsRead, ConstructionCrewsManage, StageResultsRead, StageResultsCreate, StageResultsManage, EmployeesRead, RemindersRead, CompaniesRead },
             [SystemRoles.SiteStaff] = new HashSet<string>(StringComparer.Ordinal) { ProjectsRead, PartnersRead, StageResultsRead, StageResultsCreate },
-            [SystemRoles.QueryOnly] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, ConstructionCrewsRead, StageResultsRead, FinanceRead, EmployeesRead, PayrollRead, EmployeeLedgerRead, RemindersRead, CompaniesRead, EquipmentRead },
+            [SystemRoles.QueryOnly] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, ConstructionCrewsRead, StageResultsRead, FinanceRead, ExternalLedgerRead, InternalLedgerRead, EmployeesRead, PayrollRead, EmployeeLedgerRead, RemindersRead, CompaniesRead, EquipmentRead },
             [SystemRoles.EquipmentManager] = new HashSet<string>(StringComparer.Ordinal) { DataExport, ProjectsRead, PartnersRead, CompaniesRead, RemindersRead, EquipmentRead, EquipmentManage, EquipmentUsageManage, EquipmentSettlementManage, EquipmentMaintenanceManage }
         };
 

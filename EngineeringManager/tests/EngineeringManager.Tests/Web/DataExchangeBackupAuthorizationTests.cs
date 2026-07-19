@@ -1,6 +1,7 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using EngineeringManager.Application.Backups;
 using EngineeringManager.Application.DataExchange;
+using EngineeringManager.Application.Projects;
 using EngineeringManager.Application.Reminders;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Reminders;
@@ -65,6 +66,22 @@ public sealed class DataExchangeBackupAuthorizationTests
         page.Should().Contain("data-backup-settings").And.Contain("data-backup-full").And.Contain("定时策略").And.Contain("NAS/共享目录");
     }
 
+    [Fact]
+    public async Task DataExchangeProjectWorkbookShowsCompleteFiltersAndPreviewErrors()
+    {
+        await using var factory = CreateFactory("SystemAdministrator");
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/DataExchange");
+        var html = System.Net.WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        var page = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "Pages", "DataExchange", "Index.cshtml"));
+
+        html.Should().Contain("name=\"ProjectStages\"")
+            .And.Contain("name=\"ProjectLegalEntityId\"")
+            .And.Contain("name=\"ProjectResponsibleUserId\"")
+            .And.Contain("name=\"SelectedProjectIds\"");
+        page.Should().Contain("源行").And.Contain("错误与修正建议");
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -86,10 +103,14 @@ public sealed class DataExchangeBackupAuthorizationTests
                 services.RemoveAll<IImportService>();
                 services.RemoveAll<IBackupService>();
                 services.RemoveAll<IReminderService>();
+                services.RemoveAll<IProjectWorkbookService>();
+                services.RemoveAll<IProjectService>();
                 services.AddSingleton<IExportService, FakeExportService>();
                 services.AddSingleton<IImportService, FakeImportService>();
                 services.AddSingleton<IBackupService, FakeBackupService>();
                 services.AddSingleton<IReminderService, FakeReminderService>();
+                services.AddSingleton<IProjectWorkbookService, FakeProjectWorkbookService>();
+                services.AddSingleton<IProjectService, FakeProjectService>();
             });
             builder.UseSetting(DataExchangeTestHandler.RoleSetting, role);
         });
@@ -112,6 +133,34 @@ public sealed class DataExchangeBackupAuthorizationTests
         public Task ConfirmAsync(Guid batchId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ImportMappingTemplateDto> SaveMappingTemplateAsync(SaveImportMappingTemplateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<ImportMappingTemplateDto>> ListMappingTemplatesAsync(string userId, ExportDataset dataset, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ImportMappingTemplateDto>>([]);
+    }
+
+    private sealed class FakeProjectWorkbookService : IProjectWorkbookService
+    {
+        public IReadOnlyList<ProjectWorkbookSheetDefinition> GetSheets() =>
+        [
+            new(ProjectWorkbookSheet.ProjectMaster, "项目主档", true, false, [], []),
+            new(ProjectWorkbookSheet.ProjectSummary, "项目经营汇总", false, false, [], [])
+        ];
+        public Task<ExportFileResult> ExportAsync(ProjectWorkbookExportRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ProjectWorkbookImportPreviewDto> PreviewAsync(ProjectWorkbookImportRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ConfirmAsync(ProjectWorkbookActor actor, Guid batchId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeProjectService : IProjectService
+    {
+        private static readonly Guid ProjectId = Guid.Parse("72000000-0000-0000-0000-000000000001");
+        private static readonly Guid CompanyId = Guid.Parse("72000000-0000-0000-0000-000000000002");
+        public Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ContractDto> AddContractAsync(CreateContractRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ContractLineItemDto> AddLineItemAsync(CreateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ContractLineItemDto> UpdateLineItemAsync(UpdateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ProjectListItemDto>> ListProjectsAsync(string? search, EngineeringManager.Domain.Projects.ProjectStage? stage, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ProjectListItemDto>>([]);
+        public Task<ProjectListPageDto> SearchProjectsAsync(ProjectListActor actor, ProjectListQuery query, CancellationToken cancellationToken) =>
+            Task.FromResult(new ProjectListPageDto([new ProjectListItemDto(new ProjectDto(ProjectId, "P-DATA", "数据交换项目", null, EngineeringManager.Domain.Projects.ProjectStage.UnderConstruction), new ProjectSummaryDto(0m, 0m, 0m, 0m, EngineeringManager.Domain.Projects.ProjectSettlementStatus.Estimated, 0, 0))], new ProjectListAggregateDto(1, 0m, 0m, 0), 1, 20, 1, 1, [ProjectId]));
+        public Task<ProjectListOptionsDto> GetListOptionsAsync(ProjectListActor actor, CancellationToken cancellationToken) =>
+            Task.FromResult(new ProjectListOptionsDto([new ProjectFilterOptionDto(CompanyId.ToString(), "签约公司")], [new ProjectFilterOptionDto("manager", "负责人")]));
+        public Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<ProjectDetailsDto?>(null);
     }
 
     private sealed class FakeBackupService : IBackupService

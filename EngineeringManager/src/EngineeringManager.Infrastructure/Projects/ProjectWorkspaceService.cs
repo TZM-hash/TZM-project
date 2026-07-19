@@ -28,47 +28,71 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .SingleOrDefaultAsync(item => item.Id == projectId && item.IsActive, cancellationToken);
         if (project is null) return null;
 
-        var receivables = await db.ReceivableEntries.AsNoTracking()
+        var settlements = await db.FinanceSettlements.AsNoTracking()
             .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
+            .Include(item => item.Adjustments).Include(item => item.Deductions)
             .Where(item => item.ProjectId == projectId)
-            .OrderByDescending(item => item.EntryDate)
-            .Select(item => new ProjectReceivableItemDto(item.Id, item.EntryDate, item.DueDate, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.LegalEntity.ShortName, item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.Amount, item.Description, item.IsVoided,
+            .OrderByDescending(item => item.BusinessDate)
+            .ToListAsync(cancellationToken);
+        var receivables = settlements.Where(item => item.Direction == LedgerDirection.Receivable)
+            .Select(item => new ProjectReceivableItemDto(item.Id, item.BusinessDate, null, item.Contract?.ContractNumber,
+                item.LegalEntity.ShortName, item.BusinessPartner?.Name, CurrentSettlementAmount(item), item.Notes, item.Status == LedgerRecordStatus.Voided,
                 item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.ConcurrencyStamp))
+            .ToList();
+        var payables = settlements.Where(item => item.Direction == LedgerDirection.Payable)
+            .Select(item => new ProjectPayableItemDto(item.Id, item.BusinessDate, null, item.Contract?.ContractNumber,
+                item.LegalEntity.ShortName, item.BusinessPartner?.Name ?? "未填写合作单位", CurrentSettlementAmount(item), item.Notes, item.Status == LedgerRecordStatus.Voided,
+                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.ConcurrencyStamp))
+            .ToList();
+
+        var cashHeaders = await db.FinanceCashEntries.AsNoTracking()
+            .Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account)
+            .Include(item => item.Allocations).ThenInclude(item => item.Settlement).ThenInclude(item => item.Contract)
+            .Where(item => item.Allocations.Any(allocation => allocation.ProjectId == projectId))
+            .OrderByDescending(item => item.BusinessDate)
             .ToListAsync(cancellationToken);
-        var collections = await db.CollectionEntries.AsNoTracking()
-            .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account)
-            .Where(item => item.ProjectId == projectId)
-            .OrderByDescending(item => item.CollectionDate)
-            .Select(item => new ProjectCollectionItemDto(item.Id, item.CollectionDate, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.LegalEntity.ShortName, item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.Account.AccountName,
-                item.Amount, item.PaymentMethod, item.Notes, item.ReceivableEntryId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp))
-            .ToListAsync(cancellationToken);
-        var invoices = await db.InvoiceEntries.AsNoTracking()
-            .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
-            .Where(item => item.ProjectId == projectId)
+        var collections = cashHeaders.Where(item => item.Direction == LedgerDirection.Receivable && !item.IsReversal)
+            .Select(item =>
+            {
+                var allocations = item.Allocations.Where(allocation => allocation.ProjectId == projectId).ToArray();
+                var first = allocations[0];
+                return new ProjectCollectionItemDto(item.Id, item.BusinessDate, first.Settlement.Contract?.ContractNumber,
+                    item.LegalEntity.ShortName, item.BusinessPartner?.Name, item.Account?.AccountName ?? "未填写账户",
+                    allocations.Sum(allocation => allocation.Amount), ParsePaymentMethod(item.PaymentMethod), item.Notes,
+                    allocations.Length == 1 ? first.SettlementId : null, first.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp);
+            })
+            .ToList();
+        var payments = cashHeaders.Where(item => item.Direction == LedgerDirection.Payable && !item.IsReversal)
+            .Select(item =>
+            {
+                var allocations = item.Allocations.Where(allocation => allocation.ProjectId == projectId).ToArray();
+                var first = allocations[0];
+                return new ProjectPaymentItemDto(item.Id, item.BusinessDate, first.Settlement.Contract?.ContractNumber,
+                    item.LegalEntity.ShortName, item.BusinessPartner?.Name ?? "未填写合作单位", item.Account?.AccountName ?? "未填写账户",
+                    allocations.Sum(allocation => allocation.Amount), ParsePaymentMethod(item.PaymentMethod), item.Notes,
+                    allocations.Length == 1 ? first.SettlementId : null, first.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp);
+            })
+            .ToList();
+
+        var invoiceHeaders = await db.FinanceInvoices.AsNoTracking()
+            .Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
+            .Include(item => item.Allocations).ThenInclude(item => item.Settlement).ThenInclude(item => item.Contract)
+            .Where(item => item.Direction == LedgerDirection.Receivable && item.Allocations.Any(allocation => allocation.ProjectId == projectId))
             .OrderByDescending(item => item.InvoiceDate)
-            .Select(item => new ProjectInvoiceItemDto(item.Id, item.InvoiceDate, item.InvoiceNumber, item.Direction,
-                item.Contract == null ? null : item.Contract.ContractNumber, item.LegalEntity.ShortName,
-                item.BusinessPartner == null ? null : item.BusinessPartner.Name, item.TaxRate, item.NetAmount, item.TaxAmount, item.GrossAmount, item.Status,
-                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.InvoiceType, item.ProjectTaxConfigurationId, item.ConcurrencyStamp))
             .ToListAsync(cancellationToken);
-        var payables = await db.PayableEntries.AsNoTracking()
-            .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
-            .Where(item => item.ProjectId == projectId)
-            .OrderByDescending(item => item.EntryDate)
-            .Select(item => new ProjectPayableItemDto(item.Id, item.EntryDate, item.DueDate, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.LegalEntity.ShortName, item.BusinessPartner.Name, item.Amount, item.Description, item.IsVoided,
-                item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.ConcurrencyStamp))
-            .ToListAsync(cancellationToken);
-        var payments = await db.PaymentEntries.AsNoTracking()
-            .Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account)
-            .Where(item => item.ProjectId == projectId)
-            .OrderByDescending(item => item.PaymentDate)
-            .Select(item => new ProjectPaymentItemDto(item.Id, item.PaymentDate, item.Contract == null ? null : item.Contract.ContractNumber,
-                item.LegalEntity.ShortName, item.BusinessPartner.Name, item.Account.AccountName, item.Amount, item.PaymentMethod, item.Notes,
-                item.PayableEntryId, item.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp))
-            .ToListAsync(cancellationToken);
+        var invoices = invoiceHeaders.Select(item =>
+        {
+            var allocations = item.Allocations.Where(allocation => allocation.ProjectId == projectId).ToArray();
+            var first = allocations[0];
+            var gross = allocations.Sum(allocation => allocation.Amount);
+            var ratio = item.Amount == 0m ? 0m : gross / item.Amount;
+            return new ProjectInvoiceItemDto(item.Id, item.InvoiceDate, item.InvoiceNumber,
+                item.Direction == LedgerDirection.Receivable ? InvoiceDirection.Output : InvoiceDirection.Input,
+                first.Settlement.Contract?.ContractNumber, item.LegalEntity.ShortName, item.BusinessPartner?.Name,
+                item.TaxRate ?? 0m, (item.NetAmount ?? 0m) * ratio, (item.TaxAmount ?? 0m) * ratio, gross,
+                item.Status == LedgerRecordStatus.Voided ? InvoiceStatus.Voided : InvoiceStatus.IssuedOrReceived,
+                first.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.InvoiceType, item.ProjectTaxConfigurationId, item.ConcurrencyStamp);
+        }).ToList();
         var payrollCrewRows = await db.PayrollPayments.AsNoTracking()
             .Where(item => item.RecipientType == EngineeringManager.Domain.Employees.PayrollRecipientType.CrewWorker &&
                 item.CrewBusinessPartnerId.HasValue && item.Batch.ProjectId == projectId &&
@@ -356,6 +380,20 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         if (actualStartDate.HasValue && actualCompletionDate.HasValue && actualCompletionDate.Value < actualStartDate.Value)
             throw new ArgumentException("实际完工日期不得早于开工日期。");
     }
+
+    private static decimal CurrentSettlementAmount(FinanceSettlement settlement)
+    {
+        var gross = settlement.OriginalAmount + settlement.Adjustments
+            .Where(item => item.Status == LedgerRecordStatus.Active)
+            .Sum(item => item.AmountDelta);
+        var deductions = settlement.Deductions
+            .Where(item => item.Status == LedgerRecordStatus.Active)
+            .Sum(item => item.Amount);
+        return Math.Max(gross - deductions, 0m);
+    }
+
+    private static PaymentMethod ParsePaymentMethod(string? value) =>
+        Enum.TryParse<PaymentMethod>(value, out var method) ? method : PaymentMethod.BankTransfer;
 
     private static DateTimeOffset ToTimestamp(DateOnly date) => new(date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     private static string Required(string value, string parameter) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException("值不能为空。", parameter);

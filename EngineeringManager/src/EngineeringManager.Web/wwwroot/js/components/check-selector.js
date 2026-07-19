@@ -4,7 +4,34 @@ function updateCount(root) {
   if (target) target.textContent = count > 0 ? `已选 ${count} 项` : root.dataset.checkSelectorEmptyLabel || "未选择";
 }
 
+function updateProjectSelectionCount(form) {
+  const target = form.querySelector("[data-project-export-selected-count]");
+  if (target) target.textContent = form.querySelectorAll("[data-project-export-item]:checked").length;
+}
+
 export function initCheckSelectors() {
+  document.querySelectorAll("[data-project-export-scope], [data-project-workbook] form").forEach((form) => {
+    const allMatching = form.querySelector("[data-project-export-all-matching]");
+    const projectItems = Array.from(form.querySelectorAll("[data-project-export-item]"));
+    const attachmentToggle = form.querySelector("[data-project-export-attachments]");
+    const attachmentSheet = form.querySelector('[data-project-workbook-sheet="Attachments"]');
+    projectItems.forEach((item) => item.addEventListener("change", () => {
+      if (item.checked && allMatching) allMatching.checked = false;
+      updateProjectSelectionCount(form);
+    }));
+    allMatching?.addEventListener("change", () => {
+      if (allMatching.checked) projectItems.forEach((item) => { item.checked = false; });
+      updateProjectSelectionCount(form);
+    });
+    attachmentToggle?.addEventListener("change", () => {
+      if (attachmentSheet) attachmentSheet.checked = attachmentToggle.checked;
+    });
+    attachmentSheet?.addEventListener("change", () => {
+      if (attachmentToggle) attachmentToggle.checked = attachmentSheet.checked;
+    });
+    updateProjectSelectionCount(form);
+  });
+
   document.querySelectorAll("[data-check-selector]").forEach((root) => {
     const options = () => Array.from(root.querySelectorAll("[data-check-selector-option]"));
     root.addEventListener("change", (event) => {
