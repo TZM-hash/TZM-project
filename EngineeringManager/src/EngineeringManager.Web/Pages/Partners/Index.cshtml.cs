@@ -15,11 +15,12 @@ public sealed class IndexModel(IBusinessPartnerService partnerService) : PageMod
     public IReadOnlyList<BusinessPartnerDto> Partners { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
     public bool QuickEditOpen { get; private set; }
+    [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty] public QuickEditInput QuickEdit { get; set; } = new();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        Partners = await partnerService.ListAsync(null, null, cancellationToken);
+        Partners = await partnerService.ListAsync(Search, null, cancellationToken);
     }
 
     public async Task<IActionResult> OnPostQuickEditAsync(CancellationToken cancellationToken)
@@ -44,13 +45,13 @@ public sealed class IndexModel(IBusinessPartnerService partnerService) : PageMod
                     QuickEdit.ConcurrencyStamp,
                     QuickEdit.Reason),
                 cancellationToken);
-            return RedirectToPage();
+            return RedirectToPage(new { search = Search });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
         {
             ModelState.AddModelError(string.Empty, exception.Message);
             QuickEditOpen = true;
-            Partners = await partnerService.ListAsync(null, null, cancellationToken);
+            Partners = await partnerService.ListAsync(Search, null, cancellationToken);
             return Page();
         }
     }

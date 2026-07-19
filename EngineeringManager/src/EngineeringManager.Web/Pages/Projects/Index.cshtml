@@ -43,12 +43,28 @@
         <input type="hidden" asp-for="MinimumCurrentAmount" /><input type="hidden" asp-for="MaximumCurrentAmount" />
         <input type="hidden" asp-for="SortKey" /><input type="hidden" asp-for="SortDescending" /><input type="hidden" asp-for="PageSize" />
         @foreach (var stage in Model.Stages) { <input type="hidden" name="Stages" value="@stage" /> }
+        <input type="hidden" name="SelectedFields" value="serial_number" data-export-column-key="serial_number" />
         <input type="hidden" name="SelectedFields" value="project_number" data-export-column-key="project_number" />
         <input type="hidden" name="SelectedFields" value="project_name" data-export-column-key="project_name" />
         <input type="hidden" name="SelectedFields" value="stage" data-export-column-key="stage" />
+        <input type="hidden" name="SelectedFields" value="contract_signing_status" data-export-column-key="contract_signing_status" />
         <input type="hidden" name="SelectedFields" value="affiliation_type" data-export-column-key="affiliation_type" />
+        <input type="hidden" name="SelectedFields" value="parent_project" data-export-column-key="parent_project" />
+        <input type="hidden" name="SelectedFields" value="general_contractor" data-export-column-key="general_contractor" />
+        <input type="hidden" name="SelectedFields" value="general_contractor_contact" data-export-column-key="general_contractor_contact" />
+        <input type="hidden" name="SelectedFields" value="general_contractor_phone" data-export-column-key="general_contractor_phone" />
+        <input type="hidden" name="SelectedFields" value="responsible_user" data-export-column-key="responsible_user" />
+        <input type="hidden" name="SelectedFields" value="department" data-export-column-key="department" />
+        <input type="hidden" name="SelectedFields" value="branch" data-export-column-key="branch" />
+        <input type="hidden" name="SelectedFields" value="legal_entities" data-export-column-key="legal_entities" />
+        <input type="hidden" name="SelectedFields" value="actual_start_date" data-export-column-key="actual_start_date" />
+        <input type="hidden" name="SelectedFields" value="actual_completion_date" data-export-column-key="actual_completion_date" />
         <input type="hidden" name="SelectedFields" value="contract_amount" data-export-column-key="contract_amount" />
+        <input type="hidden" name="SelectedFields" value="estimated_amount" data-export-column-key="estimated_amount" />
+        <input type="hidden" name="SelectedFields" value="settled_amount" data-export-column-key="settled_amount" />
         <input type="hidden" name="SelectedFields" value="current_project_amount" data-export-column-key="current_project_amount" />
+        <input type="hidden" name="SelectedFields" value="contract_count" data-export-column-key="contract_count" />
+        <input type="hidden" name="SelectedFields" value="line_item_count" data-export-column-key="line_item_count" />
         <input type="hidden" name="SelectedFields" value="receivable_amount" data-export-column-key="collection_progress" />
         <input type="hidden" name="SelectedFields" value="collected_amount" data-export-column-key="collection_progress" />
         <input type="hidden" name="SelectedFields" value="uncollected_amount" data-export-column-key="collection_progress" />
@@ -68,17 +84,25 @@
         <div class="table-wrap">
             <table class="data-table" id="projects-table">
                 <thead><tr>
+                    <th data-column-key="serial_number">序号</th>
                     <th data-column-key="project_number"><button class="table-sort-button" type="button" data-sort-key="ProjectNumber">项目编号</button></th>
                     <th data-column-key="project_name"><button class="table-sort-button" type="button" data-sort-key="Name">项目名称</button></th>
-                    <th data-column-key="stage"><button class="table-sort-button" type="button" data-sort-key="Stage">阶段</button></th><th data-column-key="affiliation_type">合作方式</th>
+                    <th data-column-key="stage"><button class="table-sort-button" type="button" data-sort-key="Stage">阶段</button></th>
+                    <th data-column-key="contract_signing_status">合同签订</th><th data-column-key="affiliation_type">合作方式</th>
+                    <th data-column-key="parent_project">上级项目</th><th data-column-key="general_contractor">总包单位</th><th data-column-key="general_contractor_contact">总包联系人</th><th data-column-key="general_contractor_phone">总包电话</th>
+                    <th data-column-key="responsible_user">项目负责人</th><th data-column-key="department">部门</th><th data-column-key="branch">分支机构</th><th data-column-key="legal_entities">签约公司</th>
+                    <th data-column-key="actual_start_date">实际开始日期</th><th data-column-key="actual_completion_date">实际完工日期</th>
                     <th data-column-key="contract_amount"><button class="table-sort-button" type="button" data-sort-key="ContractAmount">合同金额</button></th>
+                    <th data-column-key="estimated_amount">预计金额</th><th data-column-key="settled_amount">已结算金额</th>
                     <th data-column-key="current_project_amount"><button class="table-sort-button" type="button" data-sort-key="CurrentAmount">当前工程金额</button></th>
-                    <th data-column-key="settlement_status"><button class="table-sort-button" type="button" data-sort-key="SettlementStatus">结算状态</button></th>
+                    <th data-column-key="settlement_status"><button class="table-sort-button" type="button" data-sort-key="SettlementStatus">结算状态</button></th><th data-column-key="contract_count">合同数量</th><th data-column-key="line_item_count">清单项数量</th>
                     <th data-column-key="collection_progress"><span class="mini-progress-label">收款率（应 / 已 / 未）</span></th><th data-column-key="payment_progress"><span class="mini-progress-label">付款率（应 / 已 / 未）</span></th><th data-column-key="invoice_progress"><span class="mini-progress-label">开票率（已 / 未）</span></th><th data-column-key="notes">备注摘要</th><th data-column-key="actions">操作</th>
                 </tr></thead>
                 <tbody>
-                @foreach (var item in Model.Result.Items)
+                @foreach (var entry in Model.Result.Items.Select((item, index) => (item, index)))
                 {
+                    var item = entry.item;
+                    var serialNumber = (Model.Result.Page - 1) * Model.Result.PageSize + entry.index + 1;
                     Model.FinanceByProjectId.TryGetValue(item.Project.Id, out var finance);
                     var receivableAmount = finance?.ReceivableAmount ?? 0m;
                     var collectedAmount = finance?.CollectedAmount ?? 0m;
@@ -90,12 +114,18 @@
                     var paymentRate = payableAmount > 0m ? Math.Clamp(paidAmount / payableAmount * 100m, 0m, 100m) : 0m;
                     var invoiceRate = invoiceBasis > 0m ? Math.Clamp(invoicedAmount / invoiceBasis * 100m, 0m, 100m) : 0m;
                     <tr>
+                        <td data-column-key="serial_number">@serialNumber</td>
                         <td data-column-key="project_number"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.ProjectNumber</a></td>
                         <td data-column-key="project_name">@item.Project.Name</td>
-                        <td data-column-key="stage" class="project-stage-cell"><span class="pill">@item.Project.Stage.ToChinese()</span></td><td data-column-key="affiliation_type">@item.Project.AffiliationType.ToChinese()</td>
+                        <td data-column-key="stage" class="project-stage-cell"><span class="pill">@item.Project.Stage.ToChinese()</span></td>
+                        <td data-column-key="contract_signing_status">@item.Project.ContractSigningStatus.ToChinese()</td><td data-column-key="affiliation_type">@item.Project.AffiliationType.ToChinese()</td>
+                        <td data-column-key="parent_project">@(item.Project.ParentProjectName ?? "未设置")</td><td data-column-key="general_contractor">@(item.Project.GeneralContractorName ?? "未设置")</td><td data-column-key="general_contractor_contact">@(item.Project.GeneralContractorContact ?? "未设置")</td><td data-column-key="general_contractor_phone">@(item.Project.GeneralContractorPhone ?? "未设置")</td>
+                        <td data-column-key="responsible_user">@(item.Project.ResponsibleUserName ?? "未设置")</td><td data-column-key="department">@(item.Project.DepartmentName ?? "未设置")</td><td data-column-key="branch">@(item.Project.BranchName ?? "未设置")</td><td data-column-key="legal_entities">@(item.Project.LegalEntityNames is { Count: > 0 } ? string.Join("、", item.Project.LegalEntityNames) : "未设置")</td>
+                        <td data-column-key="actual_start_date">@(item.Project.ActualStartDate?.ToString("yyyy-MM-dd") ?? "未设置")</td><td data-column-key="actual_completion_date">@(item.Project.ActualCompletionDate?.ToString("yyyy-MM-dd") ?? "未设置")</td>
                         <td data-column-key="contract_amount">@item.Summary.ContractAmount.ToString("N2")</td>
+                        <td data-column-key="estimated_amount">@item.Summary.EstimatedAmount.ToString("N2")</td><td data-column-key="settled_amount">@item.Summary.SettledAmount.ToString("N2")</td>
                         <td data-column-key="current_project_amount">@item.Summary.CurrentAmount.ToString("N2")</td>
-                        <td data-column-key="settlement_status">@item.Summary.SettlementStatus.ToChinese()</td>
+                        <td data-column-key="settlement_status">@item.Summary.SettlementStatus.ToChinese()</td><td data-column-key="contract_count">@item.Summary.ContractCount</td><td data-column-key="line_item_count">@item.Summary.LineItemCount</td>
                         <td data-column-key="collection_progress"><div class="mini-progress mini-progress--success"><div class="mini-progress-head"><span>收款率</span><strong>@collectionRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @collectionRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span><span class="mini-progress-values">@receivableAmount.ToString("N2") / @collectedAmount.ToString("N2") / @((finance?.UncollectedAmount ?? 0m).ToString("N2"))</span></div></td>
                         <td data-column-key="payment_progress"><div class="mini-progress mini-progress--warning"><div class="mini-progress-head"><span>付款率</span><strong>@paymentRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @paymentRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span><span class="mini-progress-values">@payableAmount.ToString("N2") / @paidAmount.ToString("N2") / @((finance?.UnpaidAmount ?? 0m).ToString("N2"))</span></div></td>
                         <td data-column-key="invoice_progress"><div class="mini-progress"><div class="mini-progress-head"><span>开票率</span><strong>@invoiceRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @invoiceRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span><span class="mini-progress-values">@invoicedAmount.ToString("N2") / @((finance?.UninvoicedAmount ?? 0m).ToString("N2"))</span></div></td>

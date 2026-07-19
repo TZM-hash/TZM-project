@@ -1,6 +1,8 @@
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -133,13 +135,81 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
         return ToDto(affiliation);
     }
 
-    public async Task<IReadOnlyList<EmployeeDto>> ListAsync(string? search, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<EmployeeDto>> ListAsync(string? search, CancellationToken cancellationToken) =>
+        ListAsync(search, false, cancellationToken);
+
+    public async Task<IReadOnlyList<EmployeeDto>> ListAsync(string? search, bool canViewSensitiveData, CancellationToken cancellationToken)
     {
         var query = EmployeeQuery().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(search))
+        foreach (var term in SearchTerms.Parse(search))
         {
-            var term = search.Trim();
-            query = query.Where(item => item.EmployeeNumber.Contains(term) || item.Name.Contains(term));
+            var employeeType = ParseEmployeeType(term);
+            var active = ParseActive(term);
+            var hasDate = SearchTerms.TryParseDate(term, out var date);
+            var hasAmount = SearchTerms.TryParseDecimal(term, out var amount);
+            if (canViewSensitiveData)
+            {
+                query = query.Where(item =>
+                    item.EmployeeNumber.Contains(term)
+                    || item.Name.Contains(term)
+                    || (item.Phone != null && item.Phone.Contains(term))
+                    || (item.PositionTitle != null && item.PositionTitle.Contains(term))
+                    || (item.Notes != null && item.Notes.Contains(term))
+                    || (item.IdentityNumber != null && item.IdentityNumber.Contains(term))
+                    || (item.BankAccountNumber != null && item.BankAccountNumber.Contains(term))
+                    || (item.BankName != null && item.BankName.Contains(term))
+                    || (item.DefaultLegalEntity != null && (item.DefaultLegalEntity.Code.Contains(term) || item.DefaultLegalEntity.Name.Contains(term) || item.DefaultLegalEntity.ShortName.Contains(term)))
+                    || item.AffiliationHistory.Any(affiliation =>
+                        (affiliation.PositionTitle != null && affiliation.PositionTitle.Contains(term))
+                        || (affiliation.Notes != null && affiliation.Notes.Contains(term))
+                        || (affiliation.Department != null && (affiliation.Department.Code.Contains(term) || affiliation.Department.Name.Contains(term)))
+                        || (affiliation.Project != null && (affiliation.Project.ProjectNumber.Contains(term) || affiliation.Project.Name.Contains(term)))
+                        || (affiliation.CrewBusinessPartner != null && (affiliation.CrewBusinessPartner.PartnerNumber.Contains(term) || affiliation.CrewBusinessPartner.Name.Contains(term) || affiliation.CrewBusinessPartner.ShortName.Contains(term)))
+                        || (affiliation.LegalEntity != null && (affiliation.LegalEntity.Code.Contains(term) || affiliation.LegalEntity.Name.Contains(term) || affiliation.LegalEntity.ShortName.Contains(term)))
+                        || (hasDate && (affiliation.StartDate == date || affiliation.EndDate == date)))
+                    || item.Certificates.Any(certificate => !certificate.IsDeleted && (
+                        certificate.CertificateType.Contains(term)
+                        || (certificate.CertificateNumber != null && certificate.CertificateNumber.Contains(term))
+                        || (certificate.SpecialtyLevelScope != null && certificate.SpecialtyLevelScope.Contains(term))
+                        || (certificate.IssuingAuthority != null && certificate.IssuingAuthority.Contains(term))
+                        || (certificate.Attachment != null && certificate.Attachment.OriginalFileName.Contains(term))
+                        || (certificate.Notes != null && certificate.Notes.Contains(term))
+                        || (hasDate && (certificate.IssuedOn == date || certificate.ExpiresOn == date))))
+                    || (employeeType.HasValue && item.EmployeeType == employeeType.Value)
+                    || (active.HasValue && item.IsActive == active.Value)
+                    || (hasDate && (item.HireDate == date || item.LeaveDate == date))
+                    || (hasAmount && (item.DefaultMonthlySalary == amount || item.DefaultDailyRate == amount || item.DefaultHourlyRate == amount || item.DefaultPieceworkRate == amount)));
+            }
+            else
+            {
+                query = query.Where(item =>
+                    item.EmployeeNumber.Contains(term)
+                    || item.Name.Contains(term)
+                    || (item.Phone != null && item.Phone.Contains(term))
+                    || (item.PositionTitle != null && item.PositionTitle.Contains(term))
+                    || (item.Notes != null && item.Notes.Contains(term))
+                    || (item.BankName != null && item.BankName.Contains(term))
+                    || (item.DefaultLegalEntity != null && (item.DefaultLegalEntity.Code.Contains(term) || item.DefaultLegalEntity.Name.Contains(term) || item.DefaultLegalEntity.ShortName.Contains(term)))
+                    || item.AffiliationHistory.Any(affiliation =>
+                        (affiliation.PositionTitle != null && affiliation.PositionTitle.Contains(term))
+                        || (affiliation.Notes != null && affiliation.Notes.Contains(term))
+                        || (affiliation.Department != null && (affiliation.Department.Code.Contains(term) || affiliation.Department.Name.Contains(term)))
+                        || (affiliation.Project != null && (affiliation.Project.ProjectNumber.Contains(term) || affiliation.Project.Name.Contains(term)))
+                        || (affiliation.CrewBusinessPartner != null && (affiliation.CrewBusinessPartner.PartnerNumber.Contains(term) || affiliation.CrewBusinessPartner.Name.Contains(term) || affiliation.CrewBusinessPartner.ShortName.Contains(term)))
+                        || (affiliation.LegalEntity != null && (affiliation.LegalEntity.Code.Contains(term) || affiliation.LegalEntity.Name.Contains(term) || affiliation.LegalEntity.ShortName.Contains(term)))
+                        || (hasDate && (affiliation.StartDate == date || affiliation.EndDate == date)))
+                    || item.Certificates.Any(certificate => !certificate.IsDeleted && (
+                        certificate.CertificateType.Contains(term)
+                        || (certificate.CertificateNumber != null && certificate.CertificateNumber.Contains(term))
+                        || (certificate.SpecialtyLevelScope != null && certificate.SpecialtyLevelScope.Contains(term))
+                        || (certificate.IssuingAuthority != null && certificate.IssuingAuthority.Contains(term))
+                        || (certificate.Attachment != null && certificate.Attachment.OriginalFileName.Contains(term))
+                        || (certificate.Notes != null && certificate.Notes.Contains(term))
+                        || (hasDate && (certificate.IssuedOn == date || certificate.ExpiresOn == date))))
+                    || (employeeType.HasValue && item.EmployeeType == employeeType.Value)
+                    || (active.HasValue && item.IsActive == active.Value)
+                    || (hasDate && (item.HireDate == date || item.LeaveDate == date)));
+            }
         }
 
         var employees = await query.OrderBy(item => item.EmployeeNumber).ToListAsync(cancellationToken);
@@ -244,6 +314,21 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             .Include(item => item.AffiliationHistory).ThenInclude(item => item.Project)
             .Include(item => item.AffiliationHistory).ThenInclude(item => item.CrewBusinessPartner)
             .Include(item => item.AffiliationHistory).ThenInclude(item => item.LegalEntity);
+
+    private static EmployeeType? ParseEmployeeType(string term) => term switch
+    {
+        "正式" or "正式员工" => EmployeeType.Formal,
+        "劳务" or "劳务员工" => EmployeeType.Labor,
+        "临时" or "特殊临时人员" => EmployeeType.Temporary,
+        _ => Enum.TryParse<EmployeeType>(term, true, out var value) ? value : null
+    };
+
+    private static bool? ParseActive(string term) => term switch
+    {
+        "启用" or "在用" or "在职" => true,
+        "停用" or "离职" => false,
+        _ => null
+    };
 
     private static string NormalizeRequired(string value, string parameterName)
     {

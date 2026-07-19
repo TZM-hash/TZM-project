@@ -4,6 +4,7 @@ using EngineeringManager.Application.Companies;
 using EngineeringManager.Domain.Certificates;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Files;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Certificates;
@@ -15,10 +16,20 @@ public sealed class CompanyCertificateService(ApplicationDbContext db, IFileStor
         var query = Authorized(actor).AsNoTracking().Include(item => item.LegalEntity).Include(item => item.Attachment).Where(item => !item.IsDeleted);
         if (filter.OwnerId.HasValue) query = query.Where(item => item.LegalEntityId == filter.OwnerId);
         if (!string.IsNullOrWhiteSpace(filter.CertificateType)) query = query.Where(item => item.CertificateType == filter.CertificateType.Trim());
-        if (!string.IsNullOrWhiteSpace(filter.Search))
+        foreach (var term in SearchTerms.Parse(filter.Search))
         {
-            var term = filter.Search.Trim();
-            query = query.Where(item => item.LegalEntity.Code.Contains(term) || item.LegalEntity.Name.Contains(term) || item.CertificateType.Contains(term) || (item.CertificateNumber != null && item.CertificateNumber.Contains(term)));
+            var hasDate = SearchTerms.TryParseDate(term, out var date);
+            query = query.Where(item =>
+                item.LegalEntity.Code.Contains(term)
+                || item.LegalEntity.Name.Contains(term)
+                || item.LegalEntity.ShortName.Contains(term)
+                || item.CertificateType.Contains(term)
+                || (item.CertificateNumber != null && item.CertificateNumber.Contains(term))
+                || (item.SpecialtyLevelScope != null && item.SpecialtyLevelScope.Contains(term))
+                || (item.IssuingAuthority != null && item.IssuingAuthority.Contains(term))
+                || (item.Notes != null && item.Notes.Contains(term))
+                || (item.Attachment != null && item.Attachment.OriginalFileName.Contains(term))
+                || (hasDate && (item.IssuedOn == date || item.ExpiresOn == date)));
         }
         var items = await query.OrderBy(item => item.ExpiresOn == null).ThenBy(item => item.ExpiresOn).ThenBy(item => item.LegalEntity.Code).ToListAsync(cancellationToken);
         var result = items.Select(item => ToDto(item, today)).ToArray();

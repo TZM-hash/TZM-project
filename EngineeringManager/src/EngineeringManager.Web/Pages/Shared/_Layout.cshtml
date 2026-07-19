@@ -87,6 +87,11 @@
         <footer class="app-footer">工程项目经营管理系统 · 内部经营管理</footer>
     </div>
     <div class="toast-region" aria-live="polite" data-pwa-status></div>
+    <dialog class="conflict-notice" data-conflict-notice aria-labelledby="conflict-notice-title">
+        <div class="conflict-notice__icon" aria-hidden="true">!</div>
+        <div><p class="eyebrow">数据已变化</p><h2 id="conflict-notice-title">当前记录存在冲突</h2><p data-conflict-message>其他用户或模块已更新这条数据，请刷新后核对最新内容。</p></div>
+        <div class="conflict-notice__actions"><button class="button button--secondary" type="button" data-conflict-close>暂不刷新</button><button class="button button--primary" type="button" data-conflict-refresh>刷新页面</button></div>
+    </dialog>
     <script type="module" src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>

@@ -29,7 +29,7 @@ public sealed class ProjectOverviewExportTests
         sheets.Select(item => item.Name).Should().Equal("总览汇总", "项目明细");
         sheets[0].Rows.Should().Contain(row => row.Count > 0 && Equals(row[0], "未收款"));
         sheets[1].Rows[0].Should().Contain("项目编号");
-        sheets[1].Rows.Should().Contain(row => row.Count > 1 && Equals(row[0], fixture.Project.ProjectNumber));
+        sheets[1].Rows.Should().Contain(row => row.Count > 1 && row.Contains(fixture.Project.ProjectNumber));
     }
 
     [Fact]
@@ -47,6 +47,24 @@ public sealed class ProjectOverviewExportTests
         sheets[1].Rows[0].Should().Equal("未收款", "项目编号");
         lastSelection.Should().NotBeNull();
         lastSelection!.SelectedFields.Should().Equal(selectedFields);
+    }
+
+    [Fact]
+    public async Task ProjectOverviewCanExportContinuousSerialNumbers()
+    {
+        await using var fixture = await ExportFixture.CreateAsync();
+
+        var second = new Project { ProjectNumber = "EXPORT-Q", Name = "第二个导出项目", Stage = ProjectStage.UnderConstruction };
+        fixture.Db.Projects.Add(second);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(
+            new ExportRequest(ExportDataset.ProjectOverview, "leader-serial", ["serial_number", "project_name"], null),
+            CancellationToken.None);
+        var details = SimpleXlsxReader.Read(file.Content)[1].Rows;
+
+        details[0].Should().Equal("序号", "项目名称");
+        details.Skip(1).Select(row => row[0]).Should().Equal(1d, 2d);
     }
 
     [Fact]

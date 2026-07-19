@@ -1,12 +1,19 @@
 @page
 @model EngineeringManager.Web.Pages.Payroll.IndexModel
-@{ ViewData["Title"] = "工资台账"; }
+@using EngineeringManager.Web.Workbenches
+@{
+    ViewData["Title"] = "工资台账";
+    var workbench = DataWorkbenchPresets.Payroll with
+    {
+        InlineFilters = new DataWorkbenchFilterField[] { new("Search", "搜索", Model.Search, Placeholder: "搜索工资台账全部信息") }
+    };
+}
 
 <section class="page-heading"><div><p class="eyebrow">真实付款批次</p><h1>工资台账</h1><p class="page-lead">员工和施工班组人员共用一套发放明细；一个批次对应一次真实账户支出。</p></div><a class="button button--primary button--action" asp-page="/Payroll/Edit">新建工资批次</a></section>
 <section class="overview-strip" aria-label="工资发放汇总"><article><span>实际发放总额</span><strong>@Model.Overview.ActualAmount.ToString("N2")</strong></article><article><span>员工发放</span><strong>@Model.Overview.EmployeeAmount.ToString("N2")</strong></article><article><span>班组工程款</span><strong>@Model.Overview.CrewAmount.ToString("N2")</strong></article><article><span>待核对差额</span><strong>@Model.Overview.Difference.ToString("N2")</strong></article></section>
-<section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">批次记录</p><h2>真实工资发放</h2></div></div><div class="table-wrap"><table class="data-table" id="payroll-disbursement-table"><thead><tr><th>批次</th><th>发放日期</th><th>人数</th><th>实际总额</th><th>员工</th><th>班组</th><th>差额</th><th>状态</th><th>操作</th></tr></thead><tbody>
+<section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">批次记录</p><h2>真实工资发放</h2></div></div><partial name="_DataWorkbench" model="workbench" /><div class="table-wrap"><table class="data-table" id="payroll-disbursement-table"><thead><tr><th data-column-key="batch">批次</th><th data-column-key="payment_date">发放日期</th><th data-column-key="recipients">人数</th><th data-column-key="actual">实际总额</th><th data-column-key="employee">员工</th><th data-column-key="crew">班组</th><th data-column-key="difference">差额</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead><tbody>
 @foreach (var item in Model.Overview.Batches)
 {
-    <tr><td>@item.Batch.BatchNumber · @item.Batch.Name</td><td>@(item.Batch.PaymentDate?.ToString() ?? "暂未填写")</td><td>@item.RecipientCount</td><td>@item.Batch.ActualAmount.ToString("N2")</td><td>@item.Summary.EmployeeAmount.ToString("N2")</td><td>@item.Summary.CrewAmount.ToString("N2")</td><td>@item.Summary.Difference.ToString("N2")</td><td>@item.Batch.Status</td><td><a class="button button--secondary button--small" asp-page="/Payroll/Edit" asp-route-id="@item.Batch.Id">查看并修改</a></td></tr>
+    <tr><td data-column-key="batch">@item.Batch.BatchNumber · @item.Batch.Name</td><td data-column-key="payment_date">@(item.Batch.PaymentDate?.ToString() ?? "暂未填写")</td><td data-column-key="recipients">@item.RecipientCount</td><td data-column-key="actual">@item.Batch.ActualAmount.ToString("N2")</td><td data-column-key="employee">@item.Summary.EmployeeAmount.ToString("N2")</td><td data-column-key="crew">@item.Summary.CrewAmount.ToString("N2")</td><td data-column-key="difference">@item.Summary.Difference.ToString("N2")</td><td data-column-key="status">@item.Batch.Status</td><td data-column-key="actions"><a class="button button--secondary button--small" asp-page="/Payroll/Edit" asp-route-id="@item.Batch.Id">查看并修改</a></td></tr>
 }
 </tbody></table></div></section>

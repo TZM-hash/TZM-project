@@ -107,6 +107,7 @@ public sealed class HomePageTests
         html.Should().Contain("data-chart-series");
         html.Should().Contain("data-dashboard-equipment");
         html.Should().Contain("data-dashboard-payroll");
+        html.Should().Contain("data-dashboard-cash");
         html.Should().Contain("1,000.00");
     }
 

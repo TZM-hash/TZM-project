@@ -7,6 +7,7 @@ public sealed class ImportBatch
     public Guid Id { get; set; } = Guid.NewGuid();
     public string CreatedByUserId { get; set; } = string.Empty;
     public ExportDataset Dataset { get; set; }
+    public ImportMode Mode { get; set; } = ImportMode.Mixed;
     public string OriginalFileName { get; set; } = string.Empty;
     public byte[] OriginalContent { get; set; } = [];
     public string MappingJson { get; set; } = "{}";

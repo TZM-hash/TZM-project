@@ -46,4 +46,20 @@ public sealed class SimpleXlsxWorkbookTests
         duplicate.Should().Throw<ArgumentException>();
         invalid.Should().Throw<ArgumentException>();
     }
+
+    [Fact]
+    public void WorkbookWritesInternalAndRelativeFileHyperlinks()
+    {
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet("目录", ["模块", "附件"], [[new XlsxHyperlink("员工", "'员工'!A1"), new XlsxHyperlink("身份证附件", "attachments/employee/id.pdf", true)]]);
+        workbook.AddWorksheet("员工", ["姓名"], [["测试员工"]]);
+
+        var bytes = workbook.ToArray();
+        using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(bytes), System.IO.Compression.ZipArchiveMode.Read);
+        using var sheetReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        using var relationshipReader = new StreamReader(archive.GetEntry("xl/worksheets/_rels/sheet1.xml.rels")!.Open());
+
+        sheetReader.ReadToEnd().Should().Contain("location=\"'员工'!A1\"").And.Contain("r:id=\"rId1\"");
+        relationshipReader.ReadToEnd().Should().Contain("attachments/employee/id.pdf");
+    }
 }

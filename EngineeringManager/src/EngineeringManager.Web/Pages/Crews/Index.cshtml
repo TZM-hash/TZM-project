@@ -1,5 +1,12 @@
 @page
 @model EngineeringManager.Web.Pages.Crews.IndexModel
-@{ ViewData["Title"] = "施工班组管理"; }
+@using EngineeringManager.Web.Workbenches
+@{
+    ViewData["Title"] = "施工班组管理";
+    var workbench = DataWorkbenchPresets.Crews with
+    {
+        InlineFilters = new DataWorkbenchFilterField[] { new("Search", "搜索", Model.Search, Placeholder: "搜索班组全部信息") }
+    };
+}
 <section class="page-heading"><div><p class="eyebrow">合作单位专属视图</p><h1>施工班组管理</h1><p class="page-lead">施工班组继续共用合作单位主档，人员名册和工资代发工程款在此集中管理。</p></div><a class="button button--secondary" asp-page="/Partners/Create">新增施工班组单位</a></section>
-<section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>班组</th><th>专业</th><th>负责人</th><th>当前人员</th><th>参与项目</th><th>累计代发工程款</th><th>最近发放</th><th>操作</th></tr></thead><tbody>@foreach (var item in Model.Crews) { <tr><td>@item.PartnerNumber · @item.Name</td><td>@(item.TradeCategory ?? "未填写")</td><td>@(item.PrimaryContact ?? "未设置") @item.PrimaryPhone</td><td>@item.CurrentWorkerCount</td><td>@item.ProjectCount</td><td>@item.TotalPaidAmount.ToString("N2")</td><td>@(item.LastPaymentDate?.ToString() ?? "暂无")</td><td><a asp-page="/Crews/Details" asp-route-id="@item.Id">人员名册与工程款</a></td></tr> }</tbody></table></div></section>
+<section class="panel"><partial name="_DataWorkbench" model="workbench" /><div class="table-wrap"><table class="data-table" id="crews-table"><thead><tr><th data-column-key="crew">班组</th><th data-column-key="trade">专业</th><th data-column-key="contact">负责人</th><th data-column-key="workers">当前人员</th><th data-column-key="projects">参与项目</th><th data-column-key="paid">累计代发工程款</th><th data-column-key="last_payment">最近发放</th><th data-column-key="actions">操作</th></tr></thead><tbody>@foreach (var item in Model.Crews) { <tr><td data-column-key="crew">@item.PartnerNumber · @item.Name</td><td data-column-key="trade">@(item.TradeCategory ?? "未填写")</td><td data-column-key="contact">@(item.PrimaryContact ?? "未设置") @item.PrimaryPhone</td><td data-column-key="workers">@item.CurrentWorkerCount</td><td data-column-key="projects">@item.ProjectCount</td><td data-column-key="paid">@item.TotalPaidAmount.ToString("N2")</td><td data-column-key="last_payment">@(item.LastPaymentDate?.ToString() ?? "暂无")</td><td data-column-key="actions"><a asp-page="/Crews/Details" asp-route-id="@item.Id">人员名册与工程款</a></td></tr> }</tbody></table></div></section>

@@ -4,16 +4,67 @@ using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.ConstructionCrews;
 
 public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstructionCrewService
 {
-    public async Task<IReadOnlyList<ConstructionCrewListItemDto>> ListAsync(bool includeInactive, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ConstructionCrewListItemDto>> ListAsync(bool includeInactive, CancellationToken cancellationToken) =>
+        ListAsync(includeInactive, null, false, cancellationToken);
+
+    public Task<IReadOnlyList<ConstructionCrewListItemDto>> ListAsync(bool includeInactive, string? search, CancellationToken cancellationToken) =>
+        ListAsync(includeInactive, search, false, cancellationToken);
+
+    public async Task<IReadOnlyList<ConstructionCrewListItemDto>> ListAsync(bool includeInactive, string? search, bool canViewSensitiveData, CancellationToken cancellationToken)
     {
-        var crews = await db.BusinessPartners.AsNoTracking()
-            .Where(item => item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew) && (includeInactive || item.IsActive))
+        var query = db.BusinessPartners.AsNoTracking()
+            .Where(item => item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew) && (includeInactive || item.IsActive));
+        foreach (var term in SearchTerms.Parse(search))
+        {
+            if (canViewSensitiveData)
+            {
+                query = query.Where(item =>
+                    item.PartnerNumber.Contains(term)
+                    || item.Name.Contains(term)
+                    || item.ShortName.Contains(term)
+                    || (item.UnifiedSocialCreditCode != null && item.UnifiedSocialCreditCode.Contains(term))
+                    || (item.Notes != null && item.Notes.Contains(term))
+                    || item.Roles.Any(role => (role.TradeCategory != null && role.TradeCategory.Contains(term)) || (role.PricingRule != null && role.PricingRule.Contains(term)) || (role.SettlementTerms != null && role.SettlementTerms.Contains(term)))
+                    || item.Contacts.Any(contact => contact.Name.Contains(term) || (contact.Phone != null && contact.Phone.Contains(term)) || (contact.Email != null && contact.Email.Contains(term)) || (contact.Address != null && contact.Address.Contains(term)) || (contact.Notes != null && contact.Notes.Contains(term)))
+                    || item.ProjectLinks.Any(link => link.Project.ProjectNumber.Contains(term) || link.Project.Name.Contains(term) || (link.Notes != null && link.Notes.Contains(term)))
+                    || db.ConstructionCrewMemberships.Any(membership => membership.CrewBusinessPartnerId == item.Id && (
+                        membership.Worker.Name.Contains(term)
+                        || (membership.Worker.Phone != null && membership.Worker.Phone.Contains(term))
+                        || (membership.Worker.Trade != null && membership.Worker.Trade.Contains(term))
+                        || (membership.Worker.Notes != null && membership.Worker.Notes.Contains(term))
+                        || (membership.Worker.IdentityNumber != null && membership.Worker.IdentityNumber.Contains(term))
+                        || (membership.Worker.BankAccountNumber != null && membership.Worker.BankAccountNumber.Contains(term))
+                        || (membership.Worker.BankName != null && membership.Worker.BankName.Contains(term))
+                        || (membership.Notes != null && membership.Notes.Contains(term)))));
+            }
+            else
+            {
+                query = query.Where(item =>
+                    item.PartnerNumber.Contains(term)
+                    || item.Name.Contains(term)
+                    || item.ShortName.Contains(term)
+                    || (item.UnifiedSocialCreditCode != null && item.UnifiedSocialCreditCode.Contains(term))
+                    || (item.Notes != null && item.Notes.Contains(term))
+                    || item.Roles.Any(role => (role.TradeCategory != null && role.TradeCategory.Contains(term)) || (role.PricingRule != null && role.PricingRule.Contains(term)) || (role.SettlementTerms != null && role.SettlementTerms.Contains(term)))
+                    || item.Contacts.Any(contact => contact.Name.Contains(term) || (contact.Phone != null && contact.Phone.Contains(term)) || (contact.Email != null && contact.Email.Contains(term)) || (contact.Address != null && contact.Address.Contains(term)) || (contact.Notes != null && contact.Notes.Contains(term)))
+                    || item.ProjectLinks.Any(link => link.Project.ProjectNumber.Contains(term) || link.Project.Name.Contains(term) || (link.Notes != null && link.Notes.Contains(term)))
+                    || db.ConstructionCrewMemberships.Any(membership => membership.CrewBusinessPartnerId == item.Id && (
+                        membership.Worker.Name.Contains(term)
+                        || (membership.Worker.Phone != null && membership.Worker.Phone.Contains(term))
+                        || (membership.Worker.Trade != null && membership.Worker.Trade.Contains(term))
+                        || (membership.Worker.Notes != null && membership.Worker.Notes.Contains(term))
+                        || (membership.Worker.BankName != null && membership.Worker.BankName.Contains(term))
+                        || (membership.Notes != null && membership.Notes.Contains(term)))));
+            }
+        }
+        var crews = await query
             .Include(item => item.Roles)
             .Include(item => item.Contacts)
             .Include(item => item.ProjectLinks)

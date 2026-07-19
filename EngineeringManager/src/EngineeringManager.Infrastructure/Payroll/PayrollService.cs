@@ -4,6 +4,7 @@ using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Payroll;
@@ -107,10 +108,43 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             batch.CrewAllocations.Select(item => new PayrollCrewAllocationDto(item.Id, item.CrewBusinessPartnerId, item.ContractId, item.PayableEntryId, item.Notes, item.ConcurrencyStamp)).ToArray());
     }
 
-    public async Task<PayrollDisbursementOverviewDto> GetDisbursementOverviewAsync(CancellationToken cancellationToken)
+    public Task<PayrollDisbursementOverviewDto> GetDisbursementOverviewAsync(CancellationToken cancellationToken) =>
+        SearchDisbursementOverviewAsync(null, false, cancellationToken);
+
+    public async Task<PayrollDisbursementOverviewDto> SearchDisbursementOverviewAsync(string? search, bool canViewSensitiveData, CancellationToken cancellationToken)
     {
-        var ids = await db.PayrollBatches.AsNoTracking()
-            .Where(item => item.IsUnifiedDisbursement && item.Status != PayrollBatchStatus.Voided)
+        var query = db.PayrollBatches.AsNoTracking()
+            .Where(item => item.IsUnifiedDisbursement && item.Status != PayrollBatchStatus.Voided);
+        foreach (var term in SearchTerms.Parse(search))
+        {
+            var hasDate = SearchTerms.TryParseDate(term, out var date);
+            var hasAmount = SearchTerms.TryParseDecimal(term, out var amount);
+            query = query.Where(item =>
+                item.BatchNumber.Contains(term)
+                || item.Name.Contains(term)
+                || (item.StageOrMilestoneName != null && item.StageOrMilestoneName.Contains(term))
+                || (item.VoucherNumber != null && item.VoucherNumber.Contains(term))
+                || (item.Notes != null && item.Notes.Contains(term))
+                || (item.Project != null && (item.Project.ProjectNumber.Contains(term) || item.Project.Name.Contains(term) || (item.Project.Notes != null && item.Project.Notes.Contains(term))))
+                || (item.LegalEntity != null && (item.LegalEntity.Code.Contains(term) || item.LegalEntity.Name.Contains(term) || item.LegalEntity.ShortName.Contains(term)))
+                || (item.Account != null && (item.Account.AccountName.Contains(term) || (item.Account.BankName != null && item.Account.BankName.Contains(term)) || (item.Account.Notes != null && item.Account.Notes.Contains(term)) || (canViewSensitiveData && item.Account.AccountNumber != null && item.Account.AccountNumber.Contains(term))))
+                || (hasDate && (item.StartDate == date || item.EndDate == date || item.PaymentDate == date))
+                || (hasAmount && item.ActualAmount == amount)
+                || item.Payments.Any(payment =>
+                    (payment.PayeeName != null && payment.PayeeName.Contains(term))
+                    || (payment.RecipientNameSnapshot != null && payment.RecipientNameSnapshot.Contains(term))
+                    || (payment.TradeSnapshot != null && payment.TradeSnapshot.Contains(term))
+                    || (payment.Notes != null && payment.Notes.Contains(term))
+                    || (payment.Employee != null && (payment.Employee.EmployeeNumber.Contains(term) || payment.Employee.Name.Contains(term) || (payment.Employee.PositionTitle != null && payment.Employee.PositionTitle.Contains(term))))
+                    || (payment.ConstructionWorker != null && (payment.ConstructionWorker.Name.Contains(term) || (payment.ConstructionWorker.Trade != null && payment.ConstructionWorker.Trade.Contains(term)) || (payment.ConstructionWorker.Phone != null && payment.ConstructionWorker.Phone.Contains(term)) || (payment.ConstructionWorker.Notes != null && payment.ConstructionWorker.Notes.Contains(term))))
+                    || (payment.CrewBusinessPartner != null && (payment.CrewBusinessPartner.PartnerNumber.Contains(term) || payment.CrewBusinessPartner.Name.Contains(term) || payment.CrewBusinessPartner.ShortName.Contains(term)))
+                    || (canViewSensitiveData && ((payment.IdentityNumberSnapshot != null && payment.IdentityNumberSnapshot.Contains(term)) || (payment.BankAccountSnapshot != null && payment.BankAccountSnapshot.Contains(term)) || (payment.ConstructionWorker != null && payment.ConstructionWorker.IdentityNumber != null && payment.ConstructionWorker.IdentityNumber.Contains(term)))))
+                || item.CrewAllocations.Any(allocation =>
+                    (allocation.CrewBusinessPartner.PartnerNumber.Contains(term) || allocation.CrewBusinessPartner.Name.Contains(term) || allocation.CrewBusinessPartner.ShortName.Contains(term))
+                    || (allocation.Notes != null && allocation.Notes.Contains(term))));
+        }
+
+        var ids = await query
             .OrderByDescending(item => item.PaymentDate)
             .ThenBy(item => item.BatchNumber)
             .Select(item => item.Id)

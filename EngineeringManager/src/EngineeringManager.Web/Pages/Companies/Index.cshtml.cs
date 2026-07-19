@@ -14,12 +14,13 @@ public sealed class IndexModel(ICompanyManagementService companyService, ICompan
     public IReadOnlyList<CompanyCategoryDto> Categories { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
     [BindProperty(SupportsGet = true)] public Guid? CompanyId { get; set; }
+    [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty] public CategoryInput Category { get; set; } = new();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         var actor = await ResolveActorAsync(cancellationToken);
-        Companies = await companyService.ListAsync(actor, cancellationToken);
+        Companies = await companyService.SearchAsync(actor, Search, cancellationToken);
         Dashboard = await companyService.GetDashboardAsync(actor, CompanyId, cancellationToken);
         Categories = await companyService.ListCategoriesAsync(cancellationToken);
     }

@@ -36,6 +36,20 @@ public sealed class UiEffectsAssetTests
         css.Should().NotContain("fonts.googleapis.com");
     }
 
+    [Fact]
+    public void SharedConflictNoticeRequiresExplicitRefreshInsteadOfOverwriting()
+    {
+        var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
+        var site = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "site.js");
+        var component = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "conflict-notice.js");
+
+        layout.Should().Contain("data-conflict-notice").And.Contain("data-conflict-refresh");
+        site.Should().Contain("./components/conflict-notice.js");
+        component.Should().Contain("validation-summary-errors")
+            .And.Contain("window.location.reload()")
+            .And.NotContain("requestSubmit");
+    }
+
     private static string ReadCss() => string.Join('\n', CssFiles
         .Select(file => ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", file)));
 

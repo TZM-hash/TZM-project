@@ -25,7 +25,7 @@ public sealed class IndexModel(
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
         new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
-        new HashSet<string>(["project_number", "project_name", "stage", "affiliation_type", "contract_amount", "current_project_amount", "settlement_status", "collection_progress", "payment_progress", "invoice_progress", "notes", "actions"], StringComparer.Ordinal),
+        new HashSet<string>(["serial_number", "project_number", "project_name", "stage", "contract_signing_status", "affiliation_type", "parent_project", "general_contractor", "general_contractor_contact", "general_contractor_phone", "responsible_user", "department", "branch", "legal_entities", "actual_start_date", "actual_completion_date", "contract_amount", "estimated_amount", "settled_amount", "current_project_amount", "settlement_status", "contract_count", "line_item_count", "collection_progress", "payment_progress", "invoice_progress", "notes", "actions"], StringComparer.Ordinal),
         new HashSet<string>(["ProjectNumber", "Name", "Stage", "ContractAmount", "CurrentAmount", "SettlementStatus"], StringComparer.Ordinal));
 
     public ProjectListPageDto Result { get; private set; } = new([], new ProjectListAggregateDto(0, 0m, 0m, 0), 1, 20, 0, 1, []);
@@ -124,7 +124,7 @@ public sealed class IndexModel(
     {
         var filters = new List<DataWorkbenchFilterField>
         {
-            new("Search", "关键词", Search, Placeholder: "项目编号、名称或总包单位"),
+            new("Search", "关键词", Search, Placeholder: "支持本模块全部信息：项目、合同、清单、公司、合作单位、备注"),
             new("Stages", "项目阶段", Stages.Count > 0 ? ((int)Stages[0]).ToString(System.Globalization.CultureInfo.InvariantCulture) : null, DataWorkbenchFilterKind.Select,
                 Enum.GetValues<ProjectStage>().Select(value => new DataWorkbenchFilterOption(((int)value).ToString(System.Globalization.CultureInfo.InvariantCulture), StageLabel(value))).ToArray()),
             new("LegalEntityId", "签约公司", LegalEntityId?.ToString(), DataWorkbenchFilterKind.Select,
@@ -149,13 +149,29 @@ public sealed class IndexModel(
             "projects",
             "projects-table",
             [
-                new("project_number", "项目编号", true, true),
+                new("serial_number", "序号", true, true),
+                new("project_number", "项目编号", true, false),
                 new("project_name", "项目名称"),
                 new("stage", "阶段"),
+                new("contract_signing_status", "合同签订"),
                 new("affiliation_type", "合作方式"),
+                new("parent_project", "上级项目"),
+                new("general_contractor", "总包单位"),
+                new("general_contractor_contact", "总包联系人"),
+                new("general_contractor_phone", "总包电话"),
+                new("responsible_user", "项目负责人"),
+                new("department", "部门"),
+                new("branch", "分支机构"),
+                new("legal_entities", "签约公司"),
+                new("actual_start_date", "实际开始日期"),
+                new("actual_completion_date", "实际完工日期"),
                 new("contract_amount", "合同金额"),
+                new("estimated_amount", "预计金额"),
+                new("settled_amount", "已结算金额"),
                 new("current_project_amount", "当前工程金额"),
                 new("settlement_status", "结算状态"),
+                new("contract_count", "合同数量"),
+                new("line_item_count", "清单项数量"),
                 new("collection_progress", "收款（应/已/未）"),
                 new("payment_progress", "付款（应/已/未）"),
                 new("invoice_progress", "开票（已/未）"),
@@ -170,7 +186,8 @@ public sealed class IndexModel(
             SortKey,
             SortDescending,
             selected?.Id,
-            true);
+            true,
+            InlineFilters: [filters[0]]);
     }
 
     private void ApplySavedView(SavedDataViewDto view)

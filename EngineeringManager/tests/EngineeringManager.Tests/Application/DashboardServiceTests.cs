@@ -46,6 +46,39 @@ public sealed class DashboardServiceTests
         result.UnpaidPayrollAmount.Should().Be(150m);
         result.OpenReminderCount.Should().Be(1);
         result.Risks.Should().ContainSingle(item => item.Title == "经营风险");
+        result.CashWatchlist.Should().ContainSingle().Which.Should().Match<DashboardProjectCashDto>(item =>
+            item.ProjectNumber == "P-DASH" &&
+            item.CollectedAmount == 500m &&
+            item.PaidAmount == 200m &&
+            item.UncollectedAmount == 500m &&
+            item.UnpaidAmount == 180m &&
+            item.CashGap == 300m);
+    }
+
+    [Fact]
+    public async Task DashboardFinanceUsesOnlyProjectsAuthorizedForActor()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.SeedBusinessDataAsync();
+        fixture.Db.Users.AddRange(
+            new ApplicationUser { Id = "project-user", UserName = "project-user" },
+            new ApplicationUser { Id = "another-user", UserName = "another-user" });
+        var authorized = await fixture.Db.Projects.SingleAsync(item => item.ProjectNumber == "P-DASH");
+        authorized.ResponsibleUserId = "project-user";
+        fixture.Db.Projects.Add(new Project
+        {
+            ProjectNumber = "P-HIDDEN",
+            Name = "无权项目",
+            Stage = ProjectStage.UnderConstruction,
+            ResponsibleUserId = "another-user"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var result = await fixture.Service.GetAsync(new DashboardActor("project-user", false, true, false), default);
+
+        result.CashWatchlist.Should().ContainSingle(item => item.ProjectId == authorized.Id);
+        result.CashWatchlist.Should().NotContain(item => item.ProjectNumber == "P-HIDDEN");
+        result.MoneyComparisons.Single(item => item.Key == "receivable").TotalAmount.Should().Be(1000m);
     }
 
     [Fact]

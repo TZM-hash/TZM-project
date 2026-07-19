@@ -2,7 +2,19 @@
 @model EngineeringManager.Web.Pages.Employees.IndexModel
 @using EngineeringManager.Domain.Employees
 @using EngineeringManager.Web.Presentation
-@{ ViewData["Title"] = "员工管理"; }
+@using EngineeringManager.Web.Workbenches
+@{
+    ViewData["Title"] = "员工管理";
+    var workbench = DataWorkbenchPresets.Employees with
+    {
+        InlineFilters = new DataWorkbenchFilterField[]
+        {
+            new("Search", "搜索", Model.Search, Placeholder: "搜索员工全部信息"),
+            new("EmployeeType", "类型", Model.EmployeeType?.ToString(), DataWorkbenchFilterKind.Select,
+                new DataWorkbenchFilterOption[] { new("Formal", "正式员工"), new("Labor", "劳务员工"), new("Temporary", "特殊临时人员") })
+        }
+    };
+}
 
 <partial name="_EmployeeSubNavigation" />
 
@@ -11,12 +23,7 @@
 
 <section class="panel" style="margin-top: var(--space-3)">
     <div class="panel-heading"><div><p class="eyebrow">员工清单</p><h2>基础资料</h2><small>@(Model.CanManage ? "点击每行的“快捷编辑员工”，可直接在当前单元格修改常用字段。" : "查看员工常用资料与归属记录。")</small></div></div>
-    <form method="get" class="data-workbench-toolbar filter-bar" aria-label="员工筛选">
-        <label><span>搜索</span><input asp-for="Search" placeholder="员工编号、姓名" /></label>
-        <label><span>员工类型</span><select asp-for="EmployeeType"><option value="">全部</option><option value="@EmployeeType.Formal">正式员工</option><option value="@EmployeeType.Labor">劳务员工</option><option value="@EmployeeType.Temporary">特殊临时人员</option></select></label>
-        <button class="button button--secondary workbench-tool-button" type="submit">筛选</button>
-    </form>
-    <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Employees" />
+    <partial name="_DataWorkbench" model="workbench" />
     @if (Model.CanManage) { <div asp-validation-summary="All" class="panel-copy"></div> }
     <div class="table-wrap"><table class="data-table" id="employees-table"><thead><tr><th data-column-key="employee_number">员工编号</th><th data-column-key="name">姓名</th><th data-column-key="employee_type">类型</th><th data-column-key="position">岗位</th><th data-column-key="phone">电话</th><th data-column-key="assignments">主归属记录</th><th data-column-key="notes">备注摘要</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead><tbody>
     @foreach (var item in Model.Employees)
@@ -32,7 +39,7 @@
             <td data-column-key="assignments">@item.Affiliations.Count</td>
             <td data-column-key="notes">@(string.IsNullOrWhiteSpace(item.Notes) ? "—" : item.Notes.Length > 40 ? item.Notes[..40] + "…" : item.Notes)</td>
             <td data-column-key="status"><span data-inline-edit-value>@(item.IsActive ? "启用" : "停用")</span>@if (Model.CanManage) { <select class="inline-cell-control" name="QuickEdit.IsActive" form="@formId" data-inline-edit-control hidden><option value="true" selected="@(item.IsActive ? "selected" : null)">启用</option><option value="false" selected="@(!item.IsActive ? "selected" : null)">停用</option></select> }</td>
-            <td data-column-key="actions"><div class="table-action-buttons"><a class="button button--secondary button--small button--action" asp-page="/Employees/Details" asp-route-id="@item.Id">详情与总账</a>@if (Model.CanManage) { <button class="button button--primary button--small button--action" type="button" data-inline-edit-open>快捷编辑员工</button> }<a class="button button--secondary button--small button--action" asp-page="/Employees/Create" asp-route-id="@item.Id">详细编辑</a><a class="button button--text button--small" asp-page="/Employees/Create" asp-route-copyFrom="@item.Id">复制</a>@if (Model.CanManage) { <button class="button button--secondary button--small button--action" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button><button class="button button--primary button--small button--action" type="submit" form="@formId" data-inline-edit-actions hidden>保存</button><form id="@formId" method="post" asp-page-handler="QuickEdit"><input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="EmployeeType" value="@Model.EmployeeType" /><input type="hidden" name="QuickEdit.Id" value="@item.Id" /><input type="hidden" name="QuickEdit.IdentityNumber" value="@item.IdentityNumber" /><input type="hidden" name="QuickEdit.BankAccountNumber" value="@item.BankAccountNumber" /><input type="hidden" name="QuickEdit.BankName" value="@item.BankName" /><input type="hidden" name="QuickEdit.HireDate" value="@item.HireDate?.ToString("yyyy-MM-dd")" /><input type="hidden" name="QuickEdit.LeaveDate" value="@item.LeaveDate?.ToString("yyyy-MM-dd")" /><input type="hidden" name="QuickEdit.DefaultLegalEntityId" value="@item.DefaultLegalEntityId" /><input type="hidden" name="QuickEdit.DefaultMonthlySalary" value="@item.DefaultMonthlySalary" /><input type="hidden" name="QuickEdit.DefaultDailyRate" value="@item.DefaultDailyRate" /><input type="hidden" name="QuickEdit.DefaultHourlyRate" value="@item.DefaultHourlyRate" /><input type="hidden" name="QuickEdit.DefaultPieceworkRate" value="@item.DefaultPieceworkRate" /><input type="hidden" name="QuickEdit.ConcurrencyStamp" value="@item.ConcurrencyStamp" /><input type="hidden" name="QuickEdit.Reason" value="快捷编辑员工资料" /></form> }</div></td>
+            <td data-column-key="actions"><div class="table-action-buttons table-action-buttons--compact"><a class="button button--secondary button--small button--action" asp-page="/Employees/Details" asp-route-id="@item.Id">详情与总账</a>@if (Model.CanManage) { <button class="button button--primary button--small button--action" type="button" data-inline-edit-open>快捷编辑员工</button> }<a class="button button--secondary button--small button--action" asp-page="/Employees/Create" asp-route-id="@item.Id">详细编辑</a><a class="button button--text button--small" asp-page="/Employees/Create" asp-route-copyFrom="@item.Id">复制</a>@if (Model.CanManage) { <button class="button button--secondary button--small button--action" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button><button class="button button--primary button--small button--action" type="submit" form="@formId" data-inline-edit-actions hidden>保存</button><form id="@formId" method="post" asp-page-handler="QuickEdit"><input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="EmployeeType" value="@Model.EmployeeType" /><input type="hidden" name="QuickEdit.Id" value="@item.Id" /><input type="hidden" name="QuickEdit.IdentityNumber" value="@item.IdentityNumber" /><input type="hidden" name="QuickEdit.BankAccountNumber" value="@item.BankAccountNumber" /><input type="hidden" name="QuickEdit.BankName" value="@item.BankName" /><input type="hidden" name="QuickEdit.HireDate" value="@item.HireDate?.ToString("yyyy-MM-dd")" /><input type="hidden" name="QuickEdit.LeaveDate" value="@item.LeaveDate?.ToString("yyyy-MM-dd")" /><input type="hidden" name="QuickEdit.DefaultLegalEntityId" value="@item.DefaultLegalEntityId" /><input type="hidden" name="QuickEdit.DefaultMonthlySalary" value="@item.DefaultMonthlySalary" /><input type="hidden" name="QuickEdit.DefaultDailyRate" value="@item.DefaultDailyRate" /><input type="hidden" name="QuickEdit.DefaultHourlyRate" value="@item.DefaultHourlyRate" /><input type="hidden" name="QuickEdit.DefaultPieceworkRate" value="@item.DefaultPieceworkRate" /><input type="hidden" name="QuickEdit.ConcurrencyStamp" value="@item.ConcurrencyStamp" /><input type="hidden" name="QuickEdit.Reason" value="快捷编辑员工资料" /></form> }</div></td>
         </tr>
     }
     </tbody></table></div>

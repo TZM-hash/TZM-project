@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.IO.Compression;
+using System.Security.Cryptography;
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.DataExchange;
@@ -6,25 +8,56 @@ using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Projects;
+using EngineeringManager.Infrastructure.Files;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.DataExchange;
 
-public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService financeService) : IExportService
+public sealed class ExportService : IExportService
 {
+    private readonly ApplicationDbContext db;
+    private readonly IFinanceLedgerService financeService;
+    private readonly IFileStore? fileStore;
+
+    public ExportService(ApplicationDbContext db, IFinanceLedgerService financeService)
+        : this(db, financeService, null) { }
+
+    public ExportService(ApplicationDbContext db, IFinanceLedgerService financeService, IFileStore? fileStore)
+    {
+        this.db = db;
+        this.financeService = financeService;
+        this.fileStore = fileStore;
+    }
+
     private const string LastSelectionName = "__last_selection__";
     private static readonly Dictionary<ExportDataset, IReadOnlyList<ExportFieldDefinition>> Catalogs =
         new Dictionary<ExportDataset, IReadOnlyList<ExportFieldDefinition>>
         {
             [ExportDataset.ProjectOverview] =
             [
+                new("serial_number", "序号", ExportFieldDataType.Number, true, CanImport: false),
                 new("project_number", "项目编号", ExportFieldDataType.Text, true),
                 new("project_name", "项目名称", ExportFieldDataType.Text, true),
                 new("stage", "项目阶段", ExportFieldDataType.Text, true),
+                new("contract_signing_status", "合同签订", ExportFieldDataType.Text, true),
                 new("affiliation_type", "项目合作方式", ExportFieldDataType.Text, true),
+                new("parent_project", "上级项目", ExportFieldDataType.Text, false),
                 new("general_contractor", "总包单位", ExportFieldDataType.Text, true),
+                new("general_contractor_contact", "总包联系人", ExportFieldDataType.Text, false),
+                new("general_contractor_phone", "总包电话", ExportFieldDataType.Text, false),
+                new("responsible_user", "项目负责人", ExportFieldDataType.Text, false),
+                new("department", "部门", ExportFieldDataType.Text, false),
+                new("branch", "分支机构", ExportFieldDataType.Text, false),
+                new("legal_entities", "签约公司", ExportFieldDataType.Text, false),
+                new("actual_start_date", "实际开始日期", ExportFieldDataType.Date, false),
+                new("actual_completion_date", "实际完工日期", ExportFieldDataType.Date, false),
                 new("contract_amount", "合同金额", ExportFieldDataType.Number, true),
+                new("estimated_amount", "预计金额", ExportFieldDataType.Number, true),
+                new("settled_amount", "已结算金额", ExportFieldDataType.Number, true),
                 new("current_project_amount", "当前工程金额", ExportFieldDataType.Number, true),
+                new("settlement_status", "结算状态", ExportFieldDataType.Text, true),
+                new("contract_count", "合同数量", ExportFieldDataType.Number, true, CanImport: false),
+                new("line_item_count", "清单项数量", ExportFieldDataType.Number, true, CanImport: false),
                 new("receivable_amount", "应收款", ExportFieldDataType.Number, true),
                 new("collected_amount", "已收款", ExportFieldDataType.Number, true),
                 new("uncollected_amount", "未收款", ExportFieldDataType.Number, true),
@@ -43,8 +76,40 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("employee_type", "员工类型", ExportFieldDataType.Text, true),
                 new("position", "岗位", ExportFieldDataType.Text, true),
                 new("phone", "电话", ExportFieldDataType.Text, false),
+                new("identity_number", "身份证号", ExportFieldDataType.Text, false, true, true, true),
+                new("bank_account_number", "银行卡号", ExportFieldDataType.Text, false, true, true, true),
+                new("bank_name", "开户行", ExportFieldDataType.Text, false, true, true, true),
+                new("default_monthly_salary", "默认月工资", ExportFieldDataType.Number, false, true, true, true),
+                new("default_daily_rate", "默认日工资", ExportFieldDataType.Number, false, true, true, true),
+                new("default_hourly_rate", "默认时工资", ExportFieldDataType.Number, false, true, true, true),
+                new("default_piecework_rate", "默认计件单价", ExportFieldDataType.Number, false, true, true, true),
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true),
+                new("_concurrency_stamp", "并发版本", ExportFieldDataType.Text, false, true, true, false, false, true),
                 new("is_active", "状态", ExportFieldDataType.Boolean, true),
                 new("notes", "备注", ExportFieldDataType.Text, false)
+            ],
+            [ExportDataset.Projects] =
+            [
+                new("project_number", "项目编号", ExportFieldDataType.Text, true),
+                new("project_name", "项目名称", ExportFieldDataType.Text, true),
+                new("stage", "项目阶段", ExportFieldDataType.Text, true),
+                new("contract_signing_status", "合同状态", ExportFieldDataType.Text, true),
+                new("affiliation_type", "项目合作方式", ExportFieldDataType.Text, true),
+                new("general_contractor", "总包单位", ExportFieldDataType.Text, false),
+                new("actual_start_date", "实际开工日期", ExportFieldDataType.Date, false),
+                new("actual_completion_date", "实际完工日期", ExportFieldDataType.Date, false),
+                new("is_active", "状态", ExportFieldDataType.Boolean, true),
+                new("notes", "备注", ExportFieldDataType.Text, false),
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true),
+                new("_concurrency_stamp", "并发版本", ExportFieldDataType.Text, false, true, true, false, false, true)
+            ],
+            [ExportDataset.Contracts] =
+            [
+                new("project_number", "项目编号", ExportFieldDataType.Text, true), new("contract_number", "合同编号", ExportFieldDataType.Text, true), new("name", "合同名称", ExportFieldDataType.Text, true), new("contract_type", "合同类型", ExportFieldDataType.Text, true), new("counterparty_name", "对方单位", ExportFieldDataType.Text, false), new("signed_date", "签订日期", ExportFieldDataType.Date, false), new("total_amount", "合同金额", ExportFieldDataType.Number, true), new("is_active", "状态", ExportFieldDataType.Boolean, true), new("notes", "备注", ExportFieldDataType.Text, false)
+            ],
+            [ExportDataset.StageResults] =
+            [
+                new("project_number", "项目编号", ExportFieldDataType.Text, true), new("title", "成果标题", ExportFieldDataType.Text, true), new("result_type", "成果类型", ExportFieldDataType.Text, true), new("status", "状态", ExportFieldDataType.Text, true), new("result_date", "成果日期", ExportFieldDataType.Date, true), new("quality_result", "质量结果", ExportFieldDataType.Text, false), new("description", "说明", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.EmployeeCertificates] =
             [
@@ -81,11 +146,11 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("recipient_type", "人员来源", ExportFieldDataType.Text, true),
                 new("recipient_name", "人员姓名", ExportFieldDataType.Text, true),
                 new("crew", "施工班组", ExportFieldDataType.Text, false),
-                new("amount", "个人金额", ExportFieldDataType.Number, true),
-                new("actual_amount", "批次实际总额", ExportFieldDataType.Number, true),
-                new("payable_amount", "应发工资", ExportFieldDataType.Number, true),
-                new("paid_amount", "已发工资", ExportFieldDataType.Number, true),
-                new("unpaid_amount", "未发工资", ExportFieldDataType.Number, true),
+                new("amount", "个人金额", ExportFieldDataType.Number, true, true, true, true),
+                new("actual_amount", "批次实际总额", ExportFieldDataType.Number, true, true, true, true),
+                new("payable_amount", "应发工资", ExportFieldDataType.Number, true, true, true, true),
+                new("paid_amount", "已发工资", ExportFieldDataType.Number, true, true, true, true),
+                new("unpaid_amount", "未发工资", ExportFieldDataType.Number, true, true, true, true),
                 new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Collections] =
@@ -150,8 +215,8 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
                 new("company_code", "公司编码", ExportFieldDataType.Text, true),
                 new("account_name", "账户名称", ExportFieldDataType.Text, true),
                 new("account_type", "账户类型", ExportFieldDataType.Text, true),
-                new("account_number", "账号", ExportFieldDataType.Text, false),
-                new("bank_name", "开户行", ExportFieldDataType.Text, false),
+                new("account_number", "账号", ExportFieldDataType.Text, false, true, true, true),
+                new("bank_name", "开户行", ExportFieldDataType.Text, false, true, true, true),
                 new("opening_balance", "期初余额", ExportFieldDataType.Number, true),
                 new("default_collection", "默认收款", ExportFieldDataType.Boolean, true),
                 new("default_payment", "默认付款", ExportFieldDataType.Boolean, true),
@@ -207,11 +272,32 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
     public async Task<ExportFileResult> ExportAsync(ExportRequest request, CancellationToken cancellationToken)
     {
         var userId = NormalizeRequired(request.UserId, nameof(request.UserId));
-        var fields = ExportSelectionValidator.ResolveFields(GetFieldCatalog(request.Dataset), request.SelectedFields);
+        var fields = ExportSelectionValidator.ResolveFields(GetFieldCatalog(request.Dataset), request.SelectedFields)
+            .Select(field => request.CanViewSensitiveData ? field with { IsSensitive = false } : field)
+            .ToArray();
         ExportSelectionValidator.ValidateCutoffDate(request.CutoffDate);
-        var file = request.Dataset switch
+        var task = new DataExchangeTask
         {
+            UserId = userId,
+            Direction = DataExchangeDirection.Export,
+            DatasetsJson = JsonSerializer.Serialize(new[] { request.Dataset }),
+            SelectedFieldsJson = JsonSerializer.Serialize(new Dictionary<ExportDataset, IReadOnlyList<string>> { [request.Dataset] = fields.Select(item => item.Key).ToArray() }),
+            FilterJson = JsonSerializer.Serialize(new { request.CutoffDate, request.ProjectIds }),
+            Scope = request.Scope,
+            PackageFormat = request.PackageFormat,
+            IncludeAttachments = request.IncludeAttachments,
+            Status = DataExchangeTaskStatus.Running
+        };
+        db.DataExchangeTasks.Add(task);
+        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            var file = request.Dataset switch
+            {
             ExportDataset.ProjectOverview => await ExportProjectOverviewAsync(fields, request.CutoffDate, request.ProjectIds, cancellationToken),
+            ExportDataset.Projects => await ExportProjectsAsync(fields, cancellationToken),
+            ExportDataset.Contracts => await ExportContractsAsync(fields, cancellationToken),
+            ExportDataset.StageResults => await ExportStageResultsAsync(fields, cancellationToken),
             ExportDataset.Employees => await ExportEmployeesAsync(fields, cancellationToken),
             ExportDataset.EmployeeCertificates => await ExportEmployeeCertificatesAsync(fields, cancellationToken),
             ExportDataset.Partners => await ExportPartnersAsync(fields, cancellationToken),
@@ -228,10 +314,136 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ExportDataset.EquipmentUsages => await ExportEquipmentUsagesAsync(fields, cancellationToken),
             ExportDataset.EquipmentPeriods => await ExportEquipmentPeriodsAsync(fields, cancellationToken),
             ExportDataset.EquipmentSettlements => await ExportEquipmentSettlementsAsync(fields, cancellationToken),
-            _ => throw new NotSupportedException($"暂不支持导出数据集：{request.Dataset}")
-        };
-        await SaveLastSelectionAsync(userId, request.Dataset, fields.Select(item => item.Key).ToArray(), request.CutoffDate, cancellationToken);
-        return file;
+                _ => throw new NotSupportedException($"暂不支持导出数据集：{request.Dataset}")
+            };
+            task.Status = DataExchangeTaskStatus.Completed;
+            task.FileName = file.FileName;
+            task.ContentType = file.ContentType;
+            task.ResultContent = file.Content;
+            task.RowCount = SimpleXlsxReader.Read(file.Content).Sum(sheet => Math.Max(0, sheet.Rows.Count - 1));
+            task.Sha256 = Convert.ToHexString(SHA256.HashData(file.Content));
+            task.CompletedAt = DateTimeOffset.UtcNow;
+            db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "DataExport", EntityType = nameof(DataExchangeTask), EntityId = task.Id.ToString(), Reason = $"导出 {request.Dataset}", AfterJson = JsonSerializer.Serialize(new { request.Dataset, fields = fields.Select(item => item.Key), task.RowCount, task.Sha256 }) });
+            await SaveLastSelectionAsync(userId, request.Dataset, fields.Select(item => item.Key).ToArray(), request.CutoffDate, cancellationToken);
+            return file;
+        }
+        catch (Exception exception)
+        {
+            task.Status = DataExchangeTaskStatus.Failed;
+            task.ErrorMessage = exception.Message[..Math.Min(exception.Message.Length, 2000)];
+            task.CompletedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<ExportFileResult> ExportModulesAsync(ExportModuleRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var datasets = request.Datasets.Distinct().ToArray();
+        if (datasets.Length == 0) throw new ArgumentException("至少选择一个数据集。", nameof(request));
+        if (request.IncludeAttachments && !request.CanViewSensitiveData) throw new UnauthorizedAccessException("只有具备敏感数据权限的管理员可以导出附件。");
+        var files = new List<ExportFileResult>(datasets.Length);
+        foreach (var dataset in datasets)
+        {
+            request.SelectedFields.TryGetValue(dataset, out var selectedFields);
+            IReadOnlyList<Guid>? projectIds = null;
+            request.ProjectIds?.TryGetValue(dataset, out projectIds);
+            files.Add(await ExportAsync(new ExportRequest(dataset, request.UserId, selectedFields ?? [], null, projectIds, request.CanViewSensitiveData, ExportScope.SelectedModules, request.PackageFormat, request.IncludeAttachments), cancellationToken));
+        }
+        if (datasets.Length == 1 && request.PackageFormat == ExportPackageFormat.Workbook) return files[0];
+
+        if (request.PackageFormat == ExportPackageFormat.Workbook)
+        {
+            var workbook = new SimpleXlsxWorkbook();
+            var directory = datasets.Select((dataset, index) => (IReadOnlyList<object?>)[new XlsxHyperlink(dataset.ToString(), $"'{DatasetSheetName(dataset)}'!A1"), new XlsxHyperlink(files[index].FileName, files[index].FileName, true)]).ToArray();
+            workbook.AddWorksheet("目录", ["数据集", "文件"], directory);
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "目录" };
+            foreach (var file in files)
+            {
+                foreach (var sheet in SimpleXlsxReader.Read(file.Content))
+                {
+                    var sheetName = SafeWorksheetName(sheet.Name, usedNames);
+                    workbook.AddWorksheet(sheetName, sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray(), sheet.Rows.Skip(1));
+                }
+            }
+            return new ExportFileResult($"数据交换_{DateTime.Now:yyyyMMddHHmmss}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", workbook.ToArray());
+        }
+
+        await using var output = new MemoryStream();
+        var attachments = request.IncludeAttachments
+            ? await db.Attachments.AsNoTracking().Where(item => !item.IsDeleted).OrderBy(item => item.UploadedAt).ToListAsync(cancellationToken)
+            : [];
+        using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var navigation = new SimpleXlsxWorkbook();
+            navigation.AddWorksheet("目录", ["数据集", "文件"], datasets.Select((dataset, index) => (IReadOnlyList<object?>)[dataset.ToString(), new XlsxHyperlink(files[index].FileName, files[index].FileName, true)]));
+            if (attachments.Count > 0)
+            {
+                navigation.AddWorksheet("附件", ["原文件名", "所属项目", "相对路径"], attachments.Select(item =>
+                {
+                    var relativePath = $"attachments/{item.Id:N}/{SafeFileName(item.OriginalFileName)}";
+                    return (IReadOnlyList<object?>)[item.OriginalFileName, item.ProjectId?.ToString(), new XlsxHyperlink(relativePath, relativePath, true)];
+                }));
+            }
+            var navigationEntry = archive.CreateEntry("data-navigation.xlsx", CompressionLevel.Fastest);
+            await using (var navigationStream = navigationEntry.Open())
+            {
+                var navigationBytes = navigation.ToArray();
+                await navigationStream.WriteAsync(navigationBytes, cancellationToken);
+            }
+            var checksumLines = new List<string> { $"{Convert.ToHexString(SHA256.HashData(navigation.ToArray()))}  data-navigation.xlsx" };
+            foreach (var file in files)
+            {
+                var entry = archive.CreateEntry(file.FileName, CompressionLevel.Fastest);
+                await using var target = entry.Open();
+                await target.WriteAsync(file.Content, cancellationToken);
+                checksumLines.Add($"{Convert.ToHexString(SHA256.HashData(file.Content))}  {file.FileName}");
+            }
+            if (attachments.Count > 0 && fileStore is not null)
+            {
+                foreach (var attachment in attachments)
+                {
+                    var path = $"attachments/{attachment.Id:N}/{SafeFileName(attachment.OriginalFileName)}";
+                    var entry = archive.CreateEntry(path, CompressionLevel.Fastest);
+                    await using var source = await fileStore.OpenReadAsync(attachment.StoredName, cancellationToken);
+                    await using var target = entry.Open();
+                    using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                    var buffer = new byte[81920];
+                    int read;
+                    while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+                    {
+                        await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                        hash.AppendData(buffer, 0, read);
+                    }
+                    checksumLines.Add($"{Convert.ToHexString(hash.GetHashAndReset())}  {path}");
+                }
+            }
+            var manifest = JsonSerializer.Serialize(new
+            {
+                exportedAt = DateTimeOffset.UtcNow,
+                datasets,
+                files = files.Select(file => new { file.FileName, sha256 = Convert.ToHexString(SHA256.HashData(file.Content)) }),
+                attachments = attachments.Select(item => new { item.Id, item.OriginalFileName, path = $"attachments/{item.Id:N}/{SafeFileName(item.OriginalFileName)}" })
+            });
+            var manifestEntry = archive.CreateEntry("manifest.json", CompressionLevel.Fastest);
+            await using (var manifestStream = new StreamWriter(manifestEntry.Open()))
+            {
+                await manifestStream.WriteAsync(manifest);
+            }
+            var checksumEntry = archive.CreateEntry("checksums.sha256", CompressionLevel.Fastest);
+            await using var checksumStream = new StreamWriter(checksumEntry.Open());
+            await checksumStream.WriteAsync(string.Join(Environment.NewLine, checksumLines));
+        }
+        return new ExportFileResult($"数据交换_{DateTime.Now:yyyyMMddHHmmss}.zip", "application/zip", output.ToArray());
+    }
+
+    public async Task<IReadOnlyList<ExportTaskDto>> ListTasksAsync(string userId, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeRequired(userId, nameof(userId));
+        var tasks = (await db.DataExchangeTasks.AsNoTracking().Where(item => item.UserId == normalized && item.Direction == DataExchangeDirection.Export)
+            .ToListAsync(cancellationToken)).OrderByDescending(item => item.CreatedAt).Take(100).ToArray();
+        return tasks.Select(item => new ExportTaskDto(item.Id, item.UserId, JsonSerializer.Deserialize<ExportDataset[]>(item.DatasetsJson) ?? [], item.Scope, item.PackageFormat, item.IncludeAttachments, item.Status, item.RowCount, item.FileName, item.ErrorMessage, item.CreatedAt, item.CompletedAt)).ToArray();
     }
 
     public async Task<ExportSelectionDto?> GetLastSelectionAsync(string userId, ExportDataset dataset, CancellationToken cancellationToken)
@@ -285,6 +497,11 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
         var query = db.Projects.AsNoTracking()
             .Include(item => item.Contracts)
                 .ThenInclude(item => item.LineItems)
+            .Include(item => item.ResponsibleUser)
+            .Include(item => item.Department)
+            .Include(item => item.Branch)
+            .Include(item => item.LegalEntities)
+                .ThenInclude(item => item.LegalEntity)
             .Where(item => item.IsActive);
         if (projectIds is not null)
         {
@@ -302,24 +519,41 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
         decimal unpaidTotal = 0m;
         decimal invoiceTotal = 0m;
         decimal uninvoicedTotal = 0m;
-        foreach (var project in projects)
+        for (var index = 0; index < projects.Count; index++)
         {
+            var project = projects[index];
             var projectSummary = ProjectSummaryService.Calculate(project);
             var finance = await financeService.GetSummaryAsync(new FinanceSummaryFilter(project.Id, CutoffDate: cutoffDate), cancellationToken);
             var values = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
+                ["serial_number"] = index + 1,
                 ["project_number"] = project.ProjectNumber,
                 ["project_name"] = project.Name,
                 ["stage"] = project.Stage.ToString(),
+                ["contract_signing_status"] = project.ContractSigningStatus.ToString(),
                 ["affiliation_type"] = project.AffiliationType switch
                 {
                     EngineeringManager.Domain.Projects.ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方",
                     EngineeringManager.Domain.Projects.ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方",
                     _ => "自营项目"
                 },
+                ["parent_project"] = project.ParentProjectName,
                 ["general_contractor"] = project.GeneralContractorName,
+                ["general_contractor_contact"] = project.GeneralContractorContact,
+                ["general_contractor_phone"] = project.GeneralContractorPhone,
+                ["responsible_user"] = project.ResponsibleUser?.DisplayName,
+                ["department"] = project.Department?.Name,
+                ["branch"] = project.Branch?.Name,
+                ["legal_entities"] = string.Join("、", project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => item.LegalEntity.ShortName)),
+                ["actual_start_date"] = project.ActualStartDate,
+                ["actual_completion_date"] = project.ActualCompletionDate,
                 ["contract_amount"] = projectSummary.ContractAmount,
+                ["estimated_amount"] = projectSummary.EstimatedAmount,
+                ["settled_amount"] = projectSummary.SettledAmount,
                 ["current_project_amount"] = projectSummary.CurrentAmount,
+                ["settlement_status"] = projectSummary.SettlementStatus.ToString(),
+                ["contract_count"] = projectSummary.ContractCount,
+                ["line_item_count"] = projectSummary.LineItemCount,
                 ["receivable_amount"] = finance.ReceivableAmount,
                 ["collected_amount"] = finance.CollectedAmount,
                 ["uncollected_amount"] = finance.UncollectedAmount,
@@ -375,9 +609,45 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
             ["employee_type"] = EmployeeTypeLabel(item.EmployeeType),
             ["position"] = item.PositionTitle,
             ["phone"] = item.Phone,
+            ["identity_number"] = item.IdentityNumber,
+            ["bank_account_number"] = item.BankAccountNumber,
+            ["bank_name"] = item.BankName,
+            ["default_monthly_salary"] = item.DefaultMonthlySalary,
+            ["default_daily_rate"] = item.DefaultDailyRate,
+            ["default_hourly_rate"] = item.DefaultHourlyRate,
+            ["default_piecework_rate"] = item.DefaultPieceworkRate,
+            ["_system_id"] = item.Id.ToString(),
+            ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString(),
             ["is_active"] = item.IsActive,
             ["notes"] = item.Notes
         })), "员工台账");
+    }
+
+    private async Task<ExportFileResult> ExportProjectsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    {
+        var projects = await db.Projects.AsNoTracking().OrderBy(item => item.ProjectNumber).ToListAsync(cancellationToken);
+        return CreateSingleSheet("项目", fields, projects.Select(item => Project(fields, new(StringComparer.Ordinal)
+        {
+            ["project_number"] = item.ProjectNumber, ["project_name"] = item.Name, ["stage"] = item.Stage.ToString(), ["contract_signing_status"] = item.ContractSigningStatus.ToString(), ["affiliation_type"] = item.AffiliationType.ToString(), ["general_contractor"] = item.GeneralContractorName, ["actual_start_date"] = item.ActualStartDate, ["actual_completion_date"] = item.ActualCompletionDate, ["is_active"] = item.IsActive, ["notes"] = item.Notes, ["_system_id"] = item.Id.ToString(), ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString()
+        })), "项目台账");
+    }
+
+    private async Task<ExportFileResult> ExportContractsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    {
+        var contracts = await db.Contracts.AsNoTracking().Include(item => item.Project).OrderBy(item => item.Project.ProjectNumber).ThenBy(item => item.ContractNumber).ToListAsync(cancellationToken);
+        return CreateSingleSheet("合同", fields, contracts.Select(item => Project(fields, new(StringComparer.Ordinal)
+        {
+            ["project_number"] = item.Project.ProjectNumber, ["contract_number"] = item.ContractNumber, ["name"] = item.Name, ["contract_type"] = item.ContractType.ToString(), ["counterparty_name"] = item.CounterpartyName, ["signed_date"] = item.SignedDate, ["total_amount"] = item.TotalAmount, ["is_active"] = item.IsActive, ["notes"] = item.Notes
+        })), "合同台账");
+    }
+
+    private async Task<ExportFileResult> ExportStageResultsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    {
+        var results = await db.StageResults.AsNoTracking().Include(item => item.Project).OrderBy(item => item.Project.ProjectNumber).ThenBy(item => item.ResultDate).ToListAsync(cancellationToken);
+        return CreateSingleSheet("阶段成果", fields, results.Select(item => Project(fields, new(StringComparer.Ordinal)
+        {
+            ["project_number"] = item.Project.ProjectNumber, ["title"] = item.Title, ["result_type"] = item.ResultType.ToString(), ["status"] = item.Status.ToString(), ["result_date"] = item.ResultDate, ["quality_result"] = item.QualityResult.ToString(), ["description"] = item.Description
+        })), "阶段成果");
     }
 
     private static string EmployeeTypeLabel(EmployeeType employeeType) => employeeType switch
@@ -641,7 +911,60 @@ public sealed class ExportService(ApplicationDbContext db, IFinanceLedgerService
     }
 
     private static object?[] Project(IReadOnlyList<ExportFieldDefinition> fields, Dictionary<string, object?> values) =>
-        fields.Select(field => values[field.Key]).ToArray();
+        fields.Select(field => field.IsSensitive ? MaskSensitive(values[field.Key]) : values[field.Key]).ToArray();
+
+    private static string MaskSensitive(object? value) => value switch
+    {
+        null => string.Empty,
+        string text when text.Length <= 4 => "******",
+        string text => $"******{text[^4..]}",
+        _ => "已脱敏"
+    };
+
+    private static string SafeWorksheetName(string name, HashSet<string> used)
+    {
+        var candidate = new string(name.Where(character => !"[]:*?/\\".Contains(character)).ToArray());
+        candidate = string.IsNullOrWhiteSpace(candidate) ? "数据" : candidate[..Math.Min(candidate.Length, 31)];
+        var suffix = 2;
+        var unique = candidate;
+        while (!used.Add(unique))
+        {
+            var tail = $"-{suffix++}";
+            unique = candidate[..Math.Min(candidate.Length, 31 - tail.Length)] + tail;
+        }
+        return unique;
+    }
+
+    private static string DatasetSheetName(ExportDataset dataset) => dataset switch
+    {
+        ExportDataset.ProjectOverview => "总览汇总",
+        ExportDataset.Projects => "项目",
+        ExportDataset.Contracts => "合同",
+        ExportDataset.StageResults => "阶段成果",
+        ExportDataset.Employees => "员工",
+        ExportDataset.EmployeeCertificates => "员工证书",
+        ExportDataset.Partners => "合作单位",
+        ExportDataset.Payroll => "工资",
+        ExportDataset.Collections => "收款",
+        ExportDataset.Payments => "付款",
+        ExportDataset.Invoices => "发票",
+        ExportDataset.Accounts => "资金账户",
+        ExportDataset.Companies => "自有公司",
+        ExportDataset.CompanyAccounts => "公司账户",
+        ExportDataset.CompanyCertificates => "公司证照",
+        ExportDataset.Equipment => "设备档案",
+        ExportDataset.EquipmentLeases => "租赁约定",
+        ExportDataset.EquipmentUsages => "设备使用",
+        ExportDataset.EquipmentPeriods => "设备日期段",
+        ExportDataset.EquipmentSettlements => "设备结算",
+        _ => dataset.ToString()
+    };
+
+    private static string SafeFileName(string fileName)
+    {
+        var safe = new string(Path.GetFileName(fileName).Where(character => !Path.GetInvalidFileNameChars().Contains(character)).ToArray());
+        return string.IsNullOrWhiteSpace(safe) ? "attachment.bin" : safe;
+    }
 
     private static ExportFileResult CreateSingleSheet(string sheetName, IReadOnlyList<ExportFieldDefinition> fields, IEnumerable<IReadOnlyList<object?>> rows, string filePrefix)
     {

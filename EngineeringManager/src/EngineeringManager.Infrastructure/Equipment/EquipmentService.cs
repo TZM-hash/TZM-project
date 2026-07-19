@@ -2,6 +2,7 @@ using System.Text.Json;
 using EngineeringManager.Application.Equipment;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Equipment;
@@ -131,7 +132,38 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
         if (filter.CompanyId.HasValue) query = query.Where(item => item.OwnerLegalEntityId == filter.CompanyId || item.ProjectUsages.Any(usage => usage.LegalEntityId == filter.CompanyId));
         if (filter.ProjectId.HasValue) query = query.Where(item => item.ProjectUsages.Any(usage => usage.ProjectId == filter.ProjectId));
         if (filter.Status.HasValue) query = query.Where(item => item.Status == filter.Status);
-        if (!string.IsNullOrWhiteSpace(filter.Keyword)) { var keyword = filter.Keyword.Trim(); query = query.Where(item => item.EquipmentNumber.Contains(keyword) || item.Name.Contains(keyword)); }
+        foreach (var term in SearchTerms.Parse(filter.Keyword))
+        {
+            var ownership = ParseOwnership(term);
+            var status = ParseStatus(term);
+            var hasDate = SearchTerms.TryParseDate(term, out var date);
+            var hasAmount = SearchTerms.TryParseDecimal(term, out var amount);
+            query = query.Where(item =>
+                item.EquipmentNumber.Contains(term)
+                || item.Name.Contains(term)
+                || (item.Model != null && item.Model.Contains(term))
+                || (item.Category != null && item.Category.Contains(term))
+                || (item.Notes != null && item.Notes.Contains(term))
+                || (item.OwnerLegalEntity != null && (item.OwnerLegalEntity.Code.Contains(term) || item.OwnerLegalEntity.Name.Contains(term) || item.OwnerLegalEntity.ShortName.Contains(term)))
+                || (item.LessorBusinessPartner != null && (item.LessorBusinessPartner.PartnerNumber.Contains(term) || item.LessorBusinessPartner.Name.Contains(term) || item.LessorBusinessPartner.ShortName.Contains(term)))
+                || (item.ProjectUsages.Any(usage =>
+                    (usage.Project.ProjectNumber.Contains(term) || usage.Project.Name.Contains(term))
+                    || usage.LegalEntity.Code.Contains(term)
+                    || (usage.Notes != null && usage.Notes.Contains(term))
+                    || (usage.SharedUsageReason != null && usage.SharedUsageReason.Contains(term))
+                    || (hasDate && (usage.EntryDate == date || usage.ExitDate == date))
+                    || (hasAmount && usage.UnitRate == amount)))
+                || item.MaintenanceRecords.Any(record =>
+                    (record.MaintenanceType != null && record.MaintenanceType.Contains(term))
+                    || (record.Provider != null && record.Provider.Contains(term))
+                    || (record.Notes != null && record.Notes.Contains(term))
+                    || (hasDate && (record.MaintenanceDate == date || record.NextDueDate == date))
+                    || (hasAmount && record.Amount == amount))
+                || (hasDate && item.PurchaseDate == date)
+                || (hasAmount && (item.PurchaseAmount == amount || item.InternalDailyRate == amount))
+                || (ownership.HasValue && item.OwnershipType == ownership.Value)
+                || (status.HasValue && item.Status == status.Value));
+        }
         var items = await query.OrderBy(item => item.EquipmentNumber).ToListAsync(token);
         var ids = items.Select(item => item.Id).ToHashSet();
         var settled = await db.EquipmentSettlements.AsNoTracking().Where(item => ids.Contains(item.Usage.EquipmentId)).SumAsync(item => (decimal?)item.TotalAmount, token) ?? 0m;
@@ -220,6 +252,22 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
     private static object Snapshot(Data.Equipment item) => new { item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate, item.Notes };
     private static object UsageSnapshot(EquipmentProjectUsage item) => new { item.EquipmentId, item.ProjectId, item.LegalEntityId, item.EntryDate, item.ExitDate, item.RentMode, item.UnitRate, item.SharedUsageOverride, Periods = item.Periods.Select(period => new { period.StartDate, period.EndDate, period.PeriodType, period.IsChargeable }) };
     private static void EnsureManage(EquipmentActor actor) { if (!actor.CanManage) throw new UnauthorizedAccessException("当前用户没有设备管理权限。"); }
+    private static EquipmentStatus? ParseStatus(string term) => term switch
+    {
+        "闲置" => EquipmentStatus.Idle,
+        "使用中" => EquipmentStatus.InUse,
+        "维修中" => EquipmentStatus.Maintenance,
+        "停用" => EquipmentStatus.Disabled,
+        "报废" => EquipmentStatus.Scrapped,
+        "已转出" => EquipmentStatus.TransferredOut,
+        _ => Enum.TryParse<EquipmentStatus>(term, true, out var value) ? value : null
+    };
+    private static EquipmentOwnershipType? ParseOwnership(string term) => term switch
+    {
+        "自有" or "自有设备" => EquipmentOwnershipType.SelfOwned,
+        "租赁" or "租赁设备" => EquipmentOwnershipType.Rented,
+        _ => Enum.TryParse<EquipmentOwnershipType>(term, true, out var value) ? value : null
+    };
     private static string Required(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException($"{name}不能为空。") : value.Trim();
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

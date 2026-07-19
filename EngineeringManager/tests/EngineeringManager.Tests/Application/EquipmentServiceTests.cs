@@ -70,6 +70,21 @@ public sealed class EquipmentServiceTests
         await rented.Should().ThrowAsync<ArgumentException>().WithMessage("*出租方*");
     }
 
+    [Fact]
+    public async Task EquipmentSearchUsesAllMasterAndRelatedFields()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "EQ-SEARCH-C", Name = "设备搜索公司", ShortName = "设备搜索" };
+        var lessor = new BusinessPartner { PartnerNumber = "EQ-SEARCH-L", Name = "设备出租方", ShortName = "出租方" };
+        scope.Db.AddRange(company, lessor);
+        await scope.Db.SaveChangesAsync();
+        await scope.Service.SaveEquipmentAsync(EquipmentActor.Administrator("admin"), new SaveEquipmentRequest(null, "EQ-SEARCH", "全字段设备", "M-SEARCH", "塔吊", EquipmentOwnershipType.Rented, null, lessor.Id, 800m, null, "新增", "设备备注"), default);
+
+        var result = await scope.Service.GetDashboardAsync(EquipmentActor.Administrator("admin"), new EquipmentFilter(null, null, null, "M-SEARCH 设备出租方 设备备注"), default);
+
+        result.Items.Should().ContainSingle(item => item.EquipmentNumber == "EQ-SEARCH");
+    }
+
     private static async Task<TestScope> CreateScopeAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:");

@@ -1,8 +1,18 @@
 @page
 @model EngineeringManager.Web.Pages.Companies.IndexModel
+@using EngineeringManager.Web.Workbenches
 @{
     ViewData["Title"] = "自有公司";
     var dashboard = Model.Dashboard;
+    var workbench = DataWorkbenchPresets.Companies with
+    {
+        InlineFilters = new DataWorkbenchFilterField[]
+        {
+            new("Search", "搜索", Model.Search, Placeholder: "搜索公司全部信息"),
+            new("CompanyId", "范围", Model.CompanyId?.ToString(), DataWorkbenchFilterKind.Select,
+                Model.Companies.Select(company => new DataWorkbenchFilterOption(company.Id.ToString(), company.Name)).ToArray())
+        }
+    };
 }
 
 <div data-company-dashboard>
@@ -10,16 +20,6 @@
         <div><p class="eyebrow">公司维度经营统计</p><h1>自有公司</h1><p class="page-lead">分别查看各公司合同、收付款、发票、工资、账户和项目数据，并在全公司口径汇总。</p></div>
         @if (Model.CanManage) { <a class="button button--primary" asp-page="Edit">新增公司</a> }
     </section>
-
-    <form method="get" class="filter-bar">
-        <label>统计范围
-            <select asp-for="CompanyId">
-                <option value="">全部自有公司</option>
-                @foreach (var company in Model.Companies) { <option value="@company.Id">@company.Name</option> }
-            </select>
-        </label>
-        <button class="button button--secondary" type="submit">查看</button>
-    </form>
 
     <section class="metric-grid" aria-label="公司关键指标">
         <article class="metric-card"><span class="metric-label">公司数量</span><strong class="metric-value">@dashboard.CompanyCount</strong></article>
@@ -40,7 +40,7 @@
         </article>
         <article class="panel">
             <div class="panel-heading"><div><p class="eyebrow">公司档案</p><h2>公司列表</h2></div></div>
-            <partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.Companies" />
+            <partial name="_DataWorkbench" model="workbench" />
             @if (Model.Companies.Count == 0) { <p class="panel-copy">当前权限范围内没有自有公司。</p> }
             else
             {

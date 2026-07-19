@@ -219,6 +219,17 @@ public sealed class PayrollDisbursementServiceTests
         (await fixture.Service.GetDisbursementOverviewAsync(CancellationToken.None)).ActualAmount.Should().Be(0m);
     }
 
+    [Fact]
+    public async Task DisbursementSearchUsesBatchProjectCrewAndWorkerFields()
+    {
+        await using var fixture = await PayrollDisbursementFixture.CreateAsync();
+        await fixture.Service.SaveDisbursementBatchAsync("admin", fixture.CreateRequest(10_000m, PayrollBatchStatus.Confirmed), CancellationToken.None);
+
+        (await fixture.Service.SearchDisbursementOverviewAsync("钢筋班组 混合发放项目 班组张三", true, CancellationToken.None)).Batches.Should().ContainSingle();
+        (await fixture.Service.SearchDisbursementOverviewAsync("110101199001010011", false, CancellationToken.None)).Batches.Should().BeEmpty();
+        (await fixture.Service.SearchDisbursementOverviewAsync("110101199001010011", true, CancellationToken.None)).Batches.Should().ContainSingle();
+    }
+
     private sealed class PayrollDisbursementFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

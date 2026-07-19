@@ -19,6 +19,57 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ModuleExportTests
 {
     [Fact]
+    public async Task SensitiveEmployeeFieldsAreMaskedUnlessExplicitlyAuthorized()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        var employee = await fixture.Db.Employees.SingleAsync();
+        employee.IdentityNumber = "510101199001011234";
+        employee.BankAccountNumber = "6222021234567890";
+        employee.DefaultMonthlySalary = 8800m;
+        await fixture.Db.SaveChangesAsync();
+
+        var masked = await fixture.Service.ExportAsync(new ExportRequest(ExportDataset.Employees, "ordinary", ["identity_number", "bank_account_number", "default_monthly_salary"], null, CanViewSensitiveData: false), default);
+        var complete = await fixture.Service.ExportAsync(new ExportRequest(ExportDataset.Employees, "sensitive-admin", ["identity_number", "bank_account_number", "default_monthly_salary"], null, CanViewSensitiveData: true), default);
+
+        var maskedRow = SimpleXlsxReader.Read(masked.Content).Single().Rows[1];
+        maskedRow.Should().NotContain(employee.IdentityNumber).And.NotContain(employee.BankAccountNumber).And.Contain("已脱敏");
+        SimpleXlsxReader.Read(complete.Content).Single().Rows[1].Should().Equal(employee.IdentityNumber, employee.BankAccountNumber, 8800m);
+    }
+
+    [Fact]
+    public async Task MultiModuleWorkbookContainsDirectoryAndModuleSheets()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+
+        var file = await fixture.Service.ExportModulesAsync(new ExportModuleRequest(
+            [ExportDataset.Employees, ExportDataset.Partners],
+            "multi-module",
+            new Dictionary<ExportDataset, IReadOnlyList<string>>
+            {
+                [ExportDataset.Employees] = ["employee_number", "name"],
+                [ExportDataset.Partners] = ["partner_number", "name"]
+            }), default);
+
+        SimpleXlsxReader.Read(file.Content).Select(sheet => sheet.Name).Should().Equal("目录", "员工", "合作单位");
+        (await fixture.Service.ListTasksAsync("multi-module", default)).Should().HaveCount(2).And.OnlyContain(task => task.Status == DataExchangeTaskStatus.Completed);
+    }
+
+    [Fact]
+    public async Task ZipModuleExportContainsNavigationManifestAndChecksums()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+
+        var file = await fixture.Service.ExportModulesAsync(new ExportModuleRequest(
+            [ExportDataset.Employees, ExportDataset.Partners],
+            "zip-module",
+            new Dictionary<ExportDataset, IReadOnlyList<string>>(), PackageFormat: ExportPackageFormat.Zip), default);
+        using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(file.Content), System.IO.Compression.ZipArchiveMode.Read);
+        archive.GetEntry("data-navigation.xlsx").Should().NotBeNull();
+        archive.GetEntry("manifest.json").Should().NotBeNull();
+        archive.GetEntry("checksums.sha256").Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task CompanyAccountExportIncludesNotesValue()
     {
         await using var fixture = await ModuleExportFixture.CreateAsync();

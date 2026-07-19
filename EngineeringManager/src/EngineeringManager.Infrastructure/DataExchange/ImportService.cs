@@ -19,7 +19,16 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("姓名", "name", true),
             new("员工类型", "employee_type", true),
             new("岗位", "position", false),
-            new("电话", "phone", false)
+            new("电话", "phone", false),
+            new("身份证号", "identity_number", false),
+            new("银行卡号", "bank_account_number", false),
+            new("开户行", "bank_name", false),
+            new("默认月工资", "default_monthly_salary", false),
+            new("默认日工资", "default_daily_rate", false),
+            new("默认时工资", "default_hourly_rate", false),
+            new("默认计件单价", "default_piecework_rate", false),
+            new("系统ID", "_system_id", false),
+            new("并发版本", "_concurrency_stamp", false)
         ],
         [ExportDataset.EmployeeCertificates] =
         [
@@ -44,6 +53,14 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("项目名称", "name", true),
             new("项目阶段", "stage", false),
             new("总包单位", "general_contractor", false)
+        ],
+        [ExportDataset.Contracts] =
+        [
+            new("项目编号", "project_number", true), new("合同编号", "contract_number", true), new("合同名称", "name", true), new("合同类型", "contract_type", true), new("对方单位", "counterparty_name", false), new("签订日期", "signed_date", false), new("合同金额", "total_amount", true), new("备注", "notes", false)
+        ],
+        [ExportDataset.StageResults] =
+        [
+            new("项目编号", "project_number", true), new("成果标题", "title", true), new("成果类型", "result_type", true), new("状态", "status", false), new("成果日期", "result_date", true), new("质量结果", "quality_result", false), new("说明", "description", false)
         ],
         [ExportDataset.Companies] =
         [
@@ -108,6 +125,13 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         var columns = GetColumns(dataset);
         var workbook = new SimpleXlsxWorkbook();
         workbook.AddWorksheet(TemplateSheetName(dataset), columns.Select(item => item.Header).ToArray(), []);
+        workbook.AddWorksheet("导入说明", ["项目", "说明"],
+        [
+            ["导入方式", "支持新增、更新和混合模式；更新时优先使用系统ID，其次使用稳定业务编号。"],
+            ["校验规则", "整批校验，任意一行错误都不会写入。"],
+            ["字段映射", "可使用标准表头，也可在上传时映射任意 Excel 表头。"],
+            ["删除规则", "导入不会物理删除数据。"]
+        ]);
         return Task.FromResult(new ExportFileResult($"{TemplateSheetName(dataset)}模板.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", workbook.ToArray()));
     }
 
@@ -129,7 +153,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
 
         var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
         var mapping = ResolveMapping(request.Dataset, headers, request.SourceToTargetMapping);
-        var errors = await ValidateRowsAsync(request.Dataset, sheet.Rows.Skip(1).ToArray(), headers, mapping, cancellationToken);
+        var errors = await ValidateRowsAsync(request.Dataset, sheet.Rows.Skip(1).ToArray(), headers, mapping, request.Mode, cancellationToken);
         var totalRows = Math.Max(sheet.Rows.Count - 1, 0);
         var errorRows = errors.Select(item => item.RowNumber).Distinct().Count();
         var batch = new ImportBatch
@@ -139,6 +163,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             OriginalFileName = fileName,
             OriginalContent = request.Content.ToArray(),
             MappingJson = JsonSerializer.Serialize(mapping),
+            Mode = request.Mode,
             Status = DataExchangeTaskStatus.PreviewReady,
             TotalRows = totalRows,
             ValidRows = totalRows - errorRows,
@@ -168,19 +193,21 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             throw new InvalidOperationException("导入预览仍有错误，不能确认导入。");
         }
 
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var sheet = SimpleXlsxReader.Read(batch.OriginalContent)[0];
         var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
         var mapping = JsonSerializer.Deserialize<Dictionary<string, string>>(batch.MappingJson) ?? [];
         foreach (var row in sheet.Rows.Skip(1))
         {
             var values = RowValues(headers, row, mapping);
-            AddEntity(batch.Dataset, values);
+            AddOrUpdateEntity(batch.Dataset, values, batch.Mode);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
         batch.Status = DataExchangeTaskStatus.Completed;
         batch.CompletedAt = DateTimeOffset.UtcNow;
+        db.AuditLogs.Add(new AuditLog { UserId = batch.CreatedByUserId, Action = "DataImport", EntityType = nameof(ImportBatch), EntityId = batch.Id.ToString(), Reason = $"导入 {batch.Dataset}", AfterJson = JsonSerializer.Serialize(new { batch.Dataset, batch.Mode, batch.TotalRows, batch.ValidRows }) });
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private async Task<List<ImportErrorDto>> ValidateRowsAsync(
@@ -188,6 +215,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         IReadOnlyList<object?>[] rows,
         IReadOnlyList<string> headers,
         IReadOnlyDictionary<string, string> mapping,
+        ImportMode requestMode,
         CancellationToken cancellationToken)
     {
         var errors = new List<ImportErrorDto>();
@@ -221,6 +249,15 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             if (dataset == ExportDataset.Employees && values.TryGetValue("employee_type", out var type) && !string.IsNullOrWhiteSpace(type) && !TryParseEmployeeType(type, out _))
             {
                 errors.Add(new ImportErrorDto(excelRow, "员工类型", "员工类型必须是正式员工、劳务员工或特殊临时人员。", type));
+            }
+            if (dataset == ExportDataset.Employees && Guid.TryParse(values.GetValueOrDefault("_concurrency_stamp"), out var expectedStamp))
+            {
+                var employeeNumber = values.GetValueOrDefault("employee_number");
+                var currentStamp = await db.Employees.Where(item => item.EmployeeNumber == employeeNumber).Select(item => (Guid?)item.ConcurrencyStamp).SingleOrDefaultAsync(cancellationToken);
+                if (currentStamp.HasValue && currentStamp.Value != expectedStamp)
+                {
+                    errors.Add(new ImportErrorDto(excelRow, "并发版本", "员工已被其他用户修改，请重新导出后再导入。", values.GetValueOrDefault("_concurrency_stamp")));
+                }
             }
 
             if (dataset is ExportDataset.CompanyAccounts or ExportDataset.CompanyCertificates)
@@ -309,6 +346,21 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             {
                 ValidateDate(values.GetValueOrDefault("usage_entry_date"), excelRow, "进场日期", errors); ValidateDate(values.GetValueOrDefault("settlement_date"), excelRow, "结算日期", errors); ValidateDecimal(values.GetValueOrDefault("base_amount"), excelRow, "基础租金", errors); ValidateDecimal(values.GetValueOrDefault("total_amount"), excelRow, "结算总额", errors); ValidateDecimal(values.GetValueOrDefault("offset_amount"), excelRow, "抵扣金额", errors);
             }
+            if ((dataset is ExportDataset.Contracts or ExportDataset.StageResults) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken))
+            {
+                errors.Add(new ImportErrorDto(excelRow, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
+            }
+            if (dataset == ExportDataset.Contracts)
+            {
+                ValidateDate(values.GetValueOrDefault("signed_date"), excelRow, "签订日期", errors);
+                ValidateDecimal(values.GetValueOrDefault("total_amount"), excelRow, "合同金额", errors);
+                if (!Enum.TryParse<ContractType>(values.GetValueOrDefault("contract_type"), true, out _)) errors.Add(new ImportErrorDto(excelRow, "合同类型", "合同类型无法识别。", values.GetValueOrDefault("contract_type")));
+            }
+            if (dataset == ExportDataset.StageResults)
+            {
+                ValidateDate(values.GetValueOrDefault("result_date"), excelRow, "成果日期", errors);
+                if (!Enum.TryParse<EngineeringManager.Domain.StageResults.StageResultType>(values.GetValueOrDefault("result_type"), true, out _)) errors.Add(new ImportErrorDto(excelRow, "成果类型", "成果类型无法识别。", values.GetValueOrDefault("result_type")));
+            }
         }
 
         foreach (var number in seenNumbers)
@@ -322,10 +374,15 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 ExportDataset.Equipment => await db.Equipment.AnyAsync(item => item.EquipmentNumber == number, cancellationToken),
                 _ => false
             };
-            if (exists)
+            if (exists && requestMode == ImportMode.New)
             {
                 var rowIndex = rows.Select((row, index) => new { row, index }).First(item => RowValues(headers, item.row, mapping).GetValueOrDefault(numberKey) == number).index + 2;
                 errors.Add(new ImportErrorDto(rowIndex, HeaderFor(dataset, numberKey), "编号已存在。", number));
+            }
+            if (!exists && requestMode == ImportMode.Update)
+            {
+                var rowIndex = rows.Select((row, index) => new { row, index }).First(item => RowValues(headers, item.row, mapping).GetValueOrDefault(numberKey) == number).index + 2;
+                errors.Add(new ImportErrorDto(rowIndex, HeaderFor(dataset, numberKey), "更新模式下找不到对应记录。", number));
             }
         }
 
@@ -360,8 +417,9 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         return result;
     }
 
-    private void AddEntity(ExportDataset dataset, Dictionary<string, string?> values)
+    private void AddOrUpdateEntity(ExportDataset dataset, Dictionary<string, string?> values, ImportMode mode)
     {
+        if (mode != ImportMode.New && TryUpdateEntity(dataset, values)) return;
         switch (dataset)
         {
             case ExportDataset.Employees:
@@ -375,7 +433,14 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     Name = values["name"]!,
                     EmployeeType = employeeType,
                     PositionTitle = values.GetValueOrDefault("position"),
-                    Phone = values.GetValueOrDefault("phone")
+                    Phone = values.GetValueOrDefault("phone"),
+                    IdentityNumber = values.GetValueOrDefault("identity_number"),
+                    BankAccountNumber = values.GetValueOrDefault("bank_account_number"),
+                    BankName = values.GetValueOrDefault("bank_name"),
+                    DefaultMonthlySalary = ParseDecimal(values.GetValueOrDefault("default_monthly_salary")),
+                    DefaultDailyRate = ParseDecimal(values.GetValueOrDefault("default_daily_rate")),
+                    DefaultHourlyRate = ParseDecimal(values.GetValueOrDefault("default_hourly_rate")),
+                    DefaultPieceworkRate = ParseDecimal(values.GetValueOrDefault("default_piecework_rate"))
                 });
                 break;
             case ExportDataset.EmployeeCertificates:
@@ -409,6 +474,14 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     Stage = stage,
                     GeneralContractorName = values.GetValueOrDefault("general_contractor")
                 });
+                break;
+            case ExportDataset.Contracts:
+                var contractProject = db.Projects.Single(item => item.ProjectNumber == values["project_number"]);
+                db.Contracts.Add(new Contract { Project = contractProject, ContractNumber = values["contract_number"]!, Name = values["name"]!, ContractType = Enum.Parse<ContractType>(values["contract_type"]!, true), CounterpartyName = values.GetValueOrDefault("counterparty_name"), SignedDate = ParseDate(values.GetValueOrDefault("signed_date")), TotalAmount = ParseDecimal(values.GetValueOrDefault("total_amount")) ?? 0m, Notes = values.GetValueOrDefault("notes") });
+                break;
+            case ExportDataset.StageResults:
+                var resultProject = db.Projects.Single(item => item.ProjectNumber == values["project_number"]);
+                db.StageResults.Add(new StageResult { Project = resultProject, Title = values["title"]!, ResultType = Enum.Parse<EngineeringManager.Domain.StageResults.StageResultType>(values["result_type"]!, true), Status = Enum.TryParse<EngineeringManager.Domain.StageResults.StageResultStatus>(values.GetValueOrDefault("status"), true, out var resultStatus) ? resultStatus : EngineeringManager.Domain.StageResults.StageResultStatus.Draft, ResultDate = ParseDate(values.GetValueOrDefault("result_date")) ?? DateOnly.FromDateTime(DateTime.Today), QualityResult = Enum.TryParse<EngineeringManager.Domain.StageResults.QualityResult>(values.GetValueOrDefault("quality_result"), true, out var quality) ? quality : EngineeringManager.Domain.StageResults.QualityResult.NotChecked, Description = values.GetValueOrDefault("description") });
                 break;
             case ExportDataset.Companies:
                 var category = db.CompanyCategories.Single(item => item.Code == values["category_code"]);
@@ -485,6 +558,97 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 break;
             default:
                 throw new NotSupportedException($"暂不支持导入数据集：{dataset}");
+        }
+    }
+
+    public async Task<ImportMappingTemplateDto> SaveMappingTemplateAsync(SaveImportMappingTemplateRequest request, CancellationToken cancellationToken)
+    {
+        var owner = NormalizeRequired(request.OwnerUserId, nameof(request.OwnerUserId));
+        var name = NormalizeRequired(request.Name, nameof(request.Name));
+        if (request.Scope == ExportTemplateScope.Shared && !request.CanPublishShared) throw new UnauthorizedAccessException("当前用户无权发布共享导入映射。");
+        if (await db.ImportMappingTemplates.AnyAsync(item => item.OwnerUserId == owner && item.Dataset == request.Dataset && item.Name == name, cancellationToken)) throw new InvalidOperationException($"导入映射模板名称已存在：{name}");
+        var template = new ImportMappingTemplate { OwnerUserId = owner, Name = name, Dataset = request.Dataset, Scope = request.Scope, DatasetVersion = NormalizeRequired(request.DatasetVersion, nameof(request.DatasetVersion)), MappingJson = JsonSerializer.Serialize(request.Mapping) };
+        db.ImportMappingTemplates.Add(template);
+        await db.SaveChangesAsync(cancellationToken);
+        return ToMappingDto(template);
+    }
+
+    public async Task<IReadOnlyList<ImportMappingTemplateDto>> ListMappingTemplatesAsync(string userId, ExportDataset dataset, CancellationToken cancellationToken)
+    {
+        var owner = NormalizeRequired(userId, nameof(userId));
+        var templates = await db.ImportMappingTemplates.AsNoTracking().Where(item => item.Dataset == dataset && (item.OwnerUserId == owner || item.Scope == ExportTemplateScope.Shared)).ToListAsync(cancellationToken);
+        return templates.OrderBy(item => item.Name).Select(ToMappingDto).ToArray();
+    }
+
+    private static ImportMappingTemplateDto ToMappingDto(ImportMappingTemplate template) => new(template.Id, template.OwnerUserId, template.Name, template.Dataset, template.Scope, template.DatasetVersion, JsonSerializer.Deserialize<Dictionary<string, string>>(template.MappingJson) ?? []);
+
+    private bool TryUpdateEntity(ExportDataset dataset, Dictionary<string, string?> values)
+    {
+        var systemId = Guid.TryParse(values.GetValueOrDefault("_system_id"), out var parsedId) ? parsedId : (Guid?)null;
+        switch (dataset)
+        {
+            case ExportDataset.Employees:
+                var employee = systemId.HasValue ? db.Employees.SingleOrDefault(item => item.Id == systemId.Value) : db.Employees.SingleOrDefault(item => item.EmployeeNumber == values.GetValueOrDefault("employee_number"));
+                if (employee is null) return false;
+                EnsureConcurrency(employee.ConcurrencyStamp, values.GetValueOrDefault("_concurrency_stamp"), "员工");
+                employee.Name = values.GetValueOrDefault("name") ?? employee.Name;
+                if (TryParseEmployeeType(values.GetValueOrDefault("employee_type") ?? string.Empty, out var type)) employee.EmployeeType = type;
+                employee.PositionTitle = values.GetValueOrDefault("position") ?? employee.PositionTitle;
+                employee.Phone = values.GetValueOrDefault("phone") ?? employee.Phone;
+                employee.IdentityNumber = values.GetValueOrDefault("identity_number") ?? employee.IdentityNumber;
+                employee.BankAccountNumber = values.GetValueOrDefault("bank_account_number") ?? employee.BankAccountNumber;
+                employee.BankName = values.GetValueOrDefault("bank_name") ?? employee.BankName;
+                employee.DefaultMonthlySalary = ParseDecimal(values.GetValueOrDefault("default_monthly_salary"), employee.DefaultMonthlySalary ?? 0m);
+                employee.DefaultDailyRate = ParseDecimal(values.GetValueOrDefault("default_daily_rate"), employee.DefaultDailyRate ?? 0m);
+                employee.DefaultHourlyRate = ParseDecimal(values.GetValueOrDefault("default_hourly_rate"), employee.DefaultHourlyRate ?? 0m);
+                employee.DefaultPieceworkRate = ParseDecimal(values.GetValueOrDefault("default_piecework_rate"), employee.DefaultPieceworkRate ?? 0m);
+                employee.ConcurrencyStamp = Guid.NewGuid();
+                return true;
+            case ExportDataset.Partners:
+                var partner = systemId.HasValue ? db.BusinessPartners.SingleOrDefault(item => item.Id == systemId.Value) : db.BusinessPartners.SingleOrDefault(item => item.PartnerNumber == values.GetValueOrDefault("partner_number"));
+                if (partner is null) return false;
+                partner.Name = values.GetValueOrDefault("name") ?? partner.Name;
+                partner.ShortName = values.GetValueOrDefault("short_name") ?? partner.ShortName;
+                partner.ConcurrencyStamp = Guid.NewGuid();
+                return true;
+            case ExportDataset.Projects:
+                var project = systemId.HasValue ? db.Projects.SingleOrDefault(item => item.Id == systemId.Value) : db.Projects.SingleOrDefault(item => item.ProjectNumber == values.GetValueOrDefault("project_number"));
+                if (project is null) return false;
+                project.Name = values.GetValueOrDefault("name") ?? project.Name;
+                if (Enum.TryParse<ProjectStage>(values.GetValueOrDefault("stage"), true, out var stage)) project.Stage = stage;
+                project.GeneralContractorName = values.GetValueOrDefault("general_contractor") ?? project.GeneralContractorName;
+                project.ConcurrencyStamp = Guid.NewGuid();
+                return true;
+            case ExportDataset.Companies:
+                var company = systemId.HasValue ? db.LegalEntities.SingleOrDefault(item => item.Id == systemId.Value) : db.LegalEntities.SingleOrDefault(item => item.Code == values.GetValueOrDefault("company_code"));
+                if (company is null) return false;
+                company.Name = values.GetValueOrDefault("name") ?? company.Name;
+                company.ShortName = values.GetValueOrDefault("short_name") ?? company.ShortName;
+                company.Phone = values.GetValueOrDefault("phone") ?? company.Phone;
+                company.UnifiedSocialCreditCode = values.GetValueOrDefault("tax_code") ?? company.UnifiedSocialCreditCode;
+                company.ConcurrencyStamp = Guid.NewGuid();
+                return true;
+            case ExportDataset.Equipment:
+                var equipment = systemId.HasValue ? db.Equipment.SingleOrDefault(item => item.Id == systemId.Value) : db.Equipment.SingleOrDefault(item => item.EquipmentNumber == values.GetValueOrDefault("equipment_number"));
+                if (equipment is null) return false;
+                equipment.Name = values.GetValueOrDefault("name") ?? equipment.Name;
+                equipment.Model = values.GetValueOrDefault("model") ?? equipment.Model;
+                equipment.Category = values.GetValueOrDefault("category") ?? equipment.Category;
+                equipment.InternalDailyRate = ParseDecimal(values.GetValueOrDefault("internal_daily_rate"), equipment.InternalDailyRate ?? 0m);
+                equipment.ConcurrencyStamp = Guid.NewGuid();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static decimal ParseDecimal(string? value, decimal fallback = 0m) => decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : fallback;
+
+    private static void EnsureConcurrency(Guid current, string? expected, string label)
+    {
+        if (!string.IsNullOrWhiteSpace(expected) && Guid.TryParse(expected, out var parsed) && parsed != current)
+        {
+            throw new InvalidOperationException($"{label}已被其他用户修改，导入已停止，请重新导出后再导入。");
         }
     }
 

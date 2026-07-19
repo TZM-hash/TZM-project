@@ -1,16 +1,30 @@
 using EngineeringManager.Application.Dashboard;
+using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Reminders;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Dashboard;
 
-public sealed class DashboardService(ApplicationDbContext db) : IDashboardService
+public sealed class DashboardService : IDashboardService
 {
+    private readonly ApplicationDbContext db;
+    private readonly IFinanceLedgerService financeService;
+
+    public DashboardService(ApplicationDbContext db)
+        : this(db, new FinanceLedgerService(db)) { }
+
+    public DashboardService(ApplicationDbContext db, IFinanceLedgerService financeService)
+    {
+        this.db = db;
+        this.financeService = financeService;
+    }
+
     public async Task<DashboardDto> GetAsync(DashboardActor actor, CancellationToken cancellationToken)
     {
         var projectQuery = db.Projects.AsNoTracking()
@@ -32,8 +46,11 @@ public sealed class DashboardService(ApplicationDbContext db) : IDashboardServic
             group.Count(),
             projects.Count == 0 ? 0m : decimal.Round((decimal)group.Count() / projects.Count * 100m, 1))).ToArray();
 
+        var projectSummaries = actor.CanViewFinance
+            ? await financeService.ListProjectSummariesAsync(projectIds, cancellationToken)
+            : [];
         var comparisons = actor.CanViewFinance
-            ? await LoadFinanceAsync(projectIds, cancellationToken)
+            ? LoadFinanceComparisons(projectSummaries.Select(item => item.Summary))
             : EmptyComparisons();
         var monthlyTrend = actor.CanViewFinance ? await LoadMonthlyTrendAsync(projectIds, cancellationToken) : EmptyMonthlyTrend();
         var payrollSummary = actor.CanViewPayroll ? await LoadPayrollSummaryAsync(projectIds, actor.CanViewAllProjects, cancellationToken) : new DashboardPayrollSummaryDto(0m, 0m, 0m);
@@ -60,28 +77,19 @@ public sealed class DashboardService(ApplicationDbContext db) : IDashboardServic
             DateTimeOffset.UtcNow,
             monthlyTrend,
             equipmentSummary,
-            payrollSummary);
+            payrollSummary,
+            BuildCashWatchlist(projects, projectSummaries));
     }
 
-    private async Task<IReadOnlyList<DashboardMoneyComparisonDto>> LoadFinanceAsync(Guid[] projectIds, CancellationToken cancellationToken)
+    private static IReadOnlyList<DashboardMoneyComparisonDto> LoadFinanceComparisons(IEnumerable<FinanceProjectSummaryDto> summaries)
     {
-        if (projectIds.Length == 0) return EmptyComparisons();
-        var receivables = await db.ReceivableEntries.AsNoTracking().Where(item => projectIds.Contains(item.ProjectId) && !item.IsVoided).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var collections = await db.CollectionEntries.AsNoTracking().Where(item => projectIds.Contains(item.ProjectId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var refunds = await db.RefundOrReversalEntries.AsNoTracking().Where(item =>
-            item.Collection != null && projectIds.Contains(item.Collection.ProjectId) || item.Receivable != null && projectIds.Contains(item.Receivable.ProjectId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var payables = await db.PayableEntries.AsNoTracking().Where(item => projectIds.Contains(item.ProjectId) && !item.IsVoided).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var payments = await db.PaymentEntries.AsNoTracking().Where(item => projectIds.Contains(item.ProjectId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var reversals = await db.PaymentReversalEntries.AsNoTracking().Where(item => projectIds.Contains(item.Payment.ProjectId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var deductions = await db.DeductionEntries.AsNoTracking().Where(item => projectIds.Contains(item.ProjectId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var invoices = await db.InvoiceEntries.AsNoTracking().Where(item => projectIds.Contains(item.ProjectId) && item.Direction == InvoiceDirection.Output && item.Status != InvoiceStatus.Voided).Select(item => item.GrossAmount).ToListAsync(cancellationToken);
-
-        var receivable = receivables.Sum();
-        var collected = collections.Sum() - refunds.Sum();
-        var payable = payables.Sum();
-        var paid = payments.Sum() - reversals.Sum();
-        var unpaid = Math.Max(payable - paid - deductions.Sum(), 0m);
-        var invoiced = invoices.Sum();
+        var materialized = summaries.ToArray();
+        var receivable = materialized.Sum(item => item.ReceivableAmount);
+        var collected = materialized.Sum(item => item.CollectedAmount);
+        var payable = materialized.Sum(item => item.PayableAmount);
+        var paid = materialized.Sum(item => item.PaidAmount);
+        var unpaid = materialized.Sum(item => item.UnpaidAmount);
+        var invoiced = materialized.Sum(item => item.OutputInvoiceAmount);
         return
         [
             Comparison("receivable", "收款进度", receivable, collected, Math.Max(receivable - collected, 0m)),
@@ -101,6 +109,26 @@ public sealed class DashboardService(ApplicationDbContext db) : IDashboardServic
         var payable = Math.Max(items.Where(item => item.Nature == PayrollItemNature.Earning).Sum(item => item.Amount) - items.Where(item => item.Nature == PayrollItemNature.Deduction).Sum(item => item.Amount), 0m);
         var paid = payments.Sum();
         return new DashboardPayrollSummaryDto(payable, paid, Math.Max(payable - paid, 0m));
+    }
+
+    private static DashboardProjectCashDto[] BuildCashWatchlist(
+        IReadOnlyCollection<Project> projects,
+        IReadOnlyCollection<ProjectFinanceListItemDto> summaries)
+    {
+        var stages = projects.ToDictionary(item => item.Id, item => item.Stage);
+        return summaries
+            .Select(item =>
+            {
+                var stage = stages[item.ProjectId];
+                return new DashboardProjectCashDto(item.ProjectId, item.ProjectNumber, item.ProjectName, stage,
+                    StageLabel(stage), item.Summary.CollectedAmount, item.Summary.PaidAmount,
+                    item.Summary.UncollectedAmount, item.Summary.UnpaidAmount,
+                    item.Summary.CollectedAmount - item.Summary.PaidAmount);
+            })
+            .OrderBy(item => item.CashGap)
+            .ThenByDescending(item => item.UncollectedAmount)
+            .Take(8)
+            .ToArray();
     }
 
     private async Task<IReadOnlyList<DashboardMonthlyPointDto>> LoadMonthlyTrendAsync(Guid[] projectIds, CancellationToken cancellationToken)

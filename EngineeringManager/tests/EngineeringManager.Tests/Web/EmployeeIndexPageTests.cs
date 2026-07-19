@@ -116,17 +116,17 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Fact]
-    public void EmployeeIndexOffersAllEmployeeTypeLabelsAndSearchInAGetFilter()
+    public void EmployeeIndexOffersAllEmployeeTypeLabelsInSharedInlineFilter()
     {
         var razor = ReadPage("Employees", "Index.cshtml");
 
-        razor.Should().Contain("<form method=\"get\"")
-            .And.Contain("asp-for=\"Search\"")
-            .And.Contain("asp-for=\"EmployeeType\"")
-            .And.Contain(">全部<")
-            .And.Contain(">正式员工<")
-            .And.Contain(">劳务员工<")
-            .And.Contain(">特殊临时人员<");
+        razor.Should().Contain("_DataWorkbench")
+            .And.Contain("InlineFilters")
+            .And.Contain("new(\"Search\"")
+            .And.Contain("new(\"EmployeeType\"")
+            .And.Contain("正式员工")
+            .And.Contain("劳务员工")
+            .And.Contain("特殊临时人员");
     }
 
     [Fact]

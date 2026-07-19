@@ -57,4 +57,8 @@ public sealed record DataWorkbenchViewModel(
     Guid? CurrentSavedViewId = null,
     bool CanExport = false,
     bool CanSaveViews = true,
-    bool CanChangePageSize = true);
+    bool CanChangePageSize = true,
+    IReadOnlyList<DataWorkbenchFilterField>? InlineFilters = null)
+{
+    public IReadOnlyList<DataWorkbenchFilterField> InlineFilterFields => InlineFilters ?? [];
+}

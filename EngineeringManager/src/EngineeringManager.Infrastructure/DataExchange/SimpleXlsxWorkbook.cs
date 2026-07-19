@@ -5,6 +5,8 @@ using System.Xml.Linq;
 
 namespace EngineeringManager.Infrastructure.DataExchange;
 
+public sealed record XlsxHyperlink(string Text, string Target, bool External = false);
+
 public sealed class SimpleXlsxWorkbook
 {
     private static readonly XNamespace SpreadsheetNamespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -51,6 +53,11 @@ public sealed class SimpleXlsxWorkbook
             for (var index = 0; index < worksheets.Count; index++)
             {
                 WriteXml(archive, $"xl/worksheets/sheet{index + 1}.xml", CreateWorksheet(worksheets[index]));
+                var externalLinks = GetExternalLinks(worksheets[index]);
+                if (externalLinks.Length > 0)
+                {
+                    WriteXml(archive, $"xl/worksheets/_rels/sheet{index + 1}.xml.rels", CreateWorksheetRelationships(externalLinks));
+                }
             }
         }
 
@@ -104,8 +111,38 @@ public sealed class SimpleXlsxWorkbook
     {
         var rows = new List<XElement> { CreateRow(1, worksheet.Headers.Cast<object?>().ToArray()) };
         rows.AddRange(worksheet.Rows.Select((row, index) => CreateRow(index + 2, row)));
+        XNamespace relationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        var externalIndex = 0;
+        var links = worksheet.Rows.SelectMany((row, rowIndex) => row.Select((value, columnIndex) => new { value, rowIndex, columnIndex }))
+            .Where(item => item.value is XlsxHyperlink)
+            .Select((item, index) =>
+            {
+                var link = (XlsxHyperlink)item.value!;
+                var element = new XElement(SpreadsheetNamespace + "hyperlink", new XAttribute("ref", ColumnName(item.columnIndex + 1) + (item.rowIndex + 2)), new XAttribute("display", link.Text));
+                if (link.External) element.Add(new XAttribute(relationships + "id", $"rId{++externalIndex}"));
+                else element.Add(new XAttribute("location", link.Target.TrimStart('#')));
+                return element;
+            }).ToArray();
         return new XDocument(new XElement(SpreadsheetNamespace + "worksheet",
-            new XElement(SpreadsheetNamespace + "sheetData", rows)));
+            new XAttribute(XNamespace.Xmlns + "r", relationships),
+            new XElement(SpreadsheetNamespace + "sheetData", rows),
+            links.Length == 0 ? null : new XElement(SpreadsheetNamespace + "hyperlinks", links)));
+    }
+
+    private static XlsxHyperlink[] GetExternalLinks(WorksheetData worksheet) => worksheet.Rows
+        .SelectMany(row => row.OfType<XlsxHyperlink>())
+        .Where(link => link.External)
+        .ToArray();
+
+    private static XDocument CreateWorksheetRelationships(IReadOnlyList<XlsxHyperlink> links)
+    {
+        XNamespace relationships = "http://schemas.openxmlformats.org/package/2006/relationships";
+        return new XDocument(new XElement(relationships + "Relationships", links.Select((link, index) =>
+            new XElement(relationships + "Relationship",
+                new XAttribute("Id", $"rId{index + 1}"),
+                new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"),
+                new XAttribute("Target", link.Target),
+                new XAttribute("TargetMode", "External")))));
     }
 
     private static XElement CreateRow(int rowNumber, IReadOnlyList<object?> values) =>
@@ -132,6 +169,7 @@ public sealed class SimpleXlsxWorkbook
 
         var text = value switch
         {
+            XlsxHyperlink link => link.Text,
             DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             DateTime dateTime => dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
             DateTimeOffset dateTimeOffset => dateTimeOffset.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture),

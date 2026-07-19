@@ -3,6 +3,7 @@ namespace EngineeringManager.Application.Companies;
 public interface ICompanyManagementService
 {
     Task<IReadOnlyList<CompanyListItemDto>> ListAsync(CompanyActor actor, CancellationToken cancellationToken);
+    Task<IReadOnlyList<CompanyListItemDto>> SearchAsync(CompanyActor actor, string? search, CancellationToken cancellationToken) => ListAsync(actor, cancellationToken);
     Task<CompanyDetailsDto> GetAsync(CompanyActor actor, Guid id, CancellationToken cancellationToken);
     Task<CompanyDetailsDto> SaveCompanyAsync(CompanyActor actor, SaveCompanyRequest request, CancellationToken cancellationToken);
     Task<SaveCompanyRequest> PrepareCopyAsync(CompanyActor actor, Guid sourceId, CancellationToken cancellationToken);

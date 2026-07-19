@@ -114,6 +114,33 @@ public sealed class EmployeeServiceTests
         affiliation.LegalEntityName.Should().Be(fixture.LegalEntity.ShortName);
     }
 
+    [Fact]
+    public async Task EmployeeSearchUsesAllFieldsAndRequiresEveryKeyword()
+    {
+        await using var fixture = await EmployeeFixture.CreateAsync();
+        var project = new Project { ProjectNumber = "EMP-SEARCH-P", Name = "全字段项目" };
+        fixture.Db.Projects.Add(project);
+        await fixture.Db.SaveChangesAsync();
+        var employee = await fixture.Service.CreateAsync(
+            CreateRequest("E-SEARCH", "搜索员工") with
+            {
+                Phone = "13800138000",
+                PositionTitle = "安全员",
+                Notes = "夜班备注",
+                IdentityNumber = "110101199001010011"
+            }, CancellationToken.None);
+        await fixture.Service.AddAffiliationAsync(
+            new CreateEmployeeAffiliationRequest(employee.Id, new DateOnly(2026, 1, 1), null, fixture.Department.Id, project.Id, null, fixture.LegalEntity.Id, "安全员", true, "归属备注"),
+            CancellationToken.None);
+        fixture.Db.EmployeeCertificates.Add(new EmployeeCertificate { EmployeeId = employee.Id, CertificateType = "安全生产证", CertificateNumber = "CERT-SEARCH", IssuingAuthority = "住建局" });
+        await fixture.Db.SaveChangesAsync();
+
+        (await fixture.Service.ListAsync("13800138000 安全生产证 全字段项目", false, CancellationToken.None)).Should().ContainSingle(item => item.Id == employee.Id);
+        (await fixture.Service.ListAsync("13800138000 不存在的词", false, CancellationToken.None)).Should().BeEmpty();
+        (await fixture.Service.ListAsync("110101199001010011", false, CancellationToken.None)).Should().BeEmpty();
+        (await fixture.Service.ListAsync("110101199001010011", true, CancellationToken.None)).Should().ContainSingle(item => item.Id == employee.Id);
+    }
+
     private static CreateEmployeeRequest CreateRequest(string number, string name) =>
         new(number, name, EmployeeType.Formal, null, null, null, null, null, null, null, null, null, null, true);
 

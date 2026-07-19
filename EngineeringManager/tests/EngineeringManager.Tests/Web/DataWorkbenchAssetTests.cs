@@ -22,6 +22,9 @@ public sealed class DataWorkbenchAssetTests
 
         razor.Should().Contain("data-workbench")
             .And.Contain("data-column-manager-table")
+            .And.Contain("column-manager-dropdown")
+            .And.Contain("data-show-all-columns")
+            .And.NotContain("column-manager-dialog")
             .And.Contain("data-filter-drawer")
             .And.Contain("data-save-view-dialog");
 

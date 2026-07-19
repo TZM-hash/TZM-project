@@ -29,7 +29,7 @@ public sealed class StandardImportTests
         await using var fixture = await ImportFixture.CreateAsync();
 
         var file = await fixture.Service.GenerateTemplateAsync(dataset, CancellationToken.None);
-        var sheet = SimpleXlsxReader.Read(file.Content).Single();
+        var sheet = SimpleXlsxReader.Read(file.Content)[0];
 
         sheet.Rows[0].Should().Contain(expectedHeader);
     }
@@ -106,6 +106,30 @@ public sealed class StandardImportTests
         imported["TYPE-LABOR-EN"].Should().Be(EmployeeType.Labor);
         imported["TYPE-TEMP-CN"].Should().Be(EmployeeType.Temporary);
         imported["TYPE-TEMP-EN"].Should().Be(EmployeeType.Temporary);
+    }
+
+    [Fact]
+    public async Task MixedImportUpdatesExistingEmployeeAndPreservesAllOrNothingOnConcurrencyConflict()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "UPDATE-001", Name = "旧姓名", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet("员工", ["员工编号", "姓名", "员工类型", "并发版本"], [[employee.EmployeeNumber, "新姓名", "正式员工", employee.ConcurrencyStamp.ToString()]]);
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("update-user", ExportDataset.Employees, "update.xlsx", workbook.ToArray(), null, ImportMode.Mixed), default);
+        await fixture.Service.ConfirmAsync(preview.BatchId, default);
+        (await fixture.Db.Employees.SingleAsync(item => item.Id == employee.Id)).Name.Should().Be("新姓名");
+
+        var stale = new SimpleXlsxWorkbook();
+        stale.AddWorksheet("员工", ["员工编号", "姓名", "员工类型", "并发版本"], [[employee.EmployeeNumber, "不应写入", "正式员工", Guid.NewGuid().ToString()]]);
+        var stalePreview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("update-user", ExportDataset.Employees, "stale.xlsx", stale.ToArray(), null, ImportMode.Update), default);
+        var before = (await fixture.Db.Employees.SingleAsync(item => item.Id == employee.Id)).Name;
+        var confirmStale = () => fixture.Service.ConfirmAsync(stalePreview.BatchId, default);
+        stalePreview.Errors.Should().ContainSingle(item => item.ColumnName == "并发版本");
+        await confirmStale.Should().ThrowAsync<InvalidOperationException>().WithMessage("*错误*");
+        (await fixture.Db.Employees.SingleAsync(item => item.Id == employee.Id)).Name.Should().Be(before);
     }
 
     [Fact]

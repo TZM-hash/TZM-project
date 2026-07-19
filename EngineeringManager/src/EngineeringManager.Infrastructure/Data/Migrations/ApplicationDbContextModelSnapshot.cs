@@ -515,6 +515,67 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.BackupSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AlertOnFailure")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
+                    b.Property<TimeOnly?>("FixedTime")
+                        .HasColumnType("time");
+
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("LastRunAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("LocalRetentionCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LocalTargetDirectory")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NasRetentionCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NasTargetDirectory")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTimeOffset?>("NextRunAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind")
+                        .IsUnique();
+
+                    b.ToTable("BackupSchedules");
+                });
+
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.BackupTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -539,10 +600,30 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<bool>("IsRetained")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LocalStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NasStatus")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PackagePath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<string>("RequestedByUserId")
                         .IsRequired()
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Sha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<DateTimeOffset?>("StartedAt")
                         .HasColumnType("datetimeoffset");
@@ -1082,6 +1163,81 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ContractLineItemLegalEntityAllocations");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.DataExchangeTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DatasetsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<string>("FilterJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IncludeAttachments")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("PackageFormat")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("ResultContent")
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SelectedFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Sha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("DataExchangeTasks");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.DeductionEntry", b =>
@@ -2351,6 +2507,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
 
+                    b.Property<int>("Mode")
+                        .HasColumnType("int");
+
                     b.Property<byte[]>("OriginalContent")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
@@ -2407,6 +2566,54 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.HasIndex("ImportBatchId");
 
                     b.ToTable("ImportErrors");
+                });
+
+            modelBuilder.Entity("EngineeringManager.Infrastructure.Data.ImportMappingTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Dataset")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DatasetVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("MappingJson")
+                        .IsRequired()
+                        .HasMaxLength(8000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Dataset", "Scope");
+
+                    b.HasIndex("OwnerUserId", "Dataset", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ImportMappingTemplates");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.InvoiceEntry", b =>

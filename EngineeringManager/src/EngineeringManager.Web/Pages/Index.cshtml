@@ -105,6 +105,23 @@ else
                         }
                     </div>
                 </article>
+
+                <article class="panel panel--wide" data-dashboard-cash>
+                    <div class="panel-heading"><div><p class="eyebrow">现金观察</p><h2>项目收支缺口</h2></div><a class="button button--secondary" asp-page="/Finance/Index">进入财务台账</a></div>
+                    @if (dashboard.CashWatchlist.Count == 0)
+                    {
+                        <p class="panel-copy">暂无可查看的项目现金数据。</p>
+                    }
+                    else
+                    {
+                        <div class="table-wrap"><table class="data-table dashboard-cash-table"><thead><tr><th>项目</th><th>阶段</th><th>已收</th><th>已付</th><th>未收</th><th>未付</th><th>现金缺口</th></tr></thead><tbody>
+                        @foreach (var row in dashboard.CashWatchlist)
+                        {
+                            <tr><td><a asp-page="/Projects/Details" asp-route-id="@row.ProjectId">@row.ProjectNumber · @row.ProjectName</a></td><td>@row.StageLabel</td><td>@row.CollectedAmount.ToString("N2")</td><td>@row.PaidAmount.ToString("N2")</td><td>@row.UncollectedAmount.ToString("N2")</td><td>@row.UnpaidAmount.ToString("N2")</td><td class="@(row.CashGap < 0 ? "value-negative" : "")">@row.CashGap.ToString("N2")</td></tr>
+                        }
+                        </tbody></table></div>
+                    }
+                </article>
             }
 
             <article class="panel" data-stage-chart>

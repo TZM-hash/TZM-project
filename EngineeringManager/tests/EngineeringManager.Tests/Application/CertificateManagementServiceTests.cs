@@ -46,6 +46,20 @@ public sealed class CertificateManagementServiceTests
     }
 
     [Fact]
+    public async Task CertificateSearchUsesAllCertificateFieldsAndMultipleKeywords()
+    {
+        await using var fixture = await CertificateFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "CERT-SEARCH", Name = "证书全字段员工", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        fixture.Db.EmployeeCertificates.Add(new EmployeeCertificate { EmployeeId = employee.Id, CertificateType = "特种作业证", CertificateNumber = "CERT-NO-SEARCH", SpecialtyLevelScope = "焊接一级", IssuingAuthority = "搜索发证机关", IssuedOn = new DateOnly(2026, 1, 1), ExpiresOn = new DateOnly(2027, 1, 1), Notes = "证书备注" });
+        await fixture.Db.SaveChangesAsync();
+
+        (await fixture.EmployeeService.ListAsync(new CertificateFilter("焊接一级 搜索发证机关 证书备注"), new DateOnly(2026, 7, 17), CancellationToken.None)).Should().ContainSingle(item => item.EmployeeId == employee.Id);
+        (await fixture.EmployeeService.ListAsync(new CertificateFilter("焊接一级 不存在"), new DateOnly(2026, 7, 17), CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CompanyCertificateRespectsCompanyScopeAndAllowsSameTypeMultipleTimes()
     {
         await using var fixture = await CertificateFixture.CreateAsync();

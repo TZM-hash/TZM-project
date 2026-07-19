@@ -3,6 +3,9 @@ import { initEffects } from "./core/effects.js";
 
 const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard()];
 initSmartBack();
+if (document.querySelector("[data-conflict-notice]")) {
+  jobs.push(import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
+}
 if (document.querySelector("[data-theme-option], [data-motion-option], [data-global-font-picker]")) {
   jobs.push(import("./pages/settings.js").then((module) => module.initSettingsPreview()));
 }
@@ -22,6 +25,9 @@ if (document.querySelector("[data-chart]")) {
 }
 if (document.querySelector("[data-inline-edit], [data-inline-edit-table], [data-finance-project-select]")) {
   jobs.push(import("./components/quick-edit.js").then((module) => module.initInlineEditors()));
+}
+if (document.querySelector("[data-check-selector]")) {
+  jobs.push(import("./components/check-selector.js").then((module) => module.initCheckSelectors()));
 }
 await Promise.all(jobs);
 

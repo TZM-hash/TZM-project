@@ -37,6 +37,23 @@ public sealed class BackupServiceTests
         result.CompletedAt.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task SettingsBackupAndIndependentScheduleCreatePortablePackage()
+    {
+        await using var fixture = await BackupFixture.CreateAsync(new SuccessfulExecutor());
+        var schedule = await fixture.Service.SaveScheduleAsync(new SaveBackupScheduleRequest(BackupKind.Settings, true, BackupScheduleMode.Interval, 60, null, TimeZoneInfo.Local.Id, fixture.AttachmentRoot, null, 3, 0, true), default);
+        schedule.Enabled.Should().BeTrue();
+        var result = await fixture.Service.CreateBackupAsync("admin-settings", BackupKind.Settings, default);
+
+        result.Kind.Should().Be(BackupKind.Settings);
+        result.PackagePath.Should().NotBeNull();
+        File.Exists(result.PackagePath).Should().BeTrue();
+        result.Sha256.Should().NotBeNullOrWhiteSpace();
+        using var archive = System.IO.Compression.ZipFile.OpenRead(result.PackagePath!);
+        archive.GetEntry("manifest.json").Should().NotBeNull();
+        archive.GetEntry("settings/settings.json").Should().NotBeNull();
+    }
+
     private sealed class SuccessfulExecutor : IDatabaseBackupExecutor
     {
         public async Task ExecuteAsync(string destinationPath, CancellationToken cancellationToken) =>

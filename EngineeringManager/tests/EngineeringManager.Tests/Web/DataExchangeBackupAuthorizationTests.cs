@@ -58,6 +58,20 @@ public sealed class DataExchangeBackupAuthorizationTests
         (await client.GetAsync("/Backups")).StatusCode.Should().Be(System.Net.HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public void BackupPageExposesSeparateTypesAndSchedules()
+    {
+        var page = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "Pages", "Backups", "Index.cshtml"));
+        page.Should().Contain("data-backup-settings").And.Contain("data-backup-full").And.Contain("定时策略").And.Contain("NAS/共享目录");
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "EngineeringManager.sln"))) directory = directory.Parent;
+        return directory?.FullName ?? throw new DirectoryNotFoundException();
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string role) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -87,6 +101,8 @@ public sealed class DataExchangeBackupAuthorizationTests
         public Task<ExportSelectionDto?> GetLastSelectionAsync(string userId, ExportDataset dataset, CancellationToken cancellationToken) => Task.FromResult<ExportSelectionDto?>(null);
         public Task<ExportTemplateDto> SaveTemplateAsync(SaveExportTemplateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<ExportTemplateDto>> ListTemplatesAsync(string userId, ExportDataset dataset, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ExportTemplateDto>>([]);
+        public Task<ExportFileResult> ExportModulesAsync(ExportModuleRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ExportTaskDto>> ListTasksAsync(string userId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ExportTaskDto>>([]);
     }
 
     private sealed class FakeImportService : IImportService
@@ -94,12 +110,20 @@ public sealed class DataExchangeBackupAuthorizationTests
         public Task<ExportFileResult> GenerateTemplateAsync(ExportDataset dataset, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ImportPreviewDto> PreviewAsync(ImportPreviewRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ConfirmAsync(Guid batchId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ImportMappingTemplateDto> SaveMappingTemplateAsync(SaveImportMappingTemplateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ImportMappingTemplateDto>> ListMappingTemplatesAsync(string userId, ExportDataset dataset, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ImportMappingTemplateDto>>([]);
     }
 
     private sealed class FakeBackupService : IBackupService
     {
         public Task<BackupTaskDto> CreateBackupAsync(string requestedByUserId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BackupTaskDto> CreateBackupAsync(string requestedByUserId, BackupKind kind, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<BackupTaskDto>> ListAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BackupTaskDto>>([]);
+        public Task<IReadOnlyList<BackupScheduleDto>> ListSchedulesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BackupScheduleDto>>([]);
+        public Task<BackupScheduleDto> SaveScheduleAsync(SaveBackupScheduleRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<BackupTaskDto>> RunDueSchedulesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BackupTaskDto>>([]);
+        public Task<SettingsRestorePreviewDto> PreviewSettingsAsync(byte[] content, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task RestoreSettingsAsync(byte[] content, IReadOnlyCollection<string> categories, string requestedByUserId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeReminderService : IReminderService

@@ -1,5 +1,8 @@
-<nav class="page-tabs" aria-label="员工管理子导航">
-    <a asp-page="/Employees/Index">员工列表</a>
-    <a asp-page="/Employees/Ledger">年度总账总览</a>
-    <a asp-page="/Employees/Certificates/Index">证书总览</a>
+@{
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
+}
+<nav class="page-tabs page-tabs--buttons" aria-label="员工管理子导航">
+    <a class="button button--secondary button--small @(currentPage == "/Employees/Index" ? "is-active" : null)" asp-page="/Employees/Index" aria-current="@(currentPage == "/Employees/Index" ? "page" : null)">员工列表</a>
+    <a class="button button--secondary button--small @(currentPage == "/Employees/Ledger" ? "is-active" : null)" asp-page="/Employees/Ledger" aria-current="@(currentPage == "/Employees/Ledger" ? "page" : null)">年度总账总览</a>
+    <a class="button button--secondary button--small @(currentPage.StartsWith("/Employees/Certificates", StringComparison.Ordinal) ? "is-active" : null)" asp-page="/Employees/Certificates/Index" aria-current="@(currentPage.StartsWith("/Employees/Certificates", StringComparison.Ordinal) ? "page" : null)">证书总览</a>
 </nav>

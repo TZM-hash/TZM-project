@@ -77,8 +77,28 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             .AsNoTracking()
             .Where(item => item.IsActive)
             .OrderBy(item => item.ProjectNumber)
-            .Select(item => new { item.Id, item.ProjectNumber, item.Name })
+            .Select(item => new ProjectSummarySeed(item.Id, item.ProjectNumber, item.Name))
             .ToListAsync(cancellationToken);
+        return await BuildProjectSummariesAsync(projects, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(projectIds);
+        if (projectIds.Count == 0) return [];
+        var projects = await db.Projects
+            .AsNoTracking()
+            .Where(item => item.IsActive && projectIds.Contains(item.Id))
+            .OrderBy(item => item.ProjectNumber)
+            .Select(item => new ProjectSummarySeed(item.Id, item.ProjectNumber, item.Name))
+            .ToListAsync(cancellationToken);
+        return await BuildProjectSummariesAsync(projects, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ProjectFinanceListItemDto>> BuildProjectSummariesAsync(
+        IReadOnlyList<ProjectSummarySeed> projects,
+        CancellationToken cancellationToken)
+    {
         var results = new List<ProjectFinanceListItemDto>(projects.Count);
         foreach (var project in projects)
         {
@@ -91,6 +111,8 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
 
         return results;
     }
+
+    private sealed record ProjectSummarySeed(Guid Id, string ProjectNumber, string Name);
 
     public async Task<FinanceOverviewDto> GetOverviewAsync(CancellationToken cancellationToken)
     {

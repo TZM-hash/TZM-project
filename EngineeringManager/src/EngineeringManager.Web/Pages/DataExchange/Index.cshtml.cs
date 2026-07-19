@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Security;
@@ -13,6 +14,8 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
 {
     public IReadOnlyList<EngineeringManager.Domain.DataExchange.ExportFieldDefinition> Fields { get; private set; } = [];
     public IReadOnlyList<ExportTemplateDto> Templates { get; private set; } = [];
+    public IReadOnlyList<ExportTaskDto> Tasks { get; private set; } = [];
+    public IReadOnlyList<ImportMappingTemplateDto> MappingTemplates { get; private set; } = [];
     public ImportPreviewDto? Preview { get; private set; }
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
 
@@ -23,12 +26,34 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
     [BindProperty] public bool SharedTemplate { get; set; }
     [BindProperty] public IFormFile? ImportFile { get; set; }
     [BindProperty] public ExportDataset ImportDataset { get; set; } = ExportDataset.Employees;
+    [BindProperty] public List<ExportDataset> SelectedDatasets { get; set; } = [];
+    [BindProperty] public ExportScope Scope { get; set; } = ExportScope.CurrentView;
+    [BindProperty] public ExportPackageFormat PackageFormat { get; set; } = ExportPackageFormat.Workbook;
+    [BindProperty] public bool IncludeAttachments { get; set; }
+    [BindProperty] public ImportMode ImportMode { get; set; } = ImportMode.Mixed;
+    [BindProperty] public string? SourceMappingJson { get; set; }
+    [BindProperty] public string? MappingTemplateName { get; set; }
+    [BindProperty] public bool SharedMappingTemplate { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken);
 
     public async Task<IActionResult> OnPostExportAsync(CancellationToken cancellationToken)
     {
-        var result = await exportService.ExportAsync(new ExportRequest(Dataset, UserId(), SelectedFields, CutoffDate), cancellationToken);
+        var result = await exportService.ExportAsync(new ExportRequest(Dataset, UserId(), SelectedFields, CutoffDate, CanViewSensitiveData: CanManage), cancellationToken);
+        return File(result.Content, result.ContentType, result.FileName);
+    }
+
+    public async Task<IActionResult> OnPostExportModulesAsync(CancellationToken cancellationToken)
+    {
+        var datasets = SelectedDatasets.Count == 0 ? [Dataset] : SelectedDatasets.Distinct().ToArray();
+        var selections = datasets.ToDictionary(
+            dataset => dataset,
+            dataset => (IReadOnlyList<string>)(dataset == Dataset
+                ? SelectedFields
+                : exportService.GetFieldCatalog(dataset).Where(field => field.IsDefault).Select(field => field.Key).ToArray()));
+        var result = await exportService.ExportModulesAsync(
+            new ExportModuleRequest(datasets, UserId(), selections, null, PackageFormat, IncludeAttachments, CanManage),
+            cancellationToken);
         return File(result.Content, result.ContentType, result.FileName);
     }
 
@@ -58,7 +83,12 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
 
         await using var stream = new MemoryStream();
         await ImportFile.CopyToAsync(stream, cancellationToken);
-        Preview = await importService.PreviewAsync(new ImportPreviewRequest(UserId(), ImportDataset, ImportFile.FileName, stream.ToArray(), null), cancellationToken);
+        IReadOnlyDictionary<string, string>? mapping = null;
+        if (!string.IsNullOrWhiteSpace(SourceMappingJson))
+        {
+            mapping = JsonSerializer.Deserialize<Dictionary<string, string>>(SourceMappingJson);
+        }
+        Preview = await importService.PreviewAsync(new ImportPreviewRequest(UserId(), ImportDataset, ImportFile.FileName, stream.ToArray(), mapping, ImportMode, IncludeAttachments), cancellationToken);
         await LoadAsync(cancellationToken);
         return Page();
     }
@@ -70,10 +100,20 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostSaveMappingTemplateAsync(CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        var mapping = string.IsNullOrWhiteSpace(SourceMappingJson) ? new Dictionary<string, string>() : JsonSerializer.Deserialize<Dictionary<string, string>>(SourceMappingJson) ?? [];
+        await importService.SaveMappingTemplateAsync(new SaveImportMappingTemplateRequest(UserId(), MappingTemplateName ?? string.Empty, ImportDataset, SharedMappingTemplate ? ExportTemplateScope.Shared : ExportTemplateScope.Personal, "1", mapping, CanManage), cancellationToken);
+        return RedirectToPage();
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         Fields = exportService.GetFieldCatalog(Dataset);
         Templates = await exportService.ListTemplatesAsync(UserId(), Dataset, cancellationToken);
+        Tasks = await exportService.ListTasksAsync(UserId(), cancellationToken);
+        MappingTemplates = await importService.ListMappingTemplatesAsync(UserId(), ImportDataset, cancellationToken);
         var last = await exportService.GetLastSelectionAsync(UserId(), Dataset, cancellationToken);
         if (SelectedFields.Count == 0 && last is not null)
         {

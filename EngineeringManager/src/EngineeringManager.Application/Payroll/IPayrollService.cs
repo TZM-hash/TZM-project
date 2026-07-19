@@ -5,6 +5,7 @@ public interface IPayrollService
     Task<PayrollDisbursementBatchDetailsDto> SaveDisbursementBatchAsync(string userId, SavePayrollDisbursementBatchRequest request, CancellationToken cancellationToken);
     Task<PayrollDisbursementBatchDetailsDto?> GetDisbursementBatchAsync(Guid batchId, CancellationToken cancellationToken);
     Task<PayrollDisbursementOverviewDto> GetDisbursementOverviewAsync(CancellationToken cancellationToken);
+    Task<PayrollDisbursementOverviewDto> SearchDisbursementOverviewAsync(string? search, bool canViewSensitiveData, CancellationToken cancellationToken) => GetDisbursementOverviewAsync(cancellationToken);
     Task<PayrollBatchDto> CreateBatchAsync(CreatePayrollBatchRequest request, CancellationToken cancellationToken);
     Task<PayrollItemDto> AddItemAsync(CreatePayrollItemRequest request, CancellationToken cancellationToken);
     Task<Guid> RecordPaymentAsync(RecordPayrollPaymentRequest request, CancellationToken cancellationToken);

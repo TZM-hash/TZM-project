@@ -8,7 +8,7 @@ function removeFilter(key) {
 
 function clearFilters(root) {
   const url = new URL(window.location.href);
-  root.querySelectorAll("[data-filter-key]").forEach((control) => url.searchParams.delete(control.dataset.filterKey));
+  root.querySelectorAll("[data-filter-key], [data-inline-filter-key]").forEach((control) => url.searchParams.delete(control.dataset.filterKey || control.dataset.inlineFilterKey));
   url.searchParams.delete("page");
   url.searchParams.delete("pageNumber");
   window.location.assign(url);

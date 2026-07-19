@@ -2,6 +2,7 @@ using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -235,21 +236,56 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
     {
         var projectQuery = db.Projects
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(project => project.Contracts)
                 .ThenInclude(contract => contract.LineItems)
-            .Include(project => project.Assignments)
-            .Include(project => project.LegalEntities)
             .Include(project => project.TaxConfigurations)
+            .Include(project => project.ResponsibleUser)
+            .Include(project => project.Department)
+            .Include(project => project.Branch)
+            .Include(project => project.LegalEntities)
+                .ThenInclude(link => link.LegalEntity)
             .Where(project => project.IsActive);
         if (!actor.CanAccessAllProjects)
         {
             projectQuery = projectQuery.Where(project => project.ResponsibleUserId == actor.UserId || project.Assignments.Any(assignment => assignment.UserId == actor.UserId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Search))
+        foreach (var term in SearchTerms.Parse(query.Search))
         {
-            var term = query.Search.Trim();
-            projectQuery = projectQuery.Where(project => project.ProjectNumber.Contains(term) || project.Name.Contains(term) || (project.GeneralContractorName != null && project.GeneralContractorName.Contains(term)));
+            var stage = ParseStage(term);
+            var signingStatus = ParseSigningStatus(term);
+            var affiliation = ParseAffiliationType(term);
+            var hasDate = SearchTerms.TryParseDate(term, out var date);
+            var hasAmount = SearchTerms.TryParseDecimal(term, out var amount);
+            projectQuery = projectQuery.Where(project =>
+                project.ProjectNumber.Contains(term)
+                || project.Name.Contains(term)
+                || (project.ParentProjectName != null && project.ParentProjectName.Contains(term))
+                || (project.GeneralContractorName != null && project.GeneralContractorName.Contains(term))
+                || (project.GeneralContractorContact != null && project.GeneralContractorContact.Contains(term))
+                || (project.GeneralContractorPhone != null && project.GeneralContractorPhone.Contains(term))
+                || (project.Notes != null && project.Notes.Contains(term))
+                || (project.ResponsibleUser != null && (project.ResponsibleUser.UserName!.Contains(term) || project.ResponsibleUser.DisplayName.Contains(term)))
+                || (project.Department != null && (project.Department.Code.Contains(term) || project.Department.Name.Contains(term)))
+                || (project.Branch != null && (project.Branch.Code.Contains(term) || project.Branch.Name.Contains(term)))
+                || project.LegalEntities.Any(link => link.LegalEntity.Code.Contains(term) || link.LegalEntity.Name.Contains(term) || link.LegalEntity.ShortName.Contains(term))
+                || project.Partners.Any(link => (link.Notes != null && link.Notes.Contains(term)) || link.Partner.PartnerNumber.Contains(term) || link.Partner.Name.Contains(term) || link.Partner.ShortName.Contains(term))
+                || project.Assignments.Any(assignment => (assignment.Notes != null && assignment.Notes.Contains(term)) || assignment.User.DisplayName.Contains(term))
+                || project.Contracts.Any(contract =>
+                    contract.ContractNumber.Contains(term)
+                    || contract.Name.Contains(term)
+                    || (contract.CounterpartyName != null && contract.CounterpartyName.Contains(term))
+                    || (contract.Notes != null && contract.Notes.Contains(term))
+                    || (contract.BusinessPartner != null && (contract.BusinessPartner.Name.Contains(term) || contract.BusinessPartner.ShortName.Contains(term)))
+                    || (hasDate && contract.SignedDate == date)
+                    || (hasAmount && contract.TotalAmount == amount)
+                    || contract.LineItems.Any(line => line.Code.Contains(term) || line.Name.Contains(term) || line.Unit.Contains(term) || (line.Notes != null && line.Notes.Contains(term))))
+                || project.TaxConfigurations.Any(tax => hasAmount && tax.TaxRate == amount)
+                || (stage.HasValue && project.Stage == stage.Value)
+                || (signingStatus.HasValue && project.ContractSigningStatus == signingStatus.Value)
+                || (affiliation.HasValue && project.AffiliationType == affiliation.Value)
+                || (hasDate && (project.ActualStartDate == date || project.ActualCompletionDate == date)));
         }
         if (query.Stages.Count > 0)
         {
@@ -365,7 +401,15 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage,
             project.AffiliationType, project.ActualStartDate, project.ActualCompletionDate, project.Notes, project.ContractSigningStatus,
             project.TaxConfigurations.OrderBy(item => item.TaxRate).ThenBy(item => item.InvoiceType)
-                .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray());
+                .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray(),
+            project.ParentProjectName,
+            project.GeneralContractorContact,
+            project.GeneralContractorPhone,
+            project.ResponsibleUserId,
+            project.ResponsibleUser?.DisplayName,
+            project.Department?.Name,
+            project.Branch?.Name,
+            project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => item.LegalEntity?.ShortName).Where(name => !string.IsNullOrWhiteSpace(name)).Cast<string>().ToArray());
 
     private static void ValidateTaxConfigurations(IReadOnlyCollection<ProjectTaxConfigurationInput>? configurations)
     {
@@ -444,6 +488,32 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static ProjectStage? ParseStage(string term) => term switch
+    {
+        "待进场" => ProjectStage.AwaitingMobilization,
+        "施工中" => ProjectStage.UnderConstruction,
+        "停工中" => ProjectStage.Suspended,
+        "已完工未结算" => ProjectStage.CompletedUnsettled,
+        "已结算归档" => ProjectStage.SettledArchived,
+        _ => Enum.TryParse<ProjectStage>(term, true, out var value) ? value : null
+    };
+
+    private static ContractSigningStatus? ParseSigningStatus(string term) => term switch
+    {
+        "未签合同" or "未签" => ContractSigningStatus.NotSigned,
+        "合同已寄出" or "已寄出" => ContractSigningStatus.SentForSignature,
+        "合同已签完" or "已签完" => ContractSigningStatus.FullySigned,
+        _ => Enum.TryParse<ContractSigningStatus>(term, true, out var value) ? value : null
+    };
+
+    private static ProjectAffiliationType? ParseAffiliationType(string term) => term switch
+    {
+        "自营项目" or "自营" => ProjectAffiliationType.SelfOperated,
+        "他方挂靠我方" => ProjectAffiliationType.ExternalPartyAttachedToUs,
+        "我方挂靠他方" => ProjectAffiliationType.WeAttachedToExternalParty,
+        _ => Enum.TryParse<ProjectAffiliationType>(term, true, out var value) ? value : null
+    };
 
     private static IEnumerable<ProjectListItemDto> SortProjects(IEnumerable<ProjectListItemDto> items, string? sortKey, bool descending)
     {

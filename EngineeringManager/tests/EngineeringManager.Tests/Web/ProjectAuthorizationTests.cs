@@ -179,6 +179,56 @@ public sealed class ProjectAuthorizationTests
         html.Should().NotContain("Estimated");
     }
 
+    [Fact]
+    public void ProjectListExposesStableSerialColumnAndCompleteOverviewColumns()
+    {
+        var root = RepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml"));
+        var model = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml.cs"));
+
+        page.Should().Contain("data-column-key=\"serial_number\"")
+            .And.Contain("序号")
+            .And.Contain("data-column-key=\"general_contractor\"")
+            .And.Contain("data-column-key=\"contract_signing_status\"")
+            .And.Contain("data-column-key=\"actual_start_date\"")
+            .And.Contain("data-column-key=\"actual_completion_date\"")
+            .And.Contain("data-column-key=\"estimated_amount\"")
+            .And.Contain("data-column-key=\"settled_amount\"")
+            .And.Contain("data-column-key=\"contract_count\"")
+            .And.Contain("data-column-key=\"line_item_count\"");
+        model.Should().Contain("new(\"serial_number\", \"序号\", true, true)")
+            .And.Contain("new(\"project_number\", \"项目编号\", true, false)")
+            .And.Contain("new(\"general_contractor\", \"总包单位\")")
+            .And.Contain("new(\"contract_signing_status\", \"合同签订\")");
+    }
+
+    [Fact]
+    public void ProjectDetailInlineEditorsUseOneFormPerEditorAndKeepRouteId()
+    {
+        var root = RepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml"));
+        var styles = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "css", "components.css"));
+
+        page.Should().Contain("id=\"project-overview-inline-form\"")
+            .And.Contain("asp-route-id=\"@item.Overview.Id\"")
+            .And.NotContain("<form id=\"finance-row")
+            .And.NotContain("<form id=\"construction-row")
+            .And.Contain("data-inline-edit=\"project-overview\"")
+            .And.Contain("data-inline-edit=\"project-quantity\"")
+            .And.Contain("data-inline-edit=\"project-collection\"")
+            .And.Contain("data-inline-edit=\"project-invoice\"")
+            .And.Contain("data-inline-edit=\"project-payment\"")
+            .And.Contain("data-inline-edit=\"project-construction\"");
+        const string overviewSelector = ".inline-edit-shell.project-overview-panel [data-inline-edit-control].inline-cell-control:not([hidden])";
+        const string generalSelector = ".inline-edit-shell [data-inline-edit-control].inline-cell-control:not([hidden])";
+        styles.Should().Contain(overviewSelector)
+            .And.Contain(".project-tab-panel td { position: relative; }")
+            .And.Contain(generalSelector + " { position: absolute;")
+            .And.Contain(overviewSelector + " { position: static;");
+        styles.IndexOf(overviewSelector, StringComparison.Ordinal)
+            .Should().BeGreaterThan(styles.IndexOf(generalSelector, StringComparison.Ordinal));
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string? role) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -290,6 +340,8 @@ public sealed class ProjectAuthorizationTests
             Task.FromResult<IReadOnlyList<ProjectFinanceListItemDto>>([
                 new(FakeProjectWorkspaceService.ProjectId, "P-WEB-001", "项目工作台页面测试", new FinanceProjectSummaryDto(FakeProjectWorkspaceService.ProjectId, 100m, 40m, 60m, 80m, 25m, 0m, 55m, 30m, 70m, 0m, false, false))
             ]);
+        public Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) =>
+            ListProjectSummariesAsync(cancellationToken);
         public Task<Guid> CreateAccountAsync(CreateFinancialAccountRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<FinancialAccountDto>> ListAccountsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<FinancialAccountDto>>([]);
         public Task<FinanceOverviewDto> GetOverviewAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

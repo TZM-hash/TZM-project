@@ -13,7 +13,8 @@ namespace EngineeringManager.Web.Pages.Employees;
 public sealed class IndexModel(IEmployeeService employeeService) : PageModel
 {
     public IReadOnlyList<EmployeeDto> Employees { get; private set; } = [];
-    public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
+    public bool CanManage => PageContext?.HttpContext?.User?.IsInRole(SystemRoles.SystemAdministrator) == true
+        || PageContext?.HttpContext?.User?.IsInRole(SystemRoles.ApplicationAdministrator) == true;
     public bool QuickEditOpen { get; private set; }
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public EmployeeType? EmployeeType { get; set; }
@@ -64,7 +65,7 @@ public sealed class IndexModel(IEmployeeService employeeService) : PageModel
 
     private async Task LoadEmployeesAsync(CancellationToken cancellationToken)
     {
-        var employees = await employeeService.ListAsync(Search, cancellationToken);
+        var employees = await employeeService.ListAsync(Search, CanManage, cancellationToken);
         Employees = EmployeeType.HasValue
             ? employees.Where(employee => employee.EmployeeType == EmployeeType.Value).ToList()
             : employees;

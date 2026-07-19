@@ -13,7 +13,7 @@ function applySavedView(root, option) {
     return;
   }
   const filters = safeParse(option.dataset.savedViewFilterJson);
-  root.querySelectorAll("[data-filter-form] [data-filter-key]").forEach((control) => url.searchParams.delete(control.dataset.filterKey));
+  root.querySelectorAll("[data-filter-form] [data-filter-key], [data-inline-filter-key]").forEach((control) => url.searchParams.delete(control.dataset.filterKey || control.dataset.inlineFilterKey));
   Object.entries(filters).forEach(([key, value]) => {
     if (Array.isArray(value)) {
       url.searchParams.delete(key);
@@ -32,12 +32,13 @@ function applySavedView(root, option) {
 
 function serializeFilters(root) {
   const result = {};
-  root.querySelectorAll("[data-filter-form] [data-filter-key]").forEach((control) => {
+  root.querySelectorAll("[data-filter-form] [data-filter-key], [data-inline-filter-key]").forEach((control) => {
+    const key = control.dataset.filterKey || control.dataset.inlineFilterKey;
     if (!control.value) return;
-    if (result[control.dataset.filterKey]) {
-      result[control.dataset.filterKey] = [result[control.dataset.filterKey], control.value].flat();
+    if (result[key]) {
+      result[key] = [result[key], control.value].flat();
     } else {
-      result[control.dataset.filterKey] = control.value;
+      result[key] = control.value;
     }
   });
   return result;

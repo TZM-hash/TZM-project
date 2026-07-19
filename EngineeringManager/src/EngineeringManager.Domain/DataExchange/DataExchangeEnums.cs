@@ -27,5 +27,21 @@ public enum ExportDataset
 public enum ExportFieldDataType { Text = 1, Number = 2, Date = 3, Boolean = 4 }
 public enum ExportTemplateScope { Personal = 1, Shared = 2 }
 public enum DataExchangeTaskStatus { Pending = 1, PreviewReady = 2, Running = 3, Completed = 4, Failed = 5 }
+public enum DataExchangeDirection { Export = 1, Import = 2 }
 
-public sealed record ExportFieldDefinition(string Key, string Label, ExportFieldDataType DataType, bool IsDefault);
+public sealed record ExportFieldDefinition(
+    string Key,
+    string Label,
+    ExportFieldDataType DataType,
+    bool IsDefault,
+    bool CanImport = true,
+    bool CanExport = true,
+    bool IsSensitive = false,
+    bool IsRequired = false,
+    bool IsCalculated = false,
+    string? Relationship = null,
+    IReadOnlyList<string>? AllowedValues = null);
+
+public enum ImportMode { New = 1, Update = 2, Mixed = 3 }
+public enum ExportScope { CurrentView = 1, FullAuthorized = 2, SelectedModules = 3 }
+public enum ExportPackageFormat { Workbook = 1, Zip = 2 }

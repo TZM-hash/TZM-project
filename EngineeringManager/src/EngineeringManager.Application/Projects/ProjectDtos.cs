@@ -82,7 +82,15 @@ public sealed record ProjectDto(
     DateOnly? ActualCompletionDate = null,
     string? Notes = null,
     ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
-    IReadOnlyList<ProjectTaxConfigurationDto>? TaxConfigurations = null);
+    IReadOnlyList<ProjectTaxConfigurationDto>? TaxConfigurations = null,
+    string? ParentProjectName = null,
+    string? GeneralContractorContact = null,
+    string? GeneralContractorPhone = null,
+    string? ResponsibleUserId = null,
+    string? ResponsibleUserName = null,
+    string? DepartmentName = null,
+    string? BranchName = null,
+    IReadOnlyList<string>? LegalEntityNames = null);
 
 public sealed record ContractLineItemDto(
     Guid Id,

@@ -12,7 +12,7 @@ function setEditorState(editor, editing) {
     editor.querySelectorAll("[data-inline-edit-form]").forEach((element) => { element.hidden = !editing; });
   }
   editor.querySelectorAll("[data-inline-edit-open]").forEach((button) => button.setAttribute("aria-expanded", String(editing)));
-  if (editing) editor.querySelector("[data-inline-edit-control]:not([type='hidden']), [data-inline-edit-form] input:not([type='hidden']), [data-inline-edit-form] select, [data-inline-edit-form] textarea")?.focus();
+  if (editing) editor.querySelector("[data-inline-edit-control]:not([type='hidden']), [data-inline-edit-form] input:not([type='hidden']), [data-inline-edit-form] select, [data-inline-edit-form] textarea")?.focus({ preventScroll: true });
 }
 
 function populateFields(container, values) {
@@ -84,7 +84,7 @@ export function initInlineEditors() {
       editorRow.hidden = false;
       editorRow.classList.add("is-editing");
       button.setAttribute("aria-expanded", "true");
-      editorRow.querySelector("input:not([type='hidden']), select, textarea")?.focus();
+      editorRow.querySelector("input:not([type='hidden']), select, textarea")?.focus({ preventScroll: true });
     }));
     editorRow.querySelectorAll("[data-inline-edit-cancel]").forEach((button) => button.addEventListener("click", () => {
       editorRow.querySelector("form")?.reset();

@@ -116,6 +116,21 @@ public sealed class CompanyManagementServiceTests
         items.Should().ContainSingle(item => item.Id == first.Id);
     }
 
+    [Fact]
+    public async Task CompanySearchUsesAddressesAccountsAndCertificates()
+    {
+        await using var scope = await CreateScopeAsync();
+        var category = new CompanyCategory { Code = "SEARCH-CAT", Name = "搜索分类" };
+        var company = new LegalEntity { Code = "LE-SEARCH", Name = "全字段公司", ShortName = "全字段", CompanyCategory = category, LegalRepresentative = "搜索法人", RegisteredAddress = "搜索注册地址", Notes = "公司备注" };
+        scope.Db.Add(company);
+        await scope.Db.SaveChangesAsync();
+        scope.Db.FinancialAccounts.Add(new FinancialAccount { LegalEntityId = company.Id, AccountName = "搜索账户", AccountNumber = "622200001234", BankName = "搜索银行", Notes = "账户备注" });
+        scope.Db.CompanyCertificates.Add(new CompanyCertificate { LegalEntityId = company.Id, CertificateType = "搜索资质", CertificateNumber = "COMP-CERT-SEARCH", IssuingAuthority = "发证机关", Notes = "证书备注" });
+        await scope.Db.SaveChangesAsync();
+
+        (await scope.Service.SearchAsync(CompanyActor.Administrator("admin"), "搜索注册地址 搜索账户 搜索资质", CancellationToken.None)).Should().ContainSingle(item => item.Id == company.Id);
+    }
+
     private static async Task<TestScope> CreateScopeAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:");

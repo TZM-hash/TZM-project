@@ -1,6 +1,7 @@
 using EngineeringManager.Application.Partners;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -188,10 +189,29 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
             .Include(item => item.Contacts)
             .Include(item => item.ProjectLinks)
             .Where(item => item.IsActive);
-        if (!string.IsNullOrWhiteSpace(search))
+        foreach (var term in SearchTerms.Parse(search))
         {
-            var term = search.Trim();
-            query = query.Where(item => item.PartnerNumber.Contains(term) || item.Name.Contains(term) || item.ShortName.Contains(term));
+            var parsedRoleFilter = ParseRole(term);
+            query = query.Where(item =>
+                item.PartnerNumber.Contains(term)
+                || item.Name.Contains(term)
+                || item.ShortName.Contains(term)
+                || (item.UnifiedSocialCreditCode != null && item.UnifiedSocialCreditCode.Contains(term))
+                || (item.Notes != null && item.Notes.Contains(term))
+                || item.Roles.Any(partnerRole =>
+                    (parsedRoleFilter.HasValue && partnerRole.RoleType == parsedRoleFilter.Value)
+                    || (partnerRole.TradeCategory != null && partnerRole.TradeCategory.Contains(term))
+                    || (partnerRole.PricingRule != null && partnerRole.PricingRule.Contains(term))
+                    || (partnerRole.SettlementTerms != null && partnerRole.SettlementTerms.Contains(term)))
+                || item.Contacts.Any(contact =>
+                    contact.Name.Contains(term)
+                    || (contact.Phone != null && contact.Phone.Contains(term))
+                    || (contact.Email != null && contact.Email.Contains(term))
+                    || (contact.Address != null && contact.Address.Contains(term))
+                    || (contact.Notes != null && contact.Notes.Contains(term)))
+                || item.ProjectLinks.Any(link =>
+                    (link.Notes != null && link.Notes.Contains(term))
+                    || (link.Project != null && (link.Project.ProjectNumber.Contains(term) || link.Project.Name.Contains(term)))));
         }
 
         if (role.HasValue)
@@ -255,4 +275,13 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
     }
 
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static BusinessPartnerRoleType? ParseRole(string term) => term switch
+    {
+        "甲方/总包" or "甲方" or "总包" => BusinessPartnerRoleType.CustomerOrGeneralContractor,
+        "施工班组" or "班组" => BusinessPartnerRoleType.ConstructionCrew,
+        "材料供应商" or "材料" => BusinessPartnerRoleType.MaterialSupplier,
+        "零星供应商" or "零星" => BusinessPartnerRoleType.MiscellaneousSupplier,
+        _ => Enum.TryParse<BusinessPartnerRoleType>(term, true, out var value) ? value : null
+    };
 }

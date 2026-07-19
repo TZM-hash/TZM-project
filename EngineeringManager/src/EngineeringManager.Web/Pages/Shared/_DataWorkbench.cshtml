@@ -12,6 +12,10 @@
         order = index
     }));
     var initialColumns = selectedView?.ColumnJson ?? string.Empty;
+    var inlineFilters = Model.InlineFilterFields;
+    var inlineKeys = inlineFilters.Select(field => field.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var advancedFilters = Model.Filters.Where(field => !inlineKeys.Contains(field.Key)).ToArray();
+    var hasInlineValue = inlineFilters.Any(field => !string.IsNullOrWhiteSpace(field.Value) || !string.IsNullOrWhiteSpace(Context.Request.Query[field.Key].ToString()));
 }
 
 <section class="data-workbench" data-workbench data-page-key="@Model.PageKey" data-table-id="@Model.TableId"
@@ -19,28 +23,77 @@
          data-current-sort-descending="@Model.SortDescending.ToString().ToLowerInvariant()"
          data-default-columns="@defaultColumns" data-saved-view-columns="@initialColumns">
     <div class="data-workbench-toolbar" aria-label="数据视图工具栏">
-        @if (Model.CanSaveViews || Model.SavedViews.Count > 0)
-        {
-        <label class="workbench-view-picker">
-            <span>视图</span>
-            <select data-saved-view-select aria-label="选择保存视图">
-                <option value="">当前视图</option>
-                @foreach (var view in Model.SavedViews)
+        <form method="get" class="workbench-inline-filters" role="search" aria-label="快速搜索">
+            @foreach (var field in inlineFilters)
+            {
+                var value = field.Value ?? Context.Request.Query[field.Key].ToString();
+                <label class="workbench-inline-filter workbench-inline-filter--@field.Kind.ToString().ToLowerInvariant()">
+                    <span>@field.Label</span>
+                    @if (field.Kind == DataWorkbenchFilterKind.Select)
+                    {
+                        <select name="@field.Key" data-inline-filter-key="@field.Key">
+                            <option value="">全部</option>
+                            @foreach (var option in field.Options ?? [])
+                            {
+                                <option value="@option.Value" selected="@(option.Value == value)">@option.Label</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        var inputType = field.Kind switch
+                        {
+                            DataWorkbenchFilterKind.Date => "date",
+                            DataWorkbenchFilterKind.Number => "number",
+                            _ => "search"
+                        };
+                        <input type="@inputType" name="@field.Key" value="@value" placeholder="@field.Placeholder" data-inline-filter-key="@field.Key" />
+                    }
+                </label>
+            }
+            @foreach (var field in advancedFilters)
+            {
+                var queryValues = Context.Request.Query[field.Key];
+                if (queryValues.Count == 0 && !string.IsNullOrWhiteSpace(field.Value))
                 {
-                    <option value="@view.Id" selected="@(view.Id == Model.CurrentSavedViewId)"
-                            data-saved-view-filter-json="@view.FilterJson"
-                            data-saved-view-column-json="@view.ColumnJson"
-                            data-saved-view-sort-key="@view.SortKey"
-                            data-saved-view-sort-descending="@view.SortDescending.ToString().ToLowerInvariant()"
-                            data-saved-view-row-density="@view.RowDensity.ToString().ToLowerInvariant()"
-                            data-saved-view-page-size="@view.PageSize">@view.Name@(view.IsDefault ? " · 默认" : string.Empty)</option>
+                    queryValues = new Microsoft.Extensions.Primitives.StringValues(field.Value);
                 }
-            </select>
-        </label>
-        }
+                foreach (var value in queryValues)
+                {
+                    <input type="hidden" name="@field.Key" value="@value" />
+                }
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.CurrentSortKey)) { <input type="hidden" name="sort" value="@Model.CurrentSortKey" /> }
+            <input type="hidden" name="descending" value="@Model.SortDescending.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="pageSize" value="@Model.CurrentPageSize" />
+            @if (inlineFilters.Count > 0)
+            {
+                <button class="button button--secondary workbench-inline-submit" type="submit">搜索</button>
+                @if (hasInlineValue) { <a class="button button--ghost workbench-inline-clear" href="@Context.Request.Path">清除</a> }
+            }
+        </form>
 
         <div class="workbench-toolbar-actions">
-            @if (Model.Filters.Count > 0)
+            @if (Model.CanSaveViews || Model.SavedViews.Count > 0)
+            {
+            <label class="workbench-view-picker">
+                <span>视图</span>
+                <select data-saved-view-select aria-label="选择保存视图">
+                    <option value="">当前视图</option>
+                    @foreach (var view in Model.SavedViews)
+                    {
+                        <option value="@view.Id" selected="@(view.Id == Model.CurrentSavedViewId)"
+                                data-saved-view-filter-json="@view.FilterJson"
+                                data-saved-view-column-json="@view.ColumnJson"
+                                data-saved-view-sort-key="@view.SortKey"
+                                data-saved-view-sort-descending="@view.SortDescending.ToString().ToLowerInvariant()"
+                                data-saved-view-row-density="@view.RowDensity.ToString().ToLowerInvariant()"
+                                data-saved-view-page-size="@view.PageSize">@view.Name@(view.IsDefault ? " · 默认" : string.Empty)</option>
+                    }
+                </select>
+            </label>
+            }
+            @if (advancedFilters.Length > 0)
             {
             <button class="button button--secondary workbench-tool-button" type="button" data-open-filter-drawer>
                 高级筛选
@@ -50,7 +103,27 @@
                 }
             </button>
             }
-            <button class="button button--secondary workbench-tool-button" type="button" data-open-column-manager>列管理</button>
+            <details class="column-manager-dropdown" data-column-manager-table>
+                <summary class="button button--secondary workbench-tool-button" data-open-column-manager>列管理</summary>
+                <div class="column-manager-menu">
+                    <div class="column-manager-menu-heading"><strong>显示列</strong><span>勾选后立即生效</span></div>
+                    <ol class="column-manager-list" data-column-list>
+                        @for (var index = 0; index < Model.Columns.Count; index++)
+                        {
+                            var column = Model.Columns[index];
+                            <li draggable="true" data-column-key="@column.Key" data-column-order="@index" data-column-fixed="@column.IsFixed.ToString().ToLowerInvariant()">
+                                <span class="column-drag-handle" aria-hidden="true">⋮⋮</span>
+                                <label><input type="checkbox" checked="@column.IsVisible" disabled="@column.IsFixed" data-column-visibility /> <span>@column.Label</span></label>
+                                @if (column.IsFixed) { <small>固定</small> }
+                            </li>
+                        }
+                    </ol>
+                    <div class="column-manager-menu-actions">
+                        <button type="button" class="button button--ghost button--small" data-reset-columns>恢复默认</button>
+                        <button type="button" class="button button--ghost button--small" data-show-all-columns>全选</button>
+                    </div>
+                </div>
+            </details>
             <div class="row-spacing-picker" role="group" aria-label="表格行间距">
                 <button type="button" data-row-spacing="compact" aria-pressed="@(Model.RowDensity == TableDensity.Compact ? "true" : "false")">紧凑</button>
                 <button type="button" data-row-spacing="standard" aria-pressed="@(Model.RowDensity == TableDensity.Standard ? "true" : "false")">标准</button>
@@ -92,30 +165,8 @@
         </div>
     }
 
-    <dialog class="workbench-dialog column-manager-dialog" data-column-manager-table>
-        <div class="workbench-dialog-heading">
-            <div><strong>列管理</strong><span>选择显示列并拖动调整顺序，固定列不可隐藏。</span></div>
-            <button type="button" class="dialog-close" data-close-dialog aria-label="关闭列管理">×</button>
-        </div>
-        <ol class="column-manager-list" data-column-list>
-            @for (var index = 0; index < Model.Columns.Count; index++)
+            @if (advancedFilters.Length > 0)
             {
-                var column = Model.Columns[index];
-                <li draggable="true" data-column-key="@column.Key" data-column-order="@index" data-column-fixed="@column.IsFixed.ToString().ToLowerInvariant()">
-                    <span class="column-drag-handle" aria-hidden="true">⋮⋮</span>
-                    <label><input type="checkbox" checked="@column.IsVisible" disabled="@column.IsFixed" data-column-visibility /> <span>@column.Label</span></label>
-                    @if (column.IsFixed) { <small>固定</small> }
-                </li>
-            }
-        </ol>
-        <div class="workbench-dialog-actions">
-            <button type="button" class="button button--secondary" data-reset-columns>恢复默认</button>
-            <button type="button" class="button button--primary" data-apply-columns>应用</button>
-        </div>
-    </dialog>
-
-    @if (Model.Filters.Count > 0)
-    {
     <dialog class="workbench-dialog workbench-drawer" data-filter-drawer>
         <form method="get" data-filter-form>
             <div class="workbench-dialog-heading">
@@ -123,7 +174,7 @@
                 <button type="button" class="dialog-close" data-close-dialog aria-label="关闭高级筛选">×</button>
             </div>
             <div class="workbench-filter-grid">
-                @foreach (var field in Model.Filters)
+                @foreach (var field in advancedFilters)
                 {
                     <label>
                         <span>@field.Label</span>
@@ -150,6 +201,14 @@
                     </label>
                 }
             </div>
+            @foreach (var field in inlineFilters)
+            {
+                var value = field.Value ?? Context.Request.Query[field.Key].ToString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    <input type="hidden" name="@field.Key" value="@value" data-inline-filter-preserve />
+                }
+            }
             @if (!string.IsNullOrWhiteSpace(Model.CurrentSortKey))
             {
                 <input type="hidden" name="sort" value="@Model.CurrentSortKey" />

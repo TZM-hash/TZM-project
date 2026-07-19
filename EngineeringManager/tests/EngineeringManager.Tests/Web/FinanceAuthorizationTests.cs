@@ -80,6 +80,7 @@ public sealed class FinanceAuthorizationTests
         public Task<Guid> CreateAccountAsync(CreateFinancialAccountRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<FinancialAccountDto>> ListAccountsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<FinancialAccountDto>>([]);
         public Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ProjectFinanceListItemDto>>([]);
+        public Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ProjectFinanceListItemDto>>([]);
         public Task<FinanceOverviewDto> GetOverviewAsync(CancellationToken cancellationToken) => Task.FromResult(new FinanceOverviewDto([], new FinanceProjectSummaryDto(Guid.Empty, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, false, false)));
         public Task<FinanceOverviewPageDto> SearchOverviewAsync(FinanceOverviewQuery query, CancellationToken cancellationToken) =>
             Task.FromResult(new FinanceOverviewPageDto([], new FinanceProjectSummaryDto(Guid.Empty, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, false, false), 1, 20, 0, 1, []));

@@ -116,7 +116,8 @@ public sealed class IndexModel(
             SortKey,
             SortDescending,
             selected?.Id,
-            true);
+            true,
+            InlineFilters: [filters[0]]);
     }
 
     private void ApplySavedView(SavedDataViewDto view)

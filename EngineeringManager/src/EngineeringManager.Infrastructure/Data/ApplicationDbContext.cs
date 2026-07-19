@@ -99,6 +99,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<ImportError> ImportErrors => Set<ImportError>();
     public DbSet<BackupTask> BackupTasks => Set<BackupTask>();
+    public DbSet<BackupSchedule> BackupSchedules => Set<BackupSchedule>();
+    public DbSet<DataExchangeTask> DataExchangeTasks => Set<DataExchangeTask>();
+    public DbSet<ImportMappingTemplate> ImportMappingTemplates => Set<ImportMappingTemplate>();
     public DbSet<ReminderItem> ReminderItems => Set<ReminderItem>();
     public DbSet<OfflineDraftSync> OfflineDraftSyncs => Set<OfflineDraftSync>();
     public DbSet<OfflineAttachmentSync> OfflineAttachmentSyncs => Set<OfflineAttachmentSync>();
@@ -473,6 +476,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.RequestedByUserId).HasMaxLength(450).IsRequired();
             entity.Property(item => item.DatabaseBackupPath).HasMaxLength(1000);
             entity.Property(item => item.AttachmentArchivePath).HasMaxLength(1000);
+            entity.Property(item => item.PackagePath).HasMaxLength(1000);
+            entity.Property(item => item.Sha256).HasMaxLength(64);
             entity.Property(item => item.ErrorMessage).HasMaxLength(2000);
             entity.HasIndex(item => item.CreatedAt);
             entity.HasIndex(item => item.Status);
@@ -508,6 +513,40 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.Department).WithMany().HasForeignKey(item => item.DepartmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<ImportMappingTemplate>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.OwnerUserId).HasMaxLength(450).IsRequired();
+            entity.Property(item => item.Name).HasMaxLength(150).IsRequired();
+            entity.Property(item => item.DatasetVersion).HasMaxLength(40).IsRequired();
+            entity.Property(item => item.MappingJson).HasMaxLength(8000).IsRequired();
+            entity.HasIndex(item => new { item.OwnerUserId, item.Dataset, item.Name }).IsUnique();
+            entity.HasIndex(item => new { item.Dataset, item.Scope });
+        });
+
+        builder.Entity<DataExchangeTask>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(item => item.DatasetsJson).IsRequired();
+            entity.Property(item => item.SelectedFieldsJson).IsRequired();
+            entity.Property(item => item.FilterJson).IsRequired();
+            entity.Property(item => item.FileName).HasMaxLength(260);
+            entity.Property(item => item.ContentType).HasMaxLength(200);
+            entity.Property(item => item.Sha256).HasMaxLength(64);
+            entity.Property(item => item.ErrorMessage).HasMaxLength(2000);
+            entity.HasIndex(item => new { item.UserId, item.CreatedAt });
+            entity.HasIndex(item => item.Status);
+        });
+        builder.Entity<BackupSchedule>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => item.Kind).IsUnique();
+            entity.Property(item => item.TimeZoneId).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.LocalTargetDirectory).HasMaxLength(1000);
+            entity.Property(item => item.NasTargetDirectory).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
         });
         builder.Entity<ExpensePayment>(entity =>
         {

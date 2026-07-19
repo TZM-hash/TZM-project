@@ -34,6 +34,34 @@ public sealed class InlineEditingPageTests
     }
 
     [Fact]
+    public void InlineCellEditingKeepsTableGeometryStable()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "quick-edit.js");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
+
+        script.Should().Contain("focus({ preventScroll: true })");
+        css.Should().Contain(".inline-edit-shell [data-inline-edit-control].inline-cell-control:not([hidden]) { position: absolute")
+            .And.Contain(".inline-edit-shell td[data-column-key=\"actions\"] .table-action-buttons { flex-wrap: nowrap; }");
+    }
+
+    [Fact]
+    public void EmployeeAndPartnerActionsUseCompactButtonsAndEmployeeTabsAreButtonShaped()
+    {
+        var employee = ReadPage("Employees", "Index.cshtml");
+        var partner = ReadPage("Partners", "Index.cshtml");
+        var subNavigation = ReadPage("Employees", "_EmployeeSubNavigation.cshtml");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
+
+        employee.Should().Contain("table-action-buttons--compact");
+        partner.Should().Contain("table-action-buttons--compact");
+        subNavigation.Should().Contain("page-tabs--buttons")
+            .And.Contain("button--secondary")
+            .And.Contain("is-active");
+        css.Should().Contain(".table-action-buttons--compact .button")
+            .And.Contain(".page-tabs--buttons .button");
+    }
+
+    [Fact]
     public void FinanceProjectScopedSelectsLoadTheirClientSideFilteringModule()
     {
         var siteScript = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "site.js");

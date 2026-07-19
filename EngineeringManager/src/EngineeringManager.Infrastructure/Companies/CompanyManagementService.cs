@@ -3,6 +3,7 @@ using EngineeringManager.Application.Companies;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Companies;
@@ -12,6 +13,46 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
     public async Task<IReadOnlyList<CompanyListItemDto>> ListAsync(CompanyActor actor, CancellationToken cancellationToken)
     {
         var query = AuthorizedCompanies(actor).AsNoTracking();
+        return await query.OrderBy(item => item.Code).Select(item => new CompanyListItemDto(
+            item.Id, item.Code, item.Name, item.ShortName,
+            item.CompanyCategory == null ? null : item.CompanyCategory.Name,
+            item.LegalRepresentative, item.IsActive, item.Notes)).ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CompanyListItemDto>> SearchAsync(CompanyActor actor, string? search, CancellationToken cancellationToken)
+    {
+        IQueryable<LegalEntity> query = AuthorizedCompanies(actor).AsNoTracking().Include(item => item.CompanyCategory);
+        foreach (var term in SearchTerms.Parse(search))
+        {
+            var hasDate = SearchTerms.TryParseDate(term, out var date);
+            var hasAmount = SearchTerms.TryParseDecimal(term, out var amount);
+            query = query.Where(item =>
+                item.Code.Contains(term)
+                || item.Name.Contains(term)
+                || item.ShortName.Contains(term)
+                || (item.CompanyCategory != null && (item.CompanyCategory.Code.Contains(term) || item.CompanyCategory.Name.Contains(term)))
+                || (item.LegalRepresentative != null && item.LegalRepresentative.Contains(term))
+                || (item.UnifiedSocialCreditCode != null && item.UnifiedSocialCreditCode.Contains(term))
+                || (item.RegisteredAddress != null && item.RegisteredAddress.Contains(term))
+                || (item.BusinessAddress != null && item.BusinessAddress.Contains(term))
+                || (item.Phone != null && item.Phone.Contains(term))
+                || (item.InvoiceTitle != null && item.InvoiceTitle.Contains(term))
+                || (item.Notes != null && item.Notes.Contains(term))
+                || db.FinancialAccounts.Any(account => account.LegalEntityId == item.Id && (
+                    account.AccountName.Contains(term)
+                    || (account.BankName != null && account.BankName.Contains(term))
+                    || (account.Notes != null && account.Notes.Contains(term))
+                    || (actor.CanManage && account.AccountNumber != null && account.AccountNumber.Contains(term))
+                    || (hasAmount && account.OpeningBalance == amount)))
+                || db.CompanyCertificates.Any(certificate => certificate.LegalEntityId == item.Id && !certificate.IsDeleted && (
+                    certificate.CertificateType.Contains(term)
+                    || (certificate.CertificateNumber != null && certificate.CertificateNumber.Contains(term))
+                    || (certificate.SpecialtyLevelScope != null && certificate.SpecialtyLevelScope.Contains(term))
+                    || (certificate.IssuingAuthority != null && certificate.IssuingAuthority.Contains(term))
+                    || (certificate.Notes != null && certificate.Notes.Contains(term))
+                    || (hasDate && (certificate.IssuedOn == date || certificate.ExpiresOn == date)))));
+        }
+
         return await query.OrderBy(item => item.Code).Select(item => new CompanyListItemDto(
             item.Id, item.Code, item.Name, item.ShortName,
             item.CompanyCategory == null ? null : item.CompanyCategory.Name,

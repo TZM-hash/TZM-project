@@ -5,6 +5,7 @@ public interface IFinanceLedgerService
     Task<Guid> CreateAccountAsync(CreateFinancialAccountRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<FinancialAccountDto>> ListAccountsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken);
     Task<FinanceOverviewDto> GetOverviewAsync(CancellationToken cancellationToken);
     Task<FinanceOverviewPageDto> SearchOverviewAsync(FinanceOverviewQuery query, CancellationToken cancellationToken);
     Task<FinanceEntryOptionsDto> GetEntryOptionsAsync(CancellationToken cancellationToken);

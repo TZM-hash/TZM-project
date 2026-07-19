@@ -93,10 +93,15 @@ function initialState(root) {
 }
 
 function initColumnManager(root) {
-  const dialog = root.querySelector("[data-column-manager-table]");
+  const manager = root.querySelector("[data-column-manager-table]");
   const list = root.querySelector("[data-column-list]");
   let dragging;
-  root.querySelector("[data-open-column-manager]")?.addEventListener("click", () => dialog?.showModal());
+  const applyAndPersist = () => {
+    const columns = readColumnState(root);
+    if (!columns.some((item) => item.visible)) return;
+    applyColumns(root, columns);
+    persist(root);
+  };
   list?.addEventListener("dragstart", (event) => {
     dragging = event.target.closest("[data-column-key]");
     dragging?.classList.add("is-dragging");
@@ -108,22 +113,33 @@ function initColumnManager(root) {
     const bounds = target.getBoundingClientRect();
     list.insertBefore(dragging, event.clientY < bounds.top + bounds.height / 2 ? target : target.nextSibling);
   });
-  list?.addEventListener("dragend", () => { dragging?.classList.remove("is-dragging"); dragging = undefined; });
+  list?.addEventListener("dragend", () => {
+    dragging?.classList.remove("is-dragging");
+    dragging = undefined;
+    applyAndPersist();
+  });
   list?.addEventListener("change", (event) => {
-    if (!event.target.matches("[data-column-visibility]") || event.target.checked) return;
+    if (!event.target.matches("[data-column-visibility]")) return;
     const visible = Array.from(list.querySelectorAll("[data-column-visibility]")).some((checkbox) => checkbox.checked);
     if (!visible) event.target.checked = true;
-  });
-  root.querySelector("[data-apply-columns]")?.addEventListener("click", () => {
-    const columns = readColumnState(root);
-    if (!columns.some((item) => item.visible)) return;
-    applyColumns(root, columns);
-    persist(root);
-    dialog?.close();
+    applyAndPersist();
   });
   root.querySelector("[data-reset-columns]")?.addEventListener("click", () => {
     const defaults = safeParse(root.dataset.defaultColumns, []);
     applyColumns(root, normalizeColumns(root, defaults));
+    persist(root);
+  });
+  root.querySelector("[data-show-all-columns]")?.addEventListener("click", () => {
+    list?.querySelectorAll("[data-column-visibility]").forEach((checkbox) => { checkbox.checked = true; });
+    applyAndPersist();
+  });
+  manager?.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    manager.removeAttribute("open");
+    manager.querySelector("summary")?.focus({ preventScroll: true });
+  });
+  document.addEventListener("click", (event) => {
+    if (manager?.hasAttribute("open") && !manager.contains(event.target)) manager.removeAttribute("open");
   });
 }
 

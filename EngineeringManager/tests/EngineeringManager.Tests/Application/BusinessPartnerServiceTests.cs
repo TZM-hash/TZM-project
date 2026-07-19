@@ -107,6 +107,20 @@ public sealed class BusinessPartnerServiceTests
         (await fixture.Db.AuditLogs.SingleAsync()).Action.Should().Be("UpdateBusinessPartner");
     }
 
+    [Fact]
+    public async Task PartnerSearchUsesContactRoleAndNotesWithAndSemantics()
+    {
+        await using var fixture = await PartnerFixture.CreateAsync();
+        var partner = await fixture.Service.CreateAsync(
+            new CreateBusinessPartnerRequest("BP-SEARCH", "全字段单位", "全字段", "913000000000000001", "单位备注",
+                [new PartnerRoleRequest(BusinessPartnerRoleType.MaterialSupplier, "防水工程", "按量计价", "月结")],
+                [new PartnerContactRequest("联系人甲", "13900000000", "search@example.test", "单位地址", true, "联系人备注")]),
+            CancellationToken.None);
+
+        (await fixture.Service.ListAsync("联系人甲 防水工程 单位备注", null, CancellationToken.None)).Should().ContainSingle(item => item.Id == partner.Id);
+        (await fixture.Service.ListAsync("联系人甲 不存在", null, CancellationToken.None)).Should().BeEmpty();
+    }
+
     private sealed class PartnerFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

@@ -93,6 +93,16 @@ public sealed class ConstructionCrewServiceTests
             options => options.IncludingAllDeclaredProperties());
     }
 
+    [Fact]
+    public async Task CrewSearchUsesCrewContactAndWorkerFields()
+    {
+        await using var fixture = await CrewFixture.CreateAsync();
+        await fixture.Service.AddWorkerAsync("admin", new CreateConstructionWorkerRequest(fixture.FirstCrew.Id, "搜索工人", null, "13700000000", null, null, "木工", new DateOnly(2026, 7, 1), "工人备注", "建立名册"), CancellationToken.None);
+
+        (await fixture.Service.ListAsync(false, "搜索工人 木工 工人备注", CancellationToken.None)).Should().ContainSingle(item => item.Id == fixture.FirstCrew.Id);
+        (await fixture.Service.ListAsync(false, "搜索工人 不存在", CancellationToken.None)).Should().BeEmpty();
+    }
+
     private sealed class CrewFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

@@ -1,6 +1,7 @@
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Projects;
@@ -48,6 +49,24 @@ public sealed class ProjectServiceTests
         result.Items.Should().OnlyContain(item => item.Project.ProjectNumber != "P-HIDDEN");
         var options = await fixture.Service.GetListOptionsAsync(new ProjectListActor(manager.Id, false), CancellationToken.None);
         options.ResponsibleUsers.Should().ContainSingle(item => item.Value == manager.Id);
+    }
+
+    [Fact]
+    public async Task ProjectSearchUsesRelatedCompanyPartnerAndContractFields()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var company = await fixture.AddLegalEntityAsync();
+        var partner = new BusinessPartner { PartnerNumber = "BP-PROJECT-SEARCH", Name = "项目合作单位", ShortName = "项目合作" };
+        fixture.Db.BusinessPartners.Add(partner);
+        var project = await fixture.Service.CreateProjectAsync(new CreateProjectRequest("P-FULL-SEARCH", "全字段项目", "总包搜索", null, null, null, ProjectStage.UnderConstruction, [company.Id], Notes: "项目备注"), CancellationToken.None);
+        var contract = await fixture.Service.AddContractAsync(new CreateContractRequest(project.Id, "C-FULL-SEARCH", "搜索合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, "合同对方", 100m, [new ContractAllocationRequest(company.Id, 100m, null)], "合同备注"), CancellationToken.None);
+        await fixture.Service.AddLineItemAsync(new CreateContractLineItemRequest(contract.Id, "LINE-SEARCH", "搜索清单", "项", 1m, 2m, null, null, false, "清单备注"), CancellationToken.None);
+        fixture.Db.ProjectPartners.Add(new ProjectPartner { ProjectId = project.Id, BusinessPartnerId = partner.Id, RoleType = BusinessPartnerRoleType.MaterialSupplier });
+        await fixture.Db.SaveChangesAsync();
+
+        var result = await fixture.Service.SearchProjectsAsync(new ProjectListActor("administrator", true), new ProjectListQuery("项目合作 搜索清单", [], null, null, null, null, null, false), CancellationToken.None);
+
+        result.Items.Should().ContainSingle(item => item.Project.Id == project.Id);
     }
 
     [Fact]
