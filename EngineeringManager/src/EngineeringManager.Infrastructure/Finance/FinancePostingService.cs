@@ -7,6 +7,49 @@ namespace EngineeringManager.Infrastructure.Finance;
 
 public sealed class FinancePostingService(ApplicationDbContext db) : IFinancePostingService
 {
+    internal async Task SynchronizeProjectQuantityReceivablesAsync(
+        string actorUserId,
+        string? actorUserName,
+        Guid projectId,
+        CancellationToken token)
+    {
+        if (!await db.Projects.AnyAsync(item => item.Id == projectId, token)) throw new KeyNotFoundException("项目不存在。");
+        var existingSourceIds = await db.FinanceSettlements.AsNoTracking()
+            .Where(item => item.ProjectId == projectId && item.SourceType == LedgerSourceType.ProjectQuantity)
+            .Select(item => item.SourceId)
+            .ToListAsync(token);
+        var legalEntityIds = await db.ProjectLegalEntities.AsNoTracking()
+            .Where(item => item.ProjectId == projectId)
+            .Select(item => item.LegalEntityId)
+            .Concat(db.ContractLegalEntityAllocations.AsNoTracking()
+                .Where(item => item.Contract.ProjectId == projectId)
+                .Select(item => item.LegalEntityId))
+            .Distinct()
+            .ToListAsync(token);
+        if (legalEntityIds.Count == 0)
+        {
+            if (existingSourceIds.Count > 0) throw new InvalidOperationException("已有工程量财务记录的项目不能在变更阶段时清空签约公司。");
+            return;
+        }
+        var lineItemIds = await db.ContractLineItems.AsNoTracking()
+            .Where(item => item.Contract.ProjectId == projectId && item.Contract.BusinessPartnerId.HasValue)
+            .Select(item => item.Id)
+            .ToListAsync(token);
+        if (existingSourceIds.Any(sourceId => !sourceId.HasValue || !lineItemIds.Contains(sourceId.Value)))
+            throw new InvalidOperationException("已有工程量财务记录缺少有效的合同客户，请先恢复合同维度或人工核对中央账本。");
+        var actor = new CentralLedgerActor(
+            actorUserId,
+            actorUserName,
+            legalEntityIds.ToHashSet(),
+            new HashSet<Guid> { projectId },
+            true,
+            false,
+            false,
+            false);
+        foreach (var lineItemId in lineItemIds)
+            await UpsertProjectQuantityReceivableAsync(actor, lineItemId, token);
+    }
+
     public async Task<Guid> UpsertProjectQuantityReceivableAsync(
         CentralLedgerActor actor,
         Guid lineItemId,
@@ -31,10 +74,10 @@ public sealed class FinancePostingService(ApplicationDbContext db) : IFinancePos
             ?? throw new InvalidOperationException("项目工程量自动入账前必须配置合同客户。");
         EnsureActor(actor, legalEntityId, project.Id);
 
-        var state = lineItem.IsSettlementConfirmed ? LedgerSettlementState.Final : LedgerSettlementState.Provisional;
-        var amount = lineItem.IsSettlementConfirmed
-            ? (lineItem.SettledQuantity ?? 0m) * (lineItem.SettledUnitPrice ?? 0m)
-            : (lineItem.EstimatedQuantity ?? 0m) * (lineItem.EstimatedUnitPrice ?? 0m);
+        var isSettlement = project.Stage is EngineeringManager.Domain.Projects.ProjectStage.PartiallySettled or EngineeringManager.Domain.Projects.ProjectStage.SettledArchived;
+        var state = isSettlement ? LedgerSettlementState.Final : LedgerSettlementState.Provisional;
+        var amount = (lineItem.Quantity ?? 0m) * (lineItem.UnitPrice ?? 0m);
+        var invoiceAmount = lineItem.RequiresInvoice ? amount : 0m;
         if (amount < 0m) throw new InvalidOperationException("工程量结算金额不能为负数。");
 
         var existing = await db.FinanceSettlements
@@ -58,7 +101,7 @@ public sealed class FinancePostingService(ApplicationDbContext db) : IFinancePos
                     lineItem.Id,
                     DateOnly.FromDateTime(DateTime.UtcNow),
                     amount,
-                    amount,
+                    invoiceAmount,
                     lineItem.Notes),
                 token);
         }
@@ -74,13 +117,20 @@ public sealed class FinancePostingService(ApplicationDbContext db) : IFinancePos
         var currentInvoiceAmount = existing.OriginalInvoiceAmount + existing.Adjustments
             .Where(item => item.Status == LedgerRecordStatus.Active)
             .Sum(item => item.InvoiceAmountDelta);
-        if (existing.SettlementState == LedgerSettlementState.Provisional && state == LedgerSettlementState.Provisional)
+        if (state == LedgerSettlementState.Provisional)
         {
+            existing.SettlementState = LedgerSettlementState.Provisional;
+            existing.SettlementDate = null;
             existing.OriginalAmount = amount;
-            existing.OriginalInvoiceAmount = amount;
+            existing.OriginalInvoiceAmount = invoiceAmount;
             existing.Notes = lineItem.Notes;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
             existing.ConcurrencyStamp = Guid.NewGuid();
+            foreach (var adjustment in existing.Adjustments.Where(item => item.Status == LedgerRecordStatus.Active))
+            {
+                adjustment.Status = LedgerRecordStatus.Voided;
+                adjustment.ConcurrencyStamp = Guid.NewGuid();
+            }
             await db.SaveChangesAsync(token);
             return existing.Id;
         }
@@ -93,21 +143,21 @@ public sealed class FinancePostingService(ApplicationDbContext db) : IFinancePos
                     existing.Id,
                     DateOnly.FromDateTime(DateTime.UtcNow),
                     amount,
-                    amount,
+                    invoiceAmount,
                     "工程量确认形成最终结算差额",
                     existing.ConcurrencyStamp),
                 token);
             return existing.Id;
         }
 
-        if (currentAmount != amount || currentInvoiceAmount != amount)
+        if (currentAmount != amount || currentInvoiceAmount != invoiceAmount)
         {
             var adjustment = new FinanceSettlementAdjustment
             {
                 Settlement = existing,
                 AdjustmentType = LedgerAdjustmentType.Correction,
                 AmountDelta = amount - currentAmount,
-                InvoiceAmountDelta = amount - currentInvoiceAmount,
+                InvoiceAmountDelta = invoiceAmount - currentInvoiceAmount,
                 BusinessDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 Reason = "工程量修改形成结算修正",
                 ActorUserId = actor.UserId,

@@ -9,4 +9,5 @@ public sealed record ProjectSummaryDto(
     decimal CurrentAmount,
     ProjectSettlementStatus SettlementStatus,
     int ContractCount,
-    int LineItemCount);
+    int LineItemCount,
+    decimal InvoiceRequiredAmount = 0m);

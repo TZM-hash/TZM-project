@@ -1,0 +1,18 @@
+@model EngineeringManager.Web.Pages.Projects.Records.FinanceRecordEditorViewModel
+@using EngineeringManager.Application.Finance
+@using EngineeringManager.Domain.Finance
+<form method="post" asp-page-handler="Finance" class="record-value-editor">
+    <input type="hidden" name="ProjectId" value="@Model.ProjectId" /><input type="hidden" name="Section" value="@Model.Section" />
+    <input type="hidden" name="FinanceEdit.Id" value="@Model.Id" /><input type="hidden" name="FinanceEdit.Kind" value="@Model.Kind" />
+    <input type="hidden" name="FinanceEdit.ContractId" value="@Model.ContractId" /><input type="hidden" name="FinanceEdit.LegalEntityId" value="@Model.LegalEntityId" />
+    <input type="hidden" name="FinanceEdit.BusinessPartnerId" value="@Model.BusinessPartnerId" /><input type="hidden" name="FinanceEdit.AccountId" value="@Model.AccountId" />
+    <input type="hidden" name="FinanceEdit.RelatedEntryId" value="@Model.RelatedEntryId" /><input type="hidden" name="FinanceEdit.ProjectTaxConfigurationId" value="@Model.ProjectTaxConfigurationId" />
+    <input type="hidden" name="FinanceEdit.ConcurrencyStamp" value="@Model.ConcurrencyStamp" />
+    <label>业务日期<input type="date" name="FinanceEdit.EntryDate" value="@Model.EntryDate.ToString("yyyy-MM-dd")" required /></label>
+    @if (Model.Kind is FinanceEntryKind.Receivable or FinanceEntryKind.Payable) { <label>到期日期<input type="date" name="FinanceEdit.DueDate" value="@Model.DueDate?.ToString("yyyy-MM-dd")" /></label> }
+    @if (Model.Kind == FinanceEntryKind.Invoice) { <label>发票号码<input name="FinanceEdit.InvoiceNumber" value="@Model.InvoiceNumber" required /></label><label>不含税金额<input type="number" step="0.01" name="FinanceEdit.NetAmount" value="@Model.NetAmount" /></label><label>税额<input type="number" step="0.01" name="FinanceEdit.TaxAmount" value="@Model.TaxAmount" /></label><input type="hidden" name="FinanceEdit.InvoiceStatus" value="@Model.InvoiceStatus" /> }
+    <label>金额<input type="number" step="0.01" min="0.01" name="FinanceEdit.Amount" value="@Model.Amount" required /></label>
+    @if (Model.Kind is FinanceEntryKind.Collection or FinanceEntryKind.Payment) { <label>支付方式<select name="FinanceEdit.PaymentMethod">@foreach (var value in Enum.GetValues<PaymentMethod>()) { <option value="@value" selected="@(value == Model.PaymentMethod ? "selected" : null)">@value</option> }</select></label> }
+    <label>备注<input name="FinanceEdit.Description" value="@Model.Description" /></label><label>修改原因<input name="FinanceEdit.Reason" value="项目明细页详细编辑" required /></label>
+    <button class="button button--primary button--small" type="submit">保存本项</button>
+</form>

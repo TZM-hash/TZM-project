@@ -170,6 +170,86 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task ChangingProjectToPartialSettlementFinalizesUnifiedQuantityPosting()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+
+        await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id, fixture.Project.ProjectNumber, fixture.Project.Name, fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName, fixture.Project.GeneralContractorContact, fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId, fixture.Project.DepartmentId, fixture.Project.BranchId,
+                ProjectStage.PartiallySettled, fixture.Project.AffiliationType, [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp, "项目进入部分结算"),
+            CancellationToken.None);
+
+        var posting = await fixture.Db.FinanceSettlements.SingleAsync(item => item.SourceType == LedgerSourceType.ProjectQuantity);
+        posting.SettlementState.Should().Be(LedgerSettlementState.Final);
+        posting.OriginalAmount.Should().Be(200m);
+        posting.OriginalInvoiceAmount.Should().Be(200m);
+    }
+
+    [Fact]
+    public async Task ChangingProjectBackFromSettlementRestoresUnifiedQuantityPostingToProvisional()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var settled = await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id, fixture.Project.ProjectNumber, fixture.Project.Name, fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName, fixture.Project.GeneralContractorContact, fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId, fixture.Project.DepartmentId, fixture.Project.BranchId,
+                ProjectStage.PartiallySettled, fixture.Project.AffiliationType, [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp, "项目进入部分结算"),
+            CancellationToken.None);
+
+        await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id, fixture.Project.ProjectNumber, fixture.Project.Name, fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName, fixture.Project.GeneralContractorContact, fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId, fixture.Project.DepartmentId, fixture.Project.BranchId,
+                ProjectStage.UnderConstruction, fixture.Project.AffiliationType, [fixture.LegalEntity.Id],
+                settled.Overview.ConcurrencyStamp, "项目退回施工阶段"),
+            CancellationToken.None);
+
+        var posting = await fixture.Db.FinanceSettlements.SingleAsync(item => item.SourceType == LedgerSourceType.ProjectQuantity);
+        posting.SettlementState.Should().Be(LedgerSettlementState.Provisional);
+        posting.OriginalAmount.Should().Be(200m);
+    }
+
+    [Fact]
+    public async Task StageChangeCannotSilentlySkipExistingQuantityPostingWhenCompanyIsRemoved()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var settled = await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id, fixture.Project.ProjectNumber, fixture.Project.Name, fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName, fixture.Project.GeneralContractorContact, fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId, fixture.Project.DepartmentId, fixture.Project.BranchId,
+                ProjectStage.PartiallySettled, fixture.Project.AffiliationType, [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp, "项目进入部分结算"),
+            CancellationToken.None);
+
+        var action = () => fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id, fixture.Project.ProjectNumber, fixture.Project.Name, fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName, fixture.Project.GeneralContractorContact, fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId, fixture.Project.DepartmentId, fixture.Project.BranchId,
+                ProjectStage.UnderConstruction, fixture.Project.AffiliationType, [],
+                settled.Overview.ConcurrencyStamp, "移除公司并退回施工阶段"),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*签约公司*");
+        fixture.Db.ChangeTracker.Clear();
+        (await fixture.Db.Projects.SingleAsync()).Stage.Should().Be(ProjectStage.PartiallySettled);
+        (await fixture.Db.FinanceSettlements.SingleAsync(item => item.SourceType == LedgerSourceType.ProjectQuantity)).SettlementState.Should().Be(LedgerSettlementState.Final);
+    }
+
+    [Fact]
     public async Task UpdateCanAddNewProjectTaxConfigurations()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();

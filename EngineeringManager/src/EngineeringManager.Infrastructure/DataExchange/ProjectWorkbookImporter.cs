@@ -6,6 +6,7 @@ using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Files;
+using EngineeringManager.Infrastructure.Finance;
 using EngineeringManager.Domain.StageResults;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Equipment;
@@ -99,6 +100,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 var entityTypes = string.Join(", ", exception.Entries.Select(item => item.Metadata.ClrType.Name));
                 throw new DbUpdateConcurrencyException($"项目工作簿财务写入发生并发冲突：{entityTypes}", exception);
             }
+            await SynchronizeProjectQuantityPostingsAsync(validated.Workbook, actor, cancellationToken);
             if (archive is not null && fileStore is not null)
             {
                 foreach (var item in archive.Attachments)
@@ -833,7 +835,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 values["project_number"] = await db.Projects.Where(item => item.Id == contract.ProjectId).Select(item => item.ProjectNumber).SingleAsync(cancellationToken); values["contract_number"] = contract.ContractNumber; values["name"] = contract.Name; values["contract_type"] = contract.ContractType.ToString(); values["allocation_mode"] = contract.AllocationMode.ToString(); values["counterparty_name"] = contract.CounterpartyName; values["signed_date"] = contract.SignedDate; values["total_amount"] = contract.TotalAmount; values["is_active"] = contract.IsActive; values["notes"] = contract.Notes;
                 break;
             case ProjectWorkbookSheet.QuantityLines when existing is ContractLineItem line:
-                var lineParent = await db.Contracts.Where(item => item.Id == line.ContractId).Select(item => new { item.ProjectId, item.ContractNumber }).SingleAsync(cancellationToken); values["project_number"] = await db.Projects.Where(item => item.Id == lineParent.ProjectId).Select(item => item.ProjectNumber).SingleAsync(cancellationToken); values["contract_number"] = lineParent.ContractNumber; values["code"] = line.Code; values["name"] = line.Name; values["unit"] = line.Unit; values["estimated_quantity"] = line.EstimatedQuantity; values["estimated_unit_price"] = line.EstimatedUnitPrice; values["settled_quantity"] = line.SettledQuantity; values["settled_unit_price"] = line.SettledUnitPrice; values["is_settlement_confirmed"] = line.IsSettlementConfirmed; values["notes"] = line.Notes;
+                var lineParent = await db.Contracts.Where(item => item.Id == line.ContractId).Select(item => new { item.ProjectId, item.ContractNumber }).SingleAsync(cancellationToken); values["project_number"] = await db.Projects.Where(item => item.Id == lineParent.ProjectId).Select(item => item.ProjectNumber).SingleAsync(cancellationToken); values["contract_number"] = lineParent.ContractNumber; values["code"] = line.Code; values["name"] = line.Name; values["unit"] = line.Unit; values["quantity"] = line.Quantity; values["unit_price"] = line.UnitPrice; values["accounting_label"] = line.AccountingLabel; values["requires_invoice"] = line.RequiresInvoice; values["notes"] = line.Notes;
                 break;
             case ProjectWorkbookSheet.Milestones when existing is ProjectMilestone milestone:
                 values["project_number"] = await db.Projects.Where(item => item.Id == milestone.ProjectId).Select(item => item.ProjectNumber).SingleAsync(cancellationToken); values["name"] = milestone.Name; values["planned_date"] = milestone.PlannedDate; values["actual_date"] = milestone.ActualDate; values["is_completed"] = milestone.IsCompleted; values["sort_order"] = milestone.SortOrder; values["notes"] = milestone.Notes;
@@ -957,6 +959,25 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             }
             await ApplyProjectAsync(project, row, blankMeansNoChange, cancellationToken);
         }
+    }
+
+    private async Task SynchronizeProjectQuantityPostingsAsync(ParsedWorkbook workbook, ProjectWorkbookActor actor, CancellationToken cancellationToken)
+    {
+        var projectNumbers = workbook.Sheets
+            .Where(item => item.Sheet is ProjectWorkbookSheet.ProjectMaster or ProjectWorkbookSheet.QuantityLines)
+            .SelectMany(item => item.Rows)
+            .Select(item => item.Values.GetValueOrDefault("project_number"))
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (projectNumbers.Length == 0) return;
+        var projectIds = await db.Projects
+            .Where(item => projectNumbers.Contains(item.ProjectNumber))
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+        var postingService = new FinancePostingService(db);
+        foreach (var projectId in projectIds)
+            await postingService.SynchronizeProjectQuantityReceivablesAsync(actor.UserId, actor.UserId, projectId, cancellationToken);
     }
 
     private async Task WriteContractsAsync(ParsedWorkbook workbook, ImportMode mode, bool blankMeansNoChange, CancellationToken cancellationToken)
@@ -1670,11 +1691,10 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
     private static void Apply(ContractLineItem line, ParsedRow row, bool blankMeansNoChange)
     {
         Set(row, "code", value => line.Code = value!, line.Code, blankMeansNoChange); Set(row, "name", value => line.Name = value!, line.Name, blankMeansNoChange); Set(row, "unit", value => line.Unit = value!, line.Unit, blankMeansNoChange);
-        if (Has(row, "estimated_quantity", blankMeansNoChange)) line.EstimatedQuantity = ParseDecimal(row.Values["estimated_quantity"]);
-        if (Has(row, "estimated_unit_price", blankMeansNoChange)) line.EstimatedUnitPrice = ParseDecimal(row.Values["estimated_unit_price"]);
-        if (Has(row, "settled_quantity", blankMeansNoChange)) line.SettledQuantity = ParseDecimal(row.Values["settled_quantity"]);
-        if (Has(row, "settled_unit_price", blankMeansNoChange)) line.SettledUnitPrice = ParseDecimal(row.Values["settled_unit_price"]);
-        if (HasNonBlank(row, "is_settlement_confirmed")) line.IsSettlementConfirmed = ParseBoolean(row.Values["is_settlement_confirmed"]);
+        if (Has(row, "quantity", blankMeansNoChange)) line.Quantity = ParseDecimal(row.Values["quantity"]);
+        if (Has(row, "unit_price", blankMeansNoChange)) line.UnitPrice = ParseDecimal(row.Values["unit_price"]);
+        Set(row, "accounting_label", value => line.AccountingLabel = value, line.AccountingLabel, blankMeansNoChange);
+        if (HasNonBlank(row, "requires_invoice")) line.RequiresInvoice = ParseBoolean(row.Values["requires_invoice"]);
         Set(row, "notes", value => line.Notes = value, line.Notes, blankMeansNoChange);
         line.ConcurrencyStamp = Guid.NewGuid();
     }

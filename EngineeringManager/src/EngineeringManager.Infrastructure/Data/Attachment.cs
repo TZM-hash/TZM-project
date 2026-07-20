@@ -17,6 +17,16 @@ public sealed class Attachment
     public Contract? Contract { get; set; }
     public Guid? StageResultId { get; set; }
     public StageResult? StageResult { get; set; }
+    public Guid? ContractLineItemId { get; set; }
+    public ContractLineItem? ContractLineItem { get; set; }
+    public Guid? FinanceSettlementId { get; set; }
+    public FinanceSettlement? FinanceSettlement { get; set; }
+    public Guid? FinanceInvoiceId { get; set; }
+    public FinanceInvoice? FinanceInvoice { get; set; }
+    public Guid? FinanceCashEntryId { get; set; }
+    public FinanceCashEntry? FinanceCashEntry { get; set; }
+    public Guid? ProjectConstructionRecordId { get; set; }
+    public ProjectConstructionRecord? ProjectConstructionRecord { get; set; }
     public string? UploadedByUserId { get; set; }
     public ApplicationUser? UploadedByUser { get; set; }
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;

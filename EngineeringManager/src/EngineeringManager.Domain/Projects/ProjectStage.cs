@@ -6,5 +6,6 @@ public enum ProjectStage
     UnderConstruction = 2,
     Suspended = 3,
     CompletedUnsettled = 4,
-    SettledArchived = 5
+    SettledArchived = 5,
+    PartiallySettled = 6
 }

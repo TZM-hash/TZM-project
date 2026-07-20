@@ -106,7 +106,7 @@
             <details class="column-manager-dropdown" data-column-manager-table>
                 <summary class="button button--secondary workbench-tool-button" data-open-column-manager>列管理</summary>
                 <div class="column-manager-menu">
-                    <div class="column-manager-menu-heading"><strong>显示列</strong><span>勾选后立即生效</span></div>
+                    <div class="column-manager-menu-heading"><strong>显示列</strong><span>调整后点击确认生效</span></div>
                     <ol class="column-manager-list" data-column-list>
                         @for (var index = 0; index < Model.Columns.Count; index++)
                         {
@@ -121,6 +121,7 @@
                     <div class="column-manager-menu-actions">
                         <button type="button" class="button button--ghost button--small" data-reset-columns>恢复默认</button>
                         <button type="button" class="button button--ghost button--small" data-show-all-columns>全选</button>
+                        <button type="button" class="button button--primary button--small" data-confirm-columns>确认</button>
                     </div>
                 </div>
             </details>
@@ -144,6 +145,10 @@
             @if (Model.CanSaveViews)
             {
                 <button class="button button--secondary workbench-tool-button" type="button" data-open-save-view>保存视图</button>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.ToolbarActionsPartial) && Model.ToolbarActionsModel is not null)
+            {
+                @await Html.PartialAsync(Model.ToolbarActionsPartial, Model.ToolbarActionsModel)
             }
             @if (Model.CanExport)
             {

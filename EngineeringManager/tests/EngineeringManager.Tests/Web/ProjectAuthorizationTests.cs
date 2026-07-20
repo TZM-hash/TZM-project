@@ -90,8 +90,8 @@ public sealed class ProjectAuthorizationTests
         html.Should().Contain("收款比例");
         html.Should().Contain("开票比例");
         html.Should().Contain("付款比例");
-        html.Should().Contain("项目里程碑");
-        html.Should().Contain("节点备注");
+        html.Should().NotContain("项目里程碑");
+        html.Should().NotContain("节点备注");
         html.Should().Contain("项目人员");
         html.Should().Contain("人员备注");
         html.Should().Contain("项目合作单位");
@@ -115,6 +115,87 @@ public sealed class ProjectAuthorizationTests
             .And.Contain("data-inline-edit=\"project-invoice\" data-inline-cell-edit")
             .And.Contain("data-inline-edit=\"project-payment\" data-inline-cell-edit")
             .And.NotContain("data-inline-entry-edit");
+    }
+
+    [Fact]
+    public void ProjectOverviewUsesUnifiedQuantityCompactLayoutAndScopedEditors()
+    {
+        var root = RepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml"));
+        var styles = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "css", "pages.css"));
+
+        page.Should().Contain("总包联系人 / 电话")
+            .And.Contain("data-project-amount-view")
+            .And.Contain("project-summary-half")
+            .And.Contain("<th>工程量</th><th>单价</th><th>小计</th><th>口径</th><th>是否开票</th><th>附件</th>")
+            .And.NotContain("<th>暂估工程量</th>")
+            .And.NotContain("<th>结算工程量</th>")
+            .And.Contain("asp-page=\"/Projects/Records/Edit\"")
+            .And.Contain("asp-route-section=\"collection\"")
+            .And.Contain("asp-route-section=\"invoice\"")
+            .And.Contain("asp-route-section=\"payment\"")
+            .And.Contain("asp-route-section=\"construction\"");
+        styles.Should().Contain(".project-detail-strip article { height: 2.9rem; min-height: 0;")
+            .And.Contain(".project-summary-grid > .project-summary-half { grid-column: span 2;");
+    }
+
+    [Fact]
+    public void ProjectOverviewUsesCompactQuickEditSelectorsAndOnlyPersonnelAndParties()
+    {
+        var root = RepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml"));
+        var selectorScript = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "components", "check-selector.js"));
+        var quickEditScript = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "components", "quick-edit.js"));
+
+        page.Should().Contain("project-legal-entity-selector")
+            .And.Contain("project-tax-selector")
+            .And.Contain("data-check-selector-clear")
+            .And.Contain("data-project-amount-view-label")
+            .And.Contain("project-amount-edit-control")
+            .And.Contain("data-project-amount-view")
+            .And.Contain("ProjectRelatedPartyBuilder.Build")
+            .And.NotContain("<h2>项目里程碑</h2>")
+            .And.Contain("<h2>项目人员</h2>")
+            .And.Contain("<h2>项目合作单位</h2>")
+            .And.Contain("relatedParty.Roles");
+        selectorScript.Should().Contain("data-check-selector-clear");
+        quickEditScript.Should().Contain("querySelectorAll(\"[data-check-selector][open]\")")
+            .And.Contain("querySelector(\"[data-check-selector-option]\")")
+            .And.Contain("new KeyboardEvent(\"keydown\", { key: \"Escape\", bubbles: true })")
+            .And.Contain("data-project-amount-view");
+    }
+
+    [Fact]
+    public void DetailedRecordEditorHasNoProjectOverviewInputsAndSupportsAttachments()
+    {
+        var root = RepositoryRoot();
+        var editor = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Records", "Edit.cshtml"));
+        var attachment = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Records", "_RecordAttachmentEditor.cshtml"));
+
+        editor.Should().Contain("不包含项目总览字段")
+            .And.NotContain("QuickEdit")
+            .And.NotContain("GeneralContractor")
+            .And.Contain("收款明细")
+            .And.Contain("开票明细")
+            .And.Contain("付款明细")
+            .And.Contain("施工详情");
+        attachment.Should().Contain("type=\"file\"")
+            .And.Contain("上传附件")
+            .And.Contain("DeleteAttachment");
+    }
+
+    [Fact]
+    public void FinanceYearAdministrationLivesUnderSystemSettings()
+    {
+        var root = RepositoryRoot();
+        var admin = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Admin", "Index.cshtml"));
+        var financeYear = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Admin", "FinanceYears", "Index.cshtml"));
+        var legacyModel = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Ledger", "Years", "Index.cshtml.cs"));
+
+        admin.Should().Contain("/Admin/FinanceYears/Index");
+        financeYear.Should().Contain("所有自有公司、外部账本和内部账本统一使用同一套财务年度")
+            .And.Contain("保存财务年度");
+        legacyModel.Should().Contain("RedirectToPage(\"/Admin/FinanceYears/Index\")");
     }
 
     [Fact]
@@ -192,8 +273,16 @@ public sealed class ProjectAuthorizationTests
         using var staffClient = staffFactory.CreateClient();
         var staffHtml = System.Net.WebUtility.HtmlDecode(await (await staffClient.GetAsync("/Projects")).Content.ReadAsStringAsync());
 
-        managerHtml.Should().Contain("ExportWorkbook").And.Contain("选择项目工作簿细项");
-        staffHtml.Should().NotContain("ExportWorkbook").And.NotContain("选择项目工作簿细项");
+        managerHtml.Should().Contain("ExportWorkbook")
+            .And.Contain("data-project-workbook-export-menu")
+            .And.Contain("导出项目清单")
+            .And.Contain("选择项目工作簿细项")
+            .And.NotContain("导出当前视图")
+            .And.NotContain("project-workbook-export-form panel compact-form-grid");
+        staffHtml.Should().NotContain("ExportWorkbook")
+            .And.NotContain("data-project-workbook-export-menu")
+            .And.NotContain("导出项目清单")
+            .And.NotContain("选择项目工作簿细项");
     }
 
     [Fact]
@@ -201,12 +290,20 @@ public sealed class ProjectAuthorizationTests
     {
         var root = RepositoryRoot();
         var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml"));
+        var exportPartial = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "_ProjectWorkbookExport.cshtml"));
         var model = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml.cs"));
         var script = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "components", "check-selector.js"));
+        var labels = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "DataExchange", "DataExchangeLabels.cs"));
 
         model.Should().Contain("SelectAllMatching { get; set; }").And.NotContain("SelectAllMatching { get; set; } = true");
-        page.Should().Contain("data-project-export-all-matching").And.Contain("data-project-export-item");
-        script.Should().Contain("data-project-export-all-matching").And.Contain("data-project-export-item");
+        page.Should().Contain("data-project-export-item");
+        exportPartial.Should().Contain("data-project-export-all-matching")
+            .And.Contain("data-project-workbook-export-menu")
+            .And.Contain("导出项目清单");
+        script.Should().Contain("data-project-export-all-matching")
+            .And.Contain("data-project-export-item")
+            .And.Contain("form.elements");
+        labels.Should().Contain("ProjectWorkbookSheet.Deductions => \"扣款\"");
     }
 
     [Fact]
@@ -218,6 +315,7 @@ public sealed class ProjectAuthorizationTests
 
         page.Should().Contain("data-column-key=\"serial_number\"")
             .And.Contain("序号")
+            .And.Contain("<td data-column-key=\"project_name\"><a asp-page=\"/Projects/Details\" asp-route-id=\"@item.Project.Id\">@item.Project.Name</a></td>")
             .And.Contain("data-column-key=\"general_contractor\"")
             .And.Contain("data-column-key=\"contract_signing_status\"")
             .And.Contain("data-column-key=\"actual_start_date\"")

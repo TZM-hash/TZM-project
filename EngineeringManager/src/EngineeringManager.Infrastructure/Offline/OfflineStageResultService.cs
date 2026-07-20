@@ -238,7 +238,7 @@ public sealed class OfflineStageResultService(ApplicationDbContext db, IFileStor
         return lineRequests.Select(line =>
         {
             var item = items[line.ContractLineItemId];
-            var target = item.IsSettlementConfirmed && item.SettledQuantity.HasValue ? item.SettledQuantity.Value : item.EstimatedQuantity ?? 0m;
+            var target = item.Quantity ?? 0m;
             var quantity = StageQuantityCalculator.Calculate(target, previous.GetValueOrDefault(line.ContractLineItemId), line.PeriodQuantity);
             return new PreparedLine(line, quantity);
         }).ToList();

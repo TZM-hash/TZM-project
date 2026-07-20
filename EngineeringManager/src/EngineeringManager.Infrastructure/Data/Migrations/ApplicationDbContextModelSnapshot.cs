@@ -399,9 +399,21 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Property<Guid?>("ContractId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ContractLineItemId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid?>("FinanceCashEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("FinanceInvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("FinanceSettlementId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -410,6 +422,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<Guid?>("ProjectConstructionRecordId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("ProjectId")
                         .HasColumnType("uniqueidentifier");
@@ -434,6 +449,16 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ContractId");
+
+                    b.HasIndex("ContractLineItemId");
+
+                    b.HasIndex("FinanceCashEntryId");
+
+                    b.HasIndex("FinanceInvoiceId");
+
+                    b.HasIndex("FinanceSettlementId");
+
+                    b.HasIndex("ProjectConstructionRecordId");
 
                     b.HasIndex("ProjectId");
 
@@ -1079,6 +1104,10 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("AccountingLabel")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -1091,17 +1120,6 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Property<Guid>("ContractId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<decimal?>("EstimatedQuantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
-
-                    b.Property<decimal?>("EstimatedUnitPrice")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
-
-                    b.Property<bool>("IsSettlementConfirmed")
-                        .HasColumnType("bit");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(250)
@@ -1111,13 +1129,12 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<decimal?>("SettledQuantity")
+                    b.Property<decimal?>("Quantity")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
-                    b.Property<decimal?>("SettledUnitPrice")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                    b.Property<bool>("RequiresInvoice")
+                        .HasColumnType("bit");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
@@ -1126,6 +1143,10 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.HasKey("Id");
 
@@ -5260,6 +5281,31 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasForeignKey("ContractId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ContractLineItem", "ContractLineItem")
+                        .WithMany()
+                        .HasForeignKey("ContractLineItemId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceCashEntry", "FinanceCashEntry")
+                        .WithMany()
+                        .HasForeignKey("FinanceCashEntryId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceInvoice", "FinanceInvoice")
+                        .WithMany()
+                        .HasForeignKey("FinanceInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.FinanceSettlement", "FinanceSettlement")
+                        .WithMany()
+                        .HasForeignKey("FinanceSettlementId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.ProjectConstructionRecord", "ProjectConstructionRecord")
+                        .WithMany()
+                        .HasForeignKey("ProjectConstructionRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("EngineeringManager.Infrastructure.Data.Project", "Project")
                         .WithMany()
                         .HasForeignKey("ProjectId")
@@ -5277,7 +5323,17 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.Navigation("Contract");
 
+                    b.Navigation("ContractLineItem");
+
+                    b.Navigation("FinanceCashEntry");
+
+                    b.Navigation("FinanceInvoice");
+
+                    b.Navigation("FinanceSettlement");
+
                     b.Navigation("Project");
+
+                    b.Navigation("ProjectConstructionRecord");
 
                     b.Navigation("StageResult");
 

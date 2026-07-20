@@ -74,6 +74,7 @@ public static class ProjectDisplayText
         ProjectStage.UnderConstruction => "施工中",
         ProjectStage.Suspended => "停工中",
         ProjectStage.CompletedUnsettled => "已完工未结算",
+        ProjectStage.PartiallySettled => "部分结算",
         ProjectStage.SettledArchived => "已结算归档",
         _ => value.ToString()
     };

@@ -39,55 +39,7 @@
 
 <section class="panel data-work-surface">
     <div class="panel-heading"><div><p class="eyebrow">项目清单</p><h2>当前项目</h2></div><span class="result-count">共 @Model.Result.TotalCount 个项目</span></div>
-    @if (Model.CanExportWorkbook)
-    {
-    <form id="projects-table-workbook-export-form" method="post" asp-page-handler="ExportWorkbook" class="panel compact-form-grid project-workbook-export-form" data-project-export-scope>
-        <input type="hidden" asp-for="Search" /><input type="hidden" asp-for="LegalEntityId" /><input type="hidden" asp-for="ResponsibleUserId" /><input type="hidden" asp-for="AffiliationType" /><input type="hidden" asp-for="MinimumCurrentAmount" /><input type="hidden" asp-for="MaximumCurrentAmount" /><input type="hidden" asp-for="SortKey" /><input type="hidden" asp-for="SortDescending" />
-        @foreach (var stage in Model.Stages) { <input type="hidden" name="Stages" value="@stage" /> }
-        <label class="check-label"><input asp-for="SelectAllMatching" data-project-export-all-matching /> 导出当前筛选命中的全部项目（共 @Model.Result.TotalCount 个）</label>
-        @if (Model.CanExportWorkbookAttachments) { <label class="check-label"><input asp-for="IncludeWorkbookAttachments" data-project-export-attachments /> 包含附件并生成 ZIP</label> }
-        <details class="selection-dropdown"><summary>选择项目工作簿细项</summary><div class="check-grid">@foreach (var sheet in Enum.GetValues<ProjectWorkbookSheet>().Where(sheet => Model.CanExportFullWorkbook || sheet != ProjectWorkbookSheet.ProjectSummary && sheet != ProjectWorkbookSheet.Attachments)) { <label><input type="checkbox" name="SelectedWorkbookSheets" value="@sheet" checked="@(Model.SelectedWorkbookSheets.Count == 0 || Model.SelectedWorkbookSheets.Contains(sheet) ? "checked" : null)" data-project-workbook-sheet="@sheet" /> @DataExchangeLabels.ProjectSheet(sheet)</label> }</div></details>
-        <button class="button button--primary" type="submit">导出项目工作簿</button>
-    </form>
-    }
     <partial name="_DataWorkbench" model="Model.Workbench" />
-    <form id="projects-table-export-form" method="post" asp-page-handler="Export" hidden>
-        <input type="hidden" asp-for="Search" /><input type="hidden" asp-for="LegalEntityId" /><input type="hidden" asp-for="ResponsibleUserId" /><input type="hidden" asp-for="AffiliationType" />
-        <input type="hidden" asp-for="MinimumCurrentAmount" /><input type="hidden" asp-for="MaximumCurrentAmount" />
-        <input type="hidden" asp-for="SortKey" /><input type="hidden" asp-for="SortDescending" /><input type="hidden" asp-for="PageSize" />
-        @foreach (var stage in Model.Stages) { <input type="hidden" name="Stages" value="@stage" /> }
-        <input type="hidden" name="SelectedFields" value="serial_number" data-export-column-key="serial_number" />
-        <input type="hidden" name="SelectedFields" value="project_number" data-export-column-key="project_number" />
-        <input type="hidden" name="SelectedFields" value="project_name" data-export-column-key="project_name" />
-        <input type="hidden" name="SelectedFields" value="stage" data-export-column-key="stage" />
-        <input type="hidden" name="SelectedFields" value="contract_signing_status" data-export-column-key="contract_signing_status" />
-        <input type="hidden" name="SelectedFields" value="affiliation_type" data-export-column-key="affiliation_type" />
-        <input type="hidden" name="SelectedFields" value="parent_project" data-export-column-key="parent_project" />
-        <input type="hidden" name="SelectedFields" value="general_contractor" data-export-column-key="general_contractor" />
-        <input type="hidden" name="SelectedFields" value="general_contractor_contact" data-export-column-key="general_contractor_contact" />
-        <input type="hidden" name="SelectedFields" value="general_contractor_phone" data-export-column-key="general_contractor_phone" />
-        <input type="hidden" name="SelectedFields" value="responsible_user" data-export-column-key="responsible_user" />
-        <input type="hidden" name="SelectedFields" value="department" data-export-column-key="department" />
-        <input type="hidden" name="SelectedFields" value="branch" data-export-column-key="branch" />
-        <input type="hidden" name="SelectedFields" value="legal_entities" data-export-column-key="legal_entities" />
-        <input type="hidden" name="SelectedFields" value="actual_start_date" data-export-column-key="actual_start_date" />
-        <input type="hidden" name="SelectedFields" value="actual_completion_date" data-export-column-key="actual_completion_date" />
-        <input type="hidden" name="SelectedFields" value="contract_amount" data-export-column-key="contract_amount" />
-        <input type="hidden" name="SelectedFields" value="estimated_amount" data-export-column-key="estimated_amount" />
-        <input type="hidden" name="SelectedFields" value="settled_amount" data-export-column-key="settled_amount" />
-        <input type="hidden" name="SelectedFields" value="current_project_amount" data-export-column-key="current_project_amount" />
-        <input type="hidden" name="SelectedFields" value="contract_count" data-export-column-key="contract_count" />
-        <input type="hidden" name="SelectedFields" value="line_item_count" data-export-column-key="line_item_count" />
-        <input type="hidden" name="SelectedFields" value="receivable_amount" data-export-column-key="collection_progress" />
-        <input type="hidden" name="SelectedFields" value="collected_amount" data-export-column-key="collection_progress" />
-        <input type="hidden" name="SelectedFields" value="uncollected_amount" data-export-column-key="collection_progress" />
-        <input type="hidden" name="SelectedFields" value="payable_amount" data-export-column-key="payment_progress" />
-        <input type="hidden" name="SelectedFields" value="paid_amount" data-export-column-key="payment_progress" />
-        <input type="hidden" name="SelectedFields" value="unpaid_amount" data-export-column-key="payment_progress" />
-        <input type="hidden" name="SelectedFields" value="output_invoice_amount" data-export-column-key="invoice_progress" />
-        <input type="hidden" name="SelectedFields" value="uninvoiced_amount" data-export-column-key="invoice_progress" />
-        <input type="hidden" name="SelectedFields" value="notes" data-export-column-key="notes" />
-    </form>
     @if (Model.Result.Items.Count == 0)
     {
         <div class="empty-state"><strong>没有符合条件的项目</strong><p>可以调整筛选条件，或清除筛选后查看授权范围内的全部项目。</p></div>
@@ -129,7 +81,7 @@
                     <tr>
                         <td>@if (Model.CanExportWorkbook) { <input type="checkbox" name="SelectedProjectIds" value="@item.Project.Id" form="projects-table-workbook-export-form" data-project-export-item /> }</td><td data-column-key="serial_number">@serialNumber</td>
                         <td data-column-key="project_number"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.ProjectNumber</a></td>
-                        <td data-column-key="project_name">@item.Project.Name</td>
+                        <td data-column-key="project_name"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.Name</a></td>
                         <td data-column-key="stage" class="project-stage-cell"><span class="pill">@item.Project.Stage.ToChinese()</span></td>
                         <td data-column-key="contract_signing_status">@item.Project.ContractSigningStatus.ToChinese()</td><td data-column-key="affiliation_type">@item.Project.AffiliationType.ToChinese()</td>
                         <td data-column-key="parent_project">@(item.Project.ParentProjectName ?? "未设置")</td><td data-column-key="general_contractor">@(item.Project.GeneralContractorName ?? "未设置")</td><td data-column-key="general_contractor_contact">@(item.Project.GeneralContractorContact ?? "未设置")</td><td data-column-key="general_contractor_phone">@(item.Project.GeneralContractorPhone ?? "未设置")</td>

@@ -128,11 +128,6 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         var code = NormalizeRequired(request.Code, nameof(request.Code));
         var name = NormalizeRequired(request.Name, nameof(request.Name));
         var unit = NormalizeRequired(request.Unit, nameof(request.Unit));
-        if (request.IsSettlementConfirmed && (!request.SettledQuantity.HasValue || !request.SettledUnitPrice.HasValue))
-        {
-            throw new ArgumentException("确认结算时必须填写结算工程量和结算单价。", nameof(request));
-        }
-
         if (!await db.Contracts.AnyAsync(contract => contract.Id == request.ContractId && contract.IsActive, cancellationToken))
         {
             throw new InvalidOperationException("合同不存在或已停用。");
@@ -151,11 +146,10 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             Code = code,
             Name = name,
             Unit = unit,
-            EstimatedQuantity = request.EstimatedQuantity,
-            EstimatedUnitPrice = request.EstimatedUnitPrice,
-            SettledQuantity = request.SettledQuantity,
-            SettledUnitPrice = request.SettledUnitPrice,
-            IsSettlementConfirmed = request.IsSettlementConfirmed,
+            Quantity = request.Quantity ?? (request.IsSettlementConfirmed ? request.SettledQuantity : request.EstimatedQuantity),
+            UnitPrice = request.UnitPrice ?? (request.IsSettlementConfirmed ? request.SettledUnitPrice : request.EstimatedUnitPrice),
+            AccountingLabel = NormalizeOptional(request.AccountingLabel),
+            RequiresInvoice = request.RequiresInvoice,
             Notes = NormalizeOptional(request.Notes)
         };
         db.ContractLineItems.Add(lineItem);
@@ -171,11 +165,6 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         var code = NormalizeRequired(request.Code, nameof(request.Code));
         var name = NormalizeRequired(request.Name, nameof(request.Name));
         var unit = NormalizeRequired(request.Unit, nameof(request.Unit));
-        if (request.IsSettlementConfirmed && (!request.SettledQuantity.HasValue || !request.SettledUnitPrice.HasValue))
-        {
-            throw new ArgumentException("确认结算时必须填写结算工程量和结算单价。", nameof(request));
-        }
-
         var lineItem = await db.ContractLineItems.Include(item => item.Contract).SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
             ?? throw new InvalidOperationException("工程量明细不存在。");
         if (lineItem.ConcurrencyStamp != request.ConcurrencyStamp)
@@ -191,11 +180,10 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         lineItem.Code = code;
         lineItem.Name = name;
         lineItem.Unit = unit;
-        lineItem.EstimatedQuantity = request.EstimatedQuantity;
-        lineItem.EstimatedUnitPrice = request.EstimatedUnitPrice;
-        lineItem.SettledQuantity = request.SettledQuantity;
-        lineItem.SettledUnitPrice = request.SettledUnitPrice;
-        lineItem.IsSettlementConfirmed = request.IsSettlementConfirmed;
+        lineItem.Quantity = request.Quantity ?? (request.IsSettlementConfirmed ? request.SettledQuantity : request.EstimatedQuantity);
+        lineItem.UnitPrice = request.UnitPrice ?? (request.IsSettlementConfirmed ? request.SettledUnitPrice : request.EstimatedUnitPrice);
+        lineItem.AccountingLabel = NormalizeOptional(request.AccountingLabel);
+        lineItem.RequiresInvoice = request.RequiresInvoice;
         lineItem.Notes = NormalizeOptional(request.Notes);
         lineItem.ConcurrencyStamp = Guid.NewGuid();
         db.AuditLogs.Add(new AuditLog
@@ -445,24 +433,26 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
 
     private static ContractLineItemDto ToLineItemDto(ContractLineItem item)
     {
-        var estimatedAmount = (item.EstimatedQuantity ?? 0m) * (item.EstimatedUnitPrice ?? 0m);
-        var settledAmount = item.IsSettlementConfirmed
-            ? (item.SettledQuantity ?? 0m) * (item.SettledUnitPrice ?? 0m)
-            : 0m;
+        var amount = (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m);
         return new ContractLineItemDto(
             item.Id,
             item.Code,
             item.Name,
             item.Unit,
-            item.EstimatedQuantity,
-            item.EstimatedUnitPrice,
-            estimatedAmount,
-            item.SettledQuantity,
-            item.SettledUnitPrice,
-            settledAmount,
-            item.IsSettlementConfirmed,
+            item.Quantity,
+            item.UnitPrice,
+            amount,
+            item.Quantity,
+            item.UnitPrice,
+            amount,
+            false,
             item.ConcurrencyStamp,
-            item.Notes);
+            item.Notes,
+            item.Quantity,
+            item.UnitPrice,
+            item.AccountingLabel,
+            item.RequiresInvoice,
+            amount);
     }
 
     private static object LineItemSnapshot(ContractLineItem item) => new
@@ -471,11 +461,10 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         item.Code,
         item.Name,
         item.Unit,
-        item.EstimatedQuantity,
-        item.EstimatedUnitPrice,
-        item.SettledQuantity,
-        item.SettledUnitPrice,
-        item.IsSettlementConfirmed,
+        item.Quantity,
+        item.UnitPrice,
+        item.AccountingLabel,
+        item.RequiresInvoice,
         item.Notes,
         item.ConcurrencyStamp
     };
@@ -530,6 +519,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         "施工中" => ProjectStage.UnderConstruction,
         "停工中" => ProjectStage.Suspended,
         "已完工未结算" => ProjectStage.CompletedUnsettled,
+        "部分结算" => ProjectStage.PartiallySettled,
         "已结算归档" => ProjectStage.SettledArchived,
         _ => Enum.TryParse<ProjectStage>(term, true, out var value) ? value : null
     };

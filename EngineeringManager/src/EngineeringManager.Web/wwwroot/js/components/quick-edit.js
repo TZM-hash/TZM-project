@@ -68,9 +68,16 @@ export function initInlineEditors() {
   document.querySelectorAll("[data-inline-edit]").forEach((editor) => {
     editor.querySelectorAll("[data-inline-edit-open]").forEach((button) => button.addEventListener("click", () => setEditorState(editor, true)));
     editor.querySelectorAll("[data-inline-edit-cancel]").forEach((button) => button.addEventListener("click", () => {
+      editor.querySelectorAll("[data-check-selector][open]").forEach((selector) => {
+        selector.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      });
       editor.querySelectorAll("form").forEach((form) => form.reset());
+      editor.querySelectorAll("[data-check-selector]").forEach((selector) => {
+        selector.querySelector("[data-check-selector-option]")?.dispatchEvent(new Event("change", { bubbles: true }));
+      });
       setEditorState(editor, false);
       editor.querySelectorAll("[data-inline-edit-kind-select]").forEach(updateKindFields);
+      editor.querySelectorAll("[data-project-amount-view]").forEach((select) => select.dispatchEvent(new Event("change")));
     }));
     setEditorState(editor, editor.dataset.inlineEditActive === "true");
   });

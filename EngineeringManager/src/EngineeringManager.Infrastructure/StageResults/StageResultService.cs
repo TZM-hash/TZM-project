@@ -70,9 +70,7 @@ public sealed class StageResultService(ApplicationDbContext db) : IStageResultSe
         foreach (var lineRequest in lineRequests)
         {
             var lineItem = lineItems[lineRequest.ContractLineItemId];
-            var targetQuantity = lineItem.IsSettlementConfirmed && lineItem.SettledQuantity.HasValue
-                ? lineItem.SettledQuantity.Value
-                : lineItem.EstimatedQuantity ?? 0m;
+            var targetQuantity = lineItem.Quantity ?? 0m;
             var previousQuantity = previousQuantities.GetValueOrDefault(lineRequest.ContractLineItemId);
             var quantity = StageQuantityCalculator.Calculate(targetQuantity, previousQuantity, lineRequest.PeriodQuantity);
             stageResult.Lines.Add(new StageResultLine

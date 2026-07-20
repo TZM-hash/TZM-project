@@ -1,7 +1,9 @@
 using System.Text.Json;
+using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Finance;
 using Microsoft.EntityFrameworkCore;
@@ -200,6 +202,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
 
     public async Task<ProjectWorkspaceDto> UpdateAsync(ProjectWorkspaceActor actor, UpdateProjectRequest request, CancellationToken cancellationToken)
     {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var reason = Required(request.Reason, nameof(request.Reason));
         var number = Required(request.ProjectNumber, nameof(request.ProjectNumber));
         var name = Required(request.Name, nameof(request.Name));
@@ -213,6 +216,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         ValidateTaxConfigurations(request.TaxConfigurations);
         await ValidateReferencesAsync(request, cancellationToken);
 
+        var previousStage = project.Stage;
         var before = Snapshot(project);
         project.ProjectNumber = number;
         project.Name = name;
@@ -298,6 +302,12 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             var entityNames = string.Join("、", exception.Entries.Select(entry => entry.Metadata.ClrType.Name).Distinct());
             throw new DbUpdateConcurrencyException($"项目资料保存发生并发冲突：{entityNames}。请刷新后重试。", exception);
         }
+        if (previousStage != project.Stage)
+        {
+            var postingService = new FinancePostingService(db);
+            await postingService.SynchronizeProjectQuantityReceivablesAsync(actor.UserId, actor.UserName, project.Id, cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
         return await GetAsync(project.Id, cancellationToken) ?? throw new InvalidOperationException("项目保存后无法读取。");
     }
 
@@ -350,9 +360,10 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     private static ContractDto ToContractDto(Contract contract) => new(
         contract.Id, contract.ContractNumber, contract.Name, contract.ContractType, contract.AllocationMode, contract.TotalAmount,
         contract.LineItems.OrderBy(item => item.SortOrder).ThenBy(item => item.Code).Select(item => new ContractLineItemDto(
-            item.Id, item.Code, item.Name, item.Unit, item.EstimatedQuantity, item.EstimatedUnitPrice,
-            (item.EstimatedQuantity ?? 0m) * (item.EstimatedUnitPrice ?? 0m), item.SettledQuantity, item.SettledUnitPrice,
-            item.IsSettlementConfirmed ? (item.SettledQuantity ?? 0m) * (item.SettledUnitPrice ?? 0m) : 0m, item.IsSettlementConfirmed, item.ConcurrencyStamp, item.Notes)).ToArray(), contract.Notes);
+            item.Id, item.Code, item.Name, item.Unit, item.Quantity, item.UnitPrice,
+            (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m), item.Quantity, item.UnitPrice,
+            (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m), false, item.ConcurrencyStamp, item.Notes,
+            item.Quantity, item.UnitPrice, item.AccountingLabel, item.RequiresInvoice, (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m))).ToArray(), contract.Notes);
 
     private static object Snapshot(Project item) => new
     {

@@ -85,6 +85,7 @@ public sealed class Program
         builder.Services.AddScoped<IProjectService, ProjectService>();
         builder.Services.AddScoped<IProjectWorkspaceService, ProjectWorkspaceService>();
         builder.Services.AddScoped<IProjectConstructionService, ProjectConstructionService>();
+        builder.Services.AddScoped<IProjectRecordAttachmentService, ProjectRecordAttachmentService>();
         builder.Services.AddScoped<IBusinessPartnerService, BusinessPartnerService>();
         builder.Services.AddScoped<IStageResultService, StageResultService>();
         builder.Services.AddScoped<IFinanceLedgerService, FinanceLedgerService>();

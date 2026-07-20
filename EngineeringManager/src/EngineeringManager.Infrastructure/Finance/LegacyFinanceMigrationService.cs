@@ -388,9 +388,7 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
         var conflicts = new List<LegacyQuantityConflict>();
         foreach (var line in lines)
         {
-            var amount = line.IsSettlementConfirmed
-                ? (line.SettledQuantity ?? 0m) * (line.SettledUnitPrice ?? 0m)
-                : (line.EstimatedQuantity ?? 0m) * (line.EstimatedUnitPrice ?? 0m);
+            var amount = (line.Quantity ?? 0m) * (line.UnitPrice ?? 0m);
             if (amount <= 0m) continue;
             var candidates = receivables.Where(item => item.ProjectId == line.Contract.ProjectId && item.ContractId == line.ContractId).ToArray();
             var exact = candidates.Where(item => Math.Abs(item.Amount - amount) <= 0.01m).ToArray();

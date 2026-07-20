@@ -56,8 +56,10 @@ public sealed class ProjectModelTests
             Code = "001",
             Name = "土方工程",
             Unit = "m³",
-            EstimatedQuantity = 10m,
-            EstimatedUnitPrice = 5m
+            Quantity = 10m,
+            UnitPrice = 5m,
+            AccountingLabel = "现场暂估",
+            RequiresInvoice = false
         });
         project.Contracts.Add(contract);
 
@@ -66,7 +68,11 @@ public sealed class ProjectModelTests
 
         (await db.Projects.CountAsync()).Should().Be(1);
         (await db.Contracts.SingleAsync()).TotalAmount.Should().Be(100m);
-        (await db.ContractLineItems.SingleAsync()).EstimatedQuantity.Should().Be(10m);
+        var savedLine = await db.ContractLineItems.SingleAsync();
+        savedLine.Quantity.Should().Be(10m);
+        savedLine.UnitPrice.Should().Be(5m);
+        savedLine.AccountingLabel.Should().Be("现场暂估");
+        savedLine.RequiresInvoice.Should().BeFalse();
         (await db.ContractLegalEntityAllocations.CountAsync()).Should().Be(2);
     }
 

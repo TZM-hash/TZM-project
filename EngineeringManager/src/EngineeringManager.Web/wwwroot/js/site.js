@@ -3,6 +3,7 @@ import { initEffects } from "./core/effects.js";
 
 const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard()];
 initSmartBack();
+initProjectAmountViews();
 if (document.querySelector("[data-conflict-notice]")) {
   jobs.push(import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
 }
@@ -42,6 +43,19 @@ function initSmartBack() {
     event.preventDefault();
     window.history.back();
   }));
+}
+
+function initProjectAmountViews() {
+  document.querySelectorAll("[data-project-amount-view]").forEach((select) => {
+    const container = select.closest(".project-amount-switch");
+    const update = () => {
+      const showSettled = select.value === "settled";
+      container.querySelector("[data-project-amount-estimated]").hidden = showSettled;
+      container.querySelector("[data-project-amount-settled]").hidden = !showSettled;
+    };
+    select.addEventListener("change", update);
+    update();
+  });
 }
 
 async function initPwaStatus() {

@@ -1,0 +1,66 @@
+@model EngineeringManager.Web.Pages.Projects.IndexModel
+@using EngineeringManager.Application.DataExchange
+@using EngineeringManager.Web.Pages.DataExchange
+
+<form id="projects-table-workbook-export-form" method="post" asp-page-handler="ExportWorkbook" class="project-workbook-export-toolbar" data-project-export-scope>
+    <input type="hidden" asp-for="Search" />
+    <input type="hidden" asp-for="LegalEntityId" />
+    <input type="hidden" asp-for="ResponsibleUserId" />
+    <input type="hidden" asp-for="AffiliationType" />
+    <input type="hidden" asp-for="MinimumCurrentAmount" />
+    <input type="hidden" asp-for="MaximumCurrentAmount" />
+    <input type="hidden" asp-for="SortKey" />
+    <input type="hidden" asp-for="SortDescending" />
+    @foreach (var stage in Model.Stages)
+    {
+        <input type="hidden" name="Stages" value="@stage" />
+    }
+
+    <details class="project-workbook-export-menu" data-project-workbook-export-menu data-check-selector>
+        <summary class="button button--primary workbench-tool-button project-workbook-export-trigger">
+            <span>导出项目清单</span>
+            <span class="project-workbook-export-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="project-workbook-export-popover">
+            <div class="project-workbook-export-heading">
+                <div>
+                    <strong>项目清单导出</strong>
+                    <span>按勾选项目或当前筛选范围生成工作簿</span>
+                </div>
+                <span class="project-workbook-export-count"><strong data-project-export-selected-count>0</strong> 项已选</span>
+            </div>
+
+            <section class="project-workbook-export-section" aria-labelledby="project-export-scope-title">
+                <div class="project-workbook-export-section-title" id="project-export-scope-title">导出范围</div>
+                <label class="project-workbook-export-option">
+                    <input asp-for="SelectAllMatching" data-project-export-all-matching />
+                    <span><strong>当前筛选的全部项目</strong><small>共 @Model.Result.TotalCount 个；开启后会清除表格勾选</small></span>
+                </label>
+                <p>未开启时，仅导出表格中已勾选的项目。</p>
+            </section>
+
+            <section class="project-workbook-export-section" aria-labelledby="project-export-content-title">
+                <div class="project-workbook-export-section-title" id="project-export-content-title">导出内容</div>
+                <details class="project-workbook-export-sheet-picker">
+                    <summary><span>选择项目工作簿细项</span><small>默认全部</small></summary>
+                    <div class="project-workbook-export-sheet-grid">
+                        @foreach (var sheet in Enum.GetValues<ProjectWorkbookSheet>().Where(sheet => Model.CanExportFullWorkbook || sheet != ProjectWorkbookSheet.ProjectSummary && sheet != ProjectWorkbookSheet.Attachments))
+                        {
+                            <label><input type="checkbox" name="SelectedWorkbookSheets" value="@sheet" checked="@(Model.SelectedWorkbookSheets.Count == 0 || Model.SelectedWorkbookSheets.Contains(sheet) ? "checked" : null)" data-project-workbook-sheet="@sheet" /> <span>@DataExchangeLabels.ProjectSheet(sheet)</span></label>
+                        }
+                    </div>
+                </details>
+            </section>
+
+            @if (Model.CanExportWorkbookAttachments)
+            {
+                <label class="project-workbook-export-option project-workbook-export-attachment">
+                    <input asp-for="IncludeWorkbookAttachments" data-project-export-attachments />
+                    <span><strong>包含附件</strong><small>同时打包附件并生成 ZIP</small></span>
+                </label>
+            }
+
+            <button class="button button--primary project-workbook-export-submit" type="submit">生成项目工作簿</button>
+        </div>
+    </details>
+</form>

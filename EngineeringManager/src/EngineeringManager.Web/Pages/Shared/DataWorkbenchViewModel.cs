@@ -58,7 +58,9 @@ public sealed record DataWorkbenchViewModel(
     bool CanExport = false,
     bool CanSaveViews = true,
     bool CanChangePageSize = true,
-    IReadOnlyList<DataWorkbenchFilterField>? InlineFilters = null)
+    IReadOnlyList<DataWorkbenchFilterField>? InlineFilters = null,
+    string? ToolbarActionsPartial = null,
+    object? ToolbarActionsModel = null)
 {
     public IReadOnlyList<DataWorkbenchFilterField> InlineFilterFields => InlineFilters ?? [];
 }

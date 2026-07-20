@@ -129,7 +129,7 @@ public sealed class ProjectWorkbookExporter(
     private static IEnumerable<IReadOnlyList<object?>> QuantityRows(List<Project> projects, IReadOnlyList<ProjectWorkbookFieldDefinition> fields) =>
         projects.SelectMany(project => project.Contracts.SelectMany(contract => contract.LineItems.OrderBy(item => item.Code).Select(line => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["project_number"] = project.ProjectNumber, ["contract_number"] = contract.ContractNumber, ["code"] = line.Code, ["name"] = line.Name, ["unit"] = line.Unit, ["estimated_quantity"] = line.EstimatedQuantity, ["estimated_unit_price"] = line.EstimatedUnitPrice, ["settled_quantity"] = line.SettledQuantity, ["settled_unit_price"] = line.SettledUnitPrice, ["is_settlement_confirmed"] = line.IsSettlementConfirmed, ["notes"] = line.Notes,
+            ["project_number"] = project.ProjectNumber, ["contract_number"] = contract.ContractNumber, ["code"] = line.Code, ["name"] = line.Name, ["unit"] = line.Unit, ["quantity"] = line.Quantity, ["unit_price"] = line.UnitPrice, ["accounting_label"] = line.AccountingLabel, ["requires_invoice"] = line.RequiresInvoice, ["notes"] = line.Notes,
             ["_system_id"] = line.Id.ToString(), ["_project_system_id"] = project.Id.ToString(), ["_contract_system_id"] = contract.Id.ToString(), ["_concurrency_stamp"] = line.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
         }))));
 

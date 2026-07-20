@@ -27,13 +27,11 @@ public sealed class DataWorkbenchPageTests
             .And.Contain("CanViewSensitiveData: CanManage");
     }
 
-    [Theory]
-    [InlineData("Projects")]
-    [InlineData("Finance")]
-    public void PrimaryLedgerPageUsesSharedWorkbenchAndExportHandler(string page)
+    [Fact]
+    public void FinanceLedgerPageUsesSharedWorkbenchAndCurrentViewExportHandler()
     {
-        var razor = ReadFile("src", "EngineeringManager.Web", "Pages", page, "Index.cshtml");
-        var model = ReadFile("src", "EngineeringManager.Web", "Pages", page, "Index.cshtml.cs");
+        var razor = ReadFile("src", "EngineeringManager.Web", "Pages", "Finance", "Index.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Finance", "Index.cshtml.cs");
 
         razor.Should().Contain("_DataWorkbench")
             .And.Contain("data-column-key")
@@ -42,6 +40,40 @@ public sealed class DataWorkbenchPageTests
         model.Should().Contain("OnPostExportAsync")
             .And.Contain("OnPostSaveViewAsync")
             .And.Contain("SavedViewId");
+    }
+
+    [Fact]
+    public void ProjectLedgerPageUsesSharedWorkbenchAndCompactWorkbookExport()
+    {
+        var razor = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml.cs");
+        var exportPartial = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "_ProjectWorkbookExport.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "check-selector.js");
+
+        razor.Should().Contain("_DataWorkbench")
+            .And.Contain("data-column-key")
+            .And.NotContain("projects-table-export-form")
+            .And.NotContain("project-workbook-export-form\" data-project-export-scope");
+        model.Should().Contain("OnPostExportWorkbookAsync")
+            .And.Contain("ToolbarActionsPartial: CanExportWorkbook ? \"_ProjectWorkbookExport\" : null")
+            .And.NotContain("OnPostExportAsync")
+            .And.NotContain("IExportService exportService")
+            .And.NotContain("SelectedFields { get; set; }");
+        exportPartial.Should().Contain("导出项目清单")
+            .And.Contain("project-workbook-export-chevron")
+            .And.NotContain("icons.svg#exchange");
+        styles.Should().Contain("bottom: calc(100% + .4rem)")
+            .And.Contain("var(--project-export-max-height")
+            .And.Contain(".project-workbook-export-menu.project-export-opens-down")
+            .And.Contain("body.project-export-open .app-main")
+            .And.Contain(".project-workbook-export-popover { position: fixed")
+            .And.Contain("max-height: min(78vh, 32rem)");
+        script.Should().Contain("project-export-open")
+            .And.Contain("project-export-opens-down")
+            .And.Contain("--project-export-max-height")
+            .And.Contain("getBoundingClientRect")
+            .And.Contain("addEventListener(\"toggle\"");
     }
 
     private static string ReadFile(params string[] parts) =>

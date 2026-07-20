@@ -1267,10 +1267,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.Code).HasMaxLength(80).IsRequired();
             entity.Property(item => item.Name).HasMaxLength(250).IsRequired();
             entity.Property(item => item.Unit).HasMaxLength(30).IsRequired();
-            entity.Property(item => item.EstimatedQuantity).HasPrecision(18, 4);
-            entity.Property(item => item.EstimatedUnitPrice).HasPrecision(18, 4);
-            entity.Property(item => item.SettledQuantity).HasPrecision(18, 4);
-            entity.Property(item => item.SettledUnitPrice).HasPrecision(18, 4);
+            entity.Property(item => item.Quantity).HasPrecision(18, 4);
+            entity.Property(item => item.UnitPrice).HasPrecision(18, 4);
+            entity.Property(item => item.AccountingLabel).HasMaxLength(100);
             entity.Property(item => item.Notes).HasMaxLength(1000);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.ContractId, item.Code }).IsUnique();
@@ -1367,6 +1366,11 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Contract).WithMany().HasForeignKey(item => item.ContractId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.StageResult).WithMany(result => result.Attachments).HasForeignKey(item => item.StageResultId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ContractLineItem).WithMany().HasForeignKey(item => item.ContractLineItemId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.FinanceSettlement).WithMany().HasForeignKey(item => item.FinanceSettlementId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.FinanceInvoice).WithMany().HasForeignKey(item => item.FinanceInvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.FinanceCashEntry).WithMany().HasForeignKey(item => item.FinanceCashEntryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.ProjectConstructionRecord).WithMany().HasForeignKey(item => item.ProjectConstructionRecordId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.UploadedByUser).WithMany().HasForeignKey(item => item.UploadedByUserId).OnDelete(DeleteBehavior.SetNull);
         });
     }

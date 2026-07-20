@@ -1,4 +1,5 @@
 using EngineeringManager.Application.DataExchange;
+using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Finance;
@@ -72,7 +73,7 @@ public sealed class ProjectWorkbookImportTests
             (ProjectWorkbookSheet.QuantityLines, [Row(ProjectWorkbookSheet.QuantityLines, new Dictionary<string, object?>
             {
                 ["project_number"] = "IMP-P", ["contract_number"] = "IMP-C", ["code"] = "001", ["name"] = "导入工程量",
-                ["unit"] = "项", ["estimated_quantity"] = 2m, ["estimated_unit_price"] = 5m, ["is_settlement_confirmed"] = false
+                ["unit"] = "项", ["quantity"] = 2m, ["unit_price"] = 5m, ["accounting_label"] = "暂估", ["requires_invoice"] = true
             })]));
 
         var preview = await fixture.Service.PreviewAsync(new ProjectWorkbookImportRequest("admin", "项目.xlsx", workbook, ImportMode.Mixed, Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
@@ -81,7 +82,7 @@ public sealed class ProjectWorkbookImportTests
         preview.Errors.Should().BeEmpty();
         (await fixture.Db.Projects.SingleAsync()).ProjectNumber.Should().Be("IMP-P");
         (await fixture.Db.Contracts.SingleAsync()).ContractNumber.Should().Be("IMP-C");
-        (await fixture.Db.ContractLineItems.SingleAsync()).EstimatedQuantity.Should().Be(2m);
+        (await fixture.Db.ContractLineItems.SingleAsync()).Quantity.Should().Be(2m);
     }
 
     [Fact]
@@ -116,6 +117,69 @@ public sealed class ProjectWorkbookImportTests
         updated.Name.Should().Be("新名称");
         updated.Notes.Should().BeNull();
         updated.ConcurrencyStamp.Should().NotBe(originalStamp);
+    }
+
+    [Fact]
+    public async Task ProjectStageImportResynchronizesExistingQuantityPosting()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "STAGE-C", Name = "阶段公司", ShortName = "阶段" };
+        var partner = new BusinessPartner { PartnerNumber = "STAGE-PARTNER", Name = "阶段客户", ShortName = "客户" };
+        var project = new Project { ProjectNumber = "STAGE-P", Name = "阶段导入项目", Stage = ProjectStage.PartiallySettled };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        var contract = new Contract { Project = project, BusinessPartner = partner, ContractNumber = "STAGE-C-01", Name = "阶段合同" };
+        var line = new ContractLineItem { Contract = contract, Code = "001", Name = "工程量", Unit = "项", Quantity = 2m, UnitPrice = 50m, RequiresInvoice = true };
+        contract.LineItems.Add(line);
+        project.Contracts.Add(contract);
+        fixture.Db.AddRange(company, partner, project);
+        await fixture.Db.SaveChangesAsync();
+        var ledgerActor = new CentralLedgerActor("admin", "管理员", new HashSet<Guid> { company.Id }, new HashSet<Guid> { project.Id }, true, false, false, false);
+        await new FinancePostingService(fixture.Db).UpsertProjectQuantityReceivableAsync(ledgerActor, line.Id, CancellationToken.None);
+        var originalPosting = await fixture.Db.FinanceSettlements.SingleAsync(item => item.SourceType == LedgerSourceType.ProjectQuantity);
+        var definition = ProjectWorkbookCatalog.Get(ProjectWorkbookSheet.ProjectMaster);
+        var values = definition.Fields.Select(field => field.Key switch
+        {
+            "project_number" => project.ProjectNumber,
+            "project_name" => project.Name,
+            "stage" => "UnderConstruction",
+            "contract_signing_status" => "NotSigned",
+            "affiliation_type" => "SelfOperated",
+            "is_active" => "true",
+            "legal_entity_ids" => company.Id.ToString(),
+            "_system_id" or "_project_system_id" => project.Id.ToString(),
+            "_concurrency_stamp" => project.ConcurrencyStamp.ToString(),
+            "_dataset_version" => ProjectWorkbookVersions.Dataset,
+            _ => null
+        }).ToArray();
+        var workbook = CreateWorkbook(
+            (ProjectWorkbookSheet.ProjectMaster, [values]),
+            (ProjectWorkbookSheet.Receivables, [Row(ProjectWorkbookSheet.Receivables, new Dictionary<string, object?>
+            {
+                ["project_number"] = project.ProjectNumber,
+                ["legal_entity_code"] = company.Code,
+                ["partner_number"] = partner.PartnerNumber,
+                ["source_type"] = "ProjectQuantity",
+                ["settlement_state"] = "Final",
+                ["entry_date"] = originalPosting.BusinessDate,
+                ["original_amount"] = originalPosting.OriginalAmount,
+                ["original_invoice_amount"] = originalPosting.OriginalInvoiceAmount,
+                ["amount"] = originalPosting.OriginalAmount,
+                ["is_voided"] = false,
+                ["_system_id"] = originalPosting.Id.ToString(),
+                ["_project_system_id"] = project.Id.ToString(),
+                ["_concurrency_stamp"] = originalPosting.ConcurrencyStamp.ToString(),
+                ["_dataset_version"] = ProjectWorkbookVersions.Dataset
+            })]));
+
+        var preview = await fixture.Service.PreviewAsync(new ProjectWorkbookImportRequest("admin", "阶段回退.xlsx", workbook, ImportMode.Update, Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+
+        var storedProject = await fixture.Db.Projects.AsNoTracking().SingleAsync(item => item.Id == project.Id);
+        storedProject.Stage.Should().Be(ProjectStage.UnderConstruction);
+        var posting = await fixture.Db.FinanceSettlements.AsNoTracking().SingleAsync(item => item.SourceType == LedgerSourceType.ProjectQuantity);
+        posting.SettlementState.Should().Be(LedgerSettlementState.Provisional);
+        posting.OriginalAmount.Should().Be(100m);
     }
 
     [Fact]

@@ -20,7 +20,6 @@ public sealed class IndexModel(
     IProjectService projectService,
     IFinanceLedgerService financeService,
     ISavedDataViewService savedViewService,
-    IExportService exportService,
     IProjectWorkbookService projectWorkbookService) : PageModel
 {
     private static readonly DataViewDefinition ViewDefinition = new(
@@ -50,7 +49,6 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 20;
     [BindProperty(SupportsGet = true)] public Guid? SavedViewId { get; set; }
     [BindProperty] public SavedDataViewInput SavedView { get; set; } = new();
-    [BindProperty] public List<string> SelectedFields { get; set; } = [];
     [BindProperty] public List<Guid> SelectedProjectIds { get; set; } = [];
     [BindProperty] public bool SelectAllMatching { get; set; }
     [BindProperty] public List<ProjectWorkbookSheet> SelectedWorkbookSheets { get; set; } = [];
@@ -69,14 +67,6 @@ public sealed class IndexModel(
             ViewDefinition,
             cancellationToken);
         return RedirectToPage(new { savedViewId = saved.Id });
-    }
-
-    public async Task<IActionResult> OnPostExportAsync(CancellationToken cancellationToken)
-    {
-        var result = await projectService.SearchProjectsAsync(Actor(), Query() with { Page = 1 }, cancellationToken);
-        var fields = SelectedFields.Count > 0 ? SelectedFields : ["project_number", "project_name", "stage", "affiliation_type", "contract_amount", "current_project_amount"];
-        var file = await exportService.ExportAsync(new ExportRequest(ExportDataset.ProjectOverview, UserId(), fields, null, result.MatchingProjectIds), cancellationToken);
-        return File(file.Content, file.ContentType, file.FileName);
     }
 
     public async Task<IActionResult> OnPostExportWorkbookAsync(CancellationToken cancellationToken)
@@ -216,8 +206,10 @@ public sealed class IndexModel(
             SortKey,
             SortDescending,
             selected?.Id,
-            true,
-            InlineFilters: [filters[0]]);
+            false,
+            InlineFilters: [filters[0]],
+            ToolbarActionsPartial: CanExportWorkbook ? "_ProjectWorkbookExport" : null,
+            ToolbarActionsModel: CanExportWorkbook ? this : null);
     }
 
     private void ApplySavedView(SavedDataViewDto view)

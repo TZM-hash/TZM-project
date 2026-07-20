@@ -419,11 +419,10 @@ public sealed class SampleDataBuilder(
                 Code = $"BOQ-{lineIndex + 1:00}",
                 Name = lineNames[lineIndex],
                 Unit = units[lineIndex],
-                EstimatedQuantity = quantity,
-                EstimatedUnitPrice = price,
-                SettledQuantity = settled ? decimal.Round(quantity * (0.96m + projectNumber % 4 * 0.01m), 2) : null,
-                SettledUnitPrice = settled ? price : null,
-                IsSettlementConfirmed = settled,
+                Quantity = settled ? decimal.Round(quantity * (0.96m + projectNumber % 4 * 0.01m), 2) : quantity,
+                UnitPrice = price,
+                AccountingLabel = settled ? "结算" : "暂估",
+                RequiresInvoice = true,
                 SortOrder = (lineIndex + 1) * 10
             });
         }
@@ -844,7 +843,7 @@ public sealed class SampleDataBuilder(
             var project = context.Projects[index];
             var contract = project.Contracts.OrderBy(item => item.ContractNumber).First();
             var line = contract.LineItems.OrderBy(item => item.SortOrder).First();
-            var estimated = line.EstimatedQuantity ?? 0m;
+            var estimated = line.Quantity ?? 0m;
             var cumulative = decimal.Round(estimated * (0.35m + index % 6 * 0.1m), 2);
             var storedName = $"{Guid.NewGuid():N}.txt";
             var bytes = Encoding.UTF8.GetBytes($"DEMO 测试附件：{project.ProjectNumber} 阶段成果 {index + 1}");

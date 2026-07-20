@@ -54,7 +54,11 @@ public sealed record CreateContractLineItemRequest(
     decimal? SettledQuantity,
     decimal? SettledUnitPrice,
     bool IsSettlementConfirmed,
-    string? Notes = null);
+    string? Notes = null,
+    decimal? Quantity = null,
+    decimal? UnitPrice = null,
+    string? AccountingLabel = null,
+    bool RequiresInvoice = true);
 
 public sealed record UpdateContractLineItemRequest(
     Guid Id,
@@ -69,7 +73,11 @@ public sealed record UpdateContractLineItemRequest(
     Guid ConcurrencyStamp,
     string? Notes = null,
     string? UserId = null,
-    string? Reason = null);
+    string? Reason = null,
+    decimal? Quantity = null,
+    decimal? UnitPrice = null,
+    string? AccountingLabel = null,
+    bool RequiresInvoice = true);
 
 public sealed record ProjectDto(
     Guid Id,
@@ -105,7 +113,12 @@ public sealed record ContractLineItemDto(
     decimal SettledAmount,
     bool IsSettlementConfirmed,
     Guid ConcurrencyStamp,
-    string? Notes = null);
+    string? Notes = null,
+    decimal? Quantity = null,
+    decimal? UnitPrice = null,
+    string? AccountingLabel = null,
+    bool RequiresInvoice = true,
+    decimal Amount = 0m);
 
 public sealed record ContractDto(
     Guid Id,

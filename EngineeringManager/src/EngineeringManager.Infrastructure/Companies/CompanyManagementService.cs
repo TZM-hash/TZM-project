@@ -2,6 +2,7 @@ using System.Text.Json;
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
@@ -289,7 +290,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         var contractRows = await db.ContractLegalEntityAllocations.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId))
             .Select(item => new { item.Amount, item.Percentage, item.Contract.TotalAmount }).ToListAsync(cancellationToken);
         var lineRows = await db.ContractLineItemLegalEntityAllocations.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId))
-            .Select(item => new { item.Amount, item.ContractLineItem.IsSettlementConfirmed }).ToListAsync(cancellationToken);
+            .Select(item => new { item.Amount, item.ContractLineItem.Contract.Project.Stage }).ToListAsync(cancellationToken);
         var receivables = await db.ReceivableEntries.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId) && !item.IsVoided).Select(item => item.Amount).ToListAsync(cancellationToken);
         var collections = await db.CollectionEntries.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId)).Select(item => item.Amount).ToListAsync(cancellationToken);
         var refunds = await db.RefundOrReversalEntries.AsNoTracking().Where(item =>
@@ -314,8 +315,8 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         return new CompanyDashboardDto(
             ids.Count,
             contractAmount,
-            lineRows.Where(item => !item.IsSettlementConfirmed).Sum(item => item.Amount),
-            lineRows.Where(item => item.IsSettlementConfirmed).Sum(item => item.Amount),
+            lineRows.Where(item => item.Stage != ProjectStage.PartiallySettled && item.Stage != ProjectStage.SettledArchived).Sum(item => item.Amount),
+            lineRows.Where(item => item.Stage == ProjectStage.PartiallySettled || item.Stage == ProjectStage.SettledArchived).Sum(item => item.Amount),
             receivables.Sum(),
             collections.Sum() - refunds.Sum(),
             payables.Sum(),

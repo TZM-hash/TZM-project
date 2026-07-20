@@ -1,5 +1,6 @@
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Finance;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -12,9 +13,9 @@ public sealed class FinancePostingServiceTests
     public async Task ConfirmedProjectQuantityUpsertsOneFinalReceivableBySourceId()
     {
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();
-        fixture.LineItem.SettledQuantity = 10m;
-        fixture.LineItem.SettledUnitPrice = 120m;
-        fixture.LineItem.IsSettlementConfirmed = true;
+        fixture.LineItem.Quantity = 10m;
+        fixture.LineItem.UnitPrice = 120m;
+        fixture.Project.Stage = ProjectStage.PartiallySettled;
         await fixture.Db.SaveChangesAsync();
         var service = new FinancePostingService(fixture.Db);
 
@@ -35,8 +36,8 @@ public sealed class FinancePostingServiceTests
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();
         var service = new FinancePostingService(fixture.Db);
         var id = await service.UpsertProjectQuantityReceivableAsync(fixture.ExternalActor(), fixture.LineItem.Id, CancellationToken.None);
-        fixture.LineItem.EstimatedQuantity = 2m;
-        fixture.LineItem.EstimatedUnitPrice = 750m;
+        fixture.LineItem.Quantity = 2m;
+        fixture.LineItem.UnitPrice = 750m;
         await fixture.Db.SaveChangesAsync();
 
         var updatedId = await service.UpsertProjectQuantityReceivableAsync(fixture.ExternalActor(), fixture.LineItem.Id, CancellationToken.None);
@@ -65,6 +66,32 @@ public sealed class FinancePostingServiceTests
         settlement.SettlementState.Should().Be(LedgerSettlementState.Provisional);
         settlement.OriginalAmount.Should().Be(1_200m);
         settlement.OriginalInvoiceAmount.Should().Be(1_200m);
+    }
+
+    [Fact]
+    public async Task FinalProjectQuantityCanReturnToProvisionalWithoutKeepingFinalAdjustmentsActive()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        fixture.Project.Stage = ProjectStage.PartiallySettled;
+        fixture.LineItem.Quantity = 2m;
+        fixture.LineItem.UnitPrice = 500m;
+        await fixture.Db.SaveChangesAsync();
+        var service = new FinancePostingService(fixture.Db);
+        await service.UpsertProjectQuantityReceivableAsync(fixture.ExternalActor(), fixture.LineItem.Id, CancellationToken.None);
+        fixture.LineItem.Quantity = 3m;
+        await fixture.Db.SaveChangesAsync();
+        await service.UpsertProjectQuantityReceivableAsync(fixture.ExternalActor(), fixture.LineItem.Id, CancellationToken.None);
+        fixture.Project.Stage = ProjectStage.UnderConstruction;
+        fixture.LineItem.Quantity = 4m;
+        await fixture.Db.SaveChangesAsync();
+
+        await service.UpsertProjectQuantityReceivableAsync(fixture.ExternalActor(), fixture.LineItem.Id, CancellationToken.None);
+
+        var settlement = await fixture.Db.FinanceSettlements.Include(item => item.Adjustments).SingleAsync();
+        settlement.SettlementState.Should().Be(LedgerSettlementState.Provisional);
+        settlement.OriginalAmount.Should().Be(2_000m);
+        settlement.OriginalInvoiceAmount.Should().Be(2_000m);
+        settlement.Adjustments.Should().OnlyContain(item => item.Status == LedgerRecordStatus.Voided);
     }
 
     [Fact]

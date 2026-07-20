@@ -37,9 +37,9 @@ public sealed class DashboardService : IDashboardService
 
         var projects = await projectQuery.ToListAsync(cancellationToken);
         var projectIds = projects.Select(item => item.Id).ToArray();
-        var currentAmount = projects.Sum(project => ProjectAmountCalculator.Calculate(
+        var currentAmount = projects.Sum(project => ProjectAmountCalculator.Calculate(project.Stage,
             project.Contracts.Where(contract => contract.IsActive).SelectMany(contract => contract.LineItems).Select(line =>
-                new LineItemAmountInput(line.EstimatedQuantity, line.EstimatedUnitPrice, line.SettledQuantity, line.SettledUnitPrice))).CurrentAmount);
+                new LineItemAmountInput(line.Quantity, line.UnitPrice, line.RequiresInvoice))).CurrentAmount);
         var stageDistribution = projects.GroupBy(item => item.Stage).OrderBy(group => group.Key).Select(group => new DashboardStageDto(
             group.Key,
             StageLabel(group.Key),

@@ -114,15 +114,19 @@ public sealed class DetailsModel(
                 RequiredText(QuantityEdit.Code, "请填写清单编码。"),
                 RequiredText(QuantityEdit.Name, "请填写清单名称。"),
                 RequiredText(QuantityEdit.Unit, "请填写单位。"),
-                QuantityEdit.EstimatedQuantity,
-                QuantityEdit.EstimatedUnitPrice,
-                QuantityEdit.SettledQuantity,
-                QuantityEdit.SettledUnitPrice,
-                QuantityEdit.IsSettlementConfirmed,
+                null,
+                null,
+                null,
+                null,
+                false,
                 QuantityEdit.ConcurrencyStamp,
                 QuantityEdit.Notes,
                 User.FindFirstValue(ClaimTypes.NameIdentifier),
-                "项目管理页面快捷修改工程量"), cancellationToken);
+                "项目管理页面快捷修改工程量",
+                QuantityEdit.Quantity,
+                QuantityEdit.UnitPrice,
+                QuantityEdit.AccountingLabel,
+                QuantityEdit.RequiresInvoice), cancellationToken);
             return RedirectToPage(new { id, tab = "quantity" });
         }
         catch (Exception exception) when (IsEditableException(exception))
@@ -442,11 +446,10 @@ public sealed class DetailsModel(
         public string Code { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Unit { get; set; } = string.Empty;
-        public decimal? EstimatedQuantity { get; set; }
-        public decimal? EstimatedUnitPrice { get; set; }
-        public decimal? SettledQuantity { get; set; }
-        public decimal? SettledUnitPrice { get; set; }
-        public bool IsSettlementConfirmed { get; set; }
+        public decimal? Quantity { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public string? AccountingLabel { get; set; }
+        public bool RequiresInvoice { get; set; } = true;
         public Guid ConcurrencyStamp { get; set; }
         public string? Notes { get; set; }
     }

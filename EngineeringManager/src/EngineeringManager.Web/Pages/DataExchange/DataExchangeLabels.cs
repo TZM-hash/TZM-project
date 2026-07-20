@@ -21,6 +21,7 @@ public static class DataExchangeLabels
         ProjectWorkbookSheet.Payables => "应付",
         ProjectWorkbookSheet.Payments => "付款",
         ProjectWorkbookSheet.Invoices => "发票",
+        ProjectWorkbookSheet.Deductions => "扣款",
         ProjectWorkbookSheet.Attachments => "附件清单",
         _ => value.ToString()
     };

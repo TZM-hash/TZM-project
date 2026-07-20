@@ -8,7 +8,7 @@
 <section class="page-heading ledger-heading">
     <div><h1>外部账本</h1><p class="page-lead">统一查看项目、施工班组、合作商和中央录入形成的同一套外部财务记录。</p></div>
     <div class="page-actions-inline">
-        <a class="button button--secondary" asp-page="/Ledger/Years/Index">财务年度</a>
+        <a class="button button--secondary" asp-page="/Admin/FinanceYears/Index">财务年度设置</a>
         @if (Model.CanManage) { <a class="button button--primary" asp-page="/Ledger/Entries/Edit" asp-route-scope="External">新增财务记录</a> }
     </div>
 </section>

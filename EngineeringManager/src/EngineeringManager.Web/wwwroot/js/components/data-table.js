@@ -33,6 +33,18 @@ function normalizeColumns(root, requested) {
     .map((item, order) => ({ ...item, order }));
 }
 
+function applyColumnControls(root, columns) {
+  const list = root.querySelector("[data-column-list]");
+  columns.forEach((column) => {
+    const item = list?.querySelector(`[data-column-key="${CSS.escape(column.key)}"]`);
+    if (!item) return;
+    item.dataset.columnOrder = String(column.order);
+    const checkbox = item.querySelector("[data-column-visibility]");
+    if (checkbox && !checkbox.disabled) checkbox.checked = column.visible;
+    list.appendChild(item);
+  });
+}
+
 function applyColumns(root, columns) {
   const table = tableFor(root);
   if (!table) return;
@@ -45,15 +57,7 @@ function applyColumns(root, columns) {
       row.appendChild(cell);
     });
   });
-  const list = root.querySelector("[data-column-list]");
-  columns.forEach((column) => {
-    const item = list?.querySelector(`[data-column-key="${CSS.escape(column.key)}"]`);
-    if (!item) return;
-    item.dataset.columnOrder = String(column.order);
-    const checkbox = item.querySelector("[data-column-visibility]");
-    if (checkbox && !checkbox.disabled) checkbox.checked = column.visible;
-    list.appendChild(item);
-  });
+  applyColumnControls(root, columns);
   const exportForm = document.getElementById(`${root.dataset.tableId}-export-form`);
   exportForm?.querySelectorAll("[data-export-column-key]").forEach((input) => {
     input.disabled = byKey.get(input.dataset.exportColumnKey)?.visible === false;
@@ -96,11 +100,23 @@ function initColumnManager(root) {
   const manager = root.querySelector("[data-column-manager-table]");
   const list = root.querySelector("[data-column-list]");
   let dragging;
+  let columnDraft = null;
+  let columnDraftConfirmed = false;
   const applyAndPersist = () => {
     const columns = readColumnState(root);
     if (!columns.some((item) => item.visible)) return;
     applyColumns(root, columns);
     persist(root);
+  };
+  const restoreColumnDraft = () => {
+    if (!columnDraft) return;
+    applyColumnControls(root, columnDraft);
+    columnDraft = null;
+  };
+  const cancelColumnDraft = (focusSummary = false) => {
+    restoreColumnDraft();
+    manager?.removeAttribute("open");
+    if (focusSummary) manager?.querySelector("summary")?.focus({ preventScroll: true });
   };
   list?.addEventListener("dragstart", (event) => {
     dragging = event.target.closest("[data-column-key]");
@@ -116,30 +132,41 @@ function initColumnManager(root) {
   list?.addEventListener("dragend", () => {
     dragging?.classList.remove("is-dragging");
     dragging = undefined;
-    applyAndPersist();
   });
   list?.addEventListener("change", (event) => {
     if (!event.target.matches("[data-column-visibility]")) return;
     const visible = Array.from(list.querySelectorAll("[data-column-visibility]")).some((checkbox) => checkbox.checked);
     if (!visible) event.target.checked = true;
-    applyAndPersist();
   });
   root.querySelector("[data-reset-columns]")?.addEventListener("click", () => {
     const defaults = safeParse(root.dataset.defaultColumns, []);
-    applyColumns(root, normalizeColumns(root, defaults));
-    persist(root);
+    applyColumnControls(root, normalizeColumns(root, defaults));
   });
   root.querySelector("[data-show-all-columns]")?.addEventListener("click", () => {
     list?.querySelectorAll("[data-column-visibility]").forEach((checkbox) => { checkbox.checked = true; });
+  });
+  root.querySelector("[data-confirm-columns]")?.addEventListener("click", () => {
     applyAndPersist();
+    columnDraftConfirmed = true;
+    columnDraft = null;
+    manager?.removeAttribute("open");
+    manager?.querySelector("summary")?.focus({ preventScroll: true });
   });
   manager?.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    manager.removeAttribute("open");
-    manager.querySelector("summary")?.focus({ preventScroll: true });
+    cancelColumnDraft(true);
+  });
+  manager?.addEventListener("toggle", () => {
+    if (manager.open) {
+      columnDraft = readColumnState(root);
+      columnDraftConfirmed = false;
+    } else if (columnDraft && !columnDraftConfirmed) {
+      restoreColumnDraft();
+    }
+    columnDraftConfirmed = false;
   });
   document.addEventListener("click", (event) => {
-    if (manager?.hasAttribute("open") && !manager.contains(event.target)) manager.removeAttribute("open");
+    if (manager?.hasAttribute("open") && !manager.contains(event.target)) cancelColumnDraft();
   });
 }
 

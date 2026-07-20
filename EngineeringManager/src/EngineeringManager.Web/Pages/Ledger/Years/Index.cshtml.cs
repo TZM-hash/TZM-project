@@ -18,7 +18,7 @@ public sealed class IndexModel(IFinanceBusinessYearService service, ApplicationD
     [BindProperty] public Guid DeleteConcurrencyStamp { get; set; }
     [BindProperty] public string DeleteReason { get; set; } = string.Empty;
 
-    public async Task OnGetAsync(CancellationToken token) => Items = await service.ListAsync(token);
+    public IActionResult OnGet() => RedirectToPage("/Admin/FinanceYears/Index");
 
     public async Task<IActionResult> OnPostCreateAsync(CancellationToken token)
     {

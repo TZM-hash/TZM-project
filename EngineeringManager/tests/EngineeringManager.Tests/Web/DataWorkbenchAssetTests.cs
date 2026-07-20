@@ -19,11 +19,19 @@ public sealed class DataWorkbenchAssetTests
         js.Should().Contain("data-filter-chip");
         js.Should().Contain("data-saved-view-filter-json");
         js.Should().Contain("data-current-page-size");
+        js.Should().Contain("data-check-selector-confirm");
+        js.Should().Contain("checkSelectorSnapshot");
+        js.Should().Contain("restoreCheckSelectorSnapshot");
+        js.Should().Contain("data-confirm-columns");
+        js.Should().Contain("columnDraft");
+        js.Should().Contain("restoreColumnDraft");
 
         razor.Should().Contain("data-workbench")
             .And.Contain("data-column-manager-table")
             .And.Contain("column-manager-dropdown")
             .And.Contain("data-show-all-columns")
+            .And.Contain("data-confirm-columns")
+            .And.Contain("调整后点击确认生效")
             .And.NotContain("column-manager-dialog")
             .And.Contain("data-filter-drawer")
             .And.Contain("data-save-view-dialog");

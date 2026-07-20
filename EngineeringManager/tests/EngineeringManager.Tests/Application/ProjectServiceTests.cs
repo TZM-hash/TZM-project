@@ -167,12 +167,12 @@ public sealed class ProjectServiceTests
     }
 
     [Fact]
-    public async Task ProjectSummaryUsesSettledValuesOnlyForConfirmedLines()
+    public async Task ProjectSummaryUsesProjectStageToInterpretUnifiedValues()
     {
         await using var fixture = await ProjectFixture.CreateAsync();
         var legalEntity = await fixture.AddLegalEntityAsync();
         var project = await fixture.Service.CreateProjectAsync(
-            new CreateProjectRequest("P-SVC-03", "汇总项目", null, null, null, null, ProjectStage.CompletedUnsettled, [legalEntity.Id]),
+            new CreateProjectRequest("P-SVC-03", "汇总项目", null, null, null, null, ProjectStage.PartiallySettled, [legalEntity.Id]),
             CancellationToken.None);
         var contract = await fixture.Service.AddContractAsync(
             new CreateContractRequest(
@@ -186,18 +186,18 @@ public sealed class ProjectServiceTests
                 [new ContractAllocationRequest(legalEntity.Id, 100m, null)]),
             CancellationToken.None);
         await fixture.Service.AddLineItemAsync(
-            new CreateContractLineItemRequest(contract.Id, "001", "未结算项", "m", 10m, 5m, 9m, 5m, false),
+            new CreateContractLineItemRequest(contract.Id, "001", "工程量一", "m", null, null, null, null, false, Quantity: 10m, UnitPrice: 5m),
             CancellationToken.None);
         await fixture.Service.AddLineItemAsync(
-            new CreateContractLineItemRequest(contract.Id, "002", "已结算项", "m", 4m, 8m, 3m, 10m, true),
+            new CreateContractLineItemRequest(contract.Id, "002", "工程量二", "m", null, null, null, null, false, Quantity: 3m, UnitPrice: 10m),
             CancellationToken.None);
 
         var details = await fixture.Service.GetProjectAsync(project.Id, CancellationToken.None);
 
         details.Should().NotBeNull();
         details!.Summary.ContractAmount.Should().Be(100m);
-        details.Summary.EstimatedAmount.Should().Be(82m);
-        details.Summary.SettledAmount.Should().Be(30m);
+        details.Summary.EstimatedAmount.Should().Be(0m);
+        details.Summary.SettledAmount.Should().Be(80m);
         details.Summary.CurrentAmount.Should().Be(80m);
         details.Summary.SettlementStatus.Should().Be(ProjectSettlementStatus.PartiallySettled);
     }
@@ -219,14 +219,14 @@ public sealed class ProjectServiceTests
             CancellationToken.None);
 
         var updated = await fixture.Service.UpdateLineItemAsync(
-            new UpdateContractLineItemRequest(line.Id, "001-A", "修改后工程量", "m³", 12m, 6m, 11m, 7m, true, line.ConcurrencyStamp),
+            new UpdateContractLineItemRequest(line.Id, "001-A", "修改后工程量", "m³", null, null, null, null, false, line.ConcurrencyStamp, Quantity: 12m, UnitPrice: 6m, AccountingLabel: "现场复核", RequiresInvoice: false),
             CancellationToken.None);
 
         updated.Code.Should().Be("001-A");
         updated.Name.Should().Be("修改后工程量");
-        updated.EstimatedAmount.Should().Be(72m);
-        updated.SettledAmount.Should().Be(77m);
-        updated.IsSettlementConfirmed.Should().BeTrue();
+        updated.Amount.Should().Be(72m);
+        updated.AccountingLabel.Should().Be("现场复核");
+        updated.RequiresInvoice.Should().BeFalse();
         updated.ConcurrencyStamp.Should().NotBe(line.ConcurrencyStamp);
     }
 
