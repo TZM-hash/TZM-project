@@ -69,21 +69,26 @@ public sealed class CentralLedgerPageTests
     }
 
     [Fact]
-    public void ProjectInvoiceEntryIsOutputOnlyAndDetailedEntryMovesToCentralLedger()
+    public void ProjectFinanceEntryIsSlimmedAndProjectReceivableCannotBeCreatedManually()
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
         var pageModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml.cs");
         var workspace = ReadFile("src", "EngineeringManager.Infrastructure", "Projects", "ProjectWorkspaceService.cs");
         var centralEntry = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Entries", "Edit.cshtml.cs");
+        var legacyEntry = ReadFile("src", "EngineeringManager.Web", "Pages", "Finance", "Entries", "Create.cshtml");
+        var legacyEntryModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Finance", "Entries", "Create.cshtml.cs");
 
-        page.Should().Contain("项目开票仅录入销项发票")
+        page.Should().Contain("项目内只登记销项发票")
             .And.NotContain("Enum.GetValues<InvoiceDirection>()")
-            .And.Contain("asp-page=\"/Ledger/Entries/Edit\"")
-            .And.Contain("asp-route-direction=\"@LedgerDirection.Receivable\"");
+            .And.NotContain("asp-page=\"/Ledger/Entries/Edit\"")
+            .And.NotContain("关联应收");
         pageModel.Should().Contain("InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber")
             .And.Contain("InvoiceDirection.Output, RequiredText(FinanceRowEdit.InvoiceNumber");
         workspace.Should().Contain("item.Direction == LedgerDirection.Receivable && item.Allocations.Any");
-        centralEntry.Should().Contain("[BindProperty(SupportsGet = true)] public Guid? ProjectId { get; set; }");
+        centralEntry.Should().Contain("项目应收由工程量明细自动生成");
+        legacyEntry.Should().NotContain("GetEnumSelectList<EngineeringManager.Application.Finance.FinanceEntryKind>()")
+            .And.NotContain("<optgroup label=\"应收记录\">");
+        legacyEntryModel.Should().Contain("项目应收由工程量明细自动生成");
     }
 
     [Fact]

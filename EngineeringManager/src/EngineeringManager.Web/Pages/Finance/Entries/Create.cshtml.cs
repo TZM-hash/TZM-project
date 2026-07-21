@@ -12,7 +12,7 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
 {
     public FinanceEntryOptionsDto Options { get; private set; } = new([], [], [], [], [], [], [], [], []);
 
-    [BindProperty(SupportsGet = true)] public FinanceEntryKind EntryKind { get; set; } = FinanceEntryKind.Receivable;
+    [BindProperty(SupportsGet = true)] public FinanceEntryKind EntryKind { get; set; } = FinanceEntryKind.Collection;
     [BindProperty(SupportsGet = true)] public Guid ProjectId { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? ContractId { get; set; }
     [BindProperty(SupportsGet = true)] public Guid LegalEntityId { get; set; }
@@ -64,10 +64,9 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
         switch (EntryKind)
         {
             case FinanceEntryKind.Receivable:
-                await financeService.AddReceivableAsync(new CreateReceivableRequest(ProjectId, ContractId, LegalEntityId, BusinessPartnerId, ReceivableSourceType.Manual, EntryDate, DueDate, Amount, Description), cancellationToken);
-                break;
+                throw new InvalidOperationException("项目应收由工程量明细自动生成，不能手工新增。");
             case FinanceEntryKind.Collection:
-                await financeService.RecordCollectionAsync(new RecordCollectionRequest(RelatedEntryId, ProjectId, ContractId, LegalEntityId, BusinessPartnerId, Required(AccountId, "请选择收款账户。"), EntryDate, Amount, PaymentMethod, Description), cancellationToken);
+                await financeService.RecordCollectionAsync(new RecordCollectionRequest(null, ProjectId, ContractId, LegalEntityId, BusinessPartnerId, Required(AccountId, "请选择收款账户。"), EntryDate, Amount, PaymentMethod, Description), cancellationToken);
                 break;
             case FinanceEntryKind.RefundOrCollectionReversal:
                 await financeService.RecordRefundAsync(new RecordRefundRequest(RelatedEntryId, null, Required(AccountId, "请选择原收款账户。"), EntryDate, Amount, FinancialAdjustmentType.Refund, RequiredText(Description, "请填写退款或冲销原因。")), cancellationToken);

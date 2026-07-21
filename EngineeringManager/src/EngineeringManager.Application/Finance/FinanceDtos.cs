@@ -101,8 +101,24 @@ public sealed record RecordCollectionRequest(
     Guid AccountId,
     DateOnly CollectionDate,
     decimal Amount,
-    PaymentMethod PaymentMethod,
-    string? Notes);
+    string? PaymentMethod,
+    string? Notes)
+{
+    public RecordCollectionRequest(
+        Guid? receivableEntryId,
+        Guid projectId,
+        Guid? contractId,
+        Guid legalEntityId,
+        Guid? businessPartnerId,
+        Guid accountId,
+        DateOnly collectionDate,
+        decimal amount,
+        PaymentMethod paymentMethod,
+        string? notes)
+        : this(receivableEntryId, projectId, contractId, legalEntityId, businessPartnerId, accountId, collectionDate, amount, paymentMethod.ToString(), notes)
+    {
+    }
+}
 
 public sealed record RecordRefundRequest(
     Guid? CollectionEntryId,
@@ -188,7 +204,26 @@ public sealed record UpdateReceivableRequest(
 public sealed record UpdateCollectionRequest(
     Guid Id, Guid? ReceivableEntryId, Guid ProjectId, Guid? ContractId, Guid LegalEntityId,
     Guid? BusinessPartnerId, Guid AccountId, DateOnly CollectionDate, decimal Amount,
-    PaymentMethod PaymentMethod, string? Notes, Guid ConcurrencyStamp, string Reason);
+    string? PaymentMethod, string? Notes, Guid ConcurrencyStamp, string Reason)
+{
+    public UpdateCollectionRequest(
+        Guid id,
+        Guid? receivableEntryId,
+        Guid projectId,
+        Guid? contractId,
+        Guid legalEntityId,
+        Guid? businessPartnerId,
+        Guid accountId,
+        DateOnly collectionDate,
+        decimal amount,
+        PaymentMethod paymentMethod,
+        string? notes,
+        Guid concurrencyStamp,
+        string reason)
+        : this(id, receivableEntryId, projectId, contractId, legalEntityId, businessPartnerId, accountId, collectionDate, amount, paymentMethod.ToString(), notes, concurrencyStamp, reason)
+    {
+    }
+}
 
 public sealed record UpdateInvoiceRequest(
     Guid Id, Guid ProjectId, Guid? ContractId, Guid LegalEntityId, Guid? BusinessPartnerId,

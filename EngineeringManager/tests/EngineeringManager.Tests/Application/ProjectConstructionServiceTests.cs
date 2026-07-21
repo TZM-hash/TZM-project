@@ -97,4 +97,95 @@ public sealed class ProjectConstructionServiceTests
             new DateOnly(2026, 7, 18), CancellationToken.None);
         await crewAction.Should().ThrowAsync<ArgumentException>().WithMessage("*施工班组不能显示在项目总览*");
     }
+
+    [Fact]
+    public async Task ExistingRecordCannotSwitchEquipmentSubject()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var project = new Project { ProjectNumber = "CONS-LOCK-01", Name = "主体锁定项目" };
+        var originalEquipment = new Equipment { EquipmentNumber = "EQ-LOCK-01", Name = "原设备" };
+        var replacementEquipment = new Equipment { EquipmentNumber = "EQ-LOCK-02", Name = "替换设备" };
+        db.AddRange(project, originalEquipment, replacementEquipment);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+        var actor = new ProjectConstructionActor("project-manager", "项目经理");
+        var saved = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, project.Id, ProjectConstructionRecordType.Equipment, originalEquipment.Id, null, null, null,
+                new DateOnly(2026, 7, 1), null, 0, null, false, null, "新增正式记录"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        var action = () => service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(saved.Id, project.Id, ProjectConstructionRecordType.Equipment, replacementEquipment.Id, null, null, null,
+                new DateOnly(2026, 7, 1), null, 0, null, false, saved.ConcurrencyStamp, "尝试切换设备"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*不能直接切换设备或班组*");
+        (await db.ProjectConstructionRecords.SingleAsync(item => item.Id == saved.Id)).EquipmentId.Should().Be(originalEquipment.Id);
+    }
+
+    [Fact]
+    public async Task LinkNextCreatesBidirectionalDraftInTargetProject()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var source = new Project { ProjectNumber = "CONS-LINK-01", Name = "连接来源项目" };
+        var target = new Project { ProjectNumber = "CONS-LINK-02", Name = "连接目标项目" };
+        var equipment = new Equipment { EquipmentNumber = "EQ-LINK-01", Name = "连接设备" };
+        db.AddRange(source, target, equipment);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+        var actor = new ProjectConstructionActor("project-manager", "项目经理");
+        var current = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null,
+                new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 20), 0, null, false, null, "新增施工记录"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        await service.LinkNextAsync(actor,
+            new LinkProjectConstructionRecordRequest(current.Id, target.Id, current.ConcurrencyStamp, "关联后续项目"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        var sourceRecord = await db.ProjectConstructionRecords.SingleAsync(item => item.Id == current.Id);
+        var targetDraft = await db.ProjectConstructionRecords.SingleAsync(item => item.ProjectId == target.Id);
+        sourceRecord.NextRecordId.Should().Be(targetDraft.Id);
+        sourceRecord.TransferToProjectId.Should().Be(target.Id);
+        targetDraft.PreviousRecordId.Should().Be(sourceRecord.Id);
+        targetDraft.TransferFromProjectId.Should().Be(source.Id);
+        targetDraft.IsDraft.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UnlinkClearsBothSidesOfConstructionFlow()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var source = new Project { ProjectNumber = "CONS-UNLINK-01", Name = "解除来源项目" };
+        var target = new Project { ProjectNumber = "CONS-UNLINK-02", Name = "解除目标项目" };
+        var equipment = new Equipment { EquipmentNumber = "EQ-UNLINK-01", Name = "解除设备" };
+        db.AddRange(source, target, equipment);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+        var actor = new ProjectConstructionActor("project-manager", "项目经理");
+        var current = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, target.Id,
+                new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 20), 0, null, false, null, "新增带流转记录"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        await service.UnlinkAsync(actor,
+            new UnlinkProjectConstructionRecordRequest(current.Id, current.ConcurrencyStamp, "解除项目流转"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        var sourceRecord = await db.ProjectConstructionRecords.SingleAsync(item => item.Id == current.Id);
+        var targetDraft = await db.ProjectConstructionRecords.SingleAsync(item => item.ProjectId == target.Id);
+        sourceRecord.NextRecordId.Should().BeNull();
+        sourceRecord.TransferToProjectId.Should().BeNull();
+        targetDraft.PreviousRecordId.Should().BeNull();
+        targetDraft.TransferFromProjectId.Should().BeNull();
+    }
 }

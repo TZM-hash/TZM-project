@@ -5,11 +5,12 @@ namespace EngineeringManager.Tests.Web;
 public sealed class InlineEditingPageTests
 {
     [Fact]
-    public void ExistingQuickEditPagesUseInlineEditorsInsteadOfDialogs()
+    public void ExistingQuickEditPagesKeepMainEditorsInlineWithOnlyTheQuantityNotesDialogException()
     {
+        var projectDetails = ReadPage("Projects", "Details.cshtml");
         var pages = new[]
         {
-            ReadPage("Projects", "Details.cshtml"),
+            projectDetails,
             ReadPage("Companies", "Details.cshtml"),
             ReadPage("Equipment", "Details.cshtml"),
             ReadPage("Employees", "Index.cshtml"),
@@ -17,7 +18,9 @@ public sealed class InlineEditingPageTests
         };
 
         pages.Should().OnlyContain(page => page.Contains("data-inline-cell-edit", StringComparison.Ordinal));
-        pages.Should().OnlyContain(page => !page.Contains("<dialog", StringComparison.OrdinalIgnoreCase));
+        pages.Skip(1).Should().OnlyContain(page => !page.Contains("<dialog", StringComparison.OrdinalIgnoreCase));
+        projectDetails.Should().Contain("<dialog class=\"workbench-dialog quantity-notes-dialog\"");
+        (projectDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(1);
         pages.Should().OnlyContain(page => !page.Contains("data-quick-edit-dialog", StringComparison.Ordinal));
     }
 

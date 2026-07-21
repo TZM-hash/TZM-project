@@ -50,18 +50,19 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         var cashHeaders = await db.FinanceCashEntries.AsNoTracking()
             .Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account)
             .Include(item => item.Allocations).ThenInclude(item => item.Settlement).ThenInclude(item => item.Contract)
-            .Where(item => item.Allocations.Any(allocation => allocation.ProjectId == projectId))
+            .Where(item => item.Allocations.Any(allocation => allocation.ProjectId == projectId) ||
+                (item.SourceType == LedgerSourceType.ProjectCollection && item.SourceId == projectId))
             .OrderByDescending(item => item.BusinessDate)
             .ToListAsync(cancellationToken);
         var collections = cashHeaders.Where(item => item.Direction == LedgerDirection.Receivable && !item.IsReversal)
             .Select(item =>
             {
                 var allocations = item.Allocations.Where(allocation => allocation.ProjectId == projectId).ToArray();
-                var first = allocations[0];
-                return new ProjectCollectionItemDto(item.Id, item.BusinessDate, first.Settlement.Contract?.ContractNumber,
+                var first = allocations.FirstOrDefault();
+                return new ProjectCollectionItemDto(item.Id, item.BusinessDate, first?.Settlement.Contract?.ContractNumber,
                     item.LegalEntity.ShortName, item.BusinessPartner?.Name, item.Account?.AccountName ?? "未填写账户",
-                    allocations.Sum(allocation => allocation.Amount), ParsePaymentMethod(item.PaymentMethod), item.Notes,
-                    allocations.Length == 1 ? first.SettlementId : null, first.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp);
+                    item.Amount, item.PaymentMethod, item.Notes,
+                    allocations.Length == 1 ? first!.SettlementId : null, first?.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp);
             })
             .ToList();
         var payments = cashHeaders.Where(item => item.Direction == LedgerDirection.Payable && !item.IsReversal)
@@ -403,11 +404,11 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         return Math.Max(gross - deductions, 0m);
     }
 
-    private static PaymentMethod ParsePaymentMethod(string? value) =>
-        Enum.TryParse<PaymentMethod>(value, out var method) ? method : PaymentMethod.BankTransfer;
-
     private static DateTimeOffset ToTimestamp(DateOnly date) => new(date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     private static string Required(string value, string parameter) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException("值不能为空。", parameter);
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static PaymentMethod ParsePaymentMethod(string? value) =>
+        Enum.TryParse<PaymentMethod>(value, out var method) ? method : PaymentMethod.BankTransfer;
     private static string ActionLabel(string action) => action switch { "UpdateProject" => "编辑项目资料", "CreateReceivable" => "新增应收", "RecordCollection" => "登记收款", "CreatePayable" => "新增应付", "RecordPayment" => "登记付款", "CreateInvoice" => "登记发票", _ => action };
 }

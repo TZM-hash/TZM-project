@@ -8,7 +8,14 @@ using EngineeringManager.Domain.Projects;
 using EngineeringManager.Web;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.RazorPages.Infrastructure;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +23,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using EngineeringManager.Domain.DataExchange;
+using EngineeringManager.Web.Pages.Projects;
 
 namespace EngineeringManager.Tests.Web;
 
@@ -46,21 +54,78 @@ public sealed class ProjectAuthorizationTests
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
     }
 
-    [Theory]
-    [InlineData("QueryOnly")]
-    [InlineData("SiteStaff")]
-    public async Task ReadOnlyRolesCannotOpenContractEdit(string role)
+    [Fact]
+    public async Task LegacyContractEditRouteReturnsNotFound()
     {
-        await using var factory = CreateFactory(role);
+        await using var factory = CreateFactory("ProjectManager");
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         using var response = await client.GetAsync("/Projects/Contracts/Edit");
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task ProjectManagerSeesWorkspaceTabsActivityAndEditEntrances()
+    public async Task LegacyProjectRecordEditRouteReturnsNotFound()
+    {
+        await using var factory = CreateFactory("ProjectManager");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        using var response = await client.GetAsync($"/Projects/Records/Edit?projectId={FakeProjectWorkspaceService.ProjectId}&section=collection");
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task QuantityCreationRedirectsToCreatedLineWhenAttachmentUploadFails()
+    {
+        var workspaceService = new FakeProjectWorkspaceService();
+        var model = new DetailsModel(
+            workspaceService,
+            new FakeProjectService(),
+            new FakeFinanceLedgerService(),
+            new FakeProjectConstructionService(),
+            new FakeProjectWorkbookService(),
+            new FakeProjectRecordAttachmentService())
+        {
+            PageContext = new PageContext(new ActionContext(
+                new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        [new Claim(ClaimTypes.NameIdentifier, "manager"), new Claim(ClaimTypes.Role, "ProjectManager")],
+                        "Test"))
+                },
+                new RouteData(),
+                new PageActionDescriptor())),
+            CreateQuantity = new DetailsModel.CreateQuantityInput
+            {
+                ContractId = FakeProjectWorkspaceService.ContractId,
+                Code = "Q-NEW",
+                Name = "新增工程量",
+                Unit = "项",
+                Quantity = 1m,
+                UnitPrice = 2m,
+                AccountingLabel = "暂估",
+                RequiresInvoice = true
+            },
+            QuantityAttachmentFile = new FormFile(new MemoryStream([1, 2, 3]), 0, 3, "file", "附件.pdf")
+            {
+                Headers = new HeaderDictionary { ["Content-Type"] = "application/pdf" }
+            }
+        };
+        model.TempData = new TempDataDictionary(model.HttpContext, new TestTempDataProvider());
+        model.Url = new TestUrlHelper(model.PageContext);
+
+        var result = await model.OnPostCreateQuantityAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        var errors = string.Join(" | ", model.ModelState.Values.SelectMany(value => value.Errors).Select(error => error.ErrorMessage));
+        var redirect = result.Should().BeOfType<RedirectResult>($"ModelState errors: {errors}").Subject;
+        redirect.Url.Should().EndWith($"#quantity-line-{FakeProjectWorkspaceService.LineItemId}");
+        model.TempData["Error"].Should().Be("工程量已创建，但附件上传失败：模拟附件上传失败。");
+    }
+
+    [Fact]
+    public async Task ProjectManagerSeesWorkspaceTabsAndInlineRecordActions()
     {
         await using var factory = CreateFactory("ProjectManager");
         using var client = factory.CreateClient();
@@ -77,7 +142,14 @@ public sealed class ProjectAuthorizationTests
         html.Should().Contain("提示与记录");
         html.Should().Contain("他方挂靠我方");
         html.Should().Contain("快捷编辑");
-        html.Should().Contain("进入详细编辑");
+        html.Should().NotContain("详细编辑");
+        html.Should().NotContain("关联应收");
+        html.Should().NotContain("发票方向");
+        html.Should().Contain("新增工程量明细");
+        html.Should().Contain("上传附件");
+        html.Should().Contain("预览附件")
+            .And.Contain("title=\"测试附件.pdf\"");
+        html.Should().Contain("DeleteQuantityAttachment");
         html.Should().Contain("data-inline-edit=\"project-overview\"");
         html.Should().Contain("data-inline-edit=\"project-quantity\"");
         html.Should().Contain("data-inline-cell-edit");
@@ -127,14 +199,16 @@ public sealed class ProjectAuthorizationTests
         page.Should().Contain("总包联系人 / 电话")
             .And.Contain("data-project-amount-view")
             .And.Contain("project-summary-half")
-            .And.Contain("<th>工程量</th><th>单价</th><th>小计</th><th>口径</th><th>是否开票</th><th>附件</th>")
+            .And.Contain("<th>工程量</th><th>单价</th><th>小计</th><th>口径</th><th>是否开票</th><th class=\"quantity-upload-column\">上传</th><th class=\"quantity-attachment-column\">附件</th>")
             .And.NotContain("<th>暂估工程量</th>")
             .And.NotContain("<th>结算工程量</th>")
-            .And.Contain("asp-page=\"/Projects/Records/Edit\"")
-            .And.Contain("asp-route-section=\"collection\"")
-            .And.Contain("asp-route-section=\"invoice\"")
-            .And.Contain("asp-route-section=\"payment\"")
-            .And.Contain("asp-route-section=\"construction\"");
+            .And.NotContain("asp-page=\"/Projects/Records/Edit\"")
+            .And.NotContain("关联应收")
+            .And.NotContain("<th>方向</th>")
+            .And.Contain("ProjectRecordAttachmentType.Settlement")
+            .And.Contain("ProjectRecordAttachmentType.Invoice")
+            .And.Contain("ProjectRecordAttachmentType.Cash")
+            .And.Contain("ProjectRecordAttachmentType.Construction");
         styles.Should().Contain(".project-detail-strip article { height: 2.9rem; min-height: 0;")
             .And.Contain(".project-summary-grid > .project-summary-half { grid-column: span 2;");
     }
@@ -166,22 +240,13 @@ public sealed class ProjectAuthorizationTests
     }
 
     [Fact]
-    public void DetailedRecordEditorHasNoProjectOverviewInputsAndSupportsAttachments()
+    public void DetailedRecordEditorFilesAreRemoved()
     {
         var root = RepositoryRoot();
-        var editor = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Records", "Edit.cshtml"));
-        var attachment = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Records", "_RecordAttachmentEditor.cshtml"));
+        var recordsDirectory = Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Records");
 
-        editor.Should().Contain("不包含项目总览字段")
-            .And.NotContain("QuickEdit")
-            .And.NotContain("GeneralContractor")
-            .And.Contain("收款明细")
-            .And.Contain("开票明细")
-            .And.Contain("付款明细")
-            .And.Contain("施工详情");
-        attachment.Should().Contain("type=\"file\"")
-            .And.Contain("上传附件")
-            .And.Contain("DeleteAttachment");
+        File.Exists(Path.Combine(recordsDirectory, "Edit.cshtml")).Should().BeFalse();
+        File.Exists(Path.Combine(recordsDirectory, "Edit.cshtml.cs")).Should().BeFalse();
     }
 
     [Fact]
@@ -237,6 +302,9 @@ public sealed class ProjectAuthorizationTests
         html.Should().NotContain("快捷编辑");
         html.Should().NotContain("data-inline-edit-form");
         html.Should().NotContain("登记收款");
+        html.Should().NotContain("CreateQuantity");
+        html.Should().NotContain(">上传附件</button>");
+        html.Should().NotContain("DeleteQuantityAttachment");
     }
 
     [Fact]
@@ -381,6 +449,8 @@ public sealed class ProjectAuthorizationTests
                 services.AddSingleton<ISavedDataViewService, EmptySavedViewService>();
                 services.RemoveAll<IProjectWorkbookService>();
                 services.AddSingleton<IProjectWorkbookService, FakeProjectWorkbookService>();
+                services.RemoveAll<IProjectRecordAttachmentService>();
+                services.AddSingleton<IProjectRecordAttachmentService, FakeProjectRecordAttachmentService>();
             });
             builder.UseSetting(ProjectTestAuthenticationHandler.RoleSetting, role ?? string.Empty);
         });
@@ -396,7 +466,25 @@ public sealed class ProjectAuthorizationTests
     {
         public Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ContractDto> AddContractAsync(CreateContractRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<ContractLineItemDto> AddLineItemAsync(CreateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ContractLineItemDto> AddLineItemAsync(CreateContractLineItemRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new ContractLineItemDto(
+                FakeProjectWorkspaceService.LineItemId,
+                request.Code,
+                request.Name,
+                request.Unit,
+                request.EstimatedQuantity,
+                request.EstimatedUnitPrice,
+                0m,
+                request.SettledQuantity,
+                request.SettledUnitPrice,
+                0m,
+                request.IsSettlementConfirmed,
+                Guid.NewGuid(),
+                request.Notes,
+                request.Quantity,
+                request.UnitPrice,
+                request.AccountingLabel,
+                request.RequiresInvoice));
         public Task<ContractLineItemDto> UpdateLineItemAsync(UpdateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProjectListItemDto>> ListProjectsAsync(string? search, ProjectStage? stage, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ProjectListItemDto>>([]);
@@ -427,9 +515,27 @@ public sealed class ProjectAuthorizationTests
         public Task ConfirmAsync(ProjectWorkbookActor actor, Guid batchId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
+    private sealed class FakeProjectRecordAttachmentService : IProjectRecordAttachmentService
+    {
+        public Task<IReadOnlyList<ProjectRecordAttachmentDto>> ListAsync(Guid projectId, ProjectRecordAttachmentType recordType, Guid recordId, CancellationToken token) =>
+            Task.FromResult<IReadOnlyList<ProjectRecordAttachmentDto>>([
+                new(Guid.Parse("71000000-0000-0000-0000-000000000099"), projectId, recordType, recordId, "测试附件.pdf", "application/pdf", 3, "页面测试附件", DateTimeOffset.UtcNow)
+            ]);
+
+        public Task<ProjectRecordAttachmentDto> UploadAsync(ProjectRecordAttachmentActor actor, ProjectRecordAttachmentUpload upload, CancellationToken token) => throw new NotSupportedException();
+        public Task<ProjectRecordAttachmentDto> ReplaceAsync(ProjectRecordAttachmentActor actor, ProjectRecordAttachmentUpload upload, CancellationToken token) =>
+            throw new IOException("模拟附件上传失败。");
+        public Task<ProjectRecordAttachmentDto> ReplaceQuantityAsync(ProjectRecordAttachmentActor actor, ProjectRecordAttachmentUpload upload, CancellationToken token) =>
+            throw new IOException("模拟附件上传失败。");
+        public Task<ProjectRecordAttachmentFile> DownloadAsync(Guid projectId, Guid attachmentId, CancellationToken token) => throw new NotSupportedException();
+        public Task DeleteAsync(ProjectRecordAttachmentActor actor, Guid projectId, Guid attachmentId, CancellationToken token) => throw new NotSupportedException();
+    }
+
     private sealed class FakeProjectWorkspaceService : IProjectWorkspaceService
     {
         public static readonly Guid ProjectId = Guid.Parse("71000000-0000-0000-0000-000000000001");
+        public static readonly Guid ContractId = Guid.Parse("71000000-0000-0000-0000-000000000010");
+        public static readonly Guid LineItemId = Guid.Parse("71000000-0000-0000-0000-000000000011");
 
         public Task<ProjectWorkspaceDto?> GetAsync(Guid projectId, CancellationToken cancellationToken) =>
             Task.FromResult<ProjectWorkspaceDto?>(projectId != ProjectId ? null : new ProjectWorkspaceDto(
@@ -454,8 +560,8 @@ public sealed class ProjectAuthorizationTests
                     Guid.Parse("71000000-0000-0000-0000-000000000002")),
                 new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1),
                 new FinanceProjectSummaryDto(ProjectId, 100m, 40m, 60m, 80m, 25m, 0m, 55m, 30m, 70m, 0m, false, false),
-                [new ContractDto(Guid.NewGuid(), "C-WEB-001", "测试合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, 300m,
-                    [new ContractLineItemDto(Guid.NewGuid(), "001", "土方工程", "m³", 10m, 20m, 200m, null, null, 0m, false, Guid.NewGuid())])],
+                [new ContractDto(ContractId, "C-WEB-001", "测试合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, 300m,
+                    [new ContractLineItemDto(LineItemId, "001", "土方工程", "m³", 10m, 20m, 200m, null, null, 0m, false, Guid.NewGuid())])],
                 [],
                 [],
                 [],
@@ -510,6 +616,9 @@ public sealed class ProjectAuthorizationTests
         public Task<ProjectConstructionWorkspaceDto> GetWorkspaceAsync(Guid projectId, DateOnly today, CancellationToken token) =>
             Task.FromResult(new ProjectConstructionWorkspaceDto([], [], [], [new ProjectConstructionOptionDto(FakeProjectWorkspaceService.ProjectId, "P-WEB-001 · 项目工作台页面测试")]));
         public Task<ProjectConstructionRecordDto> SaveAsync(ProjectConstructionActor actor, SaveProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
+        public Task<ProjectConstructionRecordDto> LinkNextAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
+        public Task<ProjectConstructionRecordDto> LinkPreviousAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
+        public Task<ProjectConstructionRecordDto> UnlinkAsync(ProjectConstructionActor actor, UnlinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
         public Task<ProjectConstructionOptionDto> CreateEquipmentAsync(ProjectConstructionActor actor, CreateProjectEquipmentRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<ProjectConstructionOptionDto> CreateCrewAsync(ProjectConstructionActor actor, CreateProjectCrewRequest request, CancellationToken token) => throw new NotSupportedException();
     }
@@ -537,5 +646,21 @@ public sealed class ProjectAuthorizationTests
             identity.AddClaim(new Claim(ClaimTypes.Role, role));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme)));
         }
+    }
+
+    private sealed class TestTempDataProvider : ITempDataProvider
+    {
+        public IDictionary<string, object> LoadTempData(HttpContext context) => new Dictionary<string, object>();
+        public void SaveTempData(HttpContext context, IDictionary<string, object> values) { }
+    }
+
+    private sealed class TestUrlHelper(ActionContext actionContext) : IUrlHelper
+    {
+        public ActionContext ActionContext { get; } = actionContext;
+        public string? Action(UrlActionContext actionContext) => null;
+        public string? Content(string? contentPath) => contentPath;
+        public bool IsLocalUrl(string? url) => true;
+        public string? Link(string? routeName, object? values) => null;
+        public string? RouteUrl(UrlRouteContext routeContext) => null;
     }
 }

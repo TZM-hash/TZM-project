@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Data;
 using EngineeringManager.Application.Equipment;
 using EngineeringManager.Application.Partners;
 using EngineeringManager.Application.Projects;
@@ -54,6 +55,8 @@ public sealed class ProjectConstructionService(
                 ?? throw new InvalidOperationException("施工详情记录不存在。");
             if (record.ProjectId != request.ProjectId) throw new InvalidOperationException("施工详情记录不属于当前项目。");
             if (record.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("施工详情已被其他用户修改，请刷新后重试。");
+            if (record.RecordType != request.RecordType || record.EquipmentId != request.EquipmentId || record.CrewBusinessPartnerId != request.CrewBusinessPartnerId)
+                throw new InvalidOperationException("正式施工记录不能直接切换设备或班组，请新建正确记录。");
             before = Snapshot(record);
             await UnlinkNextAsync(record, request.TransferToProjectId, token);
         }
@@ -129,6 +132,161 @@ public sealed class ProjectConstructionService(
         await transaction.CommitAsync(token);
         var saved = await db.ProjectConstructionRecords.AsNoTracking().Include(item => item.Equipment).Include(item => item.CrewBusinessPartner)
             .Include(item => item.TransferFromProject).Include(item => item.TransferToProject).SingleAsync(item => item.Id == record.Id, token);
+        return ToDto(saved, today);
+    }
+
+    public Task<ProjectConstructionRecordDto> LinkNextAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) =>
+        LinkAsync(actor, request, today, linkPrevious: false, token: token);
+
+    public Task<ProjectConstructionRecordDto> LinkPreviousAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) =>
+        LinkAsync(actor, request, today, linkPrevious: true, token: token);
+
+    private async Task<ProjectConstructionRecordDto> LinkAsync(
+        ProjectConstructionActor actor,
+        LinkProjectConstructionRecordRequest request,
+        DateOnly today,
+        bool linkPrevious,
+        CancellationToken token)
+    {
+        var reason = Required(request.Reason, "请填写修改原因。");
+        if (request.TargetProjectId == Guid.Empty) throw new ArgumentException("请选择目标项目。", nameof(request));
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, token);
+        var record = await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == request.RecordId, token)
+            ?? throw new InvalidOperationException("施工详情记录不存在。");
+        if (record.ConcurrencyStamp != request.ConcurrencyStamp)
+            throw new DbUpdateConcurrencyException("施工详情已被其他用户修改，请刷新后重试。");
+        if (record.ProjectId == request.TargetProjectId) throw new ArgumentException("目标项目不能是当前项目。");
+        if (!await db.Projects.AnyAsync(item => item.Id == request.TargetProjectId && item.IsActive, token))
+            throw new InvalidOperationException("目标项目不存在或已停用。");
+
+        ProjectConstructionRecord? other;
+        if (linkPrevious)
+        {
+            if (record.PreviousRecordId.HasValue)
+            {
+                if (record.TransferFromProjectId == request.TargetProjectId)
+                    return await CompleteFlowTransactionAsync(record, today, transaction, token);
+                throw new InvalidOperationException("当前记录已经连接了上一个项目，请先解除流转。");
+            }
+            other = await MatchingRecords(record.RecordType, record.EquipmentId, record.CrewBusinessPartnerId)
+                .Where(item => item.ProjectId == request.TargetProjectId && item.NextRecordId == null && item.ExitDate != null &&
+                    (record.EntryDate == null || item.ExitDate <= record.EntryDate))
+                .OrderByDescending(item => item.ExitDate).ThenByDescending(item => item.Id).FirstOrDefaultAsync(token);
+            if (other is null) throw new InvalidOperationException("目标项目没有可连接的上一条施工记录。");
+            if (await WouldCreateCycleAsync(record, other.ProjectId, token)) throw new InvalidOperationException("项目流转不能形成循环。");
+            record.PreviousRecordId = other.Id;
+            record.TransferFromProjectId = other.ProjectId;
+            other.NextRecordId = record.Id;
+            other.TransferToProjectId = record.ProjectId;
+        }
+        else
+        {
+            if (record.NextRecordId.HasValue)
+            {
+                if (record.TransferToProjectId == request.TargetProjectId)
+                    return await CompleteFlowTransactionAsync(record, today, transaction, token);
+                throw new InvalidOperationException("当前记录已经连接了后续项目，请先解除流转。");
+            }
+            if (await WouldCreateCycleAsync(record, request.TargetProjectId, token)) throw new InvalidOperationException("项目流转不能形成循环。");
+            other = await MatchingRecords(record.RecordType, record.EquipmentId, record.CrewBusinessPartnerId)
+                .SingleOrDefaultAsync(item => item.ProjectId == request.TargetProjectId && item.PreviousRecordId == record.Id, token);
+            if (other is null)
+            {
+                other = new ProjectConstructionRecord
+                {
+                    ProjectId = request.TargetProjectId,
+                    RecordType = record.RecordType,
+                    EquipmentId = record.EquipmentId,
+                    CrewBusinessPartnerId = record.CrewBusinessPartnerId,
+                    TransferFromProjectId = record.ProjectId,
+                    PreviousRecordId = record.Id,
+                    IsDraft = true
+                };
+                db.ProjectConstructionRecords.Add(other);
+            }
+            else if (other.NextRecordId.HasValue && other.NextRecordId != record.Id)
+            {
+                throw new InvalidOperationException("目标项目记录已经连接到其他后续记录。");
+            }
+            record.NextRecordId = other.Id;
+            record.TransferToProjectId = other.ProjectId;
+        }
+
+        record.UpdatedAt = DateTimeOffset.UtcNow;
+        record.ConcurrencyStamp = Guid.NewGuid();
+        other.UpdatedAt = DateTimeOffset.UtcNow;
+        other.ConcurrencyStamp = Guid.NewGuid();
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = Required(actor.UserId, "操作人不能为空。"), UserName = Optional(actor.UserName),
+            Action = linkPrevious ? "LinkPreviousProjectConstruction" : "LinkNextProjectConstruction",
+            EntityType = nameof(ProjectConstructionRecord), EntityId = record.Id.ToString(), RelatedProjectId = record.ProjectId.ToString(),
+            Reason = reason, BeforeJson = null, AfterJson = JsonSerializer.Serialize(Snapshot(record))
+        });
+        await db.SaveChangesAsync(token);
+        await transaction.CommitAsync(token);
+        return await LoadDtoAsync(record.Id, today, token);
+    }
+
+    public async Task<ProjectConstructionRecordDto> UnlinkAsync(ProjectConstructionActor actor, UnlinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token)
+    {
+        var reason = Required(request.Reason, "请填写修改原因。");
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, token);
+        var record = await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == request.RecordId, token)
+            ?? throw new InvalidOperationException("施工详情记录不存在。");
+        if (record.ConcurrencyStamp != request.ConcurrencyStamp)
+            throw new DbUpdateConcurrencyException("施工详情已被其他用户修改，请刷新后重试。");
+        var previous = record.PreviousRecordId.HasValue
+            ? await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == record.PreviousRecordId, token)
+            : null;
+        var next = record.NextRecordId.HasValue
+            ? await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == record.NextRecordId, token)
+            : null;
+        record.PreviousRecordId = null;
+        record.NextRecordId = null;
+        record.TransferFromProjectId = null;
+        record.TransferToProjectId = null;
+        record.UpdatedAt = DateTimeOffset.UtcNow;
+        record.ConcurrencyStamp = Guid.NewGuid();
+        if (previous is not null && previous.NextRecordId == record.Id)
+        {
+            previous.NextRecordId = null;
+            previous.TransferToProjectId = null;
+            previous.UpdatedAt = DateTimeOffset.UtcNow;
+            previous.ConcurrencyStamp = Guid.NewGuid();
+        }
+        if (next is not null && next.PreviousRecordId == record.Id)
+        {
+            next.PreviousRecordId = null;
+            next.TransferFromProjectId = null;
+            next.UpdatedAt = DateTimeOffset.UtcNow;
+            next.ConcurrencyStamp = Guid.NewGuid();
+        }
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = Required(actor.UserId, "操作人不能为空。"), UserName = Optional(actor.UserName),
+            Action = "UnlinkProjectConstruction", EntityType = nameof(ProjectConstructionRecord), EntityId = record.Id.ToString(), RelatedProjectId = record.ProjectId.ToString(),
+            Reason = reason, BeforeJson = null, AfterJson = JsonSerializer.Serialize(Snapshot(record))
+        });
+        await db.SaveChangesAsync(token);
+        await transaction.CommitAsync(token);
+        return await LoadDtoAsync(record.Id, today, token);
+    }
+
+    private async Task<ProjectConstructionRecordDto> CompleteFlowTransactionAsync(
+        ProjectConstructionRecord record,
+        DateOnly today,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        CancellationToken token)
+    {
+        await transaction.CommitAsync(token);
+        return await LoadDtoAsync(record.Id, today, token);
+    }
+
+    private async Task<ProjectConstructionRecordDto> LoadDtoAsync(Guid recordId, DateOnly today, CancellationToken token)
+    {
+        var saved = await db.ProjectConstructionRecords.AsNoTracking().Include(item => item.Equipment).Include(item => item.CrewBusinessPartner)
+            .Include(item => item.TransferFromProject).Include(item => item.TransferToProject).SingleAsync(item => item.Id == recordId, token);
         return ToDto(saved, today);
     }
 

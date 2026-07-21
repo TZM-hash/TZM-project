@@ -13,6 +13,61 @@ namespace EngineeringManager.Tests.Application;
 public sealed class FinanceLedgerServiceTests
 {
     [Fact]
+    public async Task ProjectCollectionWithoutAnyQuantityReceivableIsRejected()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+
+        var action = () => fixture.Service.RecordCollectionAsync(new RecordCollectionRequest(
+            null, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+            fixture.Bank.Id, new DateOnly(2026, 7, 21), 10m, "自定义收款方式", "没有工程量应收"), CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*工程量*");
+        (await fixture.Db.FinanceCashEntries.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ProjectCollectionAutoAllocatesQuantityReceivablesAndKeepsCustomMethodAndExcessProjectSource()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        var first = new FinanceSettlement
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.ProjectQuantity, SourceId = Guid.NewGuid(), LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id, ProjectId = fixture.Project.Id, ContractId = fixture.Contract.Id,
+            BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 30m, OriginalInvoiceAmount = 30m
+        };
+        var second = new FinanceSettlement
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.ProjectQuantity, SourceId = Guid.NewGuid(), LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id, ProjectId = fixture.Project.Id, ContractId = fixture.Contract.Id,
+            BusinessDate = new DateOnly(2026, 7, 2), OriginalAmount = 50m, OriginalInvoiceAmount = 50m
+        };
+        fixture.Db.FinanceSettlements.AddRange(first, second);
+        await fixture.Db.SaveChangesAsync();
+
+        var allocatedId = await fixture.Service.RecordCollectionAsync(new RecordCollectionRequest(
+            null, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+            fixture.Bank.Id, new DateOnly(2026, 7, 3), 80m, "承兑汇票", null), CancellationToken.None);
+        var excessId = await fixture.Service.RecordCollectionAsync(new RecordCollectionRequest(
+            null, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+            fixture.Bank.Id, new DateOnly(2026, 7, 4), 10m, "线下核销", null), CancellationToken.None);
+
+        var allocations = await fixture.Db.FinanceCashAllocations.AsNoTracking()
+            .Where(item => item.CashEntryId == allocatedId).OrderBy(item => item.AllocationOrder).ToListAsync();
+        allocations.Select(item => (item.SettlementId, item.Amount)).Should().Equal((first.Id, 30m), (second.Id, 50m));
+        var allocated = await fixture.Db.FinanceCashEntries.AsNoTracking().SingleAsync(item => item.Id == allocatedId);
+        allocated.PaymentMethod.Should().Be("承兑汇票");
+        allocated.SourceType.Should().Be(LedgerSourceType.ProjectCollection);
+        allocated.SourceId.Should().Be(fixture.Project.Id);
+        var excess = await fixture.Db.FinanceCashEntries.AsNoTracking().SingleAsync(item => item.Id == excessId);
+        excess.PaymentMethod.Should().Be("线下核销");
+        excess.SourceType.Should().Be(LedgerSourceType.ProjectCollection);
+        excess.SourceId.Should().Be(fixture.Project.Id);
+        (await fixture.Db.FinanceCashAllocations.CountAsync(item => item.CashEntryId == excessId)).Should().Be(0);
+    }
+
+    [Fact]
     public async Task LegacyFinanceApiWritesOnlyCentralLedgerRecords()
     {
         await using var fixture = await FinanceFixture.CreateAsync();

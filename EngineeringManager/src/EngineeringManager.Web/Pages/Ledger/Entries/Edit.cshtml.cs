@@ -51,6 +51,8 @@ public sealed class EditModel(ICentralLedgerCommandService commands, ICentralLed
     {
         try
         {
+            if (ProjectId.HasValue && ProjectId.Value != Guid.Empty && RecordType == FinanceRecordType.Settlement && Direction == LedgerDirection.Receivable)
+                throw new InvalidOperationException("项目应收由工程量明细自动生成，不能手工新增。");
             var actor = await LedgerPageSupport.CreateActorAsync(User, db, token);
             switch (RecordType)
             {

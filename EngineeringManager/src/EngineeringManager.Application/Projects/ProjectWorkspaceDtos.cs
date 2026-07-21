@@ -93,7 +93,7 @@ public sealed record ProjectCollectionItemDto(
     string? BusinessPartnerName,
     string AccountName,
     decimal Amount,
-    PaymentMethod PaymentMethod,
+    string? PaymentMethod,
     string? Notes,
     Guid? ReceivableEntryId = null,
     Guid? ContractId = null,

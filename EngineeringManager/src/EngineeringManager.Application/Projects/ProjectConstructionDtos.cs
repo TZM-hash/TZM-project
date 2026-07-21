@@ -25,6 +25,12 @@ public sealed record SaveProjectConstructionRecordRequest(
     DateOnly? EntryDate, DateOnly? ExitDate, int StopDays, string? Notes, bool AutoConnectPrevious,
     Guid? ConcurrencyStamp, string Reason, bool ShowInProjectOverview = false);
 
+public sealed record LinkProjectConstructionRecordRequest(
+    Guid RecordId, Guid TargetProjectId, Guid ConcurrencyStamp, string Reason);
+
+public sealed record UnlinkProjectConstructionRecordRequest(
+    Guid RecordId, Guid ConcurrencyStamp, string Reason);
+
 public sealed record CreateProjectEquipmentRequest(
     string EquipmentNumber, string Name, string? Model, string? Category,
     EquipmentOwnershipType OwnershipType, Guid? OwnerLegalEntityId, Guid? LessorBusinessPartnerId,

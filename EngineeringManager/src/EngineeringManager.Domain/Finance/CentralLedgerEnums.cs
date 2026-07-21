@@ -24,7 +24,8 @@ public enum LedgerSourceType
     Crew = 2,
     Partner = 3,
     CentralLedger = 4,
-    LegacyMigration = 5
+    LegacyMigration = 5,
+    ProjectCollection = 6
 }
 
 public enum LedgerAdjustmentType

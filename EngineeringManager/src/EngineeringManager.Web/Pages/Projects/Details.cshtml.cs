@@ -19,12 +19,15 @@ public sealed class DetailsModel(
     IProjectService projectService,
     IFinanceLedgerService financeService,
     IProjectConstructionService constructionService,
-    IProjectWorkbookService projectWorkbookService) : PageModel
+    IProjectWorkbookService projectWorkbookService,
+    IProjectRecordAttachmentService attachmentService) : PageModel
 {
     public ProjectWorkspaceDto? Workspace { get; private set; }
     public ProjectEditOptionsDto Options { get; private set; } = new([], [], [], []);
     public FinanceEntryOptionsDto FinanceOptions { get; private set; } = new([], [], [], [], [], [], [], [], []);
     public ProjectConstructionWorkspaceDto ConstructionWorkspace { get; private set; } = new([], [], [], []);
+    public IReadOnlyDictionary<Guid, ProjectRecordAttachmentDto> QuantityAttachments { get; private set; } = new Dictionary<Guid, ProjectRecordAttachmentDto>();
+    public IReadOnlyDictionary<Guid, ProjectRecordAttachmentDto> RecordAttachments { get; private set; } = new Dictionary<Guid, ProjectRecordAttachmentDto>();
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
     public bool CanManageFinance => CanManage || User.IsInRole(SystemRoles.Finance);
     public bool CanExportWorkbook => WorkbookActor().CanExport;
@@ -34,12 +37,16 @@ public sealed class DetailsModel(
     [BindProperty(SupportsGet = true)] public string? Tab { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? RecordId { get; set; }
     [BindProperty] public QuickEditInput QuickEdit { get; set; } = new();
-    [BindProperty] public QuantityEditInput QuantityEdit { get; set; } = new();
+    [BindProperty] public List<QuantityEditInput> QuantityEdits { get; set; } = [];
+    [BindProperty] public CreateQuantityInput CreateQuantity { get; set; } = new();
+    [BindProperty] public IFormFile? QuantityAttachmentFile { get; set; }
+    [BindProperty] public IFormFile? RecordAttachmentFile { get; set; }
     [BindProperty] public CollectionEditInput CollectionEdit { get; set; } = new();
     [BindProperty] public InvoiceEditInput InvoiceEdit { get; set; } = new();
     [BindProperty] public PaymentEditInput PaymentEdit { get; set; } = new();
     [BindProperty] public FinanceRowEditInput FinanceRowEdit { get; set; } = new();
     [BindProperty] public ConstructionEditInput ConstructionEdit { get; set; } = new();
+    [BindProperty] public ConstructionFlowInput ConstructionFlow { get; set; } = new();
     [BindProperty] public NewEquipmentInput NewEquipment { get; set; } = new();
     [BindProperty] public NewCrewInput NewCrew { get; set; } = new();
     [BindProperty] public List<ProjectWorkbookSheet> SelectedWorkbookSheets { get; set; } = [];
@@ -103,36 +110,189 @@ public sealed class DetailsModel(
         }
     }
 
-    public async Task<IActionResult> OnPostQuantityAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostQuantitiesAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!CanManage) return Forbid();
         if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-quantity", cancellationToken);
         try
         {
-            await projectService.UpdateLineItemAsync(new UpdateContractLineItemRequest(
-                Required(QuantityEdit.LineItemId, "请选择工程量明细。"),
-                RequiredText(QuantityEdit.Code, "请填写清单编码。"),
-                RequiredText(QuantityEdit.Name, "请填写清单名称。"),
-                RequiredText(QuantityEdit.Unit, "请填写单位。"),
-                null,
-                null,
-                null,
-                null,
-                false,
-                QuantityEdit.ConcurrencyStamp,
-                QuantityEdit.Notes,
-                User.FindFirstValue(ClaimTypes.NameIdentifier),
-                "项目管理页面快捷修改工程量",
-                QuantityEdit.Quantity,
-                QuantityEdit.UnitPrice,
-                QuantityEdit.AccountingLabel,
-                QuantityEdit.RequiresInvoice), cancellationToken);
+            foreach (var quantityEdit in QuantityEdits.Where(item => item.IsDirty))
+            {
+                await projectService.UpdateLineItemAsync(new UpdateContractLineItemRequest(
+                    Required(quantityEdit.LineItemId, "请选择工程量明细。"),
+                    RequiredText(quantityEdit.Code, "请填写清单编码。"),
+                    RequiredText(quantityEdit.Name, "请填写清单名称。"),
+                    RequiredText(quantityEdit.Unit, "请填写单位。"),
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    quantityEdit.ConcurrencyStamp,
+                    quantityEdit.Notes,
+                    User.FindFirstValue(ClaimTypes.NameIdentifier),
+                    "项目管理页面快捷修改工程量",
+                    quantityEdit.Quantity,
+                    quantityEdit.UnitPrice,
+                    quantityEdit.AccountingLabel,
+                    quantityEdit.RequiresInvoice), cancellationToken);
+            }
             return RedirectToPage(new { id, tab = "quantity" });
         }
         catch (Exception exception) when (IsEditableException(exception))
         {
             Tab = "quantity";
             return await InlineErrorAsync(id, "project-quantity", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnPostCreateQuantityAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-quantity-create", cancellationToken);
+        try
+        {
+            var workspace = await workspaceService.GetAsync(id, cancellationToken);
+            if (workspace is null) return NotFound();
+            var contractId = Required(CreateQuantity.ContractId, "请选择所属合同。");
+            if (!workspace.Contracts.Any(contract => contract.Id == contractId)) throw new ArgumentException("所选合同不属于当前项目。");
+            var lineItem = await projectService.AddLineItemAsync(new CreateContractLineItemRequest(
+                contractId,
+                RequiredText(CreateQuantity.Code, "请填写清单编码。"),
+                RequiredText(CreateQuantity.Name, "请填写清单名称。"),
+                RequiredText(CreateQuantity.Unit, "请填写单位。"),
+                null,
+                null,
+                null,
+                null,
+                false,
+                CreateQuantity.Notes,
+                CreateQuantity.Quantity,
+                CreateQuantity.UnitPrice,
+                RequiredText(CreateQuantity.AccountingLabel, "请选择口径。"),
+                CreateQuantity.RequiresInvoice), cancellationToken);
+            if (QuantityAttachmentFile is not null)
+            {
+                try
+                {
+                    await attachmentService.ReplaceQuantityAsync(AttachmentActor(), await BuildQuantityUploadAsync(
+                        id, lineItem.Id, QuantityAttachmentFile, cancellationToken), cancellationToken);
+                }
+                catch (Exception exception) when (IsEditableException(exception))
+                {
+                    TempData["Error"] = $"工程量已创建，但附件上传失败：{exception.Message}";
+                }
+            }
+            return RedirectToQuantity(id, lineItem.Id);
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "quantity";
+            return await InlineErrorAsync(id, "project-quantity-create", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnPostQuantityAttachmentAsync(Guid id, Guid lineItemId, CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        try
+        {
+            var file = QuantityAttachmentFile ?? throw new ArgumentException("请选择需要上传的附件。");
+            await attachmentService.ReplaceQuantityAsync(AttachmentActor(), await BuildQuantityUploadAsync(
+                id, lineItemId, file, cancellationToken), cancellationToken);
+            return RedirectToQuantity(id, lineItemId);
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "quantity";
+            return await InlineErrorAsync(id, "project-quantity", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnGetQuantityAttachmentAsync(Guid id, Guid attachmentId, CancellationToken cancellationToken)
+    {
+        var workspace = await workspaceService.GetAsync(id, cancellationToken);
+        if (workspace is null) return NotFound();
+        var attachments = await LoadQuantityAttachmentsAsync(workspace, cancellationToken);
+        if (!attachments.Values.Any(item => item.Id == attachmentId)) return NotFound();
+        var file = await attachmentService.DownloadAsync(id, attachmentId, cancellationToken);
+        return File(file.Content, file.ContentType, file.OriginalFileName);
+    }
+
+    public async Task<IActionResult> OnPostDeleteQuantityAttachmentAsync(Guid id, Guid attachmentId, Guid lineItemId, CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        try
+        {
+            var workspace = await workspaceService.GetAsync(id, cancellationToken);
+            if (workspace is null) return NotFound();
+            var attachments = await LoadQuantityAttachmentsAsync(workspace, cancellationToken);
+            if (!attachments.TryGetValue(lineItemId, out var attachment) || attachment.Id != attachmentId) return NotFound();
+            await attachmentService.DeleteAsync(AttachmentActor(), id, attachmentId, cancellationToken);
+            return RedirectToQuantity(id, lineItemId);
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "quantity";
+            return await InlineErrorAsync(id, "project-quantity", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnPostRecordAttachmentAsync(
+        Guid id,
+        ProjectRecordAttachmentType recordType,
+        Guid recordId,
+        string tab,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManageAttachment(recordType)) return Forbid();
+        try
+        {
+            var file = RecordAttachmentFile ?? throw new ArgumentException("请选择需要上传的附件。");
+            var (workspace, construction) = await LoadAttachmentContextAsync(id, cancellationToken);
+            if (!RecordBelongsToProject(workspace, construction, recordType, recordId)) return NotFound();
+            await attachmentService.ReplaceAsync(AttachmentActor(recordType), await BuildRecordUploadAsync(
+                id, recordType, recordId, file, cancellationToken), cancellationToken);
+            return RedirectToRecord(id, tab, recordId);
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = tab;
+            return await InlineErrorAsync(id, $"project-{tab}", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnGetRecordAttachmentAsync(Guid id, Guid attachmentId, CancellationToken cancellationToken)
+    {
+        var (workspace, construction) = await LoadAttachmentContextAsync(id, cancellationToken);
+        var attachments = await LoadRecordAttachmentsAsync(workspace, construction, cancellationToken);
+        if (!attachments.Values.Any(item => item.Id == attachmentId)) return NotFound();
+        var file = await attachmentService.DownloadAsync(id, attachmentId, cancellationToken);
+        return File(file.Content, file.ContentType, file.OriginalFileName);
+    }
+
+    public async Task<IActionResult> OnPostDeleteRecordAttachmentAsync(
+        Guid id,
+        ProjectRecordAttachmentType recordType,
+        Guid recordId,
+        Guid attachmentId,
+        string tab,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManageAttachment(recordType)) return Forbid();
+        try
+        {
+            var (workspace, construction) = await LoadAttachmentContextAsync(id, cancellationToken);
+            if (!RecordBelongsToProject(workspace, construction, recordType, recordId)) return NotFound();
+            var attachments = await attachmentService.ListAsync(id, recordType, recordId, cancellationToken);
+            if (!attachments.Any(item => item.Id == attachmentId)) return NotFound();
+            await attachmentService.DeleteAsync(AttachmentActor(recordType), id, attachmentId, cancellationToken);
+            return RedirectToRecord(id, tab, recordId);
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = tab;
+            return await InlineErrorAsync(id, $"project-{tab}", exception, cancellationToken);
         }
     }
 
@@ -143,22 +303,13 @@ public sealed class DetailsModel(
         try
         {
             var legalEntityId = Required(CollectionEdit.LegalEntityId, "请选择签约公司。");
-            if (CollectionEdit.Kind == FinanceEntryKind.Receivable)
-            {
-                await financeService.AddReceivableAsync(new CreateReceivableRequest(
-                    id, CollectionEdit.ContractId, legalEntityId, CollectionEdit.BusinessPartnerId,
-                    ReceivableSourceType.Manual, CollectionEdit.EntryDate, CollectionEdit.DueDate,
-                    Positive(CollectionEdit.Amount), CollectionEdit.Description), cancellationToken);
-            }
-            else if (CollectionEdit.Kind == FinanceEntryKind.Collection)
-            {
-                await financeService.RecordCollectionAsync(new RecordCollectionRequest(
-                    CollectionEdit.RelatedEntryId, id, CollectionEdit.ContractId, legalEntityId,
-                    CollectionEdit.BusinessPartnerId, Required(CollectionEdit.AccountId, "请选择收款账户。"),
-                    CollectionEdit.EntryDate, Positive(CollectionEdit.Amount), CollectionEdit.PaymentMethod,
-                    CollectionEdit.Description), cancellationToken);
-            }
-            else throw new ArgumentException("收款快捷编辑只支持新增应收或登记收款。");
+            if (CollectionEdit.Kind != FinanceEntryKind.Collection) throw new ArgumentException("收款快捷编辑只支持登记收款。");
+            var collectionId = await financeService.RecordCollectionAsync(new RecordCollectionRequest(
+                null, id, CollectionEdit.ContractId, legalEntityId,
+                CollectionEdit.BusinessPartnerId, Required(CollectionEdit.AccountId, "请选择收款账户。"),
+                CollectionEdit.EntryDate, Positive(CollectionEdit.Amount), CollectionEdit.PaymentMethod,
+                CollectionEdit.Description), cancellationToken);
+            await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Cash, collectionId, "collection", RecordAttachmentFile, cancellationToken);
             return RedirectToPage(new { id, tab = "collection" });
         }
         catch (Exception exception) when (IsEditableException(exception))
@@ -174,11 +325,12 @@ public sealed class DetailsModel(
         if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-invoice", cancellationToken);
         try
         {
-            await financeService.AddInvoiceAsync(new CreateInvoiceRequest(
+            var invoiceId = await financeService.AddInvoiceAsync(new CreateInvoiceRequest(
                 id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), InvoiceEdit.BusinessPartnerId,
                 InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
                 Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), InvoiceEdit.NetAmount, InvoiceEdit.TaxAmount, Positive(InvoiceEdit.GrossAmount),
                 InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
+            await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Invoice, invoiceId, "invoice", RecordAttachmentFile, cancellationToken);
             return RedirectToPage(new { id, tab = "invoice" });
         }
         catch (Exception exception) when (IsEditableException(exception))
@@ -196,20 +348,25 @@ public sealed class DetailsModel(
         {
             var legalEntityId = Required(PaymentEdit.LegalEntityId, "请选择签约公司。");
             var partnerId = Required(PaymentEdit.BusinessPartnerId, "请选择收款单位。");
+            Guid recordId;
+            ProjectRecordAttachmentType attachmentType;
             if (PaymentEdit.Kind == FinanceEntryKind.Payable)
             {
-                await financeService.AddPayableAsync(new CreatePayableRequest(
+                recordId = await financeService.AddPayableAsync(new CreatePayableRequest(
                     id, PaymentEdit.ContractId, legalEntityId, partnerId, PayableSourceType.Manual,
                     PaymentEdit.EntryDate, PaymentEdit.DueDate, Positive(PaymentEdit.Amount), PaymentEdit.Description), cancellationToken);
+                attachmentType = ProjectRecordAttachmentType.Settlement;
             }
             else if (PaymentEdit.Kind == FinanceEntryKind.Payment)
             {
-                await financeService.RecordPaymentAsync(new RecordPaymentRequest(
+                recordId = await financeService.RecordPaymentAsync(new RecordPaymentRequest(
                     PaymentEdit.RelatedEntryId, id, PaymentEdit.ContractId, legalEntityId, partnerId,
                     Required(PaymentEdit.AccountId, "请选择付款账户。"), PaymentEdit.EntryDate,
                     Positive(PaymentEdit.Amount), PaymentEdit.PaymentMethod, PaymentEdit.Description), cancellationToken);
+                attachmentType = ProjectRecordAttachmentType.Cash;
             }
             else throw new ArgumentException("付款快捷编辑只支持新增应付或登记付款。");
+            await TryAttachCreatedRecordAsync(id, attachmentType, recordId, "payment", RecordAttachmentFile, cancellationToken);
             return RedirectToPage(new { id, tab = "payment" });
         }
         catch (Exception exception) when (IsEditableException(exception))
@@ -230,15 +387,11 @@ public sealed class DetailsModel(
             switch (FinanceRowEdit.Kind)
             {
                 case FinanceEntryKind.Receivable:
-                    await financeService.UpdateReceivableAsync(actor, new UpdateReceivableRequest(
-                        FinanceRowEdit.Id, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), FinanceRowEdit.BusinessPartnerId,
-                        FinanceRowEdit.EntryDate, FinanceRowEdit.DueDate, Positive(FinanceRowEdit.Amount), FinanceRowEdit.Description,
-                        FinanceRowEdit.ConcurrencyStamp, reason), cancellationToken);
-                    break;
+                    throw new InvalidOperationException("项目应收由工程量明细自动生成，不能手工修改。");
                 case FinanceEntryKind.Collection:
                     await financeService.UpdateCollectionAsync(actor, new UpdateCollectionRequest(
                         FinanceRowEdit.Id, FinanceRowEdit.RelatedEntryId, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), FinanceRowEdit.BusinessPartnerId,
-                        Required(FinanceRowEdit.AccountId, "请选择收款账户。"), FinanceRowEdit.EntryDate, Positive(FinanceRowEdit.Amount), FinanceRowEdit.PaymentMethod,
+                        Required(FinanceRowEdit.AccountId, "请选择收款账户。"), FinanceRowEdit.EntryDate, Positive(FinanceRowEdit.Amount), FinanceRowEdit.CollectionPaymentMethod,
                         FinanceRowEdit.Description, FinanceRowEdit.ConcurrencyStamp, reason), cancellationToken);
                     break;
                 case FinanceEntryKind.Invoice:
@@ -277,7 +430,7 @@ public sealed class DetailsModel(
         if (!CanManage) return Forbid();
         try
         {
-            await constructionService.SaveAsync(ConstructionActor(), new SaveProjectConstructionRecordRequest(
+            var saved = await constructionService.SaveAsync(ConstructionActor(), new SaveProjectConstructionRecordRequest(
                 ConstructionEdit.Id, id, ConstructionEdit.RecordType,
                 ConstructionEdit.RecordType == ProjectConstructionRecordType.Equipment ? ConstructionEdit.SubjectId : null,
                 ConstructionEdit.RecordType == ProjectConstructionRecordType.ConstructionCrew ? ConstructionEdit.SubjectId : null,
@@ -285,7 +438,46 @@ public sealed class DetailsModel(
                 ConstructionEdit.StopDays, ConstructionEdit.Notes, ConstructionEdit.AutoConnectPrevious,
                 ConstructionEdit.ConcurrencyStamp == Guid.Empty ? null : ConstructionEdit.ConcurrencyStamp,
                 RequiredText(ConstructionEdit.Reason, "请填写修改原因。"), ConstructionEdit.ShowInProjectOverview), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+            await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Construction, saved.Id, "construction", RecordAttachmentFile, cancellationToken);
             return RedirectToPage(new { id, tab = "construction" });
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "construction";
+            return await InlineErrorAsync(id, "project-construction", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnPostConstructionFlowAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        try
+        {
+            var workspace = await constructionService.GetWorkspaceAsync(id, DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+            if (!workspace.Records.Any(item => item.Id == ConstructionFlow.RecordId)) return NotFound();
+            var actor = ConstructionActor();
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var reason = RequiredText(ConstructionFlow.Reason, "请填写修改原因。");
+            switch (ConstructionFlow.Action)
+            {
+                case "previous":
+                    await constructionService.LinkPreviousAsync(actor, new LinkProjectConstructionRecordRequest(
+                        ConstructionFlow.RecordId, Required(ConstructionFlow.TargetProjectId, "请选择需要连接的上一个项目。"),
+                        ConstructionFlow.ConcurrencyStamp, reason), today, cancellationToken);
+                    break;
+                case "next":
+                    await constructionService.LinkNextAsync(actor, new LinkProjectConstructionRecordRequest(
+                        ConstructionFlow.RecordId, Required(ConstructionFlow.TargetProjectId, "请选择需要关联的后续项目。"),
+                        ConstructionFlow.ConcurrencyStamp, reason), today, cancellationToken);
+                    break;
+                case "unlink":
+                    await constructionService.UnlinkAsync(actor, new UnlinkProjectConstructionRecordRequest(
+                        ConstructionFlow.RecordId, ConstructionFlow.ConcurrencyStamp, reason), today, cancellationToken);
+                    break;
+                default:
+                    throw new ArgumentException("不支持该施工流转操作。");
+            }
+            return RedirectToRecord(id, "construction", ConstructionFlow.RecordId);
         }
         catch (Exception exception) when (IsEditableException(exception))
         {
@@ -350,7 +542,9 @@ public sealed class DetailsModel(
     {
         Workspace = await workspaceService.GetAsync(id, cancellationToken);
         if (Workspace is null) return;
+        QuantityAttachments = await LoadQuantityAttachmentsAsync(Workspace, cancellationToken);
         ConstructionWorkspace = await constructionService.GetWorkspaceAsync(id, DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+        RecordAttachments = await LoadRecordAttachmentsAsync(Workspace, ConstructionWorkspace, cancellationToken);
         if (CanManage)
         {
             Options = await workspaceService.GetEditOptionsAsync(cancellationToken);
@@ -360,6 +554,7 @@ public sealed class DetailsModel(
         if (!populateInputs) return;
 
         var defaultContractId = Workspace.Contracts.Count > 0 ? Workspace.Contracts[0].Id : (Guid?)null;
+        CreateQuantity.ContractId = defaultContractId;
         var defaultLegalEntityId = Workspace.Overview.LegalEntities.Select(option => Guid.TryParse(option.Value, out var value) ? value : Guid.Empty).FirstOrDefault(value => value != Guid.Empty);
         CollectionEdit.ContractId = defaultContractId;
         CollectionEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
@@ -371,6 +566,9 @@ public sealed class DetailsModel(
     }
 
     private ProjectWorkspaceActor Actor() => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.Identity?.Name);
+    private ProjectRecordAttachmentActor AttachmentActor() => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty, CanManage);
+    private ProjectRecordAttachmentActor AttachmentActor(ProjectRecordAttachmentType recordType) =>
+        new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty, CanManageAttachment(recordType));
     private ProjectListActor WorkbookProjectActor()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
@@ -380,10 +578,135 @@ public sealed class DetailsModel(
     private ProjectWorkbookActor WorkbookActor() =>
         new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.FindAll(ClaimTypes.Role).Select(item => item.Value).Distinct(StringComparer.Ordinal).ToArray());
     private ProjectConstructionActor ConstructionActor() => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.Identity?.Name);
-    private static bool IsEditableException(Exception exception) => exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException;
+    private static bool IsEditableException(Exception exception) => exception is ArgumentException or InvalidOperationException or KeyNotFoundException or IOException or DbUpdateConcurrencyException;
     private static Guid Required(Guid? value, string message) => value is { } id && id != Guid.Empty ? id : throw new ArgumentException(message);
     private static string RequiredText(string? value, string message) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException(message);
     private static decimal Positive(decimal value) => value > 0 ? value : throw new ArgumentException("金额必须大于 0。");
+    private RedirectResult RedirectToQuantity(Guid projectId, Guid lineItemId)
+    {
+        var pageUrl = Url.Page("/Projects/Details", new { id = projectId, tab = "quantity" }) ?? $"/Projects/Details/{projectId}?tab=quantity";
+        return Redirect($"{pageUrl}#quantity-line-{lineItemId}");
+    }
+
+    private RedirectResult RedirectToRecord(Guid projectId, string tab, Guid recordId)
+    {
+        var safeTab = tab is "collection" or "invoice" or "payment" or "construction" ? tab : "quantity";
+        var pageUrl = Url.Page("/Projects/Details", new { id = projectId, tab = safeTab }) ?? $"/Projects/Details/{projectId}?tab={safeTab}";
+        return Redirect($"{pageUrl}#project-record-{recordId}");
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, ProjectRecordAttachmentDto>> LoadQuantityAttachmentsAsync(ProjectWorkspaceDto workspace, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<Guid, ProjectRecordAttachmentDto>();
+        foreach (var lineItem in workspace.Contracts.SelectMany(contract => contract.LineItems))
+        {
+            var attachments = await attachmentService.ListAsync(workspace.Overview.Id, ProjectRecordAttachmentType.Quantity, lineItem.Id, cancellationToken);
+            var attachment = attachments.Count > 0 ? attachments[0] : null;
+            if (attachment is not null) result[lineItem.Id] = attachment;
+        }
+        return result;
+    }
+
+    private static async Task<ProjectRecordAttachmentUpload> BuildQuantityUploadAsync(Guid projectId, Guid lineItemId, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file.Length is 0 or > 20 * 1024 * 1024) throw new ArgumentException("附件不能为空且不能超过 20MB。");
+        await using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        return new ProjectRecordAttachmentUpload(projectId, ProjectRecordAttachmentType.Quantity, lineItemId, file.FileName, file.ContentType, buffer.ToArray());
+    }
+
+    private async Task<(ProjectWorkspaceDto Workspace, ProjectConstructionWorkspaceDto Construction)> LoadAttachmentContextAsync(
+        Guid projectId,
+        CancellationToken cancellationToken)
+    {
+        var workspace = await workspaceService.GetAsync(projectId, cancellationToken) ?? throw new KeyNotFoundException("项目不存在。");
+        var construction = await constructionService.GetWorkspaceAsync(projectId, DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+        return (workspace, construction);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, ProjectRecordAttachmentDto>> LoadRecordAttachmentsAsync(
+        ProjectWorkspaceDto workspace,
+        ProjectConstructionWorkspaceDto construction,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<Guid, ProjectRecordAttachmentDto>();
+        async Task AddAsync(ProjectRecordAttachmentType type, Guid recordId)
+        {
+            var attachments = await attachmentService.ListAsync(workspace.Overview.Id, type, recordId, cancellationToken);
+            if (attachments.Count > 0) result[recordId] = attachments[0];
+        }
+
+        foreach (var row in workspace.Collections) await AddAsync(ProjectRecordAttachmentType.Cash, row.Id);
+        foreach (var row in workspace.Invoices) await AddAsync(ProjectRecordAttachmentType.Invoice, row.Id);
+        foreach (var row in workspace.Payables) await AddAsync(ProjectRecordAttachmentType.Settlement, row.Id);
+        foreach (var row in workspace.Payments.Where(item => item.SourceType == "FinancePayment")) await AddAsync(ProjectRecordAttachmentType.Cash, row.Id);
+        foreach (var row in construction.Records) await AddAsync(ProjectRecordAttachmentType.Construction, row.Id);
+        return result;
+    }
+
+    private bool CanManageAttachment(ProjectRecordAttachmentType recordType) => recordType switch
+    {
+        ProjectRecordAttachmentType.Quantity or ProjectRecordAttachmentType.Construction => CanManage,
+        ProjectRecordAttachmentType.Settlement or ProjectRecordAttachmentType.Invoice or ProjectRecordAttachmentType.Cash => CanManageFinance,
+        _ => false
+    };
+
+    private static bool RecordBelongsToProject(
+        ProjectWorkspaceDto workspace,
+        ProjectConstructionWorkspaceDto construction,
+        ProjectRecordAttachmentType recordType,
+        Guid recordId) => recordType switch
+    {
+        ProjectRecordAttachmentType.Quantity => workspace.Contracts.SelectMany(item => item.LineItems).Any(item => item.Id == recordId),
+        ProjectRecordAttachmentType.Settlement => workspace.Payables.Any(item => item.Id == recordId),
+        ProjectRecordAttachmentType.Invoice => workspace.Invoices.Any(item => item.Id == recordId),
+        ProjectRecordAttachmentType.Cash => workspace.Collections.Any(item => item.Id == recordId) || workspace.Payments.Any(item => item.Id == recordId && item.SourceType == "FinancePayment"),
+        ProjectRecordAttachmentType.Construction => construction.Records.Any(item => item.Id == recordId),
+        _ => false
+    };
+
+    private async Task TryAttachCreatedRecordAsync(
+        Guid projectId,
+        ProjectRecordAttachmentType recordType,
+        Guid recordId,
+        string tab,
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null) return;
+        try
+        {
+            await attachmentService.ReplaceAsync(
+                AttachmentActor(recordType),
+                await BuildRecordUploadAsync(projectId, recordType, recordId, file, cancellationToken),
+                cancellationToken);
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            var recordLabel = tab switch
+            {
+                "collection" => "收款记录",
+                "invoice" => "开票记录",
+                "payment" => "付款明细",
+                "construction" => "施工记录",
+                _ => "业务记录"
+            };
+            TempData["Error"] = $"{recordLabel}已创建，但附件上传失败：{exception.Message}";
+        }
+    }
+
+    private static async Task<ProjectRecordAttachmentUpload> BuildRecordUploadAsync(
+        Guid projectId,
+        ProjectRecordAttachmentType recordType,
+        Guid recordId,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file.Length is 0 or > 20 * 1024 * 1024) throw new ArgumentException("附件不能为空且不能超过 20MB。");
+        await using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        return new ProjectRecordAttachmentUpload(projectId, recordType, recordId, file.FileName, file.ContentType, buffer.ToArray());
+    }
     private static ProjectTaxConfigurationInput[] ParseTaxConfigurations(IEnumerable<string> selections) =>
         selections.Where(item => !string.IsNullOrWhiteSpace(item)).Select(item =>
         {
@@ -452,11 +775,25 @@ public sealed class DetailsModel(
         public bool RequiresInvoice { get; set; } = true;
         public Guid ConcurrencyStamp { get; set; }
         public string? Notes { get; set; }
+        public bool IsDirty { get; set; }
+    }
+
+    public sealed class CreateQuantityInput
+    {
+        public Guid? ContractId { get; set; }
+        public string AccountingLabel { get; set; } = "暂估";
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Unit { get; set; } = string.Empty;
+        public decimal? Quantity { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public string? Notes { get; set; }
+        public bool RequiresInvoice { get; set; } = true;
     }
 
     public sealed class CollectionEditInput
     {
-        public FinanceEntryKind Kind { get; set; } = FinanceEntryKind.Receivable;
+        public FinanceEntryKind Kind { get; set; } = FinanceEntryKind.Collection;
         public Guid? ContractId { get; set; }
         public Guid? LegalEntityId { get; set; }
         public Guid? BusinessPartnerId { get; set; }
@@ -465,7 +802,7 @@ public sealed class DetailsModel(
         public DateOnly EntryDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
         public DateOnly? DueDate { get; set; }
         public decimal Amount { get; set; }
-        public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.BankTransfer;
+        public string? PaymentMethod { get; set; } = "银行转账";
         public string? Description { get; set; }
     }
 
@@ -513,6 +850,7 @@ public sealed class DetailsModel(
         public DateOnly? DueDate { get; set; }
         public decimal Amount { get; set; }
         public PaymentMethod PaymentMethod { get; set; }
+        public string? CollectionPaymentMethod { get; set; }
         public string? Description { get; set; }
         public InvoiceDirection Direction { get; set; }
         public string InvoiceNumber { get; set; } = string.Empty;
@@ -541,6 +879,15 @@ public sealed class DetailsModel(
         public bool ShowInProjectOverview { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "项目管理页面快捷修改施工详情";
+    }
+
+    public sealed class ConstructionFlowInput
+    {
+        public Guid RecordId { get; set; }
+        public Guid? TargetProjectId { get; set; }
+        public Guid ConcurrencyStamp { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string Reason { get; set; } = "项目管理页面调整施工流转";
     }
 
     public sealed class NewEquipmentInput
