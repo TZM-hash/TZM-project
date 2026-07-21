@@ -24,8 +24,8 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
     [BindProperty] public DateOnly? DueDate { get; set; }
     [BindProperty] public decimal Amount { get; set; }
     [BindProperty] public string? Description { get; set; }
+    [BindProperty] public string? CollectionPaymentMethod { get; set; }
     [BindProperty] public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.BankTransfer;
-    [BindProperty] public InvoiceDirection InvoiceDirection { get; set; } = InvoiceDirection.Output;
     [BindProperty] public string? InvoiceNumber { get; set; }
     [BindProperty] public Guid? ProjectTaxConfigurationId { get; set; }
     [BindProperty] public decimal NetAmount { get; set; }
@@ -66,7 +66,7 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
             case FinanceEntryKind.Receivable:
                 throw new InvalidOperationException("项目应收由工程量明细自动生成，不能手工新增。");
             case FinanceEntryKind.Collection:
-                await financeService.RecordCollectionAsync(new RecordCollectionRequest(null, ProjectId, ContractId, LegalEntityId, BusinessPartnerId, Required(AccountId, "请选择收款账户。"), EntryDate, Amount, PaymentMethod, Description), cancellationToken);
+                await financeService.RecordCollectionAsync(new RecordCollectionRequest(null, ProjectId, ContractId, LegalEntityId, BusinessPartnerId, Required(AccountId, "请选择收款账户。"), EntryDate, Amount, CollectionPaymentMethod, Description), cancellationToken);
                 break;
             case FinanceEntryKind.RefundOrCollectionReversal:
                 await financeService.RecordRefundAsync(new RecordRefundRequest(RelatedEntryId, null, Required(AccountId, "请选择原收款账户。"), EntryDate, Amount, FinancialAdjustmentType.Refund, RequiredText(Description, "请填写退款或冲销原因。")), cancellationToken);
@@ -87,7 +87,7 @@ public sealed class CreateModel(IFinanceLedgerService financeService) : PageMode
                 await financeService.TransferAsync(new CreateAccountTransferRequest(Required(AccountId, "请选择转出账户。"), Required(SecondaryAccountId, "请选择转入账户。"), EntryDate, Amount, Description), cancellationToken);
                 break;
             case FinanceEntryKind.Invoice:
-                await financeService.AddInvoiceAsync(new CreateInvoiceRequest(ProjectId, ContractId, LegalEntityId, BusinessPartnerId, InvoiceDirection, RequiredText(InvoiceNumber, "请填写发票号码。"), EntryDate, Required(ProjectTaxConfigurationId, "请选择税率和发票类型。"), NetAmount, TaxAmount, Amount, InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
+                await financeService.AddInvoiceAsync(new CreateInvoiceRequest(ProjectId, ContractId, LegalEntityId, BusinessPartnerId, InvoiceDirection.Output, RequiredText(InvoiceNumber, "请填写发票号码。"), EntryDate, Required(ProjectTaxConfigurationId, "请选择税率和发票类型。"), NetAmount, TaxAmount, Amount, InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
                 break;
             default:
                 throw new InvalidOperationException("不支持的财务业务类型。");

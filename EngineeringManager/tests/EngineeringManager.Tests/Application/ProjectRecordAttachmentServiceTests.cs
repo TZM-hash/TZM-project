@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Equipment;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
@@ -92,7 +93,7 @@ public sealed class ProjectRecordAttachmentServiceTests
     }
 
     [Fact]
-    public async Task UploadAsyncStillAllowsMultipleAttachmentsForOtherRecordTypes()
+    public async Task UploadAsyncReplacesTheExistingAttachmentForEveryRecordType()
     {
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();
         var equipment = new Equipment { EquipmentNumber = "ATT-EQ", Name = "附件设备" };
@@ -105,10 +106,58 @@ public sealed class ProjectRecordAttachmentServiceTests
             var service = new ProjectRecordAttachmentService(fixture.Db, new LocalFileStore(directory));
             var actor = new ProjectRecordAttachmentActor("attachment-user", true);
 
-            await service.UploadAsync(actor, Upload(fixture.Project.Id, ProjectRecordAttachmentType.Construction, construction.Id, "进场记录.pdf"), CancellationToken.None);
-            await service.UploadAsync(actor, Upload(fixture.Project.Id, ProjectRecordAttachmentType.Construction, construction.Id, "退场记录.pdf"), CancellationToken.None);
+            var first = await service.UploadAsync(actor, Upload(fixture.Project.Id, ProjectRecordAttachmentType.Construction, construction.Id, "进场记录.pdf"), CancellationToken.None);
+            var replacement = await service.UploadAsync(actor, Upload(fixture.Project.Id, ProjectRecordAttachmentType.Construction, construction.Id, "退场记录.pdf"), CancellationToken.None);
 
-            (await service.ListAsync(fixture.Project.Id, ProjectRecordAttachmentType.Construction, construction.Id, CancellationToken.None)).Should().HaveCount(2);
+            (await service.ListAsync(fixture.Project.Id, ProjectRecordAttachmentType.Construction, construction.Id, CancellationToken.None)).Should().ContainSingle().Which.Id.Should().Be(replacement.Id);
+            (await fixture.Db.Attachments.SingleAsync(item => item.Id == first.Id)).IsDeleted.Should().BeTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task PayrollPaymentAttachmentCanBeReplacedFromProjectPaymentList()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var batch = new PayrollBatch
+        {
+            BatchNumber = "ATT-PAYROLL",
+            Name = "附件工资批次",
+            BatchType = PayrollBatchType.Monthly,
+            StartDate = new DateOnly(2026, 7, 1),
+            EndDate = new DateOnly(2026, 7, 31),
+            Project = fixture.Project,
+            PaymentDate = new DateOnly(2026, 7, 20),
+            Status = PayrollBatchStatus.Closed
+        };
+        var worker = new ConstructionWorker { Name = "附件班组工人" };
+        var payment = new PayrollPayment
+        {
+            Batch = batch,
+            RecipientType = PayrollRecipientType.CrewWorker,
+            RecipientKey = $"crew:{worker.Id:N}",
+            ConstructionWorker = worker,
+            CrewBusinessPartner = fixture.Client,
+            Amount = 100m,
+            PayeeType = PayrollPayeeType.CrewLeader,
+            PayeeName = "班组工资",
+            RecipientNameSnapshot = worker.Name,
+            CrewNameSnapshot = fixture.Client.Name
+        };
+        fixture.Db.Add(payment);
+        await fixture.Db.SaveChangesAsync();
+        var directory = Path.Combine(Path.GetTempPath(), "engineering-attachment-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = new ProjectRecordAttachmentService(fixture.Db, new LocalFileStore(directory));
+            var actor = new ProjectRecordAttachmentActor("attachment-user", true);
+            var saved = await service.UploadAsync(actor, Upload(fixture.Project.Id, ProjectRecordAttachmentType.Cash, payment.Id, "工资凭证.pdf"), CancellationToken.None);
+
+            saved.RecordId.Should().Be(payment.Id);
+            (await service.ListAsync(fixture.Project.Id, ProjectRecordAttachmentType.Cash, payment.Id, CancellationToken.None)).Should().ContainSingle();
         }
         finally
         {
@@ -145,6 +194,42 @@ public sealed class ProjectRecordAttachmentServiceTests
                 CancellationToken.None);
 
             saved.RecordId.Should().Be(collection.Id);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectInvoiceAttachmentDoesNotRequireASettlementAllocation()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var invoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Client.Id,
+            ProjectId = fixture.Project.Id,
+            ContractId = fixture.Contract.Id,
+            InvoiceNumber = "ATT-INV-001",
+            InvoiceDate = new DateOnly(2026, 7, 21),
+            Amount = 10m
+        };
+        fixture.Db.FinanceInvoices.Add(invoice);
+        await fixture.Db.SaveChangesAsync();
+        var directory = Path.Combine(Path.GetTempPath(), "engineering-attachment-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = new ProjectRecordAttachmentService(fixture.Db, new LocalFileStore(directory));
+
+            var saved = await service.ReplaceAsync(
+                new ProjectRecordAttachmentActor("attachment-user", true),
+                Upload(fixture.Project.Id, ProjectRecordAttachmentType.Invoice, invoice.Id, "销项发票.pdf"),
+                CancellationToken.None);
+
+            saved.RecordId.Should().Be(invoice.Id);
         }
         finally
         {

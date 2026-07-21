@@ -27,7 +27,8 @@ public sealed record CreateSettlementRequest(
     DateOnly BusinessDate,
     decimal OriginalAmount,
     decimal OriginalInvoiceAmount,
-    string? Notes);
+    string? Notes,
+    DateOnly? DueDate = null);
 
 public sealed record FinalizeSettlementRequest(
     Guid SettlementId,
@@ -69,7 +70,9 @@ public sealed record CreateFinanceInvoiceRequest(
     bool AutoAllocate = false,
     Guid? ProjectTaxConfigurationId = null,
     string? InvoiceType = null,
-    LedgerRecordStatus Status = LedgerRecordStatus.Active);
+    LedgerRecordStatus Status = LedgerRecordStatus.Active,
+    Guid? ProjectId = null,
+    Guid? ContractId = null);
 
 public sealed record CreateFinanceCashRequest(
     LedgerScope Scope,
@@ -87,7 +90,10 @@ public sealed record CreateFinanceCashRequest(
     string? PaymentMethod,
     string? Notes,
     IReadOnlyList<FinanceAllocationRequest> Allocations,
-    bool AutoAllocate = false);
+    bool AutoAllocate = false,
+    Guid? ProjectId = null,
+    Guid? ContractId = null,
+    Guid? EntryId = null);
 
 public sealed record ReplaceInvoiceAllocationsRequest(
     Guid InvoiceId,
@@ -161,7 +167,28 @@ public sealed record CentralLedgerOverviewPageDto(
     int PageSize,
     int TotalCount,
     int TotalPages,
-    IReadOnlyList<Guid> MatchingSettlementIds);
+    IReadOnlyList<Guid> MatchingSettlementIds,
+    IReadOnlyList<CentralLedgerUnallocatedCashDto>? UnallocatedCash = null);
+
+public sealed record CentralLedgerUnallocatedCashDto(
+    Guid CashEntryId,
+    LedgerDirection Direction,
+    DateOnly BusinessDate,
+    Guid LegalEntityId,
+    string LegalEntityName,
+    Guid? BusinessPartnerId,
+    string? BusinessPartnerName,
+    Guid? ProjectId,
+    string? ProjectName,
+    Guid? ContractId,
+    string? ContractName,
+    Guid? AccountId,
+    string? AccountName,
+    decimal Amount,
+    decimal AllocatedAmount,
+    decimal UnallocatedAmount,
+    string? PaymentMethod,
+    Guid ConcurrencyStamp);
 
 public sealed record CentralLedgerDetailsDto(
     FinanceRecordType RecordType,

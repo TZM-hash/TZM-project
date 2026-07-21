@@ -84,7 +84,8 @@ public sealed class CentralLedgerPageTests
             .And.NotContain("关联应收");
         pageModel.Should().Contain("InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber")
             .And.Contain("InvoiceDirection.Output, RequiredText(FinanceRowEdit.InvoiceNumber");
-        workspace.Should().Contain("item.Direction == LedgerDirection.Receivable && item.Allocations.Any");
+        workspace.Should().Contain("item.Direction == LedgerDirection.Receivable")
+            .And.Contain("item.ProjectId == projectId || item.Allocations.Any");
         centralEntry.Should().Contain("项目应收由工程量明细自动生成");
         legacyEntry.Should().NotContain("GetEnumSelectList<EngineeringManager.Application.Finance.FinanceEntryKind>()")
             .And.NotContain("<optgroup label=\"应收记录\">");

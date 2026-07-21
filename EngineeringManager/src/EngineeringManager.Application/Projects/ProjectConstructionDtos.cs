@@ -26,7 +26,8 @@ public sealed record SaveProjectConstructionRecordRequest(
     Guid? ConcurrencyStamp, string Reason, bool ShowInProjectOverview = false);
 
 public sealed record LinkProjectConstructionRecordRequest(
-    Guid RecordId, Guid TargetProjectId, Guid ConcurrencyStamp, string Reason);
+    Guid RecordId, Guid TargetProjectId, Guid ConcurrencyStamp, string Reason,
+    DateOnly? TargetEntryDate = null);
 
 public sealed record UnlinkProjectConstructionRecordRequest(
     Guid RecordId, Guid ConcurrencyStamp, string Reason);

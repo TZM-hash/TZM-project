@@ -14,6 +14,10 @@ public sealed class FinanceInvoice
     public BusinessPartner? BusinessPartner { get; set; }
     public Guid? CounterLegalEntityId { get; set; }
     public LegalEntity? CounterLegalEntity { get; set; }
+    public Guid? ProjectId { get; set; }
+    public Project? Project { get; set; }
+    public Guid? ContractId { get; set; }
+    public Contract? Contract { get; set; }
     public string InvoiceNumber { get; set; } = string.Empty;
     public DateOnly InvoiceDate { get; set; }
     public Guid? ProjectTaxConfigurationId { get; set; }

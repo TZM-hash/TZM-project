@@ -25,6 +25,7 @@ public sealed class FinanceSettlement
     public Guid? ContractLineItemId { get; set; }
     public ContractLineItem? ContractLineItem { get; set; }
     public DateOnly BusinessDate { get; set; }
+    public DateOnly? DueDate { get; set; }
     public DateOnly? SettlementDate { get; set; }
     public decimal OriginalAmount { get; set; }
     public decimal OriginalInvoiceAmount { get; set; }

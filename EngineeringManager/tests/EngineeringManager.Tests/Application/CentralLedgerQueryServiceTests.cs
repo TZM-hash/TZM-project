@@ -165,6 +165,42 @@ public sealed class CentralLedgerQueryServiceTests
         await unauthorized.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
+    [Fact]
+    public async Task SearchListsProjectOwnedCashThatHasNotBeenAllocated()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var command = new CentralLedgerCommandService(fixture.Db);
+        var cashId = await command.CreateCashAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.ProjectCollection,
+                fixture.Project.Id,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.CollectionAccount.Id,
+                null,
+                new DateOnly(2026, 7, 5),
+                250m,
+                "项目收款",
+                "超额待分摊",
+                [],
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+
+        var result = await new CentralLedgerQueryService(fixture.Db).SearchAsync(
+            fixture.ExternalActor(),
+            new CentralLedgerQuery(LedgerScope.External, ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+
+        result.UnallocatedCash.Should().ContainSingle();
+        result.UnallocatedCash.Single().CashEntryId.Should().Be(cashId);
+        result.UnallocatedCash.Single().UnallocatedAmount.Should().Be(250m);
+    }
+
     private static CreateSettlementRequest SettlementRequest(
         CentralLedgerTestFixture fixture,
         LedgerSettlementState state,

@@ -39,11 +39,10 @@ public sealed class ProjectConstructionService(
         if (request.RecordType == ProjectConstructionRecordType.ConstructionCrew && request.ShowInProjectOverview)
             throw new ArgumentException("施工班组不能显示在项目总览。", nameof(request));
         ProjectConstructionCalculator.Calculate(request.EntryDate, request.ExitDate, request.StopDays, today);
-        if (request.TransferFromProjectId == request.ProjectId || request.TransferToProjectId == request.ProjectId)
-            throw new ArgumentException("调入或调出项目不能是当前项目。");
-        var projectIds = new[] { (Guid?)request.ProjectId, request.TransferFromProjectId, request.TransferToProjectId }.Where(item => item.HasValue).Select(item => item!.Value).Distinct().ToArray();
-        if (await db.Projects.CountAsync(item => projectIds.Contains(item.Id) && item.IsActive, token) != projectIds.Length)
-            throw new InvalidOperationException("当前、调入或调出项目不存在或已停用。");
+        if (request.TransferFromProjectId.HasValue || request.TransferToProjectId.HasValue || request.AutoConnectPrevious)
+            throw new InvalidOperationException("跨项目流转只能通过关联后续项目、连接上一条或解除流转操作完成。");
+        if (!await db.Projects.AnyAsync(item => item.Id == request.ProjectId && item.IsActive, token))
+            throw new InvalidOperationException("当前项目不存在或已停用。");
         await ValidateSubjectExistsAsync(request.RecordType, request.EquipmentId, request.CrewBusinessPartnerId, token);
 
         await using var transaction = await db.Database.BeginTransactionAsync(token);
@@ -58,7 +57,6 @@ public sealed class ProjectConstructionService(
             if (record.RecordType != request.RecordType || record.EquipmentId != request.EquipmentId || record.CrewBusinessPartnerId != request.CrewBusinessPartnerId)
                 throw new InvalidOperationException("正式施工记录不能直接切换设备或班组，请新建正确记录。");
             before = Snapshot(record);
-            await UnlinkNextAsync(record, request.TransferToProjectId, token);
         }
         else
         {
@@ -69,8 +67,6 @@ public sealed class ProjectConstructionService(
         record.RecordType = request.RecordType;
         record.EquipmentId = request.EquipmentId;
         record.CrewBusinessPartnerId = request.CrewBusinessPartnerId;
-        record.TransferFromProjectId = request.TransferFromProjectId;
-        record.TransferToProjectId = request.TransferToProjectId;
         record.EntryDate = request.EntryDate;
         record.ExitDate = request.ExitDate;
         record.StopDays = request.StopDays;
@@ -79,47 +75,6 @@ public sealed class ProjectConstructionService(
         record.ShowInProjectOverview = request.RecordType == ProjectConstructionRecordType.Equipment && request.ShowInProjectOverview;
         record.UpdatedAt = DateTimeOffset.UtcNow;
         record.ConcurrencyStamp = Guid.NewGuid();
-
-        if (request.AutoConnectPrevious)
-        {
-            var previous = await MatchingRecords(request.RecordType, request.EquipmentId, request.CrewBusinessPartnerId)
-                .Where(item => item.Id != record.Id && item.ProjectId != request.ProjectId && item.ExitDate != null && (request.EntryDate == null || item.ExitDate <= request.EntryDate))
-                .OrderByDescending(item => item.ExitDate).ThenByDescending(item => item.Id).FirstOrDefaultAsync(token);
-            if (previous is not null)
-            {
-                if (previous.NextRecordId.HasValue && previous.NextRecordId != record.Id) throw new InvalidOperationException("匹配到的上个项目记录已经连接到其他记录。");
-                record.PreviousRecordId = previous.Id;
-                record.TransferFromProjectId = previous.ProjectId;
-                previous.NextRecordId = record.Id;
-                previous.TransferToProjectId = record.ProjectId;
-                previous.UpdatedAt = DateTimeOffset.UtcNow;
-                previous.ConcurrencyStamp = Guid.NewGuid();
-            }
-        }
-
-        if (record.TransferToProjectId.HasValue)
-        {
-            if (await WouldCreateCycleAsync(record, record.TransferToProjectId.Value, token)) throw new InvalidOperationException("项目流转不能形成循环。");
-            var next = await MatchingRecords(record.RecordType, record.EquipmentId, record.CrewBusinessPartnerId)
-                .SingleOrDefaultAsync(item => item.ProjectId == record.TransferToProjectId && item.PreviousRecordId == record.Id, token);
-            if (next is null)
-            {
-                await db.SaveChangesAsync(token);
-                next = new ProjectConstructionRecord
-                {
-                    ProjectId = record.TransferToProjectId.Value,
-                    RecordType = record.RecordType,
-                    EquipmentId = record.EquipmentId,
-                    CrewBusinessPartnerId = record.CrewBusinessPartnerId,
-                    TransferFromProjectId = record.ProjectId,
-                    PreviousRecordId = record.Id,
-                    IsDraft = true
-                };
-                db.ProjectConstructionRecords.Add(next);
-                await db.SaveChangesAsync(token);
-            }
-            record.NextRecordId = next.Id;
-        }
 
         db.AuditLogs.Add(new AuditLog
         {
@@ -150,6 +105,7 @@ public sealed class ProjectConstructionService(
     {
         var reason = Required(request.Reason, "请填写修改原因。");
         if (request.TargetProjectId == Guid.Empty) throw new ArgumentException("请选择目标项目。", nameof(request));
+        if (!linkPrevious && request.TargetEntryDate is null) throw new ArgumentException("请选择后续项目进场日期。", nameof(request));
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, token);
         var record = await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == request.RecordId, token)
             ?? throw new InvalidOperationException("施工详情记录不存在。");
@@ -169,11 +125,11 @@ public sealed class ProjectConstructionService(
                 throw new InvalidOperationException("当前记录已经连接了上一个项目，请先解除流转。");
             }
             other = await MatchingRecords(record.RecordType, record.EquipmentId, record.CrewBusinessPartnerId)
-                .Where(item => item.ProjectId == request.TargetProjectId && item.NextRecordId == null && item.ExitDate != null &&
+                .Where(item => item.ProjectId == request.TargetProjectId && !item.IsDraft && item.NextRecordId == null && item.ExitDate != null &&
                     (record.EntryDate == null || item.ExitDate <= record.EntryDate))
                 .OrderByDescending(item => item.ExitDate).ThenByDescending(item => item.Id).FirstOrDefaultAsync(token);
             if (other is null) throw new InvalidOperationException("目标项目没有可连接的上一条施工记录。");
-            if (await WouldCreateCycleAsync(record, other.ProjectId, token)) throw new InvalidOperationException("项目流转不能形成循环。");
+            if (await WouldCreateCycleAsync(other, record, token)) throw new InvalidOperationException("项目流转不能形成循环。");
             record.PreviousRecordId = other.Id;
             record.TransferFromProjectId = other.ProjectId;
             other.NextRecordId = record.Id;
@@ -189,7 +145,8 @@ public sealed class ProjectConstructionService(
             }
             if (await WouldCreateCycleAsync(record, request.TargetProjectId, token)) throw new InvalidOperationException("项目流转不能形成循环。");
             other = await MatchingRecords(record.RecordType, record.EquipmentId, record.CrewBusinessPartnerId)
-                .SingleOrDefaultAsync(item => item.ProjectId == request.TargetProjectId && item.PreviousRecordId == record.Id, token);
+                .Where(item => item.ProjectId == request.TargetProjectId && item.IsDraft && item.PreviousRecordId == null && item.NextRecordId == null)
+                .OrderBy(item => item.EntryDate).ThenBy(item => item.Id).FirstOrDefaultAsync(token);
             if (other is null)
             {
                 other = new ProjectConstructionRecord
@@ -199,15 +156,14 @@ public sealed class ProjectConstructionService(
                     EquipmentId = record.EquipmentId,
                     CrewBusinessPartnerId = record.CrewBusinessPartnerId,
                     TransferFromProjectId = record.ProjectId,
-                    PreviousRecordId = record.Id,
-                    IsDraft = true
+                    IsDraft = true,
+                    EntryDate = request.TargetEntryDate
                 };
                 db.ProjectConstructionRecords.Add(other);
             }
-            else if (other.NextRecordId.HasValue && other.NextRecordId != record.Id)
-            {
-                throw new InvalidOperationException("目标项目记录已经连接到其他后续记录。");
-            }
+            else other.EntryDate = request.TargetEntryDate;
+            other.PreviousRecordId = record.Id;
+            other.TransferFromProjectId = record.ProjectId;
             record.NextRecordId = other.Id;
             record.TransferToProjectId = other.ProjectId;
         }
@@ -242,6 +198,10 @@ public sealed class ProjectConstructionService(
         var next = record.NextRecordId.HasValue
             ? await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == record.NextRecordId, token)
             : null;
+        if (record.PreviousRecordId.HasValue && (previous is null || previous.NextRecordId != record.Id || !SameSubject(record, previous)))
+            throw new InvalidOperationException("上一条施工记录的双向关系或主体不一致，不能自动解除，请先检查数据。");
+        if (record.NextRecordId.HasValue && (next is null || next.PreviousRecordId != record.Id || !SameSubject(record, next)))
+            throw new InvalidOperationException("后续施工记录的双向关系或主体不一致，不能自动解除，请先检查数据。");
         record.PreviousRecordId = null;
         record.NextRecordId = null;
         record.TransferFromProjectId = null;
@@ -313,20 +273,6 @@ public sealed class ProjectConstructionService(
         db.ProjectConstructionRecords.Where(item => item.RecordType == type &&
             (type == ProjectConstructionRecordType.Equipment ? item.EquipmentId == equipmentId : item.CrewBusinessPartnerId == crewId));
 
-    private async Task UnlinkNextAsync(ProjectConstructionRecord record, Guid? requestedTargetProjectId, CancellationToken token)
-    {
-        if (!record.NextRecordId.HasValue || record.TransferToProjectId == requestedTargetProjectId) return;
-        var oldNext = await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == record.NextRecordId, token);
-        if (oldNext is not null && oldNext.PreviousRecordId == record.Id)
-        {
-            oldNext.PreviousRecordId = null;
-            oldNext.TransferFromProjectId = null;
-            oldNext.UpdatedAt = DateTimeOffset.UtcNow;
-            oldNext.ConcurrencyStamp = Guid.NewGuid();
-        }
-        record.NextRecordId = null;
-    }
-
     private async Task<bool> WouldCreateCycleAsync(ProjectConstructionRecord current, Guid targetProjectId, CancellationToken token)
     {
         var candidate = await MatchingRecords(current.RecordType, current.EquipmentId, current.CrewBusinessPartnerId)
@@ -341,6 +287,23 @@ public sealed class ProjectConstructionService(
         }
         return false;
     }
+
+    private async Task<bool> WouldCreateCycleAsync(ProjectConstructionRecord from, ProjectConstructionRecord to, CancellationToken token)
+    {
+        ProjectConstructionRecord? candidate = to;
+        var visited = new HashSet<Guid>();
+        while (candidate is not null && visited.Add(candidate.Id))
+        {
+            if (candidate.Id == from.Id) return true;
+            candidate = candidate.NextRecordId.HasValue
+                ? await db.ProjectConstructionRecords.SingleOrDefaultAsync(item => item.Id == candidate.NextRecordId, token)
+                : null;
+        }
+        return false;
+    }
+
+    private static bool SameSubject(ProjectConstructionRecord left, ProjectConstructionRecord right) =>
+        left.RecordType == right.RecordType && left.EquipmentId == right.EquipmentId && left.CrewBusinessPartnerId == right.CrewBusinessPartnerId;
 
     private async Task ValidateSubjectExistsAsync(ProjectConstructionRecordType type, Guid? equipmentId, Guid? crewId, CancellationToken token)
     {

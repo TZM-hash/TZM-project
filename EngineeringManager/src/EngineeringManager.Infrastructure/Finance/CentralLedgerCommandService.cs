@@ -62,6 +62,7 @@ public sealed class CentralLedgerCommandService : ICentralLedgerCommandService
             ContractId = request.ContractId,
             ContractLineItemId = request.ContractLineItemId,
             BusinessDate = request.BusinessDate,
+            DueDate = request.DueDate,
             SettlementDate = request.BusinessDate,
             OriginalAmount = request.OriginalAmount,
             OriginalInvoiceAmount = request.OriginalInvoiceAmount,
@@ -194,6 +195,8 @@ public sealed class CentralLedgerCommandService : ICentralLedgerCommandService
             LegalEntityId = request.LegalEntityId,
             BusinessPartnerId = request.BusinessPartnerId,
             CounterLegalEntityId = request.CounterLegalEntityId,
+            ProjectId = request.ProjectId,
+            ContractId = request.ContractId,
             InvoiceNumber = invoiceNumber,
             InvoiceDate = request.InvoiceDate,
             ProjectTaxConfigurationId = request.ProjectTaxConfigurationId,
@@ -271,6 +274,7 @@ public sealed class CentralLedgerCommandService : ICentralLedgerCommandService
 
         var cash = new FinanceCashEntry
         {
+            Id = request.EntryId ?? Guid.NewGuid(),
             Scope = request.Scope,
             Direction = request.Direction,
             CashType = request.CashType,
@@ -279,6 +283,8 @@ public sealed class CentralLedgerCommandService : ICentralLedgerCommandService
             LegalEntityId = request.LegalEntityId,
             BusinessPartnerId = request.BusinessPartnerId,
             CounterLegalEntityId = request.CounterLegalEntityId,
+            ProjectId = request.ProjectId,
+            ContractId = request.ContractId,
             AccountId = request.AccountId,
             CounterAccountId = request.CounterAccountId,
             BusinessDate = request.BusinessDate,
@@ -838,6 +844,7 @@ public sealed class CentralLedgerCommandService : ICentralLedgerCommandService
         item.ContractId,
         item.ContractLineItemId,
         item.BusinessDate,
+        item.DueDate,
         item.SettlementDate,
         item.OriginalAmount,
         item.OriginalInvoiceAmount,

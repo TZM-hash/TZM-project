@@ -15,6 +15,10 @@ public sealed class FinanceCashEntry
     public BusinessPartner? BusinessPartner { get; set; }
     public Guid? CounterLegalEntityId { get; set; }
     public LegalEntity? CounterLegalEntity { get; set; }
+    public Guid? ProjectId { get; set; }
+    public Project? Project { get; set; }
+    public Guid? ContractId { get; set; }
+    public Contract? Contract { get; set; }
     public Guid? AccountId { get; set; }
     public FinancialAccount? Account { get; set; }
     public Guid? CounterAccountId { get; set; }

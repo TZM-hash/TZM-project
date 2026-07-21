@@ -14,20 +14,7 @@ public sealed class ProjectRecordAttachmentService(ApplicationDbContext db, IFil
         (await Query(projectId, recordType, recordId).AsNoTracking().ToListAsync(token)).OrderByDescending(item => item.UploadedAt).Select(ToDto).ToArray();
 
     public async Task<ProjectRecordAttachmentDto> UploadAsync(ProjectRecordAttachmentActor actor, ProjectRecordAttachmentUpload upload, CancellationToken token)
-    {
-        var safeName = ValidateUpload(actor, upload);
-        await EnsureRecordAsync(upload.ProjectId, upload.RecordType, upload.RecordId, token);
-        await using var content = new MemoryStream(upload.Content, writable: false);
-        var storedName = await fileStore.SaveAsync(content, safeName, token);
-        try
-        {
-            var item = await CreateAttachmentAsync(actor, upload, safeName, storedName, token);
-            db.Attachments.Add(item);
-            await db.SaveChangesAsync(token);
-            return ToDto(item);
-        }
-        catch { await fileStore.DeleteAsync(storedName, token); throw; }
-    }
+        => await ReplaceAsync(actor, upload, token);
 
     public async Task<ProjectRecordAttachmentDto> ReplaceAsync(ProjectRecordAttachmentActor actor, ProjectRecordAttachmentUpload upload, CancellationToken token)
     {
@@ -75,7 +62,7 @@ public sealed class ProjectRecordAttachmentService(ApplicationDbContext db, IFil
         ProjectRecordAttachmentType.Quantity => db.Attachments.Where(item => item.ProjectId == projectId && item.ContractLineItemId == id && !item.IsDeleted),
         ProjectRecordAttachmentType.Settlement => db.Attachments.Where(item => item.ProjectId == projectId && item.FinanceSettlementId == id && !item.IsDeleted),
         ProjectRecordAttachmentType.Invoice => db.Attachments.Where(item => item.ProjectId == projectId && item.FinanceInvoiceId == id && !item.IsDeleted),
-        ProjectRecordAttachmentType.Cash => db.Attachments.Where(item => item.ProjectId == projectId && item.FinanceCashEntryId == id && !item.IsDeleted),
+        ProjectRecordAttachmentType.Cash => db.Attachments.Where(item => item.ProjectId == projectId && (item.FinanceCashEntryId == id || item.PayrollPaymentId == id) && !item.IsDeleted),
         ProjectRecordAttachmentType.Construction => db.Attachments.Where(item => item.ProjectId == projectId && item.ProjectConstructionRecordId == id && !item.IsDeleted),
         _ => throw new ArgumentOutOfRangeException(nameof(type))
     };
@@ -86,10 +73,13 @@ public sealed class ProjectRecordAttachmentService(ApplicationDbContext db, IFil
         {
             ProjectRecordAttachmentType.Quantity => await db.ContractLineItems.AnyAsync(item => item.Id == id && item.Contract.ProjectId == projectId, token),
             ProjectRecordAttachmentType.Settlement => await db.FinanceSettlements.AnyAsync(item => item.Id == id && item.ProjectId == projectId, token),
-            ProjectRecordAttachmentType.Invoice => await db.FinanceInvoices.AnyAsync(item => item.Id == id && item.Allocations.Any(allocation => allocation.ProjectId == projectId), token),
+            ProjectRecordAttachmentType.Invoice => await db.FinanceInvoices.AnyAsync(item => item.Id == id &&
+                (item.ProjectId == projectId || item.Allocations.Any(allocation => allocation.ProjectId == projectId)), token),
             ProjectRecordAttachmentType.Cash => await db.FinanceCashEntries.AnyAsync(item => item.Id == id &&
                 (item.Allocations.Any(allocation => allocation.ProjectId == projectId) ||
-                 item.SourceType == LedgerSourceType.ProjectCollection && item.SourceId == projectId), token),
+                 item.ProjectId == projectId ||
+                 item.SourceType == LedgerSourceType.ProjectCollection && item.SourceId == projectId), token)
+                || await db.PayrollPayments.AnyAsync(item => item.Id == id && item.Batch.ProjectId == projectId && item.Batch.Status != EngineeringManager.Domain.Employees.PayrollBatchStatus.Voided, token),
             ProjectRecordAttachmentType.Construction => await db.ProjectConstructionRecords.AnyAsync(item => item.Id == id && item.ProjectId == projectId, token),
             _ => false
         };
@@ -119,16 +109,20 @@ public sealed class ProjectRecordAttachmentService(ApplicationDbContext db, IFil
             Description = upload.Description?.Trim(),
             UploadedByUserId = uploadedByUserId
         };
-        SetTarget(item, upload.RecordType, upload.RecordId);
+        await SetTargetAsync(item, upload.RecordType, upload.RecordId, token);
         return item;
     }
 
-    private static void SetTarget(Attachment item, ProjectRecordAttachmentType type, Guid id)
+    private async Task SetTargetAsync(Attachment item, ProjectRecordAttachmentType type, Guid id, CancellationToken token)
     {
         if (type == ProjectRecordAttachmentType.Quantity) item.ContractLineItemId = id;
         else if (type == ProjectRecordAttachmentType.Settlement) item.FinanceSettlementId = id;
         else if (type == ProjectRecordAttachmentType.Invoice) item.FinanceInvoiceId = id;
-        else if (type == ProjectRecordAttachmentType.Cash) item.FinanceCashEntryId = id;
+        else if (type == ProjectRecordAttachmentType.Cash)
+        {
+            if (await db.FinanceCashEntries.AnyAsync(value => value.Id == id, token)) item.FinanceCashEntryId = id;
+            else item.PayrollPaymentId = id;
+        }
         else if (type == ProjectRecordAttachmentType.Construction) item.ProjectConstructionRecordId = id;
         else throw new ArgumentOutOfRangeException(nameof(type));
     }
@@ -139,6 +133,7 @@ public sealed class ProjectRecordAttachmentService(ApplicationDbContext db, IFil
             : item.FinanceSettlementId.HasValue ? (ProjectRecordAttachmentType.Settlement, item.FinanceSettlementId.Value)
             : item.FinanceInvoiceId.HasValue ? (ProjectRecordAttachmentType.Invoice, item.FinanceInvoiceId.Value)
             : item.FinanceCashEntryId.HasValue ? (ProjectRecordAttachmentType.Cash, item.FinanceCashEntryId.Value)
+            : item.PayrollPaymentId.HasValue ? (ProjectRecordAttachmentType.Cash, item.PayrollPaymentId.Value)
             : item.ProjectConstructionRecordId.HasValue ? (ProjectRecordAttachmentType.Construction, item.ProjectConstructionRecordId.Value)
             : throw new InvalidOperationException("附件没有业务明细关联。");
         return new ProjectRecordAttachmentDto(item.Id, item.ProjectId ?? Guid.Empty, type, id, item.OriginalFileName, item.ContentType, item.SizeBytes, item.Description, item.UploadedAt);

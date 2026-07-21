@@ -25,6 +25,8 @@ public sealed class Attachment
     public FinanceInvoice? FinanceInvoice { get; set; }
     public Guid? FinanceCashEntryId { get; set; }
     public FinanceCashEntry? FinanceCashEntry { get; set; }
+    public Guid? PayrollPaymentId { get; set; }
+    public PayrollPayment? PayrollPayment { get; set; }
     public Guid? ProjectConstructionRecordId { get; set; }
     public ProjectConstructionRecord? ProjectConstructionRecord { get; set; }
     public string? UploadedByUserId { get; set; }

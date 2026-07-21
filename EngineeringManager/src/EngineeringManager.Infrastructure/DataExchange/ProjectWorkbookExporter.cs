@@ -202,33 +202,59 @@ public sealed class ProjectWorkbookExporter(
 
     private async Task<IEnumerable<IReadOnlyList<object?>>> CashRowsAsync(IReadOnlyList<Guid> projectIds, LedgerDirection direction, IReadOnlyList<ProjectWorkbookFieldDefinition> fields, CancellationToken token)
     {
-        var items = await db.FinanceCashAllocations.AsNoTracking().Include(item => item.Project).Include(item => item.Contract)
-            .Include(item => item.CashEntry).ThenInclude(item => item.LegalEntity).Include(item => item.CashEntry).ThenInclude(item => item.BusinessPartner).Include(item => item.CashEntry).ThenInclude(item => item.Account)
-            .Where(item => item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value) && item.CashEntry.Direction == direction && !item.CashEntry.IsReversal)
-            .OrderBy(item => item.Project!.ProjectNumber).ThenBy(item => item.CashEntry.BusinessDate).ThenBy(item => item.AllocationOrder).ToListAsync(token);
-        return items.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        var items = await db.FinanceCashEntries.AsNoTracking().AsSplitQuery()
+            .Include(item => item.Project).Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Account)
+            .Include(item => item.Allocations).ThenInclude(item => item.Project)
+            .Include(item => item.Allocations).ThenInclude(item => item.Contract)
+            .Where(item => item.Direction == direction && !item.IsReversal &&
+                ((item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value)) || item.Allocations.Any(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value))))
+            .OrderBy(item => item.Project!.ProjectNumber).ThenBy(item => item.BusinessDate).ThenBy(item => item.Id).ToListAsync(token);
+        return items.Select(item =>
         {
-            ["project_number"] = item.Project!.ProjectNumber, ["contract_number"] = item.Contract?.ContractNumber, ["legal_entity_code"] = item.CashEntry.LegalEntity.Code, ["partner_number"] = item.CashEntry.BusinessPartner?.PartnerNumber,
-            [direction == LedgerDirection.Receivable ? "receivable_id" : "payable_id"] = item.SettlementId.ToString(), [direction == LedgerDirection.Receivable ? "collection_date" : "payment_date"] = item.CashEntry.BusinessDate,
-            ["account_name"] = item.CashEntry.Account?.AccountName, ["account_id"] = item.CashEntry.AccountId?.ToString(), ["amount"] = item.Amount, ["payment_method"] = item.CashEntry.PaymentMethod, ["notes"] = item.CashEntry.Notes,
-            ["_system_id"] = item.CashEntryId.ToString(), ["_project_system_id"] = item.ProjectId?.ToString(), ["_contract_system_id"] = item.ContractId?.ToString(), ["_concurrency_stamp"] = item.CashEntry.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
-        }));
+            var projectId = item.ProjectId ?? item.Allocations.Where(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value)).Select(allocation => allocation.ProjectId).FirstOrDefault();
+            var project = item.Project ?? item.Allocations.First(allocation => allocation.ProjectId == projectId).Project!;
+            var matchingAllocations = item.Allocations.Where(allocation => allocation.ProjectId == projectId).ToArray();
+            var contractId = item.ProjectId.HasValue ? item.ContractId : matchingAllocations.Select(allocation => allocation.ContractId).Distinct().Count() == 1 ? matchingAllocations[0].ContractId : null;
+            var contractNumber = item.ProjectId.HasValue ? item.Contract?.ContractNumber : matchingAllocations.FirstOrDefault(allocation => allocation.ContractId == contractId)?.Contract?.ContractNumber;
+            var amount = item.ProjectId.HasValue ? item.Amount : matchingAllocations.Sum(allocation => allocation.Amount);
+            var payableId = direction == LedgerDirection.Payable && matchingAllocations.Length == 1 ? matchingAllocations[0].SettlementId.ToString() : null;
+            return Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["project_number"] = project.ProjectNumber, ["contract_number"] = contractNumber, ["legal_entity_code"] = item.LegalEntity.Code, ["partner_number"] = item.BusinessPartner?.PartnerNumber,
+                ["payable_id"] = payableId, [direction == LedgerDirection.Receivable ? "collection_date" : "payment_date"] = item.BusinessDate,
+                ["account_name"] = item.Account?.AccountName, ["account_id"] = item.AccountId?.ToString(), ["amount"] = amount, ["payment_method"] = item.PaymentMethod, ["notes"] = item.Notes,
+                ["_system_id"] = item.Id.ToString(), ["_project_system_id"] = projectId?.ToString(), ["_contract_system_id"] = contractId?.ToString(), ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
+            });
+        });
     }
 
     private async Task<IEnumerable<IReadOnlyList<object?>>> CentralInvoiceRowsAsync(IReadOnlyList<Guid> projectIds, IReadOnlyList<ProjectWorkbookFieldDefinition> fields, CancellationToken token)
     {
-        var items = await db.FinanceInvoiceAllocations.AsNoTracking().Include(item => item.Project).Include(item => item.Contract)
-            .Include(item => item.Invoice).ThenInclude(item => item.LegalEntity).Include(item => item.Invoice).ThenInclude(item => item.BusinessPartner)
-            .Where(item => item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value))
-            .OrderBy(item => item.Project!.ProjectNumber).ThenBy(item => item.Invoice.InvoiceDate).ThenBy(item => item.AllocationOrder).ToListAsync(token);
-        return items.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        var items = await db.FinanceInvoices.AsNoTracking().AsSplitQuery()
+            .Include(item => item.Project).Include(item => item.Contract).Include(item => item.LegalEntity).Include(item => item.BusinessPartner)
+            .Include(item => item.Allocations).ThenInclude(item => item.Project)
+            .Include(item => item.Allocations).ThenInclude(item => item.Contract)
+            .Where(item => item.Direction == LedgerDirection.Receivable &&
+                ((item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value)) || item.Allocations.Any(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value))))
+            .OrderBy(item => item.Project!.ProjectNumber).ThenBy(item => item.InvoiceDate).ThenBy(item => item.Id).ToListAsync(token);
+        return items.Select(item =>
         {
-            ["project_number"] = item.Project!.ProjectNumber, ["contract_number"] = item.Contract?.ContractNumber, ["legal_entity_code"] = item.Invoice.LegalEntity.Code, ["partner_number"] = item.Invoice.BusinessPartner?.PartnerNumber,
-            ["direction"] = item.Invoice.Direction == LedgerDirection.Receivable ? InvoiceDirection.Output.ToString() : InvoiceDirection.Input.ToString(), ["invoice_number"] = item.Invoice.InvoiceNumber,
-            ["invoice_date"] = item.Invoice.InvoiceDate, ["invoice_type"] = item.Invoice.InvoiceType, ["tax_rate"] = item.Invoice.TaxRate, ["net_amount"] = item.Invoice.NetAmount,
-            ["tax_amount"] = item.Invoice.TaxAmount, ["gross_amount"] = item.Amount, ["status"] = item.Invoice.Status.ToString(), ["_system_id"] = item.InvoiceId.ToString(),
-            ["_project_system_id"] = item.ProjectId?.ToString(), ["_contract_system_id"] = item.ContractId?.ToString(), ["_concurrency_stamp"] = item.Invoice.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
-        }));
+            var projectId = item.ProjectId ?? item.Allocations.Where(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value)).Select(allocation => allocation.ProjectId).FirstOrDefault();
+            var project = item.Project ?? item.Allocations.First(allocation => allocation.ProjectId == projectId).Project!;
+            var matchingAllocations = item.Allocations.Where(allocation => allocation.ProjectId == projectId).ToArray();
+            var contractId = item.ProjectId.HasValue ? item.ContractId : matchingAllocations.Select(allocation => allocation.ContractId).Distinct().Count() == 1 ? matchingAllocations[0].ContractId : null;
+            var contractNumber = item.ProjectId.HasValue ? item.Contract?.ContractNumber : matchingAllocations.FirstOrDefault(allocation => allocation.ContractId == contractId)?.Contract?.ContractNumber;
+            var gross = item.ProjectId.HasValue ? item.Amount : matchingAllocations.Sum(allocation => allocation.Amount);
+            var ratio = item.Amount == 0m ? 0m : gross / item.Amount;
+            return Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["project_number"] = project.ProjectNumber, ["contract_number"] = contractNumber, ["legal_entity_code"] = item.LegalEntity.Code, ["partner_number"] = item.BusinessPartner?.PartnerNumber,
+                ["invoice_number"] = item.InvoiceNumber, ["invoice_date"] = item.InvoiceDate, ["invoice_type"] = item.InvoiceType, ["tax_rate"] = item.TaxRate,
+                ["net_amount"] = (item.NetAmount ?? 0m) * ratio, ["tax_amount"] = (item.TaxAmount ?? 0m) * ratio, ["gross_amount"] = gross,
+                ["status"] = item.Status.ToString(), ["_system_id"] = item.Id.ToString(), ["_project_system_id"] = projectId?.ToString(),
+                ["_contract_system_id"] = contractId?.ToString(), ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
+            });
+        });
     }
 
     private async Task<IEnumerable<IReadOnlyList<object?>>> DeductionRowsAsync(IReadOnlyList<Guid> projectIds, IReadOnlyList<ProjectWorkbookFieldDefinition> fields, CancellationToken token)

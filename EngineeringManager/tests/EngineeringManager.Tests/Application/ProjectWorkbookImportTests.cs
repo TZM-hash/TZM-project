@@ -454,7 +454,7 @@ public sealed class ProjectWorkbookImportTests
         project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
         var account = new FinancialAccount { LegalEntity = company, AccountName = "原账户", AccountType = FinancialAccountType.Bank };
         var replacementAccount = new FinancialAccount { LegalEntity = company, AccountName = "新账户", AccountType = FinancialAccountType.Bank };
-        var receivable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, LegalEntity = company, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 100m, OriginalInvoiceAmount = 100m };
+        var receivable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.ProjectQuantity, Project = project, LegalEntity = company, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 100m, OriginalInvoiceAmount = 100m };
         var payable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, LegalEntity = company, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 80m, OriginalInvoiceAmount = 80m };
         fixture.Db.AddRange(company, partner, project, account, replacementAccount, receivable, payable);
         await fixture.Db.SaveChangesAsync();
@@ -463,8 +463,8 @@ public sealed class ProjectWorkbookImportTests
             (ProjectWorkbookSheet.Collections, [Row(ProjectWorkbookSheet.Collections, new Dictionary<string, object?>
             {
                 ["project_number"] = project.ProjectNumber, ["legal_entity_code"] = company.Code, ["partner_number"] = partner.PartnerNumber,
-                ["receivable_id"] = receivable.Id.ToString(), ["collection_date"] = new DateOnly(2026, 7, 2), ["account_id"] = account.Id.ToString(),
-                ["amount"] = 40m, ["payment_method"] = "BankTransfer"
+                ["collection_date"] = new DateOnly(2026, 7, 2), ["account_id"] = account.Id.ToString(),
+                ["amount"] = 40m, ["payment_method"] = "票据-线下"
             })]),
             (ProjectWorkbookSheet.Payments, [Row(ProjectWorkbookSheet.Payments, new Dictionary<string, object?>
             {
@@ -488,8 +488,8 @@ public sealed class ProjectWorkbookImportTests
             (ProjectWorkbookSheet.Collections, [Row(ProjectWorkbookSheet.Collections, new Dictionary<string, object?>
             {
                 ["project_number"] = project.ProjectNumber, ["legal_entity_code"] = company.Code, ["partner_number"] = partner.PartnerNumber,
-                ["receivable_id"] = receivable.Id.ToString(), ["collection_date"] = new DateOnly(2026, 7, 3), ["account_id"] = replacementAccount.Id.ToString(),
-                ["amount"] = 55m, ["payment_method"] = "Cash", ["_system_id"] = collection.Id.ToString(), ["_project_system_id"] = project.Id.ToString(),
+                ["collection_date"] = new DateOnly(2026, 7, 3), ["account_id"] = replacementAccount.Id.ToString(),
+                ["amount"] = 55m, ["payment_method"] = "承兑汇票-更新", ["_system_id"] = collection.Id.ToString(), ["_project_system_id"] = project.Id.ToString(),
                 ["_concurrency_stamp"] = collection.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
             })]),
             (ProjectWorkbookSheet.Payments, [Row(ProjectWorkbookSheet.Payments, new Dictionary<string, object?>
@@ -517,7 +517,7 @@ public sealed class ProjectWorkbookImportTests
         updatedCollection.AccountId.Should().Be(replacementAccount.Id);
         updatedCollection.BusinessDate.Should().Be(new DateOnly(2026, 7, 3));
         updatedCollection.Amount.Should().Be(55m);
-        updatedCollection.PaymentMethod.Should().Be("Cash");
+        updatedCollection.PaymentMethod.Should().Be("承兑汇票-更新");
         updatedCollection.Allocations.Single().SettlementId.Should().Be(receivable.Id);
         updatedCollection.Allocations.Single().Amount.Should().Be(55m);
         updatedPayment.AccountId.Should().Be(replacementAccount.Id);
@@ -538,13 +538,15 @@ public sealed class ProjectWorkbookImportTests
         var partner = new BusinessPartner { PartnerNumber = "INV-P", Name = "发票客户", ShortName = "客户" };
         var project = new Project { ProjectNumber = "INV-WB", Name = "发票项目", Stage = ProjectStage.UnderConstruction };
         project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        var contract = new Contract { Project = project, BusinessPartner = partner, ContractNumber = "INV-C-01", Name = "发票合同" };
+        var line = new ContractLineItem { Contract = contract, Code = "001", Name = "发票工程量", Unit = "项", Quantity = 1m, UnitPrice = 100m, RequiresInvoice = true };
         var settlement = new FinanceSettlement
         {
             Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
-            SourceType = LedgerSourceType.CentralLedger, Project = project, LegalEntity = company, BusinessPartner = partner,
+            SourceType = LedgerSourceType.ProjectQuantity, SourceId = line.Id, Project = project, Contract = contract, ContractLineItem = line, LegalEntity = company, BusinessPartner = partner,
             BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 100m, OriginalInvoiceAmount = 100m
         };
-        fixture.Db.AddRange(company, partner, project, settlement);
+        fixture.Db.AddRange(company, partner, project, contract, line, settlement);
         await fixture.Db.SaveChangesAsync();
 
         var workbook = CreateWorkbook((ProjectWorkbookSheet.Invoices, [Row(ProjectWorkbookSheet.Invoices, new Dictionary<string, object?>
@@ -744,7 +746,8 @@ public sealed class ProjectWorkbookImportTests
         fixture.Db.AddRange(company, partner, account);
         await fixture.Db.SaveChangesAsync();
         var projectId = Guid.NewGuid();
-        var receivableId = Guid.NewGuid();
+        var contractId = Guid.NewGuid();
+        var quantityId = Guid.NewGuid();
         var payableId = Guid.NewGuid();
         var collectionId = Guid.NewGuid();
         var paymentId = Guid.NewGuid();
@@ -755,14 +758,21 @@ public sealed class ProjectWorkbookImportTests
                 ["stage"] = "UnderConstruction", ["contract_signing_status"] = "NotSigned", ["affiliation_type"] = "SelfOperated", ["is_active"] = true,
                 ["_system_id"] = projectId.ToString(), ["_project_system_id"] = projectId.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
             })]),
-            (ProjectWorkbookSheet.Receivables, [Row(ProjectWorkbookSheet.Receivables, new Dictionary<string, object?>
+            (ProjectWorkbookSheet.Contracts, [Row(ProjectWorkbookSheet.Contracts, new Dictionary<string, object?>
             {
-                ["project_number"] = "NEW-P", ["legal_entity_code"] = company.Code, ["partner_number"] = partner.PartnerNumber, ["source_type"] = "Manual",
-                ["entry_date"] = new DateOnly(2026, 7, 5), ["amount"] = 100m, ["_system_id"] = receivableId.ToString(), ["_project_system_id"] = projectId.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
+                ["project_number"] = "NEW-P", ["contract_number"] = "NEW-C-01", ["name"] = "新建合同", ["contract_type"] = "MainContract",
+                ["allocation_mode"] = "SingleCompany", ["counterparty_name"] = partner.Name, ["total_amount"] = 100m, ["is_active"] = true,
+                ["_system_id"] = contractId.ToString(), ["_project_system_id"] = projectId.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
+            })]),
+            (ProjectWorkbookSheet.QuantityLines, [Row(ProjectWorkbookSheet.QuantityLines, new Dictionary<string, object?>
+            {
+                ["project_number"] = "NEW-P", ["contract_number"] = "NEW-C-01", ["code"] = "001", ["name"] = "新建工程量", ["unit"] = "项",
+                ["quantity"] = 1m, ["unit_price"] = 100m, ["accounting_label"] = "暂估", ["requires_invoice"] = true,
+                ["_system_id"] = quantityId.ToString(), ["_project_system_id"] = projectId.ToString(), ["_contract_system_id"] = contractId.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
             })]),
             (ProjectWorkbookSheet.Collections, [Row(ProjectWorkbookSheet.Collections, new Dictionary<string, object?>
             {
-                ["project_number"] = "NEW-P", ["legal_entity_code"] = company.Code, ["partner_number"] = partner.PartnerNumber, ["receivable_id"] = receivableId.ToString(),
+                ["project_number"] = "NEW-P", ["contract_number"] = "NEW-C-01", ["legal_entity_code"] = company.Code, ["partner_number"] = partner.PartnerNumber,
                 ["collection_date"] = new DateOnly(2026, 7, 6), ["account_id"] = account.Id.ToString(), ["amount"] = 40m, ["payment_method"] = "BankTransfer",
                 ["_system_id"] = collectionId.ToString(), ["_project_system_id"] = projectId.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
             })]),
@@ -788,9 +798,10 @@ public sealed class ProjectWorkbookImportTests
         var payable = await fixture.Db.FinanceSettlements.SingleAsync(item => item.Direction == LedgerDirection.Payable);
         var payment = await fixture.Db.FinanceCashEntries.Include(item => item.Allocations).SingleAsync(item => item.Direction == LedgerDirection.Payable);
         project.Id.Should().Be(projectId);
-        receivable.Id.Should().Be(receivableId);
+        receivable.SourceType.Should().Be(LedgerSourceType.ProjectQuantity);
+        receivable.SourceId.Should().Be(quantityId);
         collection.Id.Should().Be(collectionId);
-        collection.Allocations.Single().SettlementId.Should().Be(receivableId);
+        collection.Allocations.Single().SettlementId.Should().Be(receivable.Id);
         payable.Id.Should().Be(payableId);
         payment.Id.Should().Be(paymentId);
         payment.Allocations.Single().SettlementId.Should().Be(payableId);
@@ -801,7 +812,7 @@ public sealed class ProjectWorkbookImportTests
     }
 
     [Fact]
-    public async Task ReceivableAndPayableUpdateModifyCentralSettlementsWithoutOldRows()
+    public async Task ReceivableSheetIsReadOnlyWhilePayableUpdateModifiesCentralSettlement()
     {
         await using var fixture = await ImportFixture.CreateAsync();
         var company = new LegalEntity { Code = "SET-C", Name = "结算公司", ShortName = "结算" };
@@ -845,11 +856,11 @@ public sealed class ProjectWorkbookImportTests
 
         var updatedReceivable = await fixture.Db.FinanceSettlements.AsNoTracking().SingleAsync(item => item.Id == receivable.Id);
         var updatedPayable = await fixture.Db.FinanceSettlements.AsNoTracking().SingleAsync(item => item.Id == payable.Id);
-        updatedReceivable.SettlementState.Should().Be(LedgerSettlementState.Final);
-        updatedReceivable.BusinessDate.Should().Be(new DateOnly(2026, 7, 2));
-        updatedReceivable.OriginalAmount.Should().Be(120m);
-        updatedReceivable.OriginalInvoiceAmount.Should().Be(110m);
-        updatedReceivable.Notes.Should().Be("更新应收");
+        updatedReceivable.SettlementState.Should().Be(LedgerSettlementState.Provisional);
+        updatedReceivable.BusinessDate.Should().Be(new DateOnly(2026, 7, 1));
+        updatedReceivable.OriginalAmount.Should().Be(100m);
+        updatedReceivable.OriginalInvoiceAmount.Should().Be(100m);
+        updatedReceivable.Notes.Should().Be("原应收");
         updatedPayable.SettlementState.Should().Be(LedgerSettlementState.Final);
         updatedPayable.BusinessDate.Should().Be(new DateOnly(2026, 7, 3));
         updatedPayable.OriginalAmount.Should().Be(95m);

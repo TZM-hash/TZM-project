@@ -51,12 +51,10 @@ public sealed class FinanceSummaryTests
     public async Task OutputInvoiceCanLinkMultipleReceivablesAndLineItemsAndUpdatesSummary()
     {
         await using var fixture = await FinanceSummaryFixture.CreateAsync();
-        var firstReceivableId = await fixture.Service.AddReceivableAsync(
-            new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 16), null, 60m, "第一笔应收"),
-            CancellationToken.None);
-        var secondReceivableId = await fixture.Service.AddReceivableAsync(
-            new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id, ReceivableSourceType.Manual, new DateOnly(2026, 7, 17), null, 40m, "第二笔应收"),
-            CancellationToken.None);
+        var firstReceivable = QuantityReceivable(fixture, fixture.FirstLine, new DateOnly(2026, 7, 16), 60m, "第一笔应收");
+        var secondReceivable = QuantityReceivable(fixture, fixture.SecondLine, new DateOnly(2026, 7, 17), 40m, "第二笔应收");
+        fixture.Db.FinanceSettlements.AddRange(firstReceivable, secondReceivable);
+        await fixture.Db.SaveChangesAsync();
 
         var invoiceId = await fixture.Service.AddInvoiceAsync(
             new CreateInvoiceRequest(
@@ -72,7 +70,7 @@ public sealed class FinanceSummaryTests
                 8.05m,
                 70m,
                 InvoiceStatus.IssuedOrReceived,
-                [new InvoiceAllocationRequest(firstReceivableId, 50m), new InvoiceAllocationRequest(secondReceivableId, 20m)],
+                [new InvoiceAllocationRequest(firstReceivable.Id, 50m), new InvoiceAllocationRequest(secondReceivable.Id, 20m)],
                 [new InvoiceAllocationRequest(fixture.FirstLine.Id, 40m), new InvoiceAllocationRequest(fixture.SecondLine.Id, 30m)]),
             CancellationToken.None);
 
@@ -84,6 +82,24 @@ public sealed class FinanceSummaryTests
         summary.OutputInvoiceAmount.Should().Be(70m);
         summary.UninvoicedAmount.Should().Be(30m);
     }
+
+    private static FinanceSettlement QuantityReceivable(FinanceSummaryFixture fixture, ContractLineItem line, DateOnly date, decimal amount, string notes) => new()
+    {
+        Scope = LedgerScope.External,
+        Direction = LedgerDirection.Receivable,
+        SettlementState = LedgerSettlementState.Provisional,
+        SourceType = LedgerSourceType.ProjectQuantity,
+        SourceId = line.Id,
+        ProjectId = fixture.Project.Id,
+        ContractId = fixture.Contract.Id,
+        ContractLineItemId = line.Id,
+        LegalEntityId = fixture.LegalEntity.Id,
+        BusinessPartnerId = fixture.Partner.Id,
+        BusinessDate = date,
+        OriginalAmount = amount,
+        OriginalInvoiceAmount = amount,
+        Notes = notes
+    };
 
     [Fact]
     public async Task InputInvoiceIsReportedSeparatelyAndInvalidAllocationsAreRejected()

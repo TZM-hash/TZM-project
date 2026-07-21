@@ -826,6 +826,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasKey(item => item.Id);
             entity.Property(item => item.SourceUrl).HasMaxLength(1000);
             entity.Property(item => item.BusinessDate).HasColumnType("date");
+            entity.Property(item => item.DueDate).HasColumnType("date");
             entity.Property(item => item.SettlementDate).HasColumnType("date");
             entity.Property(item => item.OriginalAmount).HasPrecision(18, 2);
             entity.Property(item => item.OriginalInvoiceAmount).HasPrecision(18, 2);
@@ -891,6 +892,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.BusinessPartner).WithMany().HasForeignKey(item => item.BusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.CounterLegalEntity).WithMany().HasForeignKey(item => item.CounterLegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Contract).WithMany().HasForeignKey(item => item.ContractId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.ProjectTaxConfiguration).WithMany().HasForeignKey(item => item.ProjectTaxConfigurationId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_FinanceInvoices_Party", partyConstraint));
         });
@@ -926,6 +929,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.CounterLegalEntity).WithMany().HasForeignKey(item => item.CounterLegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Account).WithMany().HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.CounterAccount).WithMany().HasForeignKey(item => item.CounterAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Contract).WithMany().HasForeignKey(item => item.ContractId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.ReversesCashEntry).WithMany().HasForeignKey(item => item.ReversesCashEntryId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_FinanceCashEntries_Party", partyConstraint));
         });
@@ -1370,6 +1375,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.FinanceSettlement).WithMany().HasForeignKey(item => item.FinanceSettlementId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(item => item.FinanceInvoice).WithMany().HasForeignKey(item => item.FinanceInvoiceId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(item => item.FinanceCashEntry).WithMany().HasForeignKey(item => item.FinanceCashEntryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.PayrollPayment).WithMany().HasForeignKey(item => item.PayrollPaymentId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(item => item.ProjectConstructionRecord).WithMany().HasForeignKey(item => item.ProjectConstructionRecordId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.UploadedByUser).WithMany().HasForeignKey(item => item.UploadedByUserId).OnDelete(DeleteBehavior.SetNull);
         });

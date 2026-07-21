@@ -102,7 +102,8 @@ public sealed record RecordCollectionRequest(
     DateOnly CollectionDate,
     decimal Amount,
     string? PaymentMethod,
-    string? Notes)
+    string? Notes,
+    Guid? EntryId = null)
 {
     public RecordCollectionRequest(
         Guid? receivableEntryId,

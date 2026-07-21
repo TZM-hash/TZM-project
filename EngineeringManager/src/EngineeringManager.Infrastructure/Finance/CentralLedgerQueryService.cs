@@ -94,6 +94,7 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
         var pageSize = Math.Clamp(query.PageSize, 1, 200);
         var totalPages = matching.Length == 0 ? 0 : (int)Math.Ceiling(matching.Length / (decimal)pageSize);
         var pageRows = matching.Skip((page - 1) * pageSize).Take(pageSize).ToArray();
+        var unallocatedCash = await SearchUnallocatedCashAsync(actor, query, startDate, endDate, token);
         return new CentralLedgerOverviewPageDto(
             pageRows,
             totals,
@@ -101,7 +102,40 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
             pageSize,
             matching.Length,
             totalPages,
-            matching.Select(item => item.SettlementId).ToArray());
+            matching.Select(item => item.SettlementId).ToArray(),
+            unallocatedCash);
+    }
+
+    private async Task<IReadOnlyList<CentralLedgerUnallocatedCashDto>> SearchUnallocatedCashAsync(
+        CentralLedgerActor actor,
+        CentralLedgerQuery query,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        CancellationToken token)
+    {
+        var projectIds = actor.ProjectIds.ToArray();
+        var cashQuery = db.FinanceCashEntries.AsNoTracking().AsSplitQuery()
+            .Include(item => item.LegalEntity).Include(item => item.BusinessPartner).Include(item => item.Project).Include(item => item.Contract).Include(item => item.Account)
+            .Include(item => item.Allocations)
+            .Where(item => item.Scope == query.Scope && item.Status == (query.RecordStatus ?? LedgerRecordStatus.Active) && !item.IsReversal
+                && actor.LegalEntityIds.Contains(item.LegalEntityId)
+                && (item.ProjectId.HasValue ? projectIds.Contains(item.ProjectId.Value) : item.Allocations.Any(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value))));
+        if (query.Direction.HasValue) cashQuery = cashQuery.Where(item => item.Direction == query.Direction);
+        if (startDate.HasValue) cashQuery = cashQuery.Where(item => item.BusinessDate >= startDate);
+        if (endDate.HasValue) cashQuery = cashQuery.Where(item => item.BusinessDate <= endDate);
+        if (query.LegalEntityId.HasValue) cashQuery = cashQuery.Where(item => item.LegalEntityId == query.LegalEntityId);
+        if (query.BusinessPartnerId.HasValue) cashQuery = cashQuery.Where(item => item.BusinessPartnerId == query.BusinessPartnerId);
+        if (query.ProjectId.HasValue) cashQuery = cashQuery.Where(item => item.ProjectId == query.ProjectId || item.Allocations.Any(allocation => allocation.ProjectId == query.ProjectId));
+        if (query.ContractId.HasValue) cashQuery = cashQuery.Where(item => item.ContractId == query.ContractId || item.Allocations.Any(allocation => allocation.ContractId == query.ContractId));
+        var cashEntries = await cashQuery.OrderBy(item => item.BusinessDate).ThenBy(item => item.Id).ToListAsync(token);
+        return cashEntries.Select(item => new CentralLedgerUnallocatedCashDto(
+                item.Id, item.Direction, item.BusinessDate, item.LegalEntityId, item.LegalEntity.Name,
+                item.BusinessPartnerId, item.BusinessPartner?.Name, item.ProjectId, item.Project?.Name,
+                item.ContractId, item.Contract?.Name, item.AccountId, item.Account?.AccountName, item.Amount,
+                item.Allocations.Sum(allocation => allocation.Amount),
+                item.Amount - item.Allocations.Sum(allocation => allocation.Amount), item.PaymentMethod, item.ConcurrencyStamp))
+            .Where(item => item.UnallocatedAmount > 0m)
+            .ToArray();
     }
 
     public async Task<CentralLedgerDetailsDto?> GetAsync(

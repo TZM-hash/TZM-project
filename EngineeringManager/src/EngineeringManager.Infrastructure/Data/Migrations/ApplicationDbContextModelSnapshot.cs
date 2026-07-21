@@ -415,6 +415,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Property<Guid?>("FinanceSettlementId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("PayrollPaymentId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -457,6 +460,8 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.HasIndex("FinanceInvoiceId");
 
                     b.HasIndex("FinanceSettlementId");
+
+                    b.HasIndex("PayrollPaymentId");
 
                     b.HasIndex("ProjectConstructionRecordId");
 
@@ -2561,6 +2566,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Property<Guid?>("CounterLegalEntityId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -2586,6 +2594,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<Guid?>("ReversesCashEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ProjectId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Scope")
@@ -2616,6 +2627,10 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.HasIndex("CounterAccountId");
 
                     b.HasIndex("CounterLegalEntityId");
+
+                    b.HasIndex("ContractId");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("ReversesCashEntryId");
 
@@ -2770,6 +2785,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Property<Guid?>("CounterLegalEntityId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -2806,6 +2824,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Property<Guid?>("ProjectTaxConfigurationId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Scope")
                         .HasColumnType("int");
 
@@ -2838,6 +2859,10 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.HasIndex("BusinessPartnerId");
 
                     b.HasIndex("CounterLegalEntityId");
+
+                    b.HasIndex("ContractId");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("ProjectTaxConfigurationId");
 
@@ -3059,6 +3084,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
                     b.Property<Guid?>("BusinessPartnerId")
@@ -5301,6 +5329,11 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasForeignKey("FinanceSettlementId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("EngineeringManager.Infrastructure.Data.PayrollPayment", "PayrollPayment")
+                        .WithMany()
+                        .HasForeignKey("PayrollPaymentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("EngineeringManager.Infrastructure.Data.ProjectConstructionRecord", "ProjectConstructionRecord")
                         .WithMany()
                         .HasForeignKey("ProjectConstructionRecordId")
@@ -5330,6 +5363,8 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                     b.Navigation("FinanceInvoice");
 
                     b.Navigation("FinanceSettlement");
+
+                    b.Navigation("PayrollPayment");
 
                     b.Navigation("Project");
 
@@ -6096,6 +6131,16 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .HasForeignKey("ReversesCashEntryId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Account");
 
                     b.Navigation("BusinessPartner");
@@ -6104,9 +6149,13 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.Navigation("CounterLegalEntity");
 
+                    b.Navigation("Contract");
+
                     b.Navigation("LegalEntity");
 
                     b.Navigation("ReversesCashEntry");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("EngineeringManager.Infrastructure.Data.FinanceDeduction", b =>
@@ -6138,6 +6187,16 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EngineeringManager.Infrastructure.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("EngineeringManager.Infrastructure.Data.ProjectTaxConfiguration", "ProjectTaxConfiguration")
                         .WithMany()
                         .HasForeignKey("ProjectTaxConfigurationId")
@@ -6147,7 +6206,11 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.Navigation("CounterLegalEntity");
 
+                    b.Navigation("Contract");
+
                     b.Navigation("LegalEntity");
+
+                    b.Navigation("Project");
 
                     b.Navigation("ProjectTaxConfiguration");
                 });

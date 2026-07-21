@@ -29,7 +29,8 @@ public sealed class ProjectConstructionServiceTests
         var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
         var actor = new ProjectConstructionActor("project-manager", "项目经理");
 
-        var first = await service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, target.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 10), 2, "首轮施工", false, null, "登记首轮施工"), new DateOnly(2026, 7, 17), CancellationToken.None);
+        var first = await service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 10), 2, "首轮施工", false, null, "登记首轮施工"), new DateOnly(2026, 7, 17), CancellationToken.None);
+        await service.LinkNextAsync(actor, new LinkProjectConstructionRecordRequest(first.Id, target.Id, first.ConcurrencyStamp, "流转到目标项目", new DateOnly(2026, 7, 11)), new DateOnly(2026, 7, 17), CancellationToken.None);
         await service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null, new DateOnly(2026, 7, 12), new DateOnly(2026, 7, 15), 0, "第二轮施工", false, null, "登记第二轮施工"), new DateOnly(2026, 7, 17), CancellationToken.None);
 
         first.TotalDays.Should().Be(10);
@@ -59,7 +60,7 @@ public sealed class ProjectConstructionServiceTests
         var actor = new ProjectConstructionActor("project-manager", "项目经理");
 
         var selfTransfer = () => service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(null, project.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, project.Id, new DateOnly(2026, 7, 1), null, 0, null, false, null, "错误流转"), new DateOnly(2026, 7, 17), CancellationToken.None);
-        await selfTransfer.Should().ThrowAsync<ArgumentException>().WithMessage("*不能是当前项目*");
+        await selfTransfer.Should().ThrowAsync<InvalidOperationException>().WithMessage("*跨项目流转只能通过*");
         var saved = await service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(null, project.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null, new DateOnly(2026, 7, 1), null, 0, null, false, null, "新增"), new DateOnly(2026, 7, 17), CancellationToken.None);
         var stale = () => service.SaveAsync(actor, new SaveProjectConstructionRecordRequest(saved.Id, project.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null, new DateOnly(2026, 7, 1), null, 0, null, false, Guid.NewGuid(), "过期修改"), new DateOnly(2026, 7, 17), CancellationToken.None);
         await stale.Should().ThrowAsync<DbUpdateConcurrencyException>();
@@ -83,9 +84,11 @@ public sealed class ProjectConstructionServiceTests
         var actor = new ProjectConstructionActor("project-manager", "项目经理");
 
         var saved = await service.SaveAsync(actor,
-            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, target.Id,
+            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null,
                 new DateOnly(2026, 7, 1), null, 0, null, false, null, "显示重要机械", ShowInProjectOverview: true),
             new DateOnly(2026, 7, 18), CancellationToken.None);
+
+        await service.LinkNextAsync(actor, new LinkProjectConstructionRecordRequest(saved.Id, target.Id, saved.ConcurrencyStamp, "流转重要机械", new DateOnly(2026, 7, 19)), new DateOnly(2026, 7, 18), CancellationToken.None);
 
         saved.ShowInProjectOverview.Should().BeTrue();
         (await db.ProjectConstructionRecords.SingleAsync(item => item.Id == saved.Id)).ShowInProjectOverview.Should().BeTrue();
@@ -146,7 +149,7 @@ public sealed class ProjectConstructionServiceTests
             new DateOnly(2026, 7, 21), CancellationToken.None);
 
         await service.LinkNextAsync(actor,
-            new LinkProjectConstructionRecordRequest(current.Id, target.Id, current.ConcurrencyStamp, "关联后续项目"),
+            new LinkProjectConstructionRecordRequest(current.Id, target.Id, current.ConcurrencyStamp, "关联后续项目", new DateOnly(2026, 7, 21)),
             new DateOnly(2026, 7, 21), CancellationToken.None);
 
         var sourceRecord = await db.ProjectConstructionRecords.SingleAsync(item => item.Id == current.Id);
@@ -173,8 +176,12 @@ public sealed class ProjectConstructionServiceTests
         var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
         var actor = new ProjectConstructionActor("project-manager", "项目经理");
         var current = await service.SaveAsync(actor,
-            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, target.Id,
+            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null,
                 new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 20), 0, null, false, null, "新增带流转记录"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        current = await service.LinkNextAsync(actor,
+            new LinkProjectConstructionRecordRequest(current.Id, target.Id, current.ConcurrencyStamp, "关联后续项目", new DateOnly(2026, 7, 21)),
             new DateOnly(2026, 7, 21), CancellationToken.None);
 
         await service.UnlinkAsync(actor,
@@ -187,5 +194,107 @@ public sealed class ProjectConstructionServiceTests
         sourceRecord.TransferToProjectId.Should().BeNull();
         targetDraft.PreviousRecordId.Should().BeNull();
         targetDraft.TransferFromProjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LinkPreviousConnectsTheLatestFormalMatchingRecord()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var previousProject = new Project { ProjectNumber = "CONS-PREV-01", Name = "上一项目" };
+        var currentProject = new Project { ProjectNumber = "CONS-PREV-02", Name = "当前项目" };
+        var equipment = new Equipment { EquipmentNumber = "EQ-PREV-01", Name = "反向连接设备" };
+        db.AddRange(previousProject, currentProject, equipment);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+        var actor = new ProjectConstructionActor("project-manager", "项目经理");
+        var previous = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, previousProject.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null,
+                new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), 0, null, false, null, "上一项目退场"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+        var current = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, currentProject.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null,
+                new DateOnly(2026, 7, 1), null, 0, null, false, null, "当前项目进场"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        await service.LinkPreviousAsync(actor,
+            new LinkProjectConstructionRecordRequest(current.Id, previousProject.Id, current.ConcurrencyStamp, "连接上一项目"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        var savedPrevious = await db.ProjectConstructionRecords.SingleAsync(item => item.Id == previous.Id);
+        var savedCurrent = await db.ProjectConstructionRecords.SingleAsync(item => item.Id == current.Id);
+        savedPrevious.NextRecordId.Should().Be(current.Id);
+        savedPrevious.TransferToProjectId.Should().Be(currentProject.Id);
+        savedCurrent.PreviousRecordId.Should().Be(previous.Id);
+        savedCurrent.TransferFromProjectId.Should().Be(previousProject.Id);
+    }
+
+    [Fact]
+    public async Task LinkNextReusesOnlyAnUnlinkedDraftAndSetsTargetEntryDate()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var source = new Project { ProjectNumber = "CONS-REUSE-01", Name = "复用来源项目" };
+        var target = new Project { ProjectNumber = "CONS-REUSE-02", Name = "复用目标项目" };
+        var equipment = new Equipment { EquipmentNumber = "EQ-REUSE-01", Name = "复用设备" };
+        var draft = new ProjectConstructionRecord { Project = target, RecordType = ProjectConstructionRecordType.Equipment, Equipment = equipment, IsDraft = true };
+        db.AddRange(source, target, equipment, draft);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+        var actor = new ProjectConstructionActor("project-manager", "项目经理");
+        var current = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, source.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null,
+                new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 20), 0, null, false, null, "新增来源记录"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        await service.LinkNextAsync(actor,
+            new LinkProjectConstructionRecordRequest(current.Id, target.Id, current.ConcurrencyStamp, "复用目标草稿", new DateOnly(2026, 7, 22)),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        (await db.ProjectConstructionRecords.CountAsync(item => item.ProjectId == target.Id)).Should().Be(1);
+        var reused = await db.ProjectConstructionRecords.SingleAsync(item => item.Id == draft.Id);
+        reused.IsDraft.Should().BeTrue();
+        reused.EntryDate.Should().Be(new DateOnly(2026, 7, 22));
+        reused.PreviousRecordId.Should().Be(current.Id);
+        reused.TransferFromProjectId.Should().Be(source.Id);
+    }
+
+    [Fact]
+    public async Task LinkNextRequiresEntryDateAndRejectsAFlowCycle()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var firstProject = new Project { ProjectNumber = "CONS-CYCLE-01", Name = "循环项目一" };
+        var secondProject = new Project { ProjectNumber = "CONS-CYCLE-02", Name = "循环项目二" };
+        var equipment = new Equipment { EquipmentNumber = "EQ-CYCLE-01", Name = "循环设备" };
+        db.AddRange(firstProject, secondProject, equipment);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+        var actor = new ProjectConstructionActor("project-manager", "项目经理");
+        var first = await service.SaveAsync(actor,
+            new SaveProjectConstructionRecordRequest(null, firstProject.Id, ProjectConstructionRecordType.Equipment, equipment.Id, null, null, null,
+                new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 20), 0, null, false, null, "新增循环测试记录"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        var missingDate = () => service.LinkNextAsync(actor,
+            new LinkProjectConstructionRecordRequest(first.Id, secondProject.Id, first.ConcurrencyStamp, "缺少进场日期"),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+        await missingDate.Should().ThrowAsync<ArgumentException>().WithMessage("*进场日期*");
+
+        await service.LinkNextAsync(actor,
+            new LinkProjectConstructionRecordRequest(first.Id, secondProject.Id, first.ConcurrencyStamp, "建立正向流转", new DateOnly(2026, 7, 21)),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+        var second = await db.ProjectConstructionRecords.AsNoTracking().SingleAsync(item => item.ProjectId == secondProject.Id);
+        var cycle = () => service.LinkNextAsync(actor,
+            new LinkProjectConstructionRecordRequest(second.Id, firstProject.Id, second.ConcurrencyStamp, "尝试形成循环", new DateOnly(2026, 8, 1)),
+            new DateOnly(2026, 7, 21), CancellationToken.None);
+
+        await cycle.Should().ThrowAsync<InvalidOperationException>().WithMessage("*不能形成循环*");
     }
 }

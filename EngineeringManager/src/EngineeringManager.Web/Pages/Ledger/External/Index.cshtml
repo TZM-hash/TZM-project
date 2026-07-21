@@ -13,6 +13,23 @@
     </div>
 </section>
 
+<section class="panel" id="unallocated-cash">
+    <div class="panel-heading"><div><p class="eyebrow">待处理资金</p><h2>待分摊收款</h2></div><span class="result-count">共 @(Model.Result.UnallocatedCash?.Count ?? 0) 笔</span></div>
+    @if (Model.Result.UnallocatedCash is not { Count: > 0 })
+    {
+        <p class="panel-copy">当前筛选范围没有待分摊收款。</p>
+    }
+    else
+    {
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>方向</th><th>项目</th><th>收款账户</th><th>收款金额</th><th>已分摊</th><th>待分摊</th><th>收款方式</th></tr></thead><tbody>
+        @foreach (var cash in Model.Result.UnallocatedCash)
+        {
+            <tr><td>@cash.BusinessDate</td><td>@(cash.Direction == LedgerDirection.Receivable ? "收款" : "付款")</td><td>@(cash.ProjectName ?? "未指定项目")</td><td>@(cash.AccountName ?? "未填写账户")</td><td>@cash.Amount.ToString("N2")</td><td>@cash.AllocatedAmount.ToString("N2")</td><td><strong>@cash.UnallocatedAmount.ToString("N2")</strong></td><td>@(cash.PaymentMethod ?? "-")</td></tr>
+        }
+        </tbody></table></div>
+    }
+</section>
+
 <partial name="../_LedgerMetrics" model="Model.Result.Totals" />
 
 <section class="panel ledger-filter-panel">

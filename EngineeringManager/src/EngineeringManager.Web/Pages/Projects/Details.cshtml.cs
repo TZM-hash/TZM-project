@@ -434,8 +434,8 @@ public sealed class DetailsModel(
                 ConstructionEdit.Id, id, ConstructionEdit.RecordType,
                 ConstructionEdit.RecordType == ProjectConstructionRecordType.Equipment ? ConstructionEdit.SubjectId : null,
                 ConstructionEdit.RecordType == ProjectConstructionRecordType.ConstructionCrew ? ConstructionEdit.SubjectId : null,
-                ConstructionEdit.TransferFromProjectId, ConstructionEdit.TransferToProjectId, ConstructionEdit.EntryDate, ConstructionEdit.ExitDate,
-                ConstructionEdit.StopDays, ConstructionEdit.Notes, ConstructionEdit.AutoConnectPrevious,
+                null, null, ConstructionEdit.EntryDate, ConstructionEdit.ExitDate,
+                ConstructionEdit.StopDays, ConstructionEdit.Notes, false,
                 ConstructionEdit.ConcurrencyStamp == Guid.Empty ? null : ConstructionEdit.ConcurrencyStamp,
                 RequiredText(ConstructionEdit.Reason, "请填写修改原因。"), ConstructionEdit.ShowInProjectOverview), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
             await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Construction, saved.Id, "construction", RecordAttachmentFile, cancellationToken);
@@ -468,7 +468,7 @@ public sealed class DetailsModel(
                 case "next":
                     await constructionService.LinkNextAsync(actor, new LinkProjectConstructionRecordRequest(
                         ConstructionFlow.RecordId, Required(ConstructionFlow.TargetProjectId, "请选择需要关联的后续项目。"),
-                        ConstructionFlow.ConcurrencyStamp, reason), today, cancellationToken);
+                        ConstructionFlow.ConcurrencyStamp, reason, ConstructionFlow.TargetEntryDate), today, cancellationToken);
                     break;
                 case "unlink":
                     await constructionService.UnlinkAsync(actor, new UnlinkProjectConstructionRecordRequest(
@@ -639,7 +639,7 @@ public sealed class DetailsModel(
         foreach (var row in workspace.Collections) await AddAsync(ProjectRecordAttachmentType.Cash, row.Id);
         foreach (var row in workspace.Invoices) await AddAsync(ProjectRecordAttachmentType.Invoice, row.Id);
         foreach (var row in workspace.Payables) await AddAsync(ProjectRecordAttachmentType.Settlement, row.Id);
-        foreach (var row in workspace.Payments.Where(item => item.SourceType == "FinancePayment")) await AddAsync(ProjectRecordAttachmentType.Cash, row.Id);
+        foreach (var row in workspace.Payments) await AddAsync(ProjectRecordAttachmentType.Cash, row.Id);
         foreach (var row in construction.Records) await AddAsync(ProjectRecordAttachmentType.Construction, row.Id);
         return result;
     }
@@ -660,7 +660,7 @@ public sealed class DetailsModel(
         ProjectRecordAttachmentType.Quantity => workspace.Contracts.SelectMany(item => item.LineItems).Any(item => item.Id == recordId),
         ProjectRecordAttachmentType.Settlement => workspace.Payables.Any(item => item.Id == recordId),
         ProjectRecordAttachmentType.Invoice => workspace.Invoices.Any(item => item.Id == recordId),
-        ProjectRecordAttachmentType.Cash => workspace.Collections.Any(item => item.Id == recordId) || workspace.Payments.Any(item => item.Id == recordId && item.SourceType == "FinancePayment"),
+        ProjectRecordAttachmentType.Cash => workspace.Collections.Any(item => item.Id == recordId) || workspace.Payments.Any(item => item.Id == recordId),
         ProjectRecordAttachmentType.Construction => construction.Records.Any(item => item.Id == recordId),
         _ => false
     };
@@ -869,13 +869,10 @@ public sealed class DetailsModel(
         public Guid? Id { get; set; }
         public ProjectConstructionRecordType RecordType { get; set; } = ProjectConstructionRecordType.Equipment;
         public Guid? SubjectId { get; set; }
-        public Guid? TransferFromProjectId { get; set; }
-        public Guid? TransferToProjectId { get; set; }
         public DateOnly? EntryDate { get; set; }
         public DateOnly? ExitDate { get; set; }
         public int StopDays { get; set; }
         public string? Notes { get; set; }
-        public bool AutoConnectPrevious { get; set; }
         public bool ShowInProjectOverview { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "项目管理页面快捷修改施工详情";
@@ -885,6 +882,7 @@ public sealed class DetailsModel(
     {
         public Guid RecordId { get; set; }
         public Guid? TargetProjectId { get; set; }
+        public DateOnly? TargetEntryDate { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Action { get; set; } = string.Empty;
         public string Reason { get; set; } = "项目管理页面调整施工流转";
