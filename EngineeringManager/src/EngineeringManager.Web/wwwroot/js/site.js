@@ -67,16 +67,26 @@ function initProjectContractEditor() {
 
   const list = root.querySelector("[data-project-contract-list]");
   const addButton = root.querySelector("[data-project-contract-add]");
-  const totalNode = document.querySelector("[data-project-contract-total]");
+  const totalNode = root.querySelector("[data-project-contract-total]") || document.querySelector("[data-project-contract-total]");
   if (!list) return;
 
+  const initialListHtml = list.innerHTML;
+
   const reindex = () => {
-    list.querySelectorAll("[data-project-contract-row]").forEach((row, index) => {
+    const rows = [...list.querySelectorAll("[data-project-contract-row]")];
+    rows.forEach((row, index) => {
       row.querySelectorAll("input[name]").forEach((input) => {
         input.name = input.name.replace(/QuickEdit\.Contracts\[\d+\]/, `QuickEdit.Contracts[${index}]`);
       });
     });
-    if (addButton) addButton.disabled = list.querySelectorAll("[data-project-contract-row]").length >= 3;
+    const canRemove = rows.length > 1;
+    rows.forEach((row) => {
+      row.querySelectorAll("[data-project-contract-remove]").forEach((button) => {
+        button.disabled = !canRemove;
+        button.hidden = root.closest(".is-editing") ? false : button.hasAttribute("data-inline-edit-control");
+      });
+    });
+    if (addButton) addButton.disabled = rows.length >= 3;
   };
 
   const refreshTotal = () => {
@@ -96,7 +106,8 @@ function initProjectContractEditor() {
     });
     row.querySelectorAll("[data-project-contract-remove]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (row.dataset.projectContractNew !== "true") return;
+        const rows = list.querySelectorAll("[data-project-contract-row]");
+        if (rows.length <= 1) return;
         row.remove();
         reindex();
         refreshTotal();
@@ -132,11 +143,16 @@ function initProjectContractEditor() {
 
   document.querySelectorAll('[data-inline-edit="project-overview"] [data-inline-edit-cancel]').forEach((button) => {
     button.addEventListener("click", () => {
-      list.querySelectorAll('[data-project-contract-new="true"]').forEach((row) => row.remove());
+      list.innerHTML = initialListHtml;
+      list.querySelectorAll("[data-project-contract-row]").forEach(bindRow);
       reindex();
-      // allow form.reset to restore values first
       window.setTimeout(refreshTotal, 0);
     });
+  });
+
+  // When entering edit mode, ensure remove buttons visible via existing inline-edit toggle.
+  document.querySelectorAll('[data-inline-edit="project-overview"] [data-inline-edit-open]').forEach((button) => {
+    button.addEventListener("click", () => window.setTimeout(reindex, 0));
   });
 
   reindex();

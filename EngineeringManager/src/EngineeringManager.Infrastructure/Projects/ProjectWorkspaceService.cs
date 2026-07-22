@@ -286,7 +286,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         }
 
         if (request.Contracts is not null)
-            SynchronizeProjectContracts(project, request.Contracts);
+            await SynchronizeProjectContractsAsync(project, request.Contracts, cancellationToken);
 
         db.AuditLogs.Add(new AuditLog
         {
@@ -396,7 +396,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .ToArray()
     };
 
-    private void SynchronizeProjectContracts(Project project, IReadOnlyCollection<ProjectContractQuickEditInput> contracts)
+    private async Task SynchronizeProjectContractsAsync(Project project, IReadOnlyCollection<ProjectContractQuickEditInput> contracts, CancellationToken cancellationToken)
     {
         if (contracts.Count is < 1 or > 3)
             throw new ArgumentException("每个项目至少维护 1 份合同，最多 3 份。", nameof(contracts));
@@ -415,13 +415,25 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         if (submittedExistingIds.Length != submittedExistingIds.Distinct().Count())
             throw new ArgumentException("提交的合同存在重复项。", nameof(contracts));
 
-        foreach (var missing in activeContracts.Keys.Except(submittedExistingIds))
-            throw new InvalidOperationException("已有合同不能在快捷编辑中删除，请保留全部现有合同后继续。");
+        foreach (var existingId in submittedExistingIds)
+        {
+            if (!activeContracts.ContainsKey(existingId))
+                throw new InvalidOperationException("提交的合同不属于当前项目。");
+        }
+
+        foreach (var removed in activeContracts.Values.Where(item => !submittedExistingIds.Contains(item.Id)))
+        {
+            if (await ContractHasLinkedBusinessDataAsync(removed.Id, cancellationToken))
+                throw new InvalidOperationException($"合同“{removed.Name}”已关联业务数据，不能删除。");
+            removed.IsActive = false;
+            removed.UpdatedAt = DateTimeOffset.UtcNow;
+            removed.ConcurrencyStamp = Guid.NewGuid();
+        }
 
         var usedNumbers = project.Contracts
             .Select(item => item.ContractNumber)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var nextSequence = activeContracts.Count + 1;
+        var nextSequence = project.Contracts.Count + 1;
 
         for (var index = 0; index < rows.Length; index++)
         {
@@ -461,6 +473,21 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             project.Contracts.Add(created);
             db.Contracts.Add(created);
         }
+    }
+
+    private async Task<bool> ContractHasLinkedBusinessDataAsync(Guid contractId, CancellationToken cancellationToken)
+    {
+        if (await db.ContractLineItems.AnyAsync(item => item.ContractId == contractId, cancellationToken))
+            return true;
+        if (await db.FinanceSettlements.AnyAsync(item => item.ContractId == contractId, cancellationToken))
+            return true;
+        if (await db.FinanceCashEntries.AnyAsync(item => item.ContractId == contractId, cancellationToken))
+            return true;
+        if (await db.FinanceInvoices.AnyAsync(item => item.ContractId == contractId, cancellationToken))
+            return true;
+        if (await db.ProjectPartners.AnyAsync(item => item.ContractId == contractId, cancellationToken))
+            return true;
+        return false;
     }
 
     private static decimal NormalizeContractAmount(decimal? amount)

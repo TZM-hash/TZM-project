@@ -99,6 +99,57 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task UpdateCanRemoveUnlinkedProjectContractWhileKeepingAtLeastOne()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var existing = await fixture.Db.Contracts.SingleAsync(item => item.ProjectId == fixture.Project.Id);
+        // remove linked line items so existing main contract can stay and second can be deleted
+        var linked = fixture.Db.ContractLineItems.Where(item => item.ContractId == existing.Id);
+        fixture.Db.ContractLineItems.RemoveRange(linked);
+        var second = new Contract
+        {
+            ProjectId = fixture.Project.Id,
+            ContractNumber = "WORK-P-01-C02",
+            Name = "可删除合同",
+            ContractType = ContractType.Supplement,
+            AllocationMode = ContractAllocationMode.SingleCompany,
+            TotalAmount = 50m
+        };
+        fixture.Db.Contracts.Add(second);
+        await fixture.Db.SaveChangesAsync();
+        existing = await fixture.Db.Contracts.SingleAsync(item => item.Id == existing.Id);
+
+        var updated = await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id,
+                fixture.Project.ProjectNumber,
+                fixture.Project.Name,
+                fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName,
+                fixture.Project.GeneralContractorContact,
+                fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId,
+                fixture.Project.DepartmentId,
+                fixture.Project.BranchId,
+                fixture.Project.Stage,
+                fixture.Project.AffiliationType,
+                [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp,
+                "删除未关联合同",
+                Contracts:
+                [
+                    new ProjectContractQuickEditInput(existing.Id, existing.Name, existing.TotalAmount, existing.ConcurrencyStamp)
+                ]),
+            CancellationToken.None);
+
+        updated.Contracts.Should().ContainSingle();
+        updated.Contracts[0].Id.Should().Be(existing.Id);
+        (await fixture.Db.Contracts.CountAsync(item => item.ProjectId == fixture.Project.Id && item.IsActive)).Should().Be(1);
+        (await fixture.Db.Contracts.SingleAsync(item => item.Id == second.Id)).IsActive.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ProjectInvoiceDetailsOnlyIncludeOutputInvoices()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();

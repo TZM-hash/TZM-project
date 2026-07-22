@@ -43,6 +43,10 @@ public sealed class DetailsModel(
     [BindProperty] public IFormFile? RecordAttachmentFile { get; set; }
     [BindProperty] public CollectionEditInput CollectionEdit { get; set; } = new();
     [BindProperty] public List<FinanceRowEditInput> CollectionRowEdits { get; set; } = [];
+    [BindProperty] public List<FinanceRowEditInput> InvoiceRowEdits { get; set; } = [];
+    [BindProperty] public List<FinanceRowEditInput> PayableRowEdits { get; set; } = [];
+    [BindProperty] public List<FinanceRowEditInput> PaymentRowEdits { get; set; } = [];
+    [BindProperty] public List<ConstructionEditInput> ConstructionRowEdits { get; set; } = [];
     [BindProperty] public InvoiceEditInput InvoiceEdit { get; set; } = new();
     [BindProperty] public PaymentEditInput PaymentEdit { get; set; } = new();
     [BindProperty] public FinanceRowEditInput FinanceRowEdit { get; set; } = new();
@@ -347,6 +351,91 @@ public sealed class DetailsModel(
         }
     }
 
+
+    public async Task<IActionResult> OnPostInvoicesAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManageFinance) return Forbid();
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-invoice", cancellationToken);
+        try
+        {
+            var actor = new FinanceRecordActor(Actor().UserId, Actor().UserName);
+            foreach (var invoiceEdit in InvoiceRowEdits.Where(item => item.IsDirty))
+            {
+                await financeService.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(
+                    invoiceEdit.Id, id, invoiceEdit.ContractId, Required(invoiceEdit.LegalEntityId, "请选择签约公司。"), invoiceEdit.BusinessPartnerId,
+                    InvoiceDirection.Output, RequiredText(invoiceEdit.InvoiceNumber, "请填写发票号码。"), invoiceEdit.EntryDate,
+                    Required(invoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), invoiceEdit.NetAmount, invoiceEdit.TaxAmount, Positive(invoiceEdit.Amount), invoiceEdit.InvoiceStatus,
+                    invoiceEdit.ConcurrencyStamp, "项目管理页面快捷修改开票"), cancellationToken);
+            }
+            return RedirectToPage(new { id, tab = "invoice" });
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "invoice";
+            return await InlineErrorAsync(id, "project-invoice", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnPostPaymentsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManageFinance) return Forbid();
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-payment", cancellationToken);
+        try
+        {
+            var actor = new FinanceRecordActor(Actor().UserId, Actor().UserName);
+            foreach (var payableEdit in PayableRowEdits.Where(item => item.IsDirty))
+            {
+                await financeService.UpdatePayableAsync(actor, new UpdatePayableRequest(
+                    payableEdit.Id, id, payableEdit.ContractId, Required(payableEdit.LegalEntityId, "请选择签约公司。"),
+                    Required(payableEdit.BusinessPartnerId, "请选择收款单位。"), payableEdit.EntryDate, payableEdit.DueDate,
+                    Positive(payableEdit.Amount), payableEdit.Description, payableEdit.ConcurrencyStamp,
+                    "项目管理页面快捷修改应付"), cancellationToken);
+            }
+            foreach (var paymentEdit in PaymentRowEdits.Where(item => item.IsDirty))
+            {
+                await financeService.UpdatePaymentAsync(actor, new UpdatePaymentRequest(
+                    paymentEdit.Id, paymentEdit.RelatedEntryId, id, paymentEdit.ContractId,
+                    Required(paymentEdit.LegalEntityId, "请选择签约公司。"), Required(paymentEdit.BusinessPartnerId, "请选择收款单位。"),
+                    Required(paymentEdit.AccountId, "请选择付款账户。"), paymentEdit.EntryDate, Positive(paymentEdit.Amount),
+                    paymentEdit.PaymentMethod, paymentEdit.Description, paymentEdit.ConcurrencyStamp,
+                    "项目管理页面快捷修改付款"), cancellationToken);
+            }
+            return RedirectToPage(new { id, tab = "payment" });
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "payment";
+            return await InlineErrorAsync(id, "project-payment", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnPostConstructionsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-construction", cancellationToken);
+        try
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            foreach (var constructionEdit in ConstructionRowEdits.Where(item => item.IsDirty))
+            {
+                await constructionService.SaveAsync(ConstructionActor(), new SaveProjectConstructionRecordRequest(
+                    constructionEdit.Id, id, constructionEdit.RecordType,
+                    constructionEdit.RecordType == ProjectConstructionRecordType.Equipment ? constructionEdit.SubjectId : null,
+                    constructionEdit.RecordType == ProjectConstructionRecordType.ConstructionCrew ? constructionEdit.SubjectId : null,
+                    null, null, constructionEdit.EntryDate, constructionEdit.ExitDate,
+                    constructionEdit.StopDays, constructionEdit.Notes, false,
+                    constructionEdit.ConcurrencyStamp == Guid.Empty ? null : constructionEdit.ConcurrencyStamp,
+                    string.IsNullOrWhiteSpace(constructionEdit.Reason) ? "项目管理页面快捷修改施工详情" : constructionEdit.Reason,
+                    constructionEdit.ShowInProjectOverview), today, cancellationToken);
+            }
+            return RedirectToPage(new { id, tab = "construction" });
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "construction";
+            return await InlineErrorAsync(id, "project-construction", exception, cancellationToken);
+        }
+    }
     public async Task<IActionResult> OnPostInvoiceAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!CanManageFinance) return Forbid();
@@ -905,8 +994,8 @@ public sealed class DetailsModel(
         public InvoiceStatus InvoiceStatus { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "项目管理页面快捷修改";
-        public bool IsDirty { get; set; }
-    }
+                public bool IsDirty { get; set; }
+}
 
     public sealed class ConstructionEditInput
     {
@@ -920,6 +1009,7 @@ public sealed class DetailsModel(
         public bool ShowInProjectOverview { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "项目管理页面快捷修改施工详情";
+        public bool IsDirty { get; set; }
     }
 
     public sealed class ConstructionFlowInput
