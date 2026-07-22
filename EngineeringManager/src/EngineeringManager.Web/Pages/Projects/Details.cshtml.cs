@@ -90,7 +90,7 @@ public sealed class DetailsModel(
                     RequiredText(QuickEdit.ProjectNumber, "请填写项目编号。"),
                     RequiredText(QuickEdit.Name, "请填写项目名称。"),
                     QuickEdit.ParentProjectName,
-                    QuickEdit.GeneralContractorName,
+                    SerializeGeneralContractors(QuickEdit.GeneralContractorNames, QuickEdit.GeneralContractorName),
                     QuickEdit.GeneralContractorContact,
                     QuickEdit.GeneralContractorPhone,
                     QuickEdit.ResponsibleUserId,
@@ -361,10 +361,12 @@ public sealed class DetailsModel(
             var actor = new FinanceRecordActor(Actor().UserId, Actor().UserName);
             foreach (var invoiceEdit in InvoiceRowEdits.Where(item => item.IsDirty))
             {
+                var taxConfigurationId = Required(invoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。");
+                var amounts = ResolveInvoiceAmounts(invoiceEdit.Amount, taxConfigurationId);
                 await financeService.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(
                     invoiceEdit.Id, id, invoiceEdit.ContractId, Required(invoiceEdit.LegalEntityId, "请选择签约公司。"), invoiceEdit.BusinessPartnerId,
                     InvoiceDirection.Output, RequiredText(invoiceEdit.InvoiceNumber, "请填写发票号码。"), invoiceEdit.EntryDate,
-                    Required(invoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), invoiceEdit.NetAmount, invoiceEdit.TaxAmount, Positive(invoiceEdit.Amount), invoiceEdit.InvoiceStatus,
+                    taxConfigurationId, amounts.NetAmount, amounts.TaxAmount, amounts.GrossAmount, invoiceEdit.InvoiceStatus,
                     invoiceEdit.ConcurrencyStamp, "项目管理页面快捷修改开票", invoiceEdit.Description), cancellationToken);
             }
             return RedirectToPage(new { id, tab = "invoice" });
@@ -444,10 +446,12 @@ public sealed class DetailsModel(
         if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-invoice", cancellationToken);
         try
         {
+            var taxConfigurationId = Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。");
+            var amounts = ResolveInvoiceAmounts(InvoiceEdit.GrossAmount, taxConfigurationId);
             var invoiceId = await financeService.AddInvoiceAsync(new CreateInvoiceRequest(
                 id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), InvoiceEdit.BusinessPartnerId,
                 InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
-                Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), InvoiceEdit.NetAmount, InvoiceEdit.TaxAmount, Positive(InvoiceEdit.GrossAmount),
+                taxConfigurationId, amounts.NetAmount, amounts.TaxAmount, amounts.GrossAmount,
                 InvoiceStatus.IssuedOrReceived, [], [], InvoiceEdit.Description), cancellationToken);
             await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Invoice, invoiceId, "invoice", RecordAttachmentFile, cancellationToken);
             return RedirectToPage(new { id, tab = "invoice" });
@@ -514,10 +518,12 @@ public sealed class DetailsModel(
                         FinanceRowEdit.Description, FinanceRowEdit.ConcurrencyStamp, reason), cancellationToken);
                     break;
                 case FinanceEntryKind.Invoice:
+                    var taxConfigurationId = Required(FinanceRowEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。");
+                    var amounts = ResolveInvoiceAmounts(FinanceRowEdit.Amount, taxConfigurationId);
                     await financeService.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(
                         FinanceRowEdit.Id, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), FinanceRowEdit.BusinessPartnerId,
                         InvoiceDirection.Output, RequiredText(FinanceRowEdit.InvoiceNumber, "请填写发票号码。"), FinanceRowEdit.EntryDate,
-                        Required(FinanceRowEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), FinanceRowEdit.NetAmount, FinanceRowEdit.TaxAmount, Positive(FinanceRowEdit.Amount), FinanceRowEdit.InvoiceStatus,
+                        taxConfigurationId, amounts.NetAmount, amounts.TaxAmount, amounts.GrossAmount, FinanceRowEdit.InvoiceStatus,
                         FinanceRowEdit.ConcurrencyStamp, reason, FinanceRowEdit.Description), cancellationToken);
                     break;
                 case FinanceEntryKind.Payable:
@@ -689,11 +695,19 @@ public sealed class DetailsModel(
         CreateQuantity.ContractId = defaultContractId;
         var defaultLegalEntityId = Workspace.Overview.LegalEntities.Select(option => Guid.TryParse(option.Value, out var value) ? value : Guid.Empty).FirstOrDefault(value => value != Guid.Empty);
         CollectionEdit.ContractId = defaultContractId;
-        CollectionEdit.BusinessPartnerId = defaultContract?.BusinessPartnerId;
         CollectionEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
         InvoiceEdit.ContractId = defaultContractId;
         InvoiceEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
         InvoiceEdit.ProjectTaxConfigurationId = Workspace.Overview.TaxConfigurations?.FirstOrDefault(item => item.IsActive)?.Id;
+        var contractorOptions = ProjectGeneralContractorOptions();
+        if (contractorOptions.Length == 1 && contractorOptions[0].Id != Guid.Empty)
+        {
+            CollectionEdit.BusinessPartnerId = contractorOptions[0].Id;
+        }
+        if (contractorOptions.Length > 0 && contractorOptions[0].Id != Guid.Empty)
+        {
+            InvoiceEdit.BusinessPartnerId = contractorOptions[0].Id;
+        }
         PaymentEdit.ContractId = defaultContractId;
         PaymentEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
     }
@@ -850,12 +864,51 @@ public sealed class DetailsModel(
             return new ProjectTaxConfigurationInput(percent / 100m, invoiceType);
         }).ToArray();
 
+
+    private static string? SerializeGeneralContractors(IEnumerable<string>? names, string? fallbackName)
+    {
+        var values = (names ?? []).ToList();
+        if (values.Count == 0 && !string.IsNullOrWhiteSpace(fallbackName))
+        {
+            values.Add(fallbackName);
+        }
+
+        return ProjectGeneralContractors.Serialize(values);
+    }
+
+    private FinanceOptionDto[] ProjectGeneralContractorOptions()
+    {
+        var names = ProjectGeneralContractors.Parse(Workspace?.Overview.GeneralContractorName);
+        if (names.Count == 0)
+        {
+            return [];
+        }
+
+        var partners = FinanceOptions?.BusinessPartners ?? [];
+        return names.Select(name =>
+        {
+            var match = partners.FirstOrDefault(item => string.Equals(item.Label, name, StringComparison.OrdinalIgnoreCase));
+            return match ?? new FinanceOptionDto(Guid.Empty, name);
+        }).ToArray();
+    }
+
+    private (decimal NetAmount, decimal TaxAmount, decimal GrossAmount) ResolveInvoiceAmounts(decimal grossAmount, Guid? taxConfigurationId)
+    {
+        var gross = Positive(grossAmount);
+        var configuration = (Workspace?.Overview.TaxConfigurations ?? [])
+            .FirstOrDefault(item => item.Id == taxConfigurationId && item.IsActive)
+            ?? throw new ArgumentException("请选择税率和发票类型。");
+        var split = InvoiceAmountValidator.SplitGross(gross, configuration.TaxRate);
+        return (split.NetAmount, split.TaxAmount, gross);
+    }
+
     public sealed class QuickEditInput
     {
         public string ProjectNumber { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string? ParentProjectName { get; set; }
         public string? GeneralContractorName { get; set; }
+        public List<string> GeneralContractorNames { get; set; } = [];
         public string? GeneralContractorContact { get; set; }
         public string? GeneralContractorPhone { get; set; }
         public string? ResponsibleUserId { get; set; }
@@ -879,6 +932,7 @@ public sealed class DetailsModel(
             Name = item.Name,
             ParentProjectName = item.ParentProjectName,
             GeneralContractorName = item.GeneralContractorName,
+            GeneralContractorNames = ProjectGeneralContractors.Parse(item.GeneralContractorName).ToList(),
             GeneralContractorContact = item.GeneralContractorContact,
             GeneralContractorPhone = item.GeneralContractorPhone,
             ResponsibleUserId = item.ResponsibleUserId,

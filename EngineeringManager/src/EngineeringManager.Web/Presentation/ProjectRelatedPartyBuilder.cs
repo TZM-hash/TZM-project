@@ -14,7 +14,10 @@ public static class ProjectRelatedPartyBuilder
         IEnumerable<ProjectConstructionRecordDto> constructionRecords)
     {
         var entries = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
-        Add(entries, generalContractorName, "总包", null, 0, 0);
+        foreach (var contractorName in ProjectGeneralContractors.Parse(generalContractorName))
+        {
+            Add(entries, contractorName, "总包", null, 0, 0);
+        }
 
         foreach (var record in constructionRecords.Where(item => item.RecordType == ProjectConstructionRecordType.ConstructionCrew))
             Add(entries, record.SubjectLabel, "施工班组", null, 1, 2);

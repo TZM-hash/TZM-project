@@ -4,6 +4,7 @@ import { initEffects } from "./core/effects.js";
 const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard()];
 initSmartBack();
 initProjectAmountViews();
+initProjectGeneralContractors();
 initCollectionContractPayerDefaults();
 initProjectContractEditor();
 if (document.querySelector("[data-conflict-notice]")) {
@@ -158,11 +159,131 @@ function initProjectContractEditor() {
   reindex();
   refreshTotal();
 }
+
+function initProjectGeneralContractors() {
+  const root = document.querySelector("[data-project-contractors]");
+  if (!root) return;
+  const editor = root.querySelector("[data-project-contractor-editor]");
+  const list = root.querySelector("[data-project-contractor-list]");
+  const addButton = root.querySelector("[data-project-contractor-add]");
+  const cancelButton = root.querySelector("[data-project-contractor-cancel]");
+  const confirmButton = root.querySelector("[data-project-contractor-confirm]");
+  const countNode = root.querySelector("[data-project-contractor-count]");
+  if (!list) return;
+  const initialHtml = list.innerHTML;
+  let openSnapshotHtml = list.innerHTML;
+
+  const reindex = () => {
+    const rows = [...list.querySelectorAll("[data-project-contractor-row]")];
+    rows.forEach((row, index) => {
+      const input = row.querySelector("[data-project-contractor-name]");
+      if (input) {
+        input.name = `QuickEdit.GeneralContractorNames[${index}]`;
+        input.placeholder = index === 0 ? "主总包单位名称" : "总包单位名称";
+      }
+      row.querySelectorAll("[data-project-contractor-remove]").forEach((button) => {
+        button.disabled = rows.length <= 1;
+      });
+    });
+    if (countNode) {
+      const filled = rows.map((row) => row.querySelector("[data-project-contractor-name]")?.value?.trim()).filter(Boolean).length;
+      countNode.textContent = filled === 0 ? "未设置" : `${filled}家`;
+    }
+  };
+
+  const rebind = () => {
+    list.querySelectorAll("[data-project-contractor-row]").forEach(bindRow);
+    reindex();
+  };
+
+  const restoreList = (html) => {
+    list.innerHTML = html;
+    rebind();
+  };
+
+  const closeEditor = () => {
+    if (editor) editor.open = false;
+  };
+
+  const bindRow = (row) => {
+    if (row.dataset.bound === "true") return;
+    row.dataset.bound = "true";
+    row.querySelectorAll("[data-project-contractor-name]").forEach((input) => {
+      input.addEventListener("input", reindex);
+    });
+    row.querySelectorAll("[data-project-contractor-remove]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const rows = list.querySelectorAll("[data-project-contractor-row]");
+        if (rows.length <= 1) {
+          const input = row.querySelector("[data-project-contractor-name]");
+          if (input) input.value = "";
+          reindex();
+          return;
+        }
+        row.remove();
+        reindex();
+      });
+    });
+  };
+
+  rebind();
+  addButton?.addEventListener("click", () => {
+    const count = list.querySelectorAll("[data-project-contractor-row]").length;
+    if (count >= 3) return;
+    const row = document.createElement("div");
+    row.className = "project-contractor-row";
+    row.dataset.projectContractorRow = "";
+    row.innerHTML = `
+      <input name="QuickEdit.GeneralContractorNames[${count}]" value="" placeholder="总包单位名称" data-project-contractor-name />
+      <button type="button" class="button button--ghost button--small" data-project-contractor-remove>删除</button>
+    `;
+    list.appendChild(row);
+    bindRow(row);
+    reindex();
+    row.querySelector("[data-project-contractor-name]")?.focus({ preventScroll: true });
+  });
+
+  editor?.addEventListener("toggle", () => {
+    if (editor.open) {
+      openSnapshotHtml = list.innerHTML;
+      reindex();
+    }
+  });
+
+  cancelButton?.addEventListener("click", () => {
+    restoreList(openSnapshotHtml);
+    closeEditor();
+  });
+
+  confirmButton?.addEventListener("click", () => {
+    reindex();
+    closeEditor();
+  });
+
+  document.querySelectorAll('[data-inline-edit="project-overview"] [data-inline-edit-cancel]').forEach((button) => {
+    button.addEventListener("click", () => {
+      restoreList(initialHtml);
+      closeEditor();
+    });
+  });
+
+  reindex();
+}
+
 function initCollectionContractPayerDefaults() {
   document.querySelectorAll("[data-collection-entry]").forEach((form) => {
     const contract = form.querySelector("[data-collection-contract]");
     const payer = form.querySelector("[data-collection-payer]");
     if (!contract || !payer) return;
+
+    // 付款方仅来自项目总包时，不再按合同业务伙伴自动改写。
+    if (payer.hasAttribute("data-collection-payer-from-contractors")) {
+      const options = [...payer.options].filter((option) => option.value);
+      if (!payer.value && options.length === 1) {
+        payer.value = options[0].value;
+      }
+      return;
+    }
 
     let defaultPayer = payer.value;
     contract.addEventListener("change", () => {

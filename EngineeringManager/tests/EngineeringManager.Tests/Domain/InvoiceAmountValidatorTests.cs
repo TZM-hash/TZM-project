@@ -20,4 +20,12 @@ public sealed class InvoiceAmountValidatorTests
 
         action.Should().Throw<ArgumentException>().WithMessage("*含税金额*");
     }
+
+    [Fact]
+    public void SplitGrossCalculatesNetAndTaxFromSelectedRate()
+    {
+        var split = InvoiceAmountValidator.SplitGross(113m, 0.13m);
+        split.NetAmount.Should().Be(100m);
+        split.TaxAmount.Should().Be(13m);
+    }
 }

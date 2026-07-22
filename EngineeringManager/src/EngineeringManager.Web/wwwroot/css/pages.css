@@ -74,6 +74,9 @@
 #projects-table [data-column-key="settlement_status"] { width: 5.8rem; max-width: 5.8rem; }
 #projects-table [data-column-key="project_number"] { width: 7.4rem; }
 #projects-table [data-column-key="project_name"] { min-width: 12rem; }
+#projects-table [data-column-key="general_contractor"] { width: 10.5rem; max-width: 10.5rem; }
+#projects-table [data-column-key="general_contractor"] .project-general-contractor-cell,
+#projects-table [data-column-key="general_contractor"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #projects-table [data-column-key="collection_progress"], #projects-table [data-column-key="payment_progress"], #projects-table [data-column-key="invoice_progress"] { min-width: 10rem; }
 .dashboard-cash-table td:not(:first-child) { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dashboard-cash-table .value-negative { color: var(--app-danger, #b91c1c); font-weight: 700; }
@@ -163,15 +166,18 @@
 .compact-detail-panel { padding: .62rem; }
 .compact-detail-panel .panel-heading { align-items: center; }
 .compact-detail-panel .panel-heading small { display: block; margin-top: .2rem; color: var(--app-muted); font-size: .68rem; }
-.project-summary-grid { gap: .38rem; margin-top: .48rem; }
-.project-summary-grid > div { padding: .38rem .52rem; }
+.project-summary-grid { grid-auto-flow: dense; gap: .28rem .38rem; margin-top: .4rem; align-items: start; }
+.project-summary-grid > div { padding: .34rem .52rem; }
 .project-summary-grid dt { font-size: .66rem; }
 .project-summary-grid dd { margin-top: .18rem; overflow: hidden; font-size: .78rem; line-height: 1.35; text-overflow: ellipsis; }
 .project-summary-grid > .project-summary-wide { grid-column: 1 / -1; }
 .project-summary-grid > .project-summary-half { grid-column: span 2; }
 .project-summary-grid > .project-summary-quarter { grid-column: span 1; }
-.project-contract-editor { align-self: stretch; }
+.project-overview-equipment { align-self: start; }
+.project-contract-editor { grid-column: 4; grid-row: span 6; align-self: start; }
 .project-contract-editor dd { overflow: visible; }
+.project-summary-metrics { align-self: start; }
+.project-summary-metrics .mini-progress { margin-top: 0; }
 .project-contract-list { display: grid; gap: .3rem; }
 .project-contract-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .3rem; align-items: start; }
 .project-contract-display { display: grid; gap: .1rem; min-width: 0; }
@@ -185,6 +191,15 @@
 .project-contract-hint { color: var(--app-muted); font-size: .66rem; line-height: 1.3; }
 .project-contract-row-remove { min-height: 2.05rem; min-width: 3.2rem; padding-inline: .4rem; font-size: .68rem; }
 .project-overview-equipment .project-equipment-list { grid-template-columns: minmax(0, 1fr); }
+.project-contractor-cell dd { overflow: visible; }
+.project-contractor-list { display: grid; gap: .35rem; margin-top: .35rem; }
+.project-contractor-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem; align-items: center; }
+.project-contractor-row input { min-width: 0; min-height: 2.05rem; padding: .35rem .45rem; border: 1px solid var(--app-primary); border-radius: 6px; color: var(--app-text); background: var(--app-surface); font: inherit; font-size: .74rem; }
+.project-contractor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .55rem; }
+.project-contractor-hint { color: var(--app-muted); font-size: .66rem; line-height: 1.3; }
+.project-contractor-selector .selection-dropdown-menu { width: min(24rem, calc(100vw - 3rem)); }
+.project-contractor-footer { gap: .45rem; }
+
 .compact-contact-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; }
 .project-amount-switch dd { display: block; }
 .project-amount-view-label, .project-amount-edit-control { display: grid; grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); align-items: center; gap: .35rem; }
@@ -210,10 +225,25 @@
 .project-equipment-list a { display: grid; min-width: 0; gap: .15rem; padding: .5rem .6rem; border: 1px solid var(--app-border); border-radius: 6px; color: var(--app-text); background: var(--app-surface); text-decoration: none; }
 .project-equipment-list a:hover { border-color: var(--app-primary); }
 .project-equipment-list span { color: var(--app-muted); font-size: .7rem; }
-.project-related-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.project-related-party-list li > div { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
-.project-related-party-roles { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
-.project-related-party-roles .pill { padding: .16rem .38rem; font-size: .62rem; }
+.project-related-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; margin-top: .4rem; align-items: stretch; }
+.project-related-card { min-height: 5.4rem; }
+.project-related-card.compact-detail-panel { padding: .4rem .5rem; }
+.project-related-card .panel-heading { margin-bottom: .12rem; }
+.project-related-card .panel-heading h2 { font-size: .82rem; line-height: 1.25; }
+.project-related-card .panel-heading span { font-size: .68rem; }
+.project-related-card .panel-copy { margin: 0; font-size: .7rem; line-height: 1.25; }
+.project-related-party-list { display: grid; gap: .16rem; margin: 0; padding: 0; list-style: none; }
+.project-related-party-list li { display: flex; align-items: center; gap: .35rem; padding: .08rem 0; font-size: .74rem; line-height: 1.25; color: var(--app-text); }
+.project-related-party-index { display: inline-grid; place-items: center; min-width: 1.05rem; height: 1.05rem; padding: 0 .2rem; border-radius: 999px; background: #e8eef8; color: #3b5bdb; font-size: .62rem; font-weight: 700; line-height: 1; flex: 0 0 auto; }
+.project-related-party-list li > div { display: flex; align-items: center; flex-wrap: wrap; gap: .2rem; }
+.project-related-party-roles { display: inline-flex; flex-wrap: wrap; gap: .14rem; }
+.project-related-party-roles .pill { padding: .08rem .26rem; font-size: .54rem; }
+@media (max-width: 1180px) {
+    .project-related-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+    .project-related-overview { grid-template-columns: minmax(0, 1fr); }
+}
 .record-editor-list, .record-attachments { display: grid; gap: .65rem; }
 .record-attachment-editor { display: grid; grid-template-columns: minmax(12rem, .7fr) minmax(0, 1.3fr); gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--app-border); }
 .record-attachment-editor h2 { margin: 0; font-size: .95rem; }
@@ -467,6 +497,7 @@
     .project-activity-panel { position: static; max-height: none; }
     .activity-feed { max-height: 420px; }
     .detail-grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .project-contract-editor { grid-column: auto; grid-row: auto; }
     .project-detail-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .quantity-entry-grid--identity, .quantity-entry-grid--values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .quantity-entry-grid--values .quantity-entry-calculation { grid-column: 1 / -1; }

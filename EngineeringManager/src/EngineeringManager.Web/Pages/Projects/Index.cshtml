@@ -1,6 +1,7 @@
 @page
 @model EngineeringManager.Web.Pages.Projects.IndexModel
 @using EngineeringManager.Web.Presentation
+@using EngineeringManager.Domain.Projects
 @using EngineeringManager.Application.DataExchange
 @using EngineeringManager.Web.Pages.DataExchange
 @{
@@ -84,7 +85,7 @@
                         <td data-column-key="project_name"><a asp-page="/Projects/Details" asp-route-id="@item.Project.Id">@item.Project.Name</a></td>
                         <td data-column-key="stage" class="project-stage-cell"><span class="pill">@item.Project.Stage.ToChinese()</span></td>
                         <td data-column-key="contract_signing_status">@item.Project.ContractSigningStatus.ToChinese()</td><td data-column-key="affiliation_type">@item.Project.AffiliationType.ToChinese()</td>
-                        <td data-column-key="parent_project">@(item.Project.ParentProjectName ?? "未设置")</td><td data-column-key="general_contractor">@(item.Project.GeneralContractorName ?? "未设置")</td><td data-column-key="general_contractor_contact">@(item.Project.GeneralContractorContact ?? "未设置")</td><td data-column-key="general_contractor_phone">@(item.Project.GeneralContractorPhone ?? "未设置")</td>
+                        <td data-column-key="parent_project">@(item.Project.ParentProjectName ?? "未设置")</td><td data-column-key="general_contractor" title="@string.Join("，", ProjectGeneralContractors.Parse(item.Project.GeneralContractorName))"><span class="project-general-contractor-cell">@ProjectGeneralContractors.Display(item.Project.GeneralContractorName)</span></td><td data-column-key="general_contractor_contact">@(item.Project.GeneralContractorContact ?? "未设置")</td><td data-column-key="general_contractor_phone">@(item.Project.GeneralContractorPhone ?? "未设置")</td>
                         <td data-column-key="responsible_user">@(item.Project.ResponsibleUserName ?? "未设置")</td><td data-column-key="department">@(item.Project.DepartmentName ?? "未设置")</td><td data-column-key="branch">@(item.Project.BranchName ?? "未设置")</td><td data-column-key="legal_entities">@(item.Project.LegalEntityNames is { Count: > 0 } ? string.Join("、", item.Project.LegalEntityNames) : "未设置")</td>
                         <td data-column-key="actual_start_date">@(item.Project.ActualStartDate?.ToString("yyyy-MM-dd") ?? "未设置")</td><td data-column-key="actual_completion_date">@(item.Project.ActualCompletionDate?.ToString("yyyy-MM-dd") ?? "未设置")</td>
                         <td data-column-key="contract_amount">@item.Summary.ContractAmount.ToString("N2")</td>

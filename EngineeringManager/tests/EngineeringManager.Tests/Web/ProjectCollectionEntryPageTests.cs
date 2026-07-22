@@ -32,19 +32,20 @@ public sealed class ProjectCollectionEntryPageTests
     }
 
     [Fact]
-    public void CollectionDefaultPayerComesFromSelectedContractAndCanBeChanged()
+    public void CollectionDefaultPayerComesFromProjectGeneralContractors()
     {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
         var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml.cs");
-        var workspaceService = ReadFile("src", "EngineeringManager.Infrastructure", "Projects", "ProjectWorkspaceService.cs");
-        var dto = ReadFile("src", "EngineeringManager.Application", "Projects", "ProjectDtos.cs");
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "site.js");
 
-        model.Should().Contain("CollectionEdit.BusinessPartnerId = defaultContract?.BusinessPartnerId")
-            .And.Contain("CollectionEdit.ContractId = defaultContractId");
-        workspaceService.Should().Contain("ThenInclude(item => item.BusinessPartner)")
-            .And.Contain("contract.BusinessPartnerId")
-            .And.Contain("contract.BusinessPartner?.Name");
-        dto.Should().Contain("Guid? BusinessPartnerId = null")
-            .And.Contain("string? BusinessPartnerName = null");
+        page.Should().Contain("data-collection-payer-from-contractors")
+            .And.Contain("collectionContractorOptions")
+            .And.Contain("collectionRowContractorOptions");
+        model.Should().Contain("CollectionEdit.ContractId = defaultContractId")
+            .And.Contain("contractorOptions.Length == 1")
+            .And.Contain("CollectionEdit.BusinessPartnerId = contractorOptions[0].Id");
+        script.Should().Contain("data-collection-payer-from-contractors")
+            .And.Contain("options.length === 1");
     }
 
     [Fact]
@@ -91,13 +92,22 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain("合同金额")
             .And.Contain("合同总额")
             .And.Contain("project-summary-quarter project-contract-editor")
-            .And.Contain("project-summary-quarter project-overview-equipment");
+            .And.Contain("project-summary-quarter project-overview-equipment")
+            .And.Contain("data-project-contractors")
+            .And.Contain("QuickEdit.GeneralContractorNames[")
+            .And.Contain("维护总包单位")
+            .And.Contain("data-collection-payer-from-contractors")
+            .And.Contain("ProjectGeneralContractors.Display");
         model.Should().Contain("List<ProjectContractQuickEditInput> Contracts")
             .And.Contain("Contracts = Workspace.Contracts")
             .And.Contain("CollectionEdit.ContractId = defaultContractId");
         styles.Should().Contain(".project-contract-editor")
             .And.Contain(".project-contract-row")
-            .And.Contain(".project-summary-grid > .project-summary-quarter");
+            .And.Contain(".project-summary-grid > .project-summary-quarter")
+            .And.Contain("grid-auto-flow: dense")
+            .And.Contain("grid-row: span 6")
+            .And.Contain(".project-summary-metrics");
+        page.Should().Contain("project-summary-metrics");
     }
 
 
@@ -125,7 +135,13 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain("invoice-inline-table")
             .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>")
             .And.Contain("asp-for=\"InvoiceEdit.Description\"")
-            .And.Contain("name=\"InvoiceRowEdits[@editIndex].Description\" value=\"@row.Notes\"");
+            .And.Contain("name=\"InvoiceRowEdits[@editIndex].Description\" value=\"@row.Notes\"")
+            .And.Contain("asp-for=\"InvoiceEdit.GrossAmount\"")
+            .And.NotContain("asp-for=\"InvoiceEdit.NetAmount\"")
+            .And.NotContain("asp-for=\"InvoiceEdit.TaxAmount\"")
+            .And.NotContain("<th>不含税</th>")
+            .And.NotContain("<th>税额</th>")
+            .And.Contain("<th>含税金额</th>");
         payment.Should().Contain("id=\"payment-batch-form\"")
             .And.Contain("PayableRowEdits[")
             .And.Contain("PaymentRowEdits[")
@@ -148,7 +164,11 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain("invoiceEdit.Description")
             .And.Contain("InvoiceEdit.Description")
             .And.Contain("PayrollCrewDisbursement")
-            .And.Contain("public string SourceType");
+            .And.Contain("public string SourceType")
+            .And.Contain("ResolveInvoiceAmounts")
+            .And.Contain("SerializeGeneralContractors")
+            .And.Contain("List<string> GeneralContractorNames")
+            .And.Contain("contractorOptions.Length == 1");
         styles.Should().Contain(".invoice-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")
             .And.Contain(".payment-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")
             .And.Contain(".construction-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")

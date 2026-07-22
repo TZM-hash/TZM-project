@@ -164,10 +164,12 @@ public sealed class ProjectAuthorizationTests
         html.Should().Contain("付款比例");
         html.Should().NotContain("项目里程碑");
         html.Should().NotContain("节点备注");
-        html.Should().Contain("项目人员");
-        html.Should().Contain("人员备注");
-        html.Should().Contain("项目合作单位");
-        html.Should().Contain("合作备注");
+        html.Should().Contain("<h2>总包单位</h2>");
+        html.Should().Contain("<h2>施工班组</h2>");
+        html.Should().Contain("<h2>合作单位</h2>");
+        html.Should().NotContain("<h2>项目人员</h2>");
+        html.Should().Contain("合作单位").And.Contain("施工班组");
+        html.Should().NotContain("合作备注");
         html.Should().Contain("data-project-finance-edit");
         html.Should().Contain("data-inline-edit=\"project-collection\"");
         html.Should().Contain("data-inline-edit=\"project-invoice\"");
@@ -229,8 +231,8 @@ public sealed class ProjectAuthorizationTests
             .And.Contain("data-project-amount-view")
             .And.Contain("ProjectRelatedPartyBuilder.Build")
             .And.NotContain("<h2>项目里程碑</h2>")
-            .And.Contain("<h2>项目人员</h2>")
-            .And.Contain("<h2>项目合作单位</h2>")
+            .And.Contain("<h2>总包单位</h2>")
+            .And.Contain("<h2>施工班组</h2>").And.Contain("<h2>合作单位</h2>")
             .And.Contain("relatedParty.Roles");
         selectorScript.Should().Contain("data-check-selector-clear");
         quickEditScript.Should().Contain("querySelectorAll(\"[data-check-selector][open]\")")
