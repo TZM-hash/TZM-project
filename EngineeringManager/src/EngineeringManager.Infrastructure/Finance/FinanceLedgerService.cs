@@ -171,8 +171,8 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             .Select(item => new FinanceOptionDto(item.Id, item.ProjectNumber + " · " + item.Name, null)).ToListAsync(cancellationToken);
         var contracts = await db.Contracts.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.ContractNumber)
             .Select(item => new FinanceOptionDto(item.Id, item.ContractNumber + " · " + item.Name, item.ProjectId)).ToListAsync(cancellationToken);
-        var legalEntities = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Code)
-            .Select(item => new FinanceOptionDto(item.Id, item.Code + " · " + item.ShortName, null)).ToListAsync(cancellationToken);
+        var legalEntities = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name)
+            .Select(item => new FinanceOptionDto(item.Id, item.Name, null)).ToListAsync(cancellationToken);
         var partners = await db.BusinessPartners.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.PartnerNumber)
             .Select(item => new FinanceOptionDto(item.Id, item.PartnerNumber + " · " + item.ShortName, null)).ToListAsync(cancellationToken);
         var accounts = await db.FinancialAccounts.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.AccountName)
@@ -377,7 +377,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
                 null,
                 request.PaymentDate,
                 request.Amount,
-                request.PaymentMethod.ToString(),
+                request.PaymentMethod,
                 request.Notes,
                 allocations,
                 ProjectId: request.ProjectId,
@@ -779,7 +779,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         entry.AccountId = request.AccountId;
         entry.BusinessDate = request.PaymentDate;
         entry.Amount = request.Amount;
-        entry.PaymentMethod = request.PaymentMethod.ToString();
+        entry.PaymentMethod = NormalizeOptional(request.PaymentMethod);
         entry.Notes = NormalizeOptional(request.Notes);
         entry.UpdatedAt = DateTimeOffset.UtcNow;
         entry.ConcurrencyStamp = Guid.NewGuid();

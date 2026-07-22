@@ -73,7 +73,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
                 var first = allocations[0];
                 return new ProjectPaymentItemDto(item.Id, item.BusinessDate, first.Settlement.Contract?.ContractNumber,
                     item.LegalEntity.ShortName, item.BusinessPartner?.Name ?? "未填写合作单位", item.Account?.AccountName ?? "未填写账户",
-                    allocations.Sum(allocation => allocation.Amount), ParsePaymentMethod(item.PaymentMethod), item.Notes,
+                    allocations.Sum(allocation => allocation.Amount), item.PaymentMethod, item.Notes,
                     allocations.Length == 1 ? first.SettlementId : null, first.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp);
             })
             .ToList();
@@ -140,7 +140,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
                     first.BusinessPartnerName,
                     first.AccountName,
                     group.Sum(item => item.Amount),
-                    first.PaymentMethod,
+                    first.PaymentMethod.ToString(),
                     $"民工工资代发 · {first.BatchNumber}",
                     allocation?.PayableEntryId,
                     allocation?.ContractId,
@@ -199,8 +199,8 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .OrderBy(item => item.Name).Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Name)).ToListAsync(cancellationToken);
         var branches = await db.OrganizationUnits.AsNoTracking().Where(item => item.IsActive && item.UnitType == OrganizationUnitType.Branch)
             .OrderBy(item => item.Name).Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Name)).ToListAsync(cancellationToken);
-        var legalEntities = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Code)
-            .Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Code + " · " + item.ShortName)).ToListAsync(cancellationToken);
+        var legalEntities = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name)
+            .Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Name)).ToListAsync(cancellationToken);
         return new ProjectEditOptionsDto(users, departments, branches, legalEntities);
     }
 
@@ -539,7 +539,5 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     private static string Required(string value, string parameter) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException("值不能为空。", parameter);
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static PaymentMethod ParsePaymentMethod(string? value) =>
-        Enum.TryParse<PaymentMethod>(value, out var method) ? method : PaymentMethod.BankTransfer;
     private static string ActionLabel(string action) => action switch { "UpdateProject" => "编辑项目资料", "CreateReceivable" => "新增应收", "RecordCollection" => "登记收款", "CreatePayable" => "新增应付", "RecordPayment" => "登记付款", "CreateInvoice" => "登记发票", _ => action };
 }

@@ -150,8 +150,24 @@ public sealed record RecordPaymentRequest(
     Guid AccountId,
     DateOnly PaymentDate,
     decimal Amount,
-    PaymentMethod PaymentMethod,
-    string? Notes);
+    string? PaymentMethod,
+    string? Notes)
+{
+    public RecordPaymentRequest(
+        Guid? payableEntryId,
+        Guid projectId,
+        Guid? contractId,
+        Guid legalEntityId,
+        Guid businessPartnerId,
+        Guid accountId,
+        DateOnly paymentDate,
+        decimal amount,
+        PaymentMethod paymentMethod,
+        string? notes)
+        : this(payableEntryId, projectId, contractId, legalEntityId, businessPartnerId, accountId, paymentDate, amount, paymentMethod.ToString(), notes)
+    {
+    }
+}
 
 public sealed record CreateDeductionRequest(
     Guid PayableEntryId,
@@ -241,7 +257,26 @@ public sealed record UpdatePayableRequest(
 public sealed record UpdatePaymentRequest(
     Guid Id, Guid? PayableEntryId, Guid ProjectId, Guid? ContractId, Guid LegalEntityId,
     Guid BusinessPartnerId, Guid AccountId, DateOnly PaymentDate, decimal Amount,
-    PaymentMethod PaymentMethod, string? Notes, Guid ConcurrencyStamp, string Reason);
+    string? PaymentMethod, string? Notes, Guid ConcurrencyStamp, string Reason)
+{
+    public UpdatePaymentRequest(
+        Guid id,
+        Guid? payableEntryId,
+        Guid projectId,
+        Guid? contractId,
+        Guid legalEntityId,
+        Guid businessPartnerId,
+        Guid accountId,
+        DateOnly paymentDate,
+        decimal amount,
+        PaymentMethod paymentMethod,
+        string? notes,
+        Guid concurrencyStamp,
+        string reason)
+        : this(id, payableEntryId, projectId, contractId, legalEntityId, businessPartnerId, accountId, paymentDate, amount, paymentMethod.ToString(), notes, concurrencyStamp, reason)
+    {
+    }
+}
 
 public sealed record FinanceSummaryFilter(
     Guid ProjectId,

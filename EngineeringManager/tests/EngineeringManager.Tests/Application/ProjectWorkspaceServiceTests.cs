@@ -13,6 +13,19 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ProjectWorkspaceServiceTests
 {
     [Fact]
+    public async Task LegalEntityEditOptionsUseFullNamesWhileOverviewUsesShortNames()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+
+        var options = await fixture.Service.GetEditOptionsAsync(CancellationToken.None);
+        var workspace = await fixture.Service.GetAsync(fixture.Project.Id, CancellationToken.None);
+
+        options.LegalEntities.Should().Contain(item => Guid.Parse(item.Value) == fixture.LegalEntity.Id && item.Label == fixture.LegalEntity.Name);
+        options.LegalEntities.Should().NotContain(item => item.Label.Contains(fixture.LegalEntity.Code, StringComparison.Ordinal));
+        workspace!.Overview.LegalEntities.Should().Contain(item => Guid.Parse(item.Value) == fixture.LegalEntity.Id && item.Label == fixture.LegalEntity.ShortName);
+    }
+
+    [Fact]
     public async Task WorkspaceIncludesMilestoneAssignmentAndPartnerNotes()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
@@ -35,6 +48,9 @@ public sealed class ProjectWorkspaceServiceTests
     public async Task WorkspaceCombinesQuantityFinanceDetailsAndActivity()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var payment = await fixture.Db.FinanceCashEntries.SingleAsync(item => item.Direction == LedgerDirection.Payable);
+        payment.PaymentMethod = "电子承兑汇票";
+        await fixture.Db.SaveChangesAsync();
 
         var workspace = await fixture.Service.GetAsync(fixture.Project.Id, CancellationToken.None);
 
@@ -52,7 +68,8 @@ public sealed class ProjectWorkspaceServiceTests
         workspace.Collections.Should().ContainSingle(item => item.Amount == 40m);
         workspace.Invoices.Should().ContainSingle(item => item.GrossAmount == 30m);
         workspace.Payables.Should().ContainSingle(item => item.Amount == 80m);
-        workspace.Payments.Should().ContainSingle(item => item.Amount == 25m);
+        var paymentItem = workspace.Payments.Should().ContainSingle(item => item.Amount == 25m).Subject;
+        paymentItem.PaymentMethod.Should().Be("电子承兑汇票");
         workspace.Activities.Should().Contain(item => item.Title == "存在未收款");
         workspace.Activities.Should().Contain(item => item.Title == "收款 40.00");
     }

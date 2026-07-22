@@ -1,11 +1,17 @@
 $ErrorActionPreference = 'Stop'
 
 $databaseName = 'EngineeringManager_Test'
+$allowOfficialDataDeletion = $false
 for ($index = 0; $index -lt $args.Count; $index++) {
-    if ($args[$index] -ne '-DatabaseName' -or $index + 1 -ge $args.Count) {
-        throw "未知参数：$($args[$index])。仅支持 -DatabaseName <名称>。"
+    if ($args[$index] -eq '-AllowOfficialDataDeletion') {
+        $allowOfficialDataDeletion = $true
+        continue
     }
-    $databaseName = [string]$args[++$index]
+    if ($args[$index] -eq '-DatabaseName' -and $index + 1 -lt $args.Count) {
+        $databaseName = [string]$args[++$index]
+        continue
+    }
+    throw "未知参数：$($args[$index])。仅支持 -DatabaseName <名称> 和 -AllowOfficialDataDeletion。"
 }
 
 if ($databaseName -notmatch '_Test$') {
@@ -35,6 +41,42 @@ if ($actualDatabase -ne $databaseName) {
 }
 if ($actualDatabase -notmatch '_Test$') {
     throw 'Development 连接目标不是明确标识的测试数据库。'
+}
+if ($actualDatabase -notmatch '^[A-Za-z0-9_]+$') {
+    throw 'Development 数据库名包含不允许的字符。'
+}
+
+if (-not $allowOfficialDataDeletion) {
+    $masterBuilder = [System.Data.SqlClient.SqlConnectionStringBuilder]::new()
+    $masterBuilder.set_ConnectionString($connectionString)
+    $masterBuilder['Initial Catalog'] = 'master'
+    $masterConnection = [System.Data.SqlClient.SqlConnection]::new($masterBuilder.ConnectionString)
+    try {
+        $masterConnection.Open()
+        $existsCommand = $masterConnection.CreateCommand()
+        try {
+            $existsCommand.CommandText = 'SELECT CASE WHEN DB_ID(@databaseName) IS NULL THEN 0 ELSE 1 END'
+            [void]$existsCommand.Parameters.AddWithValue('@databaseName', $actualDatabase)
+            $databaseExists = [int]$existsCommand.ExecuteScalar() -eq 1
+        } finally {
+            $existsCommand.Dispose()
+        }
+
+        if ($databaseExists) {
+            $officialCommand = $masterConnection.CreateCommand()
+            try {
+                $officialCommand.CommandText = "SELECT COUNT(*) FROM [$actualDatabase].dbo.LegalEntities WHERE Code LIKE N'OFFICIAL-%' OR Notes LIKE N'正式资料，禁止按测试数据删除。%'"
+                $officialCount = [int]$officialCommand.ExecuteScalar()
+            } finally {
+                $officialCommand.Dispose()
+            }
+            if ($officialCount -gt 0) {
+                throw "检测到正式自有公司资料（$officialCount 家），已拒绝重建测试库。只有明确接受删除正式资料时才可传入 -AllowOfficialDataDeletion。"
+            }
+        }
+    } finally {
+        $masterConnection.Dispose()
+    }
 }
 
 $env:ASPNETCORE_ENVIRONMENT = 'Development'

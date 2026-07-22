@@ -49,6 +49,47 @@ public sealed class CompanyManagementServiceTests
     }
 
     [Fact]
+    public async Task CompanyListReportsActiveAndTotalAccountCounts()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "LE-COUNT", Name = "账户统计公司", ShortName = "账户统计" };
+        scope.Db.Add(company);
+        scope.Db.FinancialAccounts.AddRange(
+            new FinancialAccount { LegalEntity = company, AccountName = "启用账户", IsActive = true },
+            new FinancialAccount { LegalEntity = company, AccountName = "停用账户", IsActive = false });
+        await scope.Db.SaveChangesAsync();
+
+        var listed = await scope.Service.ListAsync(CompanyActor.Administrator("admin"), default);
+        var searched = await scope.Service.SearchAsync(CompanyActor.Administrator("admin"), "账户统计", default);
+
+        listed.Should().ContainSingle(item => item.Id == company.Id && item.ActiveAccountCount == 1 && item.TotalAccountCount == 2);
+        searched.Should().ContainSingle(item => item.Id == company.Id && item.ActiveAccountCount == 1 && item.TotalAccountCount == 2);
+    }
+
+    [Fact]
+    public async Task CompanyAccountCanBeEditedAndDeactivatedUsingConcurrencyStamp()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "LE-EDIT", Name = "账户编辑公司", ShortName = "账户编辑" };
+        scope.Db.Add(company);
+        await scope.Db.SaveChangesAsync();
+        var actor = CompanyActor.Administrator("admin");
+        var created = await scope.Service.SaveAccountAsync(actor, new SaveCompanyAccountRequest(
+            null, company.Id, "原账户", "1001", "原开户行", (int)FinancialAccountType.Bank, 10m,
+            false, false, false, true, null, "新增账户"), default);
+
+        var updated = await scope.Service.SaveAccountAsync(actor, new SaveCompanyAccountRequest(
+            created.Id, company.Id, "修改后账户", "2002", "新开户行", (int)FinancialAccountType.Bank, 20m,
+            false, false, false, false, created.ConcurrencyStamp, "删除账户"), default);
+        var details = await scope.Service.GetAsync(actor, company.Id, default);
+
+        created.ConcurrencyStamp.Should().NotBeEmpty();
+        updated.ConcurrencyStamp.Should().NotBe(created.ConcurrencyStamp);
+        details.Accounts.Should().ContainSingle(item => item.Id == created.Id && item.AccountName == "修改后账户" && !item.IsActive);
+        (await scope.Db.AuditLogs.CountAsync(item => item.EntityType == nameof(FinancialAccount))).Should().Be(2);
+    }
+
+    [Fact]
     public async Task CompanyCanBeCreatedListedAndPreparedForCopyWithoutUniqueFields()
     {
         await using var scope = await CreateScopeAsync();

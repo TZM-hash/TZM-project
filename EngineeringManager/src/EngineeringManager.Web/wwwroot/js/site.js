@@ -6,6 +6,7 @@ initSmartBack();
 initProjectAmountViews();
 initProjectGeneralContractors();
 initCollectionContractPayerDefaults();
+initCompanyAccountEntries();
 initProjectContractEditor();
 if (document.querySelector("[data-conflict-notice]")) {
   jobs.push(import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
@@ -291,6 +292,30 @@ function initCollectionContractPayerDefaults() {
       if (!payer.value || payer.value === defaultPayer) payer.value = nextPayer;
       defaultPayer = nextPayer;
     });
+  });
+}
+
+function initCompanyAccountEntries() {
+  document.querySelectorAll("[data-company-account-entry]").forEach((form) => {
+    const company = form.querySelector("[data-company-account-company]");
+    const account = form.querySelector("[data-company-account-select]");
+    if (!company || !account) return;
+
+    const updateAccounts = () => {
+      const companyId = company.value.toLowerCase();
+      [...account.options].forEach((option) => {
+        if (!option.value) return;
+        const matches = Boolean(companyId) && option.dataset.legalEntityId?.toLowerCase() === companyId;
+        option.hidden = !matches;
+        option.disabled = !matches;
+      });
+
+      const selected = account.selectedOptions[0];
+      if (selected?.value && selected.dataset.legalEntityId?.toLowerCase() !== companyId) account.value = "";
+    };
+
+    company.addEventListener("change", updateAccounts);
+    updateAccounts();
   });
 }
 

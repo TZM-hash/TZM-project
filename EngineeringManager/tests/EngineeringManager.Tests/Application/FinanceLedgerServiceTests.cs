@@ -298,6 +298,22 @@ public sealed class FinanceLedgerServiceTests
     }
 
     [Fact]
+    public async Task ProjectPaymentPreservesCustomPaymentMethodText()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        var payableId = await fixture.Service.AddPayableAsync(new CreatePayableRequest(
+            fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+            PayableSourceType.Manual, new DateOnly(2026, 7, 3), null, 90m, "应付"), CancellationToken.None);
+
+        var paymentId = await fixture.Service.RecordPaymentAsync(new RecordPaymentRequest(
+            payableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+            fixture.Bank.Id, new DateOnly(2026, 7, 4), 35m, "电子承兑汇票", "付款"), CancellationToken.None);
+
+        var payment = await fixture.Db.FinanceCashEntries.AsNoTracking().SingleAsync(item => item.Id == paymentId);
+        payment.PaymentMethod.Should().Be("电子承兑汇票");
+    }
+
+    [Fact]
     public async Task UpdatingInvoiceRescalesExistingAllocationsAndRejectsStaleVersion()
     {
         await using var fixture = await FinanceFixture.CreateAsync();

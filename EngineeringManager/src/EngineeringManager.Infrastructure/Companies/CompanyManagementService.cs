@@ -17,7 +17,9 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         return await query.OrderBy(item => item.Code).Select(item => new CompanyListItemDto(
             item.Id, item.Code, item.Name, item.ShortName,
             item.CompanyCategory == null ? null : item.CompanyCategory.Name,
-            item.LegalRepresentative, item.IsActive, item.Notes)).ToListAsync(cancellationToken);
+            item.LegalRepresentative, item.IsActive, item.Notes,
+            db.FinancialAccounts.Count(account => account.LegalEntityId == item.Id && account.IsActive),
+            db.FinancialAccounts.Count(account => account.LegalEntityId == item.Id))).ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<CompanyListItemDto>> SearchAsync(CompanyActor actor, string? search, CancellationToken cancellationToken)
@@ -57,7 +59,9 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         return await query.OrderBy(item => item.Code).Select(item => new CompanyListItemDto(
             item.Id, item.Code, item.Name, item.ShortName,
             item.CompanyCategory == null ? null : item.CompanyCategory.Name,
-            item.LegalRepresentative, item.IsActive, item.Notes)).ToListAsync(cancellationToken);
+            item.LegalRepresentative, item.IsActive, item.Notes,
+            db.FinancialAccounts.Count(account => account.LegalEntityId == item.Id && account.IsActive),
+            db.FinancialAccounts.Count(account => account.LegalEntityId == item.Id))).ToListAsync(cancellationToken);
     }
 
     public async Task<CompanyDetailsDto> GetAsync(CompanyActor actor, Guid id, CancellationToken cancellationToken)
@@ -365,7 +369,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
 
     private static CompanyAccountDto ToAccount(FinancialAccount account) => new(account.Id, account.AccountName, account.AccountNumber,
         account.BankName, account.AccountType.ToString(), account.OpeningBalance, account.IsDefaultCollection,
-        account.IsDefaultPayment, account.IsDefaultInvoice, account.IsActive, account.Notes);
+        account.IsDefaultPayment, account.IsDefaultInvoice, account.IsActive, account.Notes, account.ConcurrencyStamp);
 
     private static CompanyCertificateDto ToCertificate(CompanyCertificate item) => new(item.Id, item.CertificateType,
         item.CertificateNumber, item.IssuedOn, item.ExpiresOn, item.AttachmentId, item.Notes);

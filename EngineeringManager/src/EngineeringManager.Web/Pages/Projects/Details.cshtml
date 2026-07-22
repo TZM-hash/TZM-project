@@ -294,6 +294,10 @@ else
 
     var taxConfigurations = item.Overview.TaxConfigurations?.Where(configuration => configuration.IsActive).ToArray() ?? [];
 
+    var projectLegalEntityIds = item.Overview.LegalEntities.Select(company => company.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    var projectLegalEntityOptions = Model.Options.LegalEntities.Where(company => projectLegalEntityIds.Contains(company.Value)).ToArray();
+
 
 
     @if (TempData["Error"] is string error)
@@ -469,7 +473,7 @@ else
 
                         <div><dt>部门</dt><dd><span data-inline-edit-value>@(item.Overview.DepartmentName ?? "未设置")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.DepartmentId" data-inline-edit-control hidden><option value="">未设置</option>@foreach (var option in Model.Options.Departments) { <option value="@option.Value">@option.Label</option> }</select> }</dd></div>
 
-                        <div class="project-quick-selection-cell"><dt>签约公司</dt><dd><span data-inline-edit-value>@(item.Overview.LegalEntities.Count == 0 ? "未设置" : string.Join("、", item.Overview.LegalEntities.Select(option => option.Label)))</span>@if (Model.CanManage) { <details class="selection-dropdown project-quick-selection project-legal-entity-selector" data-check-selector data-check-selector-empty-label="未选择" data-inline-edit-control hidden><summary class="selection-dropdown-toggle"><span>签约公司</span><strong data-check-selector-count></strong></summary><div class="selection-dropdown-menu"><div class="selection-dropdown-heading"><span>勾选签约公司</span><div><button type="button" data-check-selector-all>全选</button><button type="button" data-check-selector-clear>清空</button></div></div><div class="check-grid">@foreach (var option in Model.Options.LegalEntities) { var optionId = Guid.Parse(option.Value); var selected = Model.QuickEdit.LegalEntityIds.Contains(optionId); <label><input type="checkbox" name="QuickEdit.LegalEntityIds" value="@option.Value" checked="@(selected ? "checked" : null)" data-check-selector-option data-default="@selected.ToString().ToLowerInvariant()" /> <span>@option.Label</span></label> }</div></div></details> }</dd></div>
+                        <div class="project-quick-selection-cell"><dt>签约公司</dt><dd><span data-inline-edit-value>@(item.Overview.LegalEntities.Count == 0 ? "未设置" : string.Join("、", item.Overview.LegalEntities.Select(option => option.Label)))</span>@if (Model.CanManage) { <details class="selection-dropdown column-manager-dropdown project-quick-selection project-legal-entity-selector" data-check-selector data-check-selector-empty-label="未选择" data-inline-edit-control hidden><summary class="selection-dropdown-toggle"><span>签约公司</span><strong data-check-selector-count></strong></summary><div class="column-manager-menu project-legal-entity-menu"><div class="column-manager-menu-heading"><strong>选择签约公司</strong><span>勾选后点击确认</span></div><ol class="column-manager-list project-legal-entity-list">@foreach (var option in Model.Options.LegalEntities) { var optionId = Guid.Parse(option.Value); var selected = Model.QuickEdit.LegalEntityIds.Contains(optionId); <li><label><input type="checkbox" name="QuickEdit.LegalEntityIds" value="@option.Value" checked="@(selected ? "checked" : null)" data-check-selector-option data-default="@selected.ToString().ToLowerInvariant()" /> <span>@option.Label</span></label></li> }</ol><div class="column-manager-menu-actions"><button type="button" class="button button--ghost button--small" data-check-selector-all>全选</button><button type="button" class="button button--ghost button--small" data-check-selector-clear>清空</button><button type="button" class="button button--primary button--small" data-check-selector-confirm>确认</button></div></div></details> }</dd></div>
 
                         <div><dt>合作方式</dt><dd><span data-inline-edit-value>@item.Overview.AffiliationType.ToChinese()</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.AffiliationType" data-inline-edit-control hidden>@foreach (var value in Enum.GetValues<ProjectAffiliationType>()) { <option value="@value">@value.ToChinese()</option> }</select> }</dd></div>
 
@@ -783,7 +787,7 @@ else
 
                         {
 
-                            <details class="inline-create-details record-entry-details"><summary>新增收款明细</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Collection" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form" data-collection-entry>
+                            <details class="inline-create-details record-entry-details" open="@(Model.ActiveInlineEditor == "project-collection-create" ? "open" : null)"><summary>新增收款明细</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Collection" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form" data-collection-entry data-company-account-entry>
 
                                 <div asp-validation-summary="All" class="panel-copy"></div><div class="collection-entry-compact-grid">
 
@@ -791,7 +795,7 @@ else
 
                                         <label class="collection-entry-compact-field">合同<select asp-for="CollectionEdit.ContractId" data-collection-contract><option value="" data-business-partner-id="">不指定合同</option>@foreach (var contract in item.Contracts) { <option value="@contract.Id" data-business-partner-id="@contract.BusinessPartnerId">@contract.ContractNumber · @contract.Name</option> }</select></label>
 
-                                        <label class="collection-entry-compact-field">签约公司<select asp-for="CollectionEdit.LegalEntityId"><option value="">请选择</option>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value">@company.Label</option> }</select></label>
+                                        <label class="collection-entry-compact-field">签约公司<select asp-for="CollectionEdit.LegalEntityId" data-company-account-company><option value="">请选择</option>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value">@company.Label</option> }</select></label>
 
                                         @{
 
@@ -825,7 +829,7 @@ else
 
                                     <div class="collection-entry-row collection-entry-row--2">
 
-                                        <label class="collection-entry-compact-field">收款账户<select asp-for="CollectionEdit.AccountId"><option value="">请选择</option>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id">@account.Label</option> }</select></label>
+                                        <label class="collection-entry-compact-field">收款账户<select asp-for="CollectionEdit.AccountId" data-company-account-select><option value="">请选择</option>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id" data-legal-entity-id="@account.ParentId">@account.Label</option> }</select></label>
 
                                         <label class="collection-entry-compact-field">收款方式<input asp-for="CollectionEdit.PaymentMethod" placeholder="例如：银行转账、现金" /></label>
 
@@ -873,17 +877,17 @@ else
 
                             var editIndex = collectionEditIndex++;
 
-                            <tr id="project-record-@row.Id" data-quantity-edit-row>
+                            <tr id="project-record-@row.Id" data-quantity-edit-row data-company-account-entry>
 
                                 <td><span data-inline-edit-value>@row.CollectionDate</span><input class="inline-cell-control" name="CollectionRowEdits[@editIndex].EntryDate" value="@row.CollectionDate.ToString("yyyy-MM-dd")" type="date" form="collection-batch-form" data-inline-edit-control hidden /></td>
 
                                 <td><span data-inline-edit-value>@(row.ContractNumber ?? "-")</span><select class="inline-cell-control" name="CollectionRowEdits[@editIndex].ContractId" form="collection-batch-form" data-inline-edit-control hidden><option value="">不指定合同</option>@foreach (var contract in item.Contracts) { <option value="@contract.Id" selected="@(contract.Id == row.ContractId ? "selected" : null)">@contract.ContractNumber · @contract.Name</option> }</select></td>
 
-                                <td><span data-inline-edit-value>@row.LegalEntityName</span><select class="inline-cell-control" name="CollectionRowEdits[@editIndex].LegalEntityId" form="collection-batch-form" data-inline-edit-control hidden>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value" selected="@(company.Value == row.LegalEntityId.ToString() ? "selected" : null)">@company.Label</option> }</select></td>
+                                <td><span data-inline-edit-value>@row.LegalEntityName</span><select class="inline-cell-control" name="CollectionRowEdits[@editIndex].LegalEntityId" form="collection-batch-form" data-inline-edit-control data-company-account-company hidden>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value" selected="@(string.Equals(company.Value, row.LegalEntityId.ToString(), StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@company.Label</option> }</select></td>
 
 <td><span data-inline-edit-value>@(row.BusinessPartnerName ?? "-")</span><select class="inline-cell-control" name="CollectionRowEdits[@editIndex].BusinessPartnerId" form="collection-batch-form" data-inline-edit-control hidden><option value="">未指定</option>@foreach (var partner in collectionRowContractorOptions) { <option value="@(partner.Id == Guid.Empty ? "" : partner.Id.ToString())" selected="@((partner.Id != Guid.Empty && partner.Id == row.BusinessPartnerId) || (partner.Id == Guid.Empty && string.Equals(partner.Label, row.BusinessPartnerName, StringComparison.OrdinalIgnoreCase)) ? "selected" : null)">@partner.Label</option> }</select></td>
 
-                                <td><span data-inline-edit-value>@row.AccountName</span><select class="inline-cell-control" name="CollectionRowEdits[@editIndex].AccountId" form="collection-batch-form" data-inline-edit-control hidden>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id" selected="@(account.Id == row.AccountId ? "selected" : null)">@account.Label</option> }</select></td>
+                                <td><span data-inline-edit-value>@row.AccountName</span><select class="inline-cell-control" name="CollectionRowEdits[@editIndex].AccountId" form="collection-batch-form" data-inline-edit-control data-company-account-select hidden>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id" data-legal-entity-id="@account.ParentId" selected="@(account.Id == row.AccountId ? "selected" : null)">@account.Label</option> }</select></td>
 
                                 <td><span data-inline-edit-value>@row.Amount.ToString("N2")</span><input class="inline-cell-control" name="CollectionRowEdits[@editIndex].Amount" value="@row.Amount" type="number" step="0.01" form="collection-batch-form" data-inline-edit-control hidden /></td>
 
@@ -911,7 +915,7 @@ else
 
                         {
 
-                            <details class="inline-create-details record-entry-details"><summary>新增开票明细</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Invoice" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form">
+                            <details class="inline-create-details record-entry-details" open="@(Model.ActiveInlineEditor == "project-invoice-create" ? "open" : null)"><summary>新增开票明细</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Invoice" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form">
 
                                 <div asp-validation-summary="All" class="panel-copy"></div>
 
@@ -951,7 +955,7 @@ else
 
                                     <div class="collection-entry-row collection-entry-row--2">
 
-                                        <label class="collection-entry-compact-field">开票公司<select asp-for="InvoiceEdit.LegalEntityId"><option value="">请选择</option>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value">@company.Label</option> }</select></label>
+                                        <label class="collection-entry-compact-field">开票公司<select asp-for="InvoiceEdit.LegalEntityId"><option value="">请选择</option>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value">@company.Label</option> }</select></label>
 
                                         <label class="collection-entry-compact-field">往来单位<select asp-for="InvoiceEdit.BusinessPartnerId"><option value="">未指定</option>@foreach (var partner in invoiceContractorOptions) { <option value="@(partner.Id == Guid.Empty ? "" : partner.Id.ToString())">@partner.Label</option> }</select></label>
 
@@ -1005,7 +1009,7 @@ else
 
                                 <td><span data-inline-edit-value>@(row.ContractNumber ?? "-")</span><select class="inline-cell-control" name="InvoiceRowEdits[@editIndex].ContractId" form="invoice-batch-form" data-inline-edit-control hidden><option value="">不指定合同</option>@foreach (var contract in item.Contracts) { <option value="@contract.Id" selected="@(contract.Id == row.ContractId ? "selected" : null)">@contract.ContractNumber · @contract.Name</option> }</select></td>
 
-                                <td><span data-inline-edit-value>@row.LegalEntityName</span><select class="inline-cell-control" name="InvoiceRowEdits[@editIndex].LegalEntityId" form="invoice-batch-form" data-inline-edit-control hidden>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value" selected="@(company.Value == row.LegalEntityId.ToString() ? "selected" : null)">@company.Label</option> }</select></td>
+                                <td><span data-inline-edit-value>@row.LegalEntityName</span><select class="inline-cell-control" name="InvoiceRowEdits[@editIndex].LegalEntityId" form="invoice-batch-form" data-inline-edit-control hidden>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value" selected="@(string.Equals(company.Value, row.LegalEntityId.ToString(), StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@company.Label</option> }</select></td>
 
                                 <td><span data-inline-edit-value>@(row.BusinessPartnerName ?? "-")</span><select class="inline-cell-control" name="InvoiceRowEdits[@editIndex].BusinessPartnerId" form="invoice-batch-form" data-inline-edit-control hidden><option value="">未指定</option>@foreach (var partner in invoiceTableContractorOptions) { <option value="@(partner.Id == Guid.Empty ? "" : partner.Id.ToString())" selected="@((partner.Id != Guid.Empty && partner.Id == row.BusinessPartnerId) || (partner.Id == Guid.Empty && string.Equals(partner.Label, row.BusinessPartnerName, StringComparison.OrdinalIgnoreCase)) ? "selected" : null)">@partner.Label</option> }</select></td>
 
@@ -1037,7 +1041,7 @@ else
 
                         {
 
-                            <details class="inline-create-details record-entry-details"><summary>新增付款明细</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Payment" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form">
+                            <details class="inline-create-details record-entry-details" open="@(Model.ActiveInlineEditor == "project-payment-create" ? "open" : null)"><summary>新增付款明细</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Payment" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form" data-company-account-entry>
 
                                 <div asp-validation-summary="All" class="panel-copy"></div>
 
@@ -1045,11 +1049,11 @@ else
 
                                     <div class="collection-entry-row collection-entry-row--1">
 
-                                        <label class="collection-entry-compact-field">类型<select asp-for="PaymentEdit.Kind"><option value="@FinanceEntryKind.Payable">应付记录</option><option value="@FinanceEntryKind.Payment">实际付款</option></select></label>
+                                        <label class="collection-entry-compact-field">类型<select asp-for="PaymentEdit.Kind" data-inline-edit-kind-select><option value="@FinanceEntryKind.Payable">应付记录</option><option value="@FinanceEntryKind.Payment">实际付款</option></select></label>
 
                                         <label class="collection-entry-compact-field">合同<select asp-for="PaymentEdit.ContractId"><option value="">不指定合同</option>@foreach (var contract in item.Contracts) { <option value="@contract.Id">@contract.ContractNumber · @contract.Name</option> }</select></label>
 
-                                        <label class="collection-entry-compact-field">签约公司<select asp-for="PaymentEdit.LegalEntityId"><option value="">请选择</option>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value">@company.Label</option> }</select></label>
+                                        <label class="collection-entry-compact-field">签约公司<select asp-for="PaymentEdit.LegalEntityId" data-company-account-company><option value="">请选择</option>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value">@company.Label</option> }</select></label>
 
                                         <div class="quantity-entry-attachment collection-entry-attachment" data-attachment-picker>
 
@@ -1061,23 +1065,19 @@ else
 
                                     </div>
 
-                                    <div class="collection-entry-row collection-entry-row--2">
+                                    <div class="collection-entry-row collection-entry-row--2 payment-entry-row--2">
 
                                         <label class="collection-entry-compact-field">收款单位<select asp-for="PaymentEdit.BusinessPartnerId"><option value="">请选择</option>@foreach (var partner in Model.FinanceOptions.BusinessPartners) { <option value="@partner.Id">@partner.Label</option> }</select></label>
 
-                                        <label class="collection-entry-compact-field">付款账户<select asp-for="PaymentEdit.AccountId"><option value="">请选择</option>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id">@account.Label</option> }</select></label>
+                                        <label class="collection-entry-compact-field" data-kind="@FinanceEntryKind.Payment"><span>付款账户</span><select asp-for="PaymentEdit.AccountId" data-company-account-select><option value="">请选择</option>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id" data-legal-entity-id="@account.ParentId">@account.Label</option> }</select></label>
+
+                                        <label class="collection-entry-compact-field" data-kind="@FinanceEntryKind.Payment"><span>付款方式</span><input asp-for="PaymentEdit.PaymentMethod" maxlength="100" placeholder="例如：银行转账、承兑汇票" /></label>
 
                                         <label class="collection-entry-compact-field">金额<input asp-for="PaymentEdit.Amount" type="number" step="0.01" /></label>
 
-                                        <label class="collection-entry-compact-field">日期<input asp-for="PaymentEdit.EntryDate" type="date" /></label>
+                                        <label class="collection-entry-compact-field">填写日期<input asp-for="PaymentEdit.EntryDate" type="date" /></label>
 
-                                    </div>
-
-                                    <div class="collection-entry-row collection-entry-row--2">
-
-                                        <label class="collection-entry-compact-field">到期日<input asp-for="PaymentEdit.DueDate" type="date" /></label>
-
-                                        <label class="collection-entry-compact-field">付款方式<select asp-for="PaymentEdit.PaymentMethod">@foreach (var value in Enum.GetValues<PaymentMethod>()) { <option value="@value">@value.ToChinese()</option> }</select></label>
+                                        <label class="collection-entry-compact-field" data-kind="@FinanceEntryKind.Payable"><span>到期日期</span><input asp-for="PaymentEdit.DueDate" type="date" /></label>
 
                                     </div>
 
@@ -1091,7 +1091,7 @@ else
 
                         }
 
-                        <div><h3>应付记录</h3><div class="table-wrap"><table class="data-table payment-inline-table"><thead><tr><th>日期</th><th>到期日</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>金额</th><th>状态</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
+                        <div><h3>应付记录</h3><div class="table-wrap"><table class="data-table payment-inline-table payable-inline-table"><thead><tr><th>日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>金额</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
 
                         @{ var payableEditIndex = 0; }
 
@@ -1105,21 +1105,17 @@ else
 
                                 <td><span data-inline-edit-value>@row.EntryDate</span><input class="inline-cell-control" name="PayableRowEdits[@editIndex].EntryDate" value="@row.EntryDate.ToString("yyyy-MM-dd")" type="date" form="payment-batch-form" data-inline-edit-control hidden /></td>
 
-                                <td><span data-inline-edit-value>@row.DueDate</span><input class="inline-cell-control" name="PayableRowEdits[@editIndex].DueDate" value="@row.DueDate?.ToString("yyyy-MM-dd")" type="date" form="payment-batch-form" data-inline-edit-control hidden /></td>
-
                                 <td><span data-inline-edit-value>@(row.ContractNumber ?? "-")</span><select class="inline-cell-control" name="PayableRowEdits[@editIndex].ContractId" form="payment-batch-form" data-inline-edit-control hidden><option value="">不指定合同</option>@foreach (var contract in item.Contracts) { <option value="@contract.Id" selected="@(contract.Id == row.ContractId ? "selected" : null)">@contract.ContractNumber · @contract.Name</option> }</select></td>
 
-                                <td><span data-inline-edit-value>@row.LegalEntityName</span><select class="inline-cell-control" name="PayableRowEdits[@editIndex].LegalEntityId" form="payment-batch-form" data-inline-edit-control hidden>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value" selected="@(company.Value == row.LegalEntityId.ToString() ? "selected" : null)">@company.Label</option> }</select></td>
+                                <td><span data-inline-edit-value>@row.LegalEntityName</span><select class="inline-cell-control" name="PayableRowEdits[@editIndex].LegalEntityId" form="payment-batch-form" data-inline-edit-control hidden>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value" selected="@(string.Equals(company.Value, row.LegalEntityId.ToString(), StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@company.Label</option> }</select></td>
 
                                 <td><span data-inline-edit-value>@row.BusinessPartnerName</span><select class="inline-cell-control" name="PayableRowEdits[@editIndex].BusinessPartnerId" form="payment-batch-form" data-inline-edit-control hidden>@foreach (var partner in Model.FinanceOptions.BusinessPartners) { <option value="@partner.Id" selected="@(partner.Id == row.BusinessPartnerId ? "selected" : null)">@partner.Label</option> }</select></td>
 
                                 <td><span data-inline-edit-value>@row.Amount.ToString("N2")</span><input class="inline-cell-control" name="PayableRowEdits[@editIndex].Amount" value="@row.Amount" type="number" step="0.01" form="payment-batch-form" data-inline-edit-control hidden /></td>
 
-                                <td>@(row.IsVoided ? "已作废" : "有效")</td>
-
                                 <td class="record-attachment-column"><div class="record-attachment-tools">@if (Model.CanManageFinance) { <form method="post" enctype="multipart/form-data" asp-page-handler="RecordAttachment" asp-route-id="@item.Overview.Id" asp-route-recordType="@ProjectRecordAttachmentType.Settlement" asp-route-recordId="@row.Id" asp-route-tab="payment" data-auto-upload-picker><input type="file" name="RecordAttachmentFile" required data-auto-upload-input hidden /><button class="button button--secondary button--small" type="button" data-auto-upload-trigger>@(Model.RecordAttachments.ContainsKey(row.Id) ? "替换" : "上传")</button></form> }@if (Model.RecordAttachments.TryGetValue(row.Id, out var payableAttachment)) { <a class="button button--secondary button--small" asp-page-handler="RecordAttachment" asp-route-id="@item.Overview.Id" asp-route-attachmentId="@payableAttachment.Id" target="_blank" rel="noopener" title="@payableAttachment.OriginalFileName">预览</a>@if (Model.CanManageFinance) { <form method="post" asp-page-handler="DeleteRecordAttachment" asp-route-id="@item.Overview.Id" asp-route-recordType="@ProjectRecordAttachmentType.Settlement" asp-route-recordId="@row.Id" asp-route-attachmentId="@payableAttachment.Id" asp-route-tab="payment"><button class="button button--ghost button--small" type="submit">删除</button></form> } }</div></td>
 
-                                <td class="quantity-notes-column">@if (string.IsNullOrWhiteSpace(row.Description)) { <span data-inline-edit-value></span> } else { <span class="quantity-notes-value" data-inline-edit-value data-quantity-notes-anchor tabindex="0" aria-describedby="quantity-notes-comment"><span>@row.Description</span><span data-quantity-notes-content hidden>@row.Description</span></span> }<button class="quantity-notes-edit-trigger" type="button" data-quantity-notes-edit data-quantity-notes-title="编辑应付备注" data-inline-edit-actions hidden><span data-quantity-notes-button-text>@(string.IsNullOrWhiteSpace(row.Description) ? "点击编辑备注" : row.Description)</span></button><input type="hidden" name="PayableRowEdits[@editIndex].Description" value="@row.Description" form="payment-batch-form" data-quantity-notes-input hidden /><input type="hidden" name="PayableRowEdits[@editIndex].Id" value="@row.Id" form="payment-batch-form" /><input type="hidden" name="PayableRowEdits[@editIndex].ConcurrencyStamp" value="@row.ConcurrencyStamp" form="payment-batch-form" /><input type="hidden" name="PayableRowEdits[@editIndex].IsDirty" value="false" form="payment-batch-form" data-quantity-edit-dirty /></td>
+                                <td class="quantity-notes-column">@if (string.IsNullOrWhiteSpace(row.Description)) { <span data-inline-edit-value></span> } else { <span class="quantity-notes-value" data-inline-edit-value data-quantity-notes-anchor tabindex="0" aria-describedby="quantity-notes-comment"><span>@row.Description</span><span data-quantity-notes-content hidden>@row.Description</span></span> }<button class="quantity-notes-edit-trigger" type="button" data-quantity-notes-edit data-quantity-notes-title="编辑应付备注" data-inline-edit-actions hidden><span data-quantity-notes-button-text>@(string.IsNullOrWhiteSpace(row.Description) ? "点击编辑备注" : row.Description)</span></button><input type="hidden" name="PayableRowEdits[@editIndex].DueDate" value="@row.DueDate?.ToString("yyyy-MM-dd")" form="payment-batch-form" /><input type="hidden" name="PayableRowEdits[@editIndex].Description" value="@row.Description" form="payment-batch-form" data-quantity-notes-input hidden /><input type="hidden" name="PayableRowEdits[@editIndex].Id" value="@row.Id" form="payment-batch-form" /><input type="hidden" name="PayableRowEdits[@editIndex].ConcurrencyStamp" value="@row.ConcurrencyStamp" form="payment-batch-form" /><input type="hidden" name="PayableRowEdits[@editIndex].IsDirty" value="false" form="payment-batch-form" data-quantity-edit-dirty /></td>
 
                             </tr>
 
@@ -1127,7 +1123,7 @@ else
 
                         </tbody></table></div>
 
-                        <h3>付款记录</h3><div class="table-wrap"><table class="data-table payment-inline-table"><thead><tr><th>付款日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>付款账户</th><th>付款金额</th><th>付款方式</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
+                        <h3>付款记录</h3><div class="table-wrap"><table class="data-table payment-inline-table payment-record-inline-table"><thead><tr><th>付款日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>付款账户</th><th>付款金额</th><th>付款方式</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
 
                         @{ var paymentEditIndex = 0; }
 
@@ -1139,21 +1135,21 @@ else
 
                             var isPayrollPayment = string.Equals(row.SourceType, "PayrollCrewDisbursement", StringComparison.Ordinal);
 
-                            <tr id="project-record-@row.Id" data-quantity-edit-row>
+                            <tr id="project-record-@row.Id" data-quantity-edit-row data-company-account-entry>
 
                                 <td><span data-inline-edit-value>@row.PaymentDate</span>@if (!isPayrollPayment) { <input class="inline-cell-control" name="PaymentRowEdits[@editIndex].EntryDate" value="@row.PaymentDate.ToString("yyyy-MM-dd")" type="date" form="payment-batch-form" data-inline-edit-control hidden /> }</td>
 
                                 <td><span data-inline-edit-value>@(row.ContractNumber ?? "-")</span>@if (!isPayrollPayment) { <select class="inline-cell-control" name="PaymentRowEdits[@editIndex].ContractId" form="payment-batch-form" data-inline-edit-control hidden><option value="">不指定合同</option>@foreach (var contract in item.Contracts) { <option value="@contract.Id" selected="@(contract.Id == row.ContractId ? "selected" : null)">@contract.ContractNumber · @contract.Name</option> }</select> }</td>
 
-                                <td><span data-inline-edit-value>@row.LegalEntityName</span>@if (!isPayrollPayment) { <select class="inline-cell-control" name="PaymentRowEdits[@editIndex].LegalEntityId" form="payment-batch-form" data-inline-edit-control hidden>@foreach (var company in item.Overview.LegalEntities) { <option value="@company.Value" selected="@(company.Value == row.LegalEntityId.ToString() ? "selected" : null)">@company.Label</option> }</select> }</td>
+                                <td><span data-inline-edit-value>@row.LegalEntityName</span>@if (!isPayrollPayment) { <select class="inline-cell-control" name="PaymentRowEdits[@editIndex].LegalEntityId" form="payment-batch-form" data-inline-edit-control data-company-account-company hidden>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value" selected="@(string.Equals(company.Value, row.LegalEntityId.ToString(), StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@company.Label</option> }</select> }</td>
 
                                 <td><span data-inline-edit-value>@row.BusinessPartnerName</span>@if (!isPayrollPayment) { <select class="inline-cell-control" name="PaymentRowEdits[@editIndex].BusinessPartnerId" form="payment-batch-form" data-inline-edit-control hidden>@foreach (var partner in Model.FinanceOptions.BusinessPartners) { <option value="@partner.Id" selected="@(partner.Id == row.BusinessPartnerId ? "selected" : null)">@partner.Label</option> }</select> }</td>
 
-                                <td><span data-inline-edit-value>@row.AccountName</span>@if (!isPayrollPayment) { <select class="inline-cell-control" name="PaymentRowEdits[@editIndex].AccountId" form="payment-batch-form" data-inline-edit-control hidden>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id" selected="@(account.Id == row.AccountId ? "selected" : null)">@account.Label</option> }</select> }</td>
+                                <td><span data-inline-edit-value>@row.AccountName</span>@if (!isPayrollPayment) { <select class="inline-cell-control" name="PaymentRowEdits[@editIndex].AccountId" form="payment-batch-form" data-inline-edit-control data-company-account-select hidden>@foreach (var account in Model.FinanceOptions.Accounts) { <option value="@account.Id" data-legal-entity-id="@account.ParentId" selected="@(account.Id == row.AccountId ? "selected" : null)">@account.Label</option> }</select> }</td>
 
                                 <td><span data-inline-edit-value>@row.Amount.ToString("N2")</span>@if (!isPayrollPayment) { <input class="inline-cell-control" name="PaymentRowEdits[@editIndex].Amount" value="@row.Amount" type="number" step="0.01" form="payment-batch-form" data-inline-edit-control hidden /> }</td>
 
-                                <td><span data-inline-edit-value>@row.PaymentMethod.ToChinese()</span>@if (!isPayrollPayment) { <select class="inline-cell-control" name="PaymentRowEdits[@editIndex].PaymentMethod" form="payment-batch-form" data-inline-edit-control hidden>@foreach (var value in Enum.GetValues<PaymentMethod>()) { <option value="@value" selected="@(value == row.PaymentMethod ? "selected" : null)">@value.ToChinese()</option> }</select> }</td>
+                                <td><span data-inline-edit-value>@ProjectDisplayText.PaymentMethodLabel(row.PaymentMethod)</span>@if (!isPayrollPayment) { <input class="inline-cell-control" name="PaymentRowEdits[@editIndex].PaymentMethod" value="@row.PaymentMethod" maxlength="100" form="payment-batch-form" data-inline-edit-control hidden /> }</td>
 
                                 <td class="record-attachment-column"><div class="record-attachment-tools">@if (Model.CanManageFinance) { <form method="post" enctype="multipart/form-data" asp-page-handler="RecordAttachment" asp-route-id="@item.Overview.Id" asp-route-recordType="@ProjectRecordAttachmentType.Cash" asp-route-recordId="@row.Id" asp-route-tab="payment" data-auto-upload-picker><input type="file" name="RecordAttachmentFile" required data-auto-upload-input hidden /><button class="button button--secondary button--small" type="button" data-auto-upload-trigger>@(Model.RecordAttachments.ContainsKey(row.Id) ? "替换" : "上传")</button></form> }@if (Model.RecordAttachments.TryGetValue(row.Id, out var paymentAttachment)) { <a class="button button--secondary button--small" asp-page-handler="RecordAttachment" asp-route-id="@item.Overview.Id" asp-route-attachmentId="@paymentAttachment.Id" target="_blank" rel="noopener" title="@paymentAttachment.OriginalFileName">预览</a>@if (Model.CanManageFinance) { <form method="post" asp-page-handler="DeleteRecordAttachment" asp-route-id="@item.Overview.Id" asp-route-recordType="@ProjectRecordAttachmentType.Cash" asp-route-recordId="@row.Id" asp-route-attachmentId="@paymentAttachment.Id" asp-route-tab="payment"><button class="button button--ghost button--small" type="submit">删除</button></form> } }</div></td>
 
@@ -1177,7 +1173,7 @@ else
 
                             <div class="construction-create-grid">
 
-                                <details class="inline-create-details record-entry-details"><summary>新增施工记录</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Construction" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form">
+                                <details class="inline-create-details record-entry-details" open="@(Model.ActiveInlineEditor == "project-construction-create" ? "open" : null)"><summary>新增施工记录</summary><form method="post" enctype="multipart/form-data" asp-page-handler="Construction" asp-route-id="@item.Overview.Id" class="inline-edit-panel collection-entry-compact-form">
 
                                     <div class="collection-entry-compact-grid">
 
@@ -1185,7 +1181,7 @@ else
 
                                             <label class="collection-entry-compact-field">类型<select asp-for="ConstructionEdit.RecordType" data-construction-type><option value="1">设备</option><option value="2">施工班组</option></select></label>
 
-                                            <label class="collection-entry-compact-field">设备/施工班组<select asp-for="ConstructionEdit.SubjectId"><option value="">请选择</option><optgroup label="设备">@foreach (var option in Model.ConstructionWorkspace.Equipment) { <option value="@option.Id">@option.Label</option> }</optgroup><optgroup label="施工班组">@foreach (var option in Model.ConstructionWorkspace.Crews) { <option value="@option.Id">@option.Label</option> }</optgroup></select></label>
+                                            <label class="collection-entry-compact-field"><span data-construction-subject-label>设备</span><select asp-for="ConstructionEdit.SubjectId" data-construction-subject-select><option value="">请选择</option><optgroup label="设备" data-construction-subject-kind="1">@foreach (var option in Model.ConstructionWorkspace.Equipment) { <option value="@option.Id">@option.Label</option> }</optgroup><optgroup label="施工班组" data-construction-subject-kind="2">@foreach (var option in Model.ConstructionWorkspace.Crews) { <option value="@option.Id">@option.Label</option> }</optgroup></select></label>
 
                                             <label class="collection-entry-compact-field">进场日期<input asp-for="ConstructionEdit.EntryDate" type="date" /></label>
 
@@ -1218,10 +1214,6 @@ else
                                     <div class="inline-edit-actions"><button type="button" class="button button--secondary button--action" data-inline-edit-cancel>取消</button><button class="button button--primary button--action" type="submit">新增记录</button></div>
 
                                 </form></details>
-
-                                <details class="inline-create-details"><summary>新建设备主档</summary><form method="post" asp-page-handler="CreateEquipment" asp-route-id="@item.Overview.Id" class="inline-edit-panel"><div class="inline-edit-grid"><label>设备编号<input asp-for="NewEquipment.EquipmentNumber" /></label><label>设备名称<input asp-for="NewEquipment.Name" /></label><label>型号<input asp-for="NewEquipment.Model" /></label><label>分类<input asp-for="NewEquipment.Category" /></label><label>权属<select asp-for="NewEquipment.OwnershipType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Equipment.EquipmentOwnershipType>()"></select></label><label>所属公司（自有）<select asp-for="NewEquipment.OwnerLegalEntityId"><option value="">请选择</option>@foreach (var option in Model.FinanceOptions.LegalEntities) { <option value="@option.Id">@option.Label</option> }</select></label><label>出租方（租赁）<select asp-for="NewEquipment.LessorBusinessPartnerId"><option value="">请选择</option>@foreach (var option in Model.FinanceOptions.BusinessPartners) { <option value="@option.Id">@option.Label</option> }</select></label><label>内部日租金<input asp-for="NewEquipment.InternalDailyRate" type="number" step="0.01" /></label><label class="inline-edit-span">创建原因<input asp-for="NewEquipment.Reason" /></label></div><button class="button button--primary" type="submit">创建并加入本项目</button></form></details>
-
-                                <details class="inline-create-details"><summary>新建施工班组主档</summary><form method="post" asp-page-handler="CreateCrew" asp-route-id="@item.Overview.Id" class="inline-edit-panel"><div class="inline-edit-grid"><label>班组编号<input asp-for="NewCrew.PartnerNumber" /></label><label>班组名称<input asp-for="NewCrew.Name" /></label><label>联系人<input asp-for="NewCrew.ContactName" /></label><label>联系电话<input asp-for="NewCrew.ContactPhone" /></label><label class="inline-edit-span">创建原因<input asp-for="NewCrew.Reason" /></label></div><button class="button button--primary" type="submit">创建并加入本项目</button></form></details>
 
                             </div>
 

@@ -176,6 +176,142 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain(".project-tab-panel--payment .tab-panel-heading > .button-row")
             .And.Contain(".project-tab-panel--construction .tab-panel-heading > .button-row");
     }
+
+    [Fact]
+    public void PayableTableHidesDueDateAndStatusWithoutClearingDueDateOnBatchEdit()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var payment = Section(page, "project-tab-panel--payment", "project-tab-panel--construction");
+
+        payment.Should().NotContain("<th>到期日</th>")
+            .And.NotContain("<th>状态</th>")
+            .And.NotContain("<span data-inline-edit-value>@row.DueDate</span>")
+            .And.NotContain("<td>@(row.IsVoided ? \"已作废\" : \"有效\")</td>")
+            .And.Contain("<input type=\"hidden\" name=\"PayableRowEdits[@editIndex].DueDate\"")
+            .And.Contain("value=\"@row.DueDate?.ToString(\"yyyy-MM-dd\")\" form=\"payment-batch-form\"");
+    }
+
+    [Fact]
+    public void PaymentCreateFormSwitchesPayableAndPaymentSpecificFields()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml.cs");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var payment = Section(page, "project-tab-panel--payment", "project-tab-panel--construction");
+
+        payment.Should().Contain("asp-for=\"PaymentEdit.Kind\" data-inline-edit-kind-select")
+            .And.Contain("data-kind=\"@FinanceEntryKind.Payable\"><span>到期日期</span>")
+            .And.Contain("data-kind=\"@FinanceEntryKind.Payment\"><span>付款账户</span>")
+            .And.Contain("data-kind=\"@FinanceEntryKind.Payment\"><span>付款方式</span><input asp-for=\"PaymentEdit.PaymentMethod\"")
+            .And.Contain(">填写日期<input asp-for=\"PaymentEdit.EntryDate\"")
+            .And.NotContain("asp-for=\"PaymentEdit.PaymentMethod\"><option");
+        var secondRow = Section(payment, "payment-entry-row--2", "collection-entry-row--3");
+        secondRow.IndexOf("PaymentEdit.AccountId", StringComparison.Ordinal).Should().BeLessThan(secondRow.IndexOf("PaymentEdit.PaymentMethod", StringComparison.Ordinal));
+        secondRow.IndexOf("PaymentEdit.PaymentMethod", StringComparison.Ordinal).Should().BeLessThan(secondRow.IndexOf("PaymentEdit.Amount", StringComparison.Ordinal));
+        secondRow.IndexOf("PaymentEdit.EntryDate", StringComparison.Ordinal).Should().BeLessThan(secondRow.IndexOf("PaymentEdit.DueDate", StringComparison.Ordinal));
+        model.Should().Contain("public string? PaymentMethod { get; set; } = \"银行转账\"");
+        styles.Should().Contain(".payment-entry-row--2 { grid-template-columns: repeat(5, minmax(0, 1fr)); }")
+            .And.Contain(".payment-inline-table { min-width: 0; }")
+            .And.Contain(".payable-inline-table th:nth-child(1), .payable-inline-table td:nth-child(1) { width: 9%; }")
+            .And.Contain(".payment-record-inline-table th:nth-child(1), .payment-record-inline-table td:nth-child(1) { width: 8%; }");
+    }
+
+    [Fact]
+    public void NewFinanceFormsUseFullCompanyOptionsAndFilterAccountsByCompany()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "site.js");
+        var collection = Section(page, "project-tab-panel--collection", "project-tab-panel--invoice");
+        var invoice = Section(page, "project-tab-panel--invoice", "project-tab-panel--payment");
+        var payment = Section(page, "project-tab-panel--payment", "project-tab-panel--construction");
+
+        page.Should().Contain("var projectLegalEntityOptions = Model.Options.LegalEntities")
+            .And.Contain("data-legal-entity-id=\"@account.ParentId\"");
+        collection.Should().Contain("data-company-account-entry")
+            .And.Contain("data-company-account-company")
+            .And.Contain("data-company-account-select")
+            .And.Contain("@foreach (var company in projectLegalEntityOptions)");
+        invoice.Should().Contain("@foreach (var company in projectLegalEntityOptions)");
+        payment.Should().Contain("data-company-account-entry")
+            .And.Contain("data-company-account-company")
+            .And.Contain("data-company-account-select")
+            .And.Contain("@foreach (var company in projectLegalEntityOptions)");
+        script.Should().Contain("[data-company-account-entry]")
+            .And.Contain("option.dataset.legalEntityId")
+            .And.Contain("company.value.toLowerCase()")
+            .And.Contain("option.disabled = !matches");
+    }
+
+    [Fact]
+    public void FinanceQuickEditRowsUseFullCompanyOptionsAndFilterAccountsByRowCompany()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var quickEdit = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "quick-edit.js");
+        var collection = Section(page, "project-tab-panel--collection", "project-tab-panel--invoice");
+        var invoice = Section(page, "project-tab-panel--invoice", "project-tab-panel--payment");
+        var payment = Section(page, "project-tab-panel--payment", "project-tab-panel--construction");
+
+        collection.Should().Contain("data-company-account-entry")
+            .And.Contain("data-company-account-company")
+            .And.Contain("data-company-account-select")
+            .And.Contain("data-legal-entity-id=\"@account.ParentId\"")
+            .And.Contain("@foreach (var company in projectLegalEntityOptions)")
+            .And.NotContain("@foreach (var company in item.Overview.LegalEntities)");
+        invoice.Should().Contain("@foreach (var company in projectLegalEntityOptions)")
+            .And.NotContain("@foreach (var company in item.Overview.LegalEntities)");
+        payment.Should().Contain("data-company-account-entry")
+            .And.Contain("data-company-account-company")
+            .And.Contain("data-company-account-select")
+            .And.Contain("data-legal-entity-id=\"@account.ParentId\"")
+            .And.Contain("@foreach (var company in projectLegalEntityOptions)")
+            .And.NotContain("@foreach (var company in item.Overview.LegalEntities)");
+        quickEdit.Should().Contain("[data-company-account-company]")
+            .And.Contain("dispatchEvent(new Event(\"change\"))");
+    }
+
+    [Fact]
+    public void ConstructionCreateFormSwitchesSubjectOptionsAndRemovesDuplicateMasterForms()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "quick-edit.js");
+        var construction = Section(page, "project-tab-panel--construction", "</article>");
+
+        construction.Should().Contain("data-construction-subject-label")
+            .And.Contain("data-construction-subject-select")
+            .And.Contain("data-construction-subject-kind=\"1\"")
+            .And.Contain("data-construction-subject-kind=\"2\"")
+            .And.Contain("data-construction-equipment-only")
+            .And.NotContain("新建设备主档")
+            .And.NotContain("新建施工班组主档")
+            .And.NotContain("asp-page-handler=\"CreateEquipment\"")
+            .And.NotContain("asp-page-handler=\"CreateCrew\"");
+        script.Should().Contain("[data-construction-subject-kind]")
+            .And.Contain("group.disabled = !visible")
+            .And.Contain("subjectSelect.value = \"\"")
+            .And.Contain("subjectLabel.textContent = isEquipment ? \"设备\" : \"施工班组\"");
+    }
+
+    [Fact]
+    public void CancelingInlineEditorReappliesConstructionTypeDependentFields()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "quick-edit.js");
+
+        script.Should().Contain("editor.querySelectorAll(\"[data-construction-type]\").forEach(updateConstructionEquipmentFields);");
+    }
+
+    [Fact]
+    public void RecordCreationErrorsOpenOnlyTheMatchingCreateForm()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+
+        page.Should().Contain("open=\"@(Model.ActiveInlineEditor == \"project-quantity-create\" ? \"open\" : null)\"")
+            .And.Contain("open=\"@(Model.ActiveInlineEditor == \"project-collection-create\" ? \"open\" : null)\"")
+            .And.Contain("open=\"@(Model.ActiveInlineEditor == \"project-invoice-create\" ? \"open\" : null)\"")
+            .And.Contain("open=\"@(Model.ActiveInlineEditor == \"project-payment-create\" ? \"open\" : null)\"")
+            .And.Contain("open=\"@(Model.ActiveInlineEditor == \"project-construction-create\" ? \"open\" : null)\"")
+            .And.NotContain("open=\"@(Model.ActiveInlineEditor == \"project-equipment-create\" ? \"open\" : null)\"")
+            .And.NotContain("open=\"@(Model.ActiveInlineEditor == \"project-crew-create\" ? \"open\" : null)\"");
+    }
     private static string Section(string page, string startMarker, string endMarker)
     {
         var start = page.IndexOf(startMarker, StringComparison.Ordinal);

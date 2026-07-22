@@ -147,6 +147,9 @@ public sealed class DevelopmentSampleDataSeederTests
         script.Should().Contain(".dotnet");
         script.Should().Contain("$env:ASPNETCORE_ENVIRONMENT = 'Development'");
         script.Should().Contain("DevelopmentSampleData__Enabled");
+        script.Should().Contain("-AllowOfficialDataDeletion");
+        script.Should().Contain("OFFICIAL-%");
+        script.Should().Contain("检测到正式自有公司资料");
         script.Should().NotContain("EngineeringManager_Production");
     }
 

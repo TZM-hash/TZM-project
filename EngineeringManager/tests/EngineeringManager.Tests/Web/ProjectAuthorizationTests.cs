@@ -3,6 +3,7 @@ using EngineeringManager.Application.DataViews;
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
+using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Web;
@@ -124,6 +125,148 @@ public sealed class ProjectAuthorizationTests
         model.TempData["Error"].Should().Be("工程量已创建，但附件上传失败：模拟附件上传失败。");
     }
 
+    [Theory]
+    [InlineData("collection")]
+    [InlineData("invoice")]
+    [InlineData("payment")]
+    public async Task RecordCreationValidationErrorsKeepTheMatchingCreateFormOpen(string tab)
+    {
+        var model = CreateDetailsModel();
+        model.ModelState.AddModelError("CreateInput", "模拟新增校验失败");
+
+        var result = tab switch
+        {
+            "collection" => await model.OnPostCollectionAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None),
+            "invoice" => await model.OnPostInvoiceAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None),
+            "payment" => await model.OnPostPaymentAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None),
+            _ => throw new ArgumentOutOfRangeException(nameof(tab))
+        };
+
+        result.Should().BeOfType<PageResult>();
+        model.ActiveInlineEditor.Should().Be($"project-{tab}-create");
+    }
+
+    [Fact]
+    public async Task ConstructionCreationErrorKeepsTheConstructionCreateFormOpen()
+    {
+        var model = CreateDetailsModel(constructionService: new FakeProjectConstructionService(rejectSave: true));
+
+        var result = await model.OnPostConstructionAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        result.Should().BeOfType<PageResult>();
+        model.ActiveInlineEditor.Should().Be("project-construction-create");
+    }
+
+    [Fact]
+    public async Task ConstructionFlowErrorsKeepTheConstructionEditorOpen()
+    {
+        var model = CreateDetailsModel(constructionService: new FakeProjectConstructionService(rejectFlow: true));
+        model.ConstructionFlow = new DetailsModel.ConstructionFlowInput
+        {
+            RecordId = FakeProjectConstructionService.ConstructionRecordId,
+            Action = "previous",
+            TargetProjectId = FakeProjectWorkspaceService.ProjectId
+        };
+
+        var result = await model.OnPostConstructionFlowAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        result.Should().BeOfType<PageResult>();
+        model.ActiveInlineEditor.Should().Be("project-construction");
+    }
+
+    [Theory]
+    [InlineData("equipment")]
+    [InlineData("crew")]
+    public async Task ConstructionMasterCreationErrorsKeepTheMatchingCreateFormOpen(string kind)
+    {
+        var model = CreateDetailsModel();
+
+        var result = kind == "equipment"
+            ? await model.OnPostCreateEquipmentAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None)
+            : await model.OnPostCreateCrewAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        result.Should().BeOfType<PageResult>();
+        model.ActiveInlineEditor.Should().Be($"project-{kind}-create");
+    }
+
+    [Fact]
+    public async Task CollectionCreationRedirectsToTheCreatedRecord()
+    {
+        var model = CreateDetailsModel();
+        model.CollectionEdit = new DetailsModel.CollectionEditInput
+        {
+            Kind = FinanceEntryKind.Collection,
+            LegalEntityId = FakeProjectWorkspaceService.LegalEntityId,
+            AccountId = FakeFinanceLedgerService.AccountId,
+            Amount = 100m
+        };
+
+        var result = await model.OnPostCollectionAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        var redirect = result.Should().BeOfType<RedirectResult>().Subject;
+        redirect.Url.Should().EndWith($"#project-record-{FakeFinanceLedgerService.CollectionId}");
+    }
+
+    [Fact]
+    public async Task InvoiceCreationLoadsProjectTaxConfigurationAndRedirectsToTheCreatedRecord()
+    {
+        var model = CreateDetailsModel();
+        model.InvoiceEdit = new DetailsModel.InvoiceEditInput
+        {
+            LegalEntityId = FakeProjectWorkspaceService.LegalEntityId,
+            InvoiceNumber = "INV-NEW",
+            InvoiceDate = new DateOnly(2026, 7, 22),
+            ProjectTaxConfigurationId = FakeProjectWorkspaceService.TaxConfigurationId,
+            GrossAmount = 106m
+        };
+
+        var result = await model.OnPostInvoiceAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        var redirect = result.Should().BeOfType<RedirectResult>().Subject;
+        redirect.Url.Should().EndWith($"#project-record-{FakeFinanceLedgerService.InvoiceId}");
+    }
+
+    [Theory]
+    [InlineData(FinanceEntryKind.Payable)]
+    [InlineData(FinanceEntryKind.Payment)]
+    public async Task PaymentCreationRedirectsToTheCreatedRecord(FinanceEntryKind kind)
+    {
+        var model = CreateDetailsModel();
+        model.PaymentEdit = new DetailsModel.PaymentEditInput
+        {
+            Kind = kind,
+            LegalEntityId = FakeProjectWorkspaceService.LegalEntityId,
+            BusinessPartnerId = FakeFinanceLedgerService.BusinessPartnerId,
+            AccountId = FakeFinanceLedgerService.AccountId,
+            Amount = 100m
+        };
+
+        var result = await model.OnPostPaymentAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        var expectedId = kind == FinanceEntryKind.Payable
+            ? FakeFinanceLedgerService.PayableId
+            : FakeFinanceLedgerService.PaymentId;
+        var redirect = result.Should().BeOfType<RedirectResult>().Subject;
+        redirect.Url.Should().EndWith($"#project-record-{expectedId}");
+    }
+
+    [Fact]
+    public async Task ConstructionCreationRedirectsToTheCreatedRecord()
+    {
+        var model = CreateDetailsModel();
+        model.ConstructionEdit = new DetailsModel.ConstructionEditInput
+        {
+            RecordType = ProjectConstructionRecordType.Equipment,
+            SubjectId = FakeProjectConstructionService.EquipmentId,
+            Reason = "新增施工记录"
+        };
+
+        var result = await model.OnPostConstructionAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        var redirect = result.Should().BeOfType<RedirectResult>().Subject;
+        redirect.Url.Should().EndWith($"#project-record-{FakeProjectConstructionService.ConstructionRecordId}");
+    }
+
     [Fact]
     public async Task ProjectManagerSeesWorkspaceTabsAndInlineRecordActions()
     {
@@ -220,10 +363,15 @@ public sealed class ProjectAuthorizationTests
     {
         var root = RepositoryRoot();
         var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml"));
+        var styles = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "css", "pages.css"));
         var selectorScript = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "components", "check-selector.js"));
         var quickEditScript = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "components", "quick-edit.js"));
 
         page.Should().Contain("project-legal-entity-selector")
+            .And.Contain("column-manager-menu project-legal-entity-menu")
+            .And.Contain("column-manager-list project-legal-entity-list")
+            .And.Contain("column-manager-menu-actions")
+            .And.Contain("data-check-selector-confirm")
             .And.Contain("project-tax-selector")
             .And.Contain("data-check-selector-clear")
             .And.Contain("data-project-amount-view-label")
@@ -234,6 +382,8 @@ public sealed class ProjectAuthorizationTests
             .And.Contain("<h2>总包单位</h2>")
             .And.Contain("<h2>施工班组</h2>").And.Contain("<h2>合作单位</h2>")
             .And.Contain("relatedParty.Roles");
+        styles.Should().Contain(".project-legal-entity-list li")
+            .And.Contain(".project-legal-entity-selector .column-manager-menu");
         selectorScript.Should().Contain("data-check-selector-clear");
         quickEditScript.Should().Contain("querySelectorAll(\"[data-check-selector][open]\")")
             .And.Contain("querySelector(\"[data-check-selector-option]\")")
@@ -457,6 +607,34 @@ public sealed class ProjectAuthorizationTests
             builder.UseSetting(ProjectTestAuthenticationHandler.RoleSetting, role ?? string.Empty);
         });
 
+    private static DetailsModel CreateDetailsModel(
+        IFinanceLedgerService? financeService = null,
+        IProjectConstructionService? constructionService = null)
+    {
+        var pageContext = new PageContext(new ActionContext(
+            new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, "manager"), new Claim(ClaimTypes.Role, "ProjectManager")],
+                    "Test"))
+            },
+            new RouteData(),
+            new PageActionDescriptor()));
+        var model = new DetailsModel(
+            new FakeProjectWorkspaceService(),
+            new FakeProjectService(),
+            financeService ?? new FakeFinanceLedgerService(),
+            constructionService ?? new FakeProjectConstructionService(),
+            new FakeProjectWorkbookService(),
+            new FakeProjectRecordAttachmentService())
+        {
+            PageContext = pageContext
+        };
+        model.TempData = new TempDataDictionary(model.HttpContext, new TestTempDataProvider());
+        model.Url = new TestUrlHelper(pageContext);
+        return model;
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -538,6 +716,8 @@ public sealed class ProjectAuthorizationTests
         public static readonly Guid ProjectId = Guid.Parse("71000000-0000-0000-0000-000000000001");
         public static readonly Guid ContractId = Guid.Parse("71000000-0000-0000-0000-000000000010");
         public static readonly Guid LineItemId = Guid.Parse("71000000-0000-0000-0000-000000000011");
+        public static readonly Guid LegalEntityId = Guid.Parse("71000000-0000-0000-0000-000000000012");
+        public static readonly Guid TaxConfigurationId = Guid.Parse("71000000-0000-0000-0000-000000000013");
 
         public Task<ProjectWorkspaceDto?> GetAsync(Guid projectId, CancellationToken cancellationToken) =>
             Task.FromResult<ProjectWorkspaceDto?>(projectId != ProjectId ? null : new ProjectWorkspaceDto(
@@ -557,9 +737,15 @@ public sealed class ProjectAuthorizationTests
                     "一分公司",
                     ProjectStage.UnderConstruction,
                     ProjectAffiliationType.ExternalPartyAttachedToUs,
-                    [new ProjectWorkspaceOptionDto(Guid.NewGuid().ToString(), "测试签约公司")],
+                    [new ProjectWorkspaceOptionDto(LegalEntityId.ToString(), "测试签约公司")],
                     new DateTimeOffset(2026, 7, 17, 8, 0, 0, TimeSpan.Zero),
-                    Guid.Parse("71000000-0000-0000-0000-000000000002")),
+                    Guid.Parse("71000000-0000-0000-0000-000000000002"),
+                    TaxConfigurations: [new ProjectTaxConfigurationDto(
+                        TaxConfigurationId,
+                        0.06m,
+                        ProjectInvoiceType.Special,
+                        true,
+                        Guid.Parse("71000000-0000-0000-0000-000000000014"))]),
                 new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1),
                 new FinanceProjectSummaryDto(ProjectId, 100m, 40m, 60m, 80m, 25m, 0m, 55m, 30m, 70m, 0m, false, false),
                 [new ContractDto(ContractId, "C-WEB-001", "测试合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, 300m,
@@ -583,6 +769,13 @@ public sealed class ProjectAuthorizationTests
 
     private sealed class FakeFinanceLedgerService : IFinanceLedgerService
     {
+        public static readonly Guid AccountId = Guid.Parse("72000000-0000-0000-0000-000000000001");
+        public static readonly Guid BusinessPartnerId = Guid.Parse("72000000-0000-0000-0000-000000000002");
+        public static readonly Guid CollectionId = Guid.Parse("72000000-0000-0000-0000-000000000003");
+        public static readonly Guid InvoiceId = Guid.Parse("72000000-0000-0000-0000-000000000004");
+        public static readonly Guid PayableId = Guid.Parse("72000000-0000-0000-0000-000000000005");
+        public static readonly Guid PaymentId = Guid.Parse("72000000-0000-0000-0000-000000000006");
+
         public Task<IReadOnlyList<ProjectFinanceListItemDto>> ListProjectSummariesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ProjectFinanceListItemDto>>([
                 new(FakeProjectWorkspaceService.ProjectId, "P-WEB-001", "项目工作台页面测试", new FinanceProjectSummaryDto(FakeProjectWorkspaceService.ProjectId, 100m, 40m, 60m, 80m, 25m, 0m, 55m, 30m, 70m, 0m, false, false))
@@ -596,14 +789,14 @@ public sealed class ProjectAuthorizationTests
         public Task<FinanceEntryOptionsDto> GetEntryOptionsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new FinanceEntryOptionsDto([], [], [], [], [], [], [], [], []));
         public Task<Guid> AddReceivableAsync(CreateReceivableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> RecordCollectionAsync(RecordCollectionRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Guid> RecordCollectionAsync(RecordCollectionRequest request, CancellationToken cancellationToken) => Task.FromResult(CollectionId);
         public Task<Guid> RecordRefundAsync(RecordRefundRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> AddPayableAsync(CreatePayableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> RecordPaymentAsync(RecordPaymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Guid> AddPayableAsync(CreatePayableRequest request, CancellationToken cancellationToken) => Task.FromResult(PayableId);
+        public Task<Guid> RecordPaymentAsync(RecordPaymentRequest request, CancellationToken cancellationToken) => Task.FromResult(PaymentId);
         public Task<Guid> AddDeductionAsync(CreateDeductionRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> RecordPaymentReversalAsync(RecordPaymentReversalRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> TransferAsync(CreateAccountTransferRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> AddInvoiceAsync(CreateInvoiceRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Guid> AddInvoiceAsync(CreateInvoiceRequest request, CancellationToken cancellationToken) => Task.FromResult(InvoiceId);
         public Task UpdateReceivableAsync(FinanceRecordActor actor, UpdateReceivableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateCollectionAsync(FinanceRecordActor actor, UpdateCollectionRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateInvoiceAsync(FinanceRecordActor actor, UpdateInvoiceRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -613,13 +806,42 @@ public sealed class ProjectAuthorizationTests
         public Task<FinanceProjectSummaryDto> GetProjectSummaryAsync(Guid projectId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class FakeProjectConstructionService : IProjectConstructionService
+    private sealed class FakeProjectConstructionService(bool rejectSave = false, bool rejectFlow = false) : IProjectConstructionService
     {
+        public static readonly Guid ConstructionRecordId = Guid.Parse("73000000-0000-0000-0000-000000000001");
+        public static readonly Guid EquipmentId = Guid.Parse("73000000-0000-0000-0000-000000000002");
+
         public Task<ProjectConstructionWorkspaceDto> GetWorkspaceAsync(Guid projectId, DateOnly today, CancellationToken token) =>
-            Task.FromResult(new ProjectConstructionWorkspaceDto([], [], [], [new ProjectConstructionOptionDto(FakeProjectWorkspaceService.ProjectId, "P-WEB-001 · 项目工作台页面测试")]));
-        public Task<ProjectConstructionRecordDto> SaveAsync(ProjectConstructionActor actor, SaveProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
+            Task.FromResult(new ProjectConstructionWorkspaceDto(
+                rejectFlow
+                    ? [new ProjectConstructionRecordDto(ConstructionRecordId, FakeProjectWorkspaceService.ProjectId, ProjectConstructionRecordType.Equipment, EquipmentId, "测试施工对象", null, null, null, null, 0, 0, 0, null, null, null, false, Guid.Parse("73000000-0000-0000-0000-000000000003"), false)]
+                    : [],
+                [], [], [new ProjectConstructionOptionDto(FakeProjectWorkspaceService.ProjectId, "P-WEB-001 · 项目工作台页面测试")]));
+        public Task<ProjectConstructionRecordDto> SaveAsync(ProjectConstructionActor actor, SaveProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) =>
+            rejectSave
+                ? throw new ArgumentException("模拟施工记录校验失败")
+                : Task.FromResult(new ProjectConstructionRecordDto(
+                    ConstructionRecordId,
+                    request.ProjectId,
+                    request.RecordType,
+                    request.EquipmentId ?? request.CrewBusinessPartnerId ?? EquipmentId,
+                    "测试施工对象",
+                    null,
+                    null,
+                    request.EntryDate,
+                    request.ExitDate,
+                    0,
+                    request.StopDays,
+                    0,
+                    null,
+                    null,
+                    request.Notes,
+                    false,
+                    Guid.Parse("73000000-0000-0000-0000-000000000003"),
+                    request.ShowInProjectOverview));
         public Task<ProjectConstructionRecordDto> LinkNextAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
-        public Task<ProjectConstructionRecordDto> LinkPreviousAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
+        public Task<ProjectConstructionRecordDto> LinkPreviousAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) =>
+            rejectFlow ? throw new ArgumentException("模拟施工流转校验失败") : throw new NotSupportedException();
         public Task<ProjectConstructionRecordDto> UnlinkAsync(ProjectConstructionActor actor, UnlinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
         public Task<ProjectConstructionOptionDto> CreateEquipmentAsync(ProjectConstructionActor actor, CreateProjectEquipmentRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<ProjectConstructionOptionDto> CreateCrewAsync(ProjectConstructionActor actor, CreateProjectCrewRequest request, CancellationToken token) => throw new NotSupportedException();

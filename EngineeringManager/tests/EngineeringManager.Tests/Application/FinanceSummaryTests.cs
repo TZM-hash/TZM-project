@@ -42,9 +42,9 @@ public sealed class FinanceSummaryTests
         overview.Projects.Should().HaveCount(1);
         options.Projects.Should().ContainSingle(item => item.Id == fixture.Project.Id);
         options.Contracts.Should().ContainSingle(item => item.Id == fixture.Contract.Id);
-        options.LegalEntities.Should().ContainSingle(item => item.Id == fixture.LegalEntity.Id);
+        options.LegalEntities.Should().ContainSingle(item => item.Id == fixture.LegalEntity.Id && item.Label == fixture.LegalEntity.Name);
         options.BusinessPartners.Should().ContainSingle(item => item.Id == fixture.Partner.Id);
-        options.Accounts.Should().ContainSingle(item => item.Id == accountId);
+        options.Accounts.Should().ContainSingle(item => item.Id == accountId && item.ParentId == fixture.LegalEntity.Id);
     }
 
     [Fact]

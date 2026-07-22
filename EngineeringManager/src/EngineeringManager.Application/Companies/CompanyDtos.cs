@@ -19,7 +19,9 @@ public sealed record CompanyListItemDto(
     string? CategoryName,
     string? LegalRepresentative,
     bool IsActive,
-    string? Notes = null);
+    string? Notes = null,
+    int ActiveAccountCount = 0,
+    int TotalAccountCount = 0);
 
 public sealed record CompanyAccountDto(
     Guid Id,
@@ -32,7 +34,8 @@ public sealed record CompanyAccountDto(
     bool IsDefaultPayment,
     bool IsDefaultInvoice,
     bool IsActive,
-    string? Notes = null);
+    string? Notes = null,
+    Guid ConcurrencyStamp = default);
 
 public sealed record CompanyCertificateDto(
     Guid Id,

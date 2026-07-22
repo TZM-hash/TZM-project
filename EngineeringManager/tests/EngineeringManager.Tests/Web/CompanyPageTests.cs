@@ -85,6 +85,37 @@ public sealed class CompanyPageTests
         html.Should().Contain("账户备注");
     }
 
+    [Fact]
+    public async Task CompanyListShowsAccountCountAndDetailsProvideAccountManagement()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var listHtml = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies"));
+        var detailsHtml = WebUtility.HtmlDecode(await client.GetStringAsync($"/Companies/Details/{FakeCompanyService.CompanyId}"));
+
+        listHtml.Should().Contain("data-column-key=\"accounts\"");
+        detailsHtml.Should().Contain("data-company-account-table")
+            .And.Contain("账户名称")
+            .And.Contain("账号")
+            .And.Contain("开户行")
+            .And.Contain("账户类型")
+            .And.Contain("期初余额")
+            .And.Contain("默认用途")
+            .And.Contain("账户备注")
+            .And.Contain("编辑")
+            .And.Contain("删除");
+    }
+
+    [Fact]
+    public void CompanyAccountDtoCarriesConcurrencyStampForReliableEditing()
+    {
+        var root = RepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Application", "Companies", "CompanyDtos.cs"));
+
+        source.Should().Contain("string? Notes = null,\n    Guid ConcurrencyStamp = default");
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string role) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -114,7 +145,7 @@ public sealed class CompanyPageTests
         public static readonly Guid CompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         public Task<IReadOnlyList<CompanyListItemDto>> ListAsync(CompanyActor actor, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<CompanyListItemDto>>([new(CompanyId, "TEST", "测试自有公司", "测试公司", "一般纳税人有限公司", "测试法人", true)]);
+            Task.FromResult<IReadOnlyList<CompanyListItemDto>>([new(CompanyId, "TEST", "测试自有公司", "测试公司", "一般纳税人有限公司", "测试法人", true, null, 1, 1)]);
 
         public Task<CompanyDashboardDto> GetDashboardAsync(CompanyActor actor, Guid? companyId, CancellationToken cancellationToken) =>
             Task.FromResult(new CompanyDashboardDto(1, 1000m, 800m, 0m, 600m, 400m, 300m, 100m, 200m, 50m, 80m, 0m, 500m, DateTimeOffset.UtcNow));
@@ -143,5 +174,12 @@ public sealed class CompanyPageTests
             identity.AddClaim(new Claim(ClaimTypes.Role, role!));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme)));
         }
+    }
+
+    private static string RepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null && !File.Exists(Path.Combine(current.FullName, "EngineeringManager.sln"))) current = current.Parent;
+        return current?.FullName ?? throw new DirectoryNotFoundException("Cannot locate EngineeringManager.sln.");
     }
 }

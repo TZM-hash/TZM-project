@@ -1,4 +1,4 @@
-const CACHE_NAME = 'engineering-manager-shell-v7';
+const CACHE_NAME = 'engineering-manager-shell-v8';
 const SHELL = [
   '/css/base.css', '/css/components.css', '/css/pages.css', '/css/themes.css',
   '/js/site.js', '/js/core/shell.js', '/js/core/effects.js', '/js/pages/settings.js',
@@ -44,7 +44,7 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
 
   if (SHELL.includes(url.pathname)) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(networkFirst(request, true));
     return;
   }
 

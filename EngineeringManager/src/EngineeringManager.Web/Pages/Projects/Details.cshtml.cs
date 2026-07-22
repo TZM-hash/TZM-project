@@ -305,7 +305,7 @@ public sealed class DetailsModel(
     public async Task<IActionResult> OnPostCollectionAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!CanManageFinance) return Forbid();
-        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-collection", cancellationToken);
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-collection-create", cancellationToken);
         try
         {
             var legalEntityId = Required(CollectionEdit.LegalEntityId, "请选择签约公司。");
@@ -316,12 +316,12 @@ public sealed class DetailsModel(
                 CollectionEdit.EntryDate, Positive(CollectionEdit.Amount), CollectionEdit.PaymentMethod,
                 CollectionEdit.Description), cancellationToken);
             await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Cash, collectionId, "collection", RecordAttachmentFile, cancellationToken);
-            return RedirectToPage(new { id, tab = "collection" });
+            return RedirectToRecord(id, "collection", collectionId);
         }
         catch (Exception exception) when (IsEditableException(exception))
         {
             Tab = "collection";
-            return await InlineErrorAsync(id, "project-collection", exception, cancellationToken);
+            return await InlineErrorAsync(id, "project-collection-create", exception, cancellationToken);
         }
     }
 
@@ -362,7 +362,7 @@ public sealed class DetailsModel(
             foreach (var invoiceEdit in InvoiceRowEdits.Where(item => item.IsDirty))
             {
                 var taxConfigurationId = Required(invoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。");
-                var amounts = ResolveInvoiceAmounts(invoiceEdit.Amount, taxConfigurationId);
+                var amounts = await ResolveInvoiceAmountsAsync(id, invoiceEdit.Amount, taxConfigurationId, cancellationToken);
                 await financeService.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(
                     invoiceEdit.Id, id, invoiceEdit.ContractId, Required(invoiceEdit.LegalEntityId, "请选择签约公司。"), invoiceEdit.BusinessPartnerId,
                     InvoiceDirection.Output, RequiredText(invoiceEdit.InvoiceNumber, "请填写发票号码。"), invoiceEdit.EntryDate,
@@ -401,7 +401,7 @@ public sealed class DetailsModel(
                     paymentEdit.Id, paymentEdit.RelatedEntryId, id, paymentEdit.ContractId,
                     Required(paymentEdit.LegalEntityId, "请选择签约公司。"), Required(paymentEdit.BusinessPartnerId, "请选择收款单位。"),
                     Required(paymentEdit.AccountId, "请选择付款账户。"), paymentEdit.EntryDate, Positive(paymentEdit.Amount),
-                    paymentEdit.PaymentMethod, paymentEdit.Description, paymentEdit.ConcurrencyStamp,
+                    RequiredText(paymentEdit.PaymentMethod, "请填写付款方式。"), paymentEdit.Description, paymentEdit.ConcurrencyStamp,
                     "项目管理页面快捷修改付款"), cancellationToken);
             }
             return RedirectToPage(new { id, tab = "payment" });
@@ -443,30 +443,30 @@ public sealed class DetailsModel(
     public async Task<IActionResult> OnPostInvoiceAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!CanManageFinance) return Forbid();
-        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-invoice", cancellationToken);
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-invoice-create", cancellationToken);
         try
         {
             var taxConfigurationId = Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。");
-            var amounts = ResolveInvoiceAmounts(InvoiceEdit.GrossAmount, taxConfigurationId);
+            var amounts = await ResolveInvoiceAmountsAsync(id, InvoiceEdit.GrossAmount, taxConfigurationId, cancellationToken);
             var invoiceId = await financeService.AddInvoiceAsync(new CreateInvoiceRequest(
                 id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), InvoiceEdit.BusinessPartnerId,
                 InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
                 taxConfigurationId, amounts.NetAmount, amounts.TaxAmount, amounts.GrossAmount,
                 InvoiceStatus.IssuedOrReceived, [], [], InvoiceEdit.Description), cancellationToken);
             await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Invoice, invoiceId, "invoice", RecordAttachmentFile, cancellationToken);
-            return RedirectToPage(new { id, tab = "invoice" });
+            return RedirectToRecord(id, "invoice", invoiceId);
         }
         catch (Exception exception) when (IsEditableException(exception))
         {
             Tab = "invoice";
-            return await InlineErrorAsync(id, "project-invoice", exception, cancellationToken);
+            return await InlineErrorAsync(id, "project-invoice-create", exception, cancellationToken);
         }
     }
 
     public async Task<IActionResult> OnPostPaymentAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!CanManageFinance) return Forbid();
-        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-payment", cancellationToken);
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-payment-create", cancellationToken);
         try
         {
             var legalEntityId = Required(PaymentEdit.LegalEntityId, "请选择签约公司。");
@@ -485,17 +485,17 @@ public sealed class DetailsModel(
                 recordId = await financeService.RecordPaymentAsync(new RecordPaymentRequest(
                     PaymentEdit.RelatedEntryId, id, PaymentEdit.ContractId, legalEntityId, partnerId,
                     Required(PaymentEdit.AccountId, "请选择付款账户。"), PaymentEdit.EntryDate,
-                    Positive(PaymentEdit.Amount), PaymentEdit.PaymentMethod, PaymentEdit.Description), cancellationToken);
+                    Positive(PaymentEdit.Amount), RequiredText(PaymentEdit.PaymentMethod, "请填写付款方式。"), PaymentEdit.Description), cancellationToken);
                 attachmentType = ProjectRecordAttachmentType.Cash;
             }
             else throw new ArgumentException("付款快捷编辑只支持新增应付或登记付款。");
             await TryAttachCreatedRecordAsync(id, attachmentType, recordId, "payment", RecordAttachmentFile, cancellationToken);
-            return RedirectToPage(new { id, tab = "payment" });
+            return RedirectToRecord(id, "payment", recordId);
         }
         catch (Exception exception) when (IsEditableException(exception))
         {
             Tab = "payment";
-            return await InlineErrorAsync(id, "project-payment", exception, cancellationToken);
+            return await InlineErrorAsync(id, "project-payment-create", exception, cancellationToken);
         }
     }
 
@@ -519,7 +519,7 @@ public sealed class DetailsModel(
                     break;
                 case FinanceEntryKind.Invoice:
                     var taxConfigurationId = Required(FinanceRowEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。");
-                    var amounts = ResolveInvoiceAmounts(FinanceRowEdit.Amount, taxConfigurationId);
+                    var amounts = await ResolveInvoiceAmountsAsync(id, FinanceRowEdit.Amount, taxConfigurationId, cancellationToken);
                     await financeService.UpdateInvoiceAsync(actor, new UpdateInvoiceRequest(
                         FinanceRowEdit.Id, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), FinanceRowEdit.BusinessPartnerId,
                         InvoiceDirection.Output, RequiredText(FinanceRowEdit.InvoiceNumber, "请填写发票号码。"), FinanceRowEdit.EntryDate,
@@ -535,7 +535,7 @@ public sealed class DetailsModel(
                 case FinanceEntryKind.Payment:
                     await financeService.UpdatePaymentAsync(actor, new UpdatePaymentRequest(
                         FinanceRowEdit.Id, FinanceRowEdit.RelatedEntryId, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), Required(FinanceRowEdit.BusinessPartnerId, "请选择收款单位。"),
-                        Required(FinanceRowEdit.AccountId, "请选择付款账户。"), FinanceRowEdit.EntryDate, Positive(FinanceRowEdit.Amount), FinanceRowEdit.PaymentMethod,
+                        Required(FinanceRowEdit.AccountId, "请选择付款账户。"), FinanceRowEdit.EntryDate, Positive(FinanceRowEdit.Amount), RequiredText(FinanceRowEdit.PaymentMethod, "请填写付款方式。"),
                         FinanceRowEdit.Description, FinanceRowEdit.ConcurrencyStamp, reason), cancellationToken);
                     break;
                 default:
@@ -564,12 +564,12 @@ public sealed class DetailsModel(
                 ConstructionEdit.ConcurrencyStamp == Guid.Empty ? null : ConstructionEdit.ConcurrencyStamp,
                 RequiredText(ConstructionEdit.Reason, "请填写修改原因。"), ConstructionEdit.ShowInProjectOverview), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
             await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Construction, saved.Id, "construction", RecordAttachmentFile, cancellationToken);
-            return RedirectToPage(new { id, tab = "construction" });
+            return RedirectToRecord(id, "construction", saved.Id);
         }
         catch (Exception exception) when (IsEditableException(exception))
         {
             Tab = "construction";
-            return await InlineErrorAsync(id, "project-construction", exception, cancellationToken);
+            return await InlineErrorAsync(id, "project-construction-create", exception, cancellationToken);
         }
     }
 
@@ -626,7 +626,7 @@ public sealed class DetailsModel(
         catch (Exception exception) when (IsEditableException(exception))
         {
             Tab = "construction";
-            return await InlineErrorAsync(id, "project-construction", exception, cancellationToken);
+            return await InlineErrorAsync(id, "project-equipment-create", exception, cancellationToken);
         }
     }
 
@@ -644,7 +644,7 @@ public sealed class DetailsModel(
         catch (Exception exception) when (IsEditableException(exception))
         {
             Tab = "construction";
-            return await InlineErrorAsync(id, "project-construction", exception, cancellationToken);
+            return await InlineErrorAsync(id, "project-crew-create", exception, cancellationToken);
         }
     }
 
@@ -892,10 +892,16 @@ public sealed class DetailsModel(
         }).ToArray();
     }
 
-    private (decimal NetAmount, decimal TaxAmount, decimal GrossAmount) ResolveInvoiceAmounts(decimal grossAmount, Guid? taxConfigurationId)
+    private async Task<(decimal NetAmount, decimal TaxAmount, decimal GrossAmount)> ResolveInvoiceAmountsAsync(
+        Guid projectId,
+        decimal grossAmount,
+        Guid? taxConfigurationId,
+        CancellationToken cancellationToken)
     {
         var gross = Positive(grossAmount);
-        var configuration = (Workspace?.Overview.TaxConfigurations ?? [])
+        Workspace ??= await workspaceService.GetAsync(projectId, cancellationToken)
+            ?? throw new KeyNotFoundException("项目不存在。");
+        var configuration = (Workspace.Overview.TaxConfigurations ?? [])
             .FirstOrDefault(item => item.Id == taxConfigurationId && item.IsActive)
             ?? throw new ArgumentException("请选择税率和发票类型。");
         var split = InvoiceAmountValidator.SplitGross(gross, configuration.TaxRate);
@@ -1021,7 +1027,7 @@ public sealed class DetailsModel(
         public DateOnly EntryDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
         public DateOnly? DueDate { get; set; }
         public decimal Amount { get; set; }
-        public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.BankTransfer;
+        public string? PaymentMethod { get; set; } = "银行转账";
         public string? Description { get; set; }
     }
 
@@ -1038,7 +1044,7 @@ public sealed class DetailsModel(
         public DateOnly EntryDate { get; set; }
         public DateOnly? DueDate { get; set; }
         public decimal Amount { get; set; }
-        public PaymentMethod PaymentMethod { get; set; }
+        public string? PaymentMethod { get; set; }
         public string? CollectionPaymentMethod { get; set; }
         public string? Description { get; set; }
         public InvoiceDirection Direction { get; set; }

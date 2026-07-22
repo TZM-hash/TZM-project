@@ -39,7 +39,7 @@ public sealed class HomePageTests
         html.Should().NotContain("阶段 7 开发中");
         html.Should().NotContain("阶段成果");
         manifest.Should().Contain("工程项目经营管理系统");
-        serviceWorker.Should().Contain("engineering-manager-shell-v7");
+        serviceWorker.Should().Contain("engineering-manager-shell-v8");
         siteScript.Should().Contain("/service-worker.js");
     }
 

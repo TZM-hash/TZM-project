@@ -40,6 +40,17 @@ function updateConstructionEquipmentFields(select) {
   const container = select.closest("form, [data-construction-row]");
   if (!container) return;
   const isEquipment = select.value === "1";
+  const subjectLabel = container.querySelector("[data-construction-subject-label]");
+  if (subjectLabel) subjectLabel.textContent = isEquipment ? "设备" : "施工班组";
+  const subjectSelect = container.querySelector("[data-construction-subject-select]");
+  if (subjectSelect) {
+    subjectSelect.querySelectorAll("[data-construction-subject-kind]").forEach((group) => {
+      const visible = group.dataset.constructionSubjectKind === select.value;
+      group.hidden = !visible;
+      group.disabled = !visible;
+    });
+    if (subjectSelect.selectedOptions[0]?.closest("[data-construction-subject-kind]")?.hidden) subjectSelect.value = "";
+  }
   container.querySelectorAll("[data-construction-equipment-only]").forEach((element) => {
     element.hidden = !isEquipment;
     element.querySelectorAll("input").forEach((field) => {
@@ -77,6 +88,8 @@ export function initInlineEditors() {
       });
       setEditorState(editor, false);
       editor.querySelectorAll("[data-inline-edit-kind-select]").forEach(updateKindFields);
+      editor.querySelectorAll("[data-construction-type]").forEach(updateConstructionEquipmentFields);
+      editor.querySelectorAll("[data-company-account-company]").forEach((select) => select.dispatchEvent(new Event("change")));
       editor.querySelectorAll("[data-project-amount-view]").forEach((select) => select.dispatchEvent(new Event("change")));
     }));
     setEditorState(editor, editor.dataset.inlineEditActive === "true");

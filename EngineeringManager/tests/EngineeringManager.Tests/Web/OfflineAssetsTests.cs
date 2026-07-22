@@ -41,7 +41,7 @@ public sealed class OfflineAssetsTests
 
         var script = await client.GetStringAsync("/service-worker.js");
 
-        script.Should().Contain("engineering-manager-shell-v7");
+        script.Should().Contain("engineering-manager-shell-v8");
         script.Should().Contain("/js/components/data-table.js");
         script.Should().Contain("/js/components/charts.js");
         script.Should().Contain("/js/components/quick-edit.js");
@@ -56,5 +56,6 @@ public sealed class OfflineAssetsTests
         script.Should().Contain("request.method !== 'GET'");
         script.Should().Contain("cacheFirst");
         script.Should().Contain("networkFirst");
+        script.Should().Contain("if (SHELL.includes(url.pathname)) {\n    event.respondWith(networkFirst(request, true));");
     }
 }

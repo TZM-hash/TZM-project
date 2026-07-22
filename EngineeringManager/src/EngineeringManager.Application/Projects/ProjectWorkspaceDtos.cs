@@ -153,7 +153,7 @@ public sealed record ProjectPaymentItemDto(
     string BusinessPartnerName,
     string AccountName,
     decimal Amount,
-    PaymentMethod PaymentMethod,
+    string? PaymentMethod,
     string? Notes,
     Guid? PayableEntryId = null,
     Guid? ContractId = null,

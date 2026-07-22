@@ -68,6 +68,17 @@ public static class ProjectDisplayText
         _ => value.ToString()
     };
 
+    public static string PaymentMethodLabel(string? value) => value switch
+    {
+        nameof(PaymentMethod.BankTransfer) => "银行转账",
+        nameof(PaymentMethod.Cash) => "现金",
+        nameof(PaymentMethod.WeChat) => "微信",
+        nameof(PaymentMethod.Alipay) => "支付宝",
+        nameof(PaymentMethod.Other) => "其他",
+        null or "" => "-",
+        _ => value
+    };
+
     public static string ToChinese(this ProjectStage value) => value switch
     {
         ProjectStage.AwaitingMobilization => "待进场",
