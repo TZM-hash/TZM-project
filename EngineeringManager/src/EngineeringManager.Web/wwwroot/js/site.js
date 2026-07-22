@@ -8,6 +8,7 @@ initProjectGeneralContractors();
 initCollectionContractPayerDefaults();
 initCompanyAccountEntries();
 initProjectContractEditor();
+initEmployeeWorkspaceControls();
 if (document.querySelector("[data-conflict-notice]")) {
   jobs.push(import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
 }
@@ -355,4 +356,82 @@ async function initOfflineDashboard() {
   dashboard.querySelector("[data-dashboard-pending]").textContent = counts.pending || 0;
   dashboard.querySelector("[data-dashboard-failed]").textContent = counts.failed || 0;
   dashboard.querySelector("[data-dashboard-conflicts]").textContent = counts.conflicts || 0;
+}
+
+function initEmployeeWorkspaceControls() {
+  document.querySelectorAll("[data-financial-account-editor]").forEach((root) => {
+    const type = root.querySelector("[data-account-type]");
+    const fields = root.querySelector("[data-personal-account-fields]");
+    const owner = root.querySelector("[data-personal-owner-name]");
+    if (!type || !fields) return;
+    const update = () => {
+      const personal = type.value === "4";
+      fields.hidden = !personal;
+      if (owner) {
+        owner.required = personal;
+        owner.disabled = !personal;
+      }
+      fields.querySelectorAll("select, input, textarea").forEach((control) => {
+        if (control === owner) return;
+        control.disabled = !personal;
+      });
+    };
+    type.addEventListener("change", update);
+    update();
+  });
+
+  document.querySelectorAll("[data-payroll-dependent-fields]").forEach((root) => {
+    const funding = root.querySelector("[data-payroll-funding-source]");
+    const disbursement = root.querySelector("[data-payroll-disbursement-type]");
+    const companyField = root.querySelector("[data-company-account-field]");
+    const personalField = root.querySelector("[data-personal-advance-account-field]");
+    const repaymentField = root.querySelector("[data-personal-advance-repayment-field]");
+    const legalEntity = root.querySelector("[name='Input.LegalEntityId']");
+    const update = () => {
+      const personal = funding?.value === "2";
+      const other = disbursement?.value === "2";
+      toggleField(companyField, !personal);
+      toggleField(personalField, personal);
+      toggleField(repaymentField, !personal && other);
+      if (legalEntity && companyField) {
+        const companyId = legalEntity.value.toLowerCase();
+        companyField.querySelectorAll("option[data-company-id]").forEach((option) => {
+          const matches = !companyId || option.dataset.companyId?.toLowerCase() === companyId;
+          option.hidden = !matches;
+          option.disabled = !matches;
+        });
+        const selected = companyField.querySelector("option:checked");
+        if (selected?.disabled) companyField.querySelector("select").value = "";
+      }
+      root.querySelectorAll("[data-payroll-line]").forEach((row) => updatePayrollLine(row, disbursement?.value));
+    };
+    funding?.addEventListener("change", update);
+    disbursement?.addEventListener("change", update);
+    legalEntity?.addEventListener("change", update);
+    root.querySelectorAll("[data-line-payment-category]").forEach((select) => select.addEventListener("change", () => updatePayrollLine(select.closest("[data-payroll-line]"))));
+    update();
+  });
+}
+
+function toggleField(field, visible) {
+  if (!field) return;
+  field.hidden = !visible;
+  field.querySelectorAll("select, input, textarea").forEach((control) => {
+    control.disabled = !visible;
+  });
+}
+
+function updatePayrollLine(row, batchType) {
+  if (!row) return;
+  const category = row.querySelector("[data-line-payment-category]");
+  const wage = row.querySelector("[data-line-wage-category]");
+  const labor = row.querySelector("[data-line-labor-company]");
+  const project = row.querySelector("[data-line-project]");
+  if (category && batchType && category.value !== batchType) category.value = batchType;
+  const isWage = (category?.value || batchType || "1") === "1";
+  [wage, labor, project].forEach((control) => {
+    if (!control) return;
+    control.closest("td")?.toggleAttribute("hidden", !isWage && control !== project);
+    control.disabled = !isWage && control !== project;
+  });
 }

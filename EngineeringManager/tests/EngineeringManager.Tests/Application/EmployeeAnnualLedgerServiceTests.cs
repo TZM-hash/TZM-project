@@ -1,5 +1,6 @@
 using EngineeringManager.Application.EmployeeAnnualLedger;
 using EngineeringManager.Domain.Employees;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.EmployeeAnnualLedger;
 using FluentAssertions;
@@ -42,11 +43,11 @@ public sealed class EmployeeAnnualLedgerServiceTests
     }
 
     [Fact]
-    public async Task MigrantWageCanBeSavedWithoutProjectOrLaborPartnerAndIsFlaggedUnassigned()
+    public async Task MigrantWageRequiresLaborPartnerButAllowsNoProject()
     {
         await using var fixture = await LedgerFixture.CreateAsync();
 
-        var entry = await fixture.Service.AddWageEntryAsync(
+        var missingLabor = () => fixture.Service.AddWageEntryAsync(
             new CreateEmployeeWageEntryRequest(
                 fixture.Employee.Id,
                 fixture.CurrentYear.Id,
@@ -66,7 +67,31 @@ public sealed class EmployeeAnnualLedgerServiceTests
                 null),
             CancellationToken.None);
 
-        entry.IsUnassignedMigrantWage.Should().BeTrue();
+        await missingLabor.Should().ThrowAsync<ArgumentException>().WithMessage("*劳务公司*");
+
+        var entry = await fixture.Service.AddWageEntryAsync(
+            new CreateEmployeeWageEntryRequest(
+                fixture.Employee.Id,
+                fixture.CurrentYear.Id,
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 31),
+                EmployeeWageCategory.MigrantWorkerWage,
+                EmployeeWageCalculationMethod.FixedAmount,
+                PayrollItemNature.Earning,
+                null,
+                null,
+                null,
+                4_000m,
+                null,
+                null,
+                fixture.LaborPartner.Id,
+                0m,
+                null),
+            CancellationToken.None);
+
+        entry.ProjectId.Should().BeNull();
+        entry.LaborBusinessPartnerId.Should().Be(fixture.LaborPartner.Id);
+        entry.IsUnassignedMigrantWage.Should().BeFalse();
     }
 
     [Fact]
@@ -138,7 +163,8 @@ public sealed class EmployeeAnnualLedgerServiceTests
             EmployeeAnnualLedgerService service,
             Employee employee,
             BusinessYear historicalYear,
-            BusinessYear currentYear)
+            BusinessYear currentYear,
+            BusinessPartner laborPartner)
         {
             this.connection = connection;
             Db = db;
@@ -146,6 +172,7 @@ public sealed class EmployeeAnnualLedgerServiceTests
             Employee = employee;
             HistoricalYear = historicalYear;
             CurrentYear = currentYear;
+            LaborPartner = laborPartner;
         }
 
         public ApplicationDbContext Db { get; }
@@ -153,6 +180,7 @@ public sealed class EmployeeAnnualLedgerServiceTests
         public Employee Employee { get; }
         public BusinessYear HistoricalYear { get; }
         public BusinessYear CurrentYear { get; }
+        public BusinessPartner LaborPartner { get; }
 
         public static async Task<LedgerFixture> CreateAsync()
         {
@@ -163,10 +191,12 @@ public sealed class EmployeeAnnualLedgerServiceTests
             var employee = new Employee { EmployeeNumber = "ANNUAL-E", Name = "年度员工", EmployeeType = EmployeeType.Formal };
             var historicalYear = new BusinessYear { Name = "2025年度", StartDate = new DateOnly(2025, 3, 1), EndDate = new DateOnly(2026, 2, 28) };
             var currentYear = new BusinessYear { Name = "2026年度", StartDate = new DateOnly(2026, 3, 1), EndDate = new DateOnly(2027, 2, 28) };
-            db.AddRange(employee, historicalYear, currentYear);
+            var laborPartner = new BusinessPartner { PartnerNumber = "LABOR-1", Name = "测试劳务公司", ShortName = "测试劳务" };
+            laborPartner.Roles.Add(new BusinessPartnerRole { Partner = laborPartner, RoleType = BusinessPartnerRoleType.ConstructionCrew });
+            db.AddRange(employee, historicalYear, currentYear, laborPartner);
             await db.SaveChangesAsync();
             var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 7, 18, 0, 0, 0, TimeSpan.FromHours(8)));
-            return new LedgerFixture(connection, db, new EmployeeAnnualLedgerService(db, timeProvider), employee, historicalYear, currentYear);
+            return new LedgerFixture(connection, db, new EmployeeAnnualLedgerService(db, timeProvider), employee, historicalYear, currentYear, laborPartner);
         }
 
         public async ValueTask DisposeAsync()

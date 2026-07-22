@@ -10,6 +10,8 @@ public sealed class PayrollBatch
     public string BatchNumber { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public PayrollBatchType BatchType { get; set; }
+    public PayrollDisbursementType DisbursementType { get; set; } = PayrollDisbursementType.Wage;
+    public PayrollFundingSource FundingSource { get; set; } = PayrollFundingSource.CompanyAccount;
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
     public Guid? ProjectId { get; set; }
@@ -19,6 +21,8 @@ public sealed class PayrollBatch
     public DateOnly? PaymentDate { get; set; }
     public Guid? AccountId { get; set; }
     public FinancialAccount? Account { get; set; }
+    public Guid? RepaysPersonalAdvanceAccountId { get; set; }
+    public FinancialAccount? RepaysPersonalAdvanceAccount { get; set; }
     public decimal ActualAmount { get; set; }
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.BankTransfer;
     public string? VoucherNumber { get; set; }

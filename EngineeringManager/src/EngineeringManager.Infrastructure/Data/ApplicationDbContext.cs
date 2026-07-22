@@ -589,6 +589,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Account).WithMany().HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.RelatedPayable).WithMany().HasForeignKey(item => item.RelatedPayableId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -611,16 +612,23 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.AutomaticAmount).HasPrecision(18, 2);
             entity.Property(item => item.AdjustmentAmount).HasPrecision(18, 2);
             entity.Property(item => item.FinalAmount).HasPrecision(18, 2);
+            entity.Property(item => item.EntryType)
+                .HasDefaultValue(EmployeeWageEntryType.Attendance)
+                .HasSentinel((EmployeeWageEntryType)0);
             entity.Property(item => item.Notes).HasMaxLength(1000);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.EmployeeId, item.BusinessYearId, item.StartDate });
+            entity.HasIndex(item => new { item.EmployeeId, item.BusinessYearId, item.EntryType });
             entity.HasIndex(item => item.SourcePayrollItemId);
+            entity.HasIndex(item => item.SourcePersonalAdvanceBatchId);
             entity.HasOne(item => item.Employee).WithMany().HasForeignKey(item => item.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.BusinessYear).WithMany().HasForeignKey(item => item.BusinessYearId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.LaborBusinessPartner).WithMany().HasForeignKey(item => item.LaborBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.SourcePayrollItem).WithMany().HasForeignKey(item => item.SourcePayrollItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.SourcePersonalAdvanceBatch).WithMany().HasForeignKey(item => item.SourcePersonalAdvanceBatchId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<EmployeeFinancialAdjustment>(entity =>
         {
@@ -659,6 +667,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.StageOrMilestoneName).HasMaxLength(200);
             entity.Property(item => item.ActualAmount).HasPrecision(18, 2);
+            entity.Property(item => item.DisbursementType)
+                .HasDefaultValue(PayrollDisbursementType.Wage)
+                .HasSentinel((PayrollDisbursementType)0);
+            entity.Property(item => item.FundingSource)
+                .HasDefaultValue(PayrollFundingSource.CompanyAccount)
+                .HasSentinel((PayrollFundingSource)0);
             entity.Property(item => item.PaymentMethod).HasDefaultValue(PaymentMethod.BankTransfer).HasSentinel((PaymentMethod)0);
             entity.Property(item => item.VoucherNumber).HasMaxLength(100);
             entity.Property(item => item.ReviewedByUserId).HasMaxLength(450);
@@ -668,6 +682,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Account).WithMany().HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.RepaysPersonalAdvanceAccount).WithMany().HasForeignKey(item => item.RepaysPersonalAdvanceAccountId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<PayrollItem>(entity =>
         {
@@ -694,6 +709,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Amount).HasPrecision(18, 2);
             entity.Property(item => item.RecipientType).HasDefaultValue(PayrollRecipientType.Employee).HasSentinel((PayrollRecipientType)0);
+            entity.Property(item => item.PaymentCategory)
+                .HasDefaultValue(PayrollPaymentCategory.Wage)
+                .HasSentinel((PayrollPaymentCategory)0);
             entity.Property(item => item.PayeeName).HasMaxLength(100).IsRequired();
             entity.Property(item => item.RecipientKey).HasMaxLength(100);
             entity.Property(item => item.RecipientNameSnapshot).HasMaxLength(100);
@@ -705,10 +723,13 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.Notes).HasMaxLength(500);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.PayrollBatchId, item.RecipientKey }).IsUnique().HasFilter("[RecipientKey] IS NOT NULL");
+            entity.HasIndex(item => new { item.EmployeeId, item.PaymentCategory });
             entity.HasOne(item => item.Batch).WithMany(batch => batch.Payments).HasForeignKey(item => item.PayrollBatchId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Employee).WithMany().HasForeignKey(item => item.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.ConstructionWorker).WithMany().HasForeignKey(item => item.ConstructionWorkerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.CrewBusinessPartner).WithMany().HasForeignKey(item => item.CrewBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.LaborBusinessPartner).WithMany().HasForeignKey(item => item.LaborBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Account).WithMany().HasForeignKey(item => item.AccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.PayeeBusinessPartner).WithMany().HasForeignKey(item => item.PayeeBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint(
@@ -1016,12 +1037,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         {
             entity.HasKey(item => item.Id);
             entity.Property(item => item.AccountName).HasMaxLength(150).IsRequired();
+            entity.Property(item => item.OwnerName).HasMaxLength(100);
             entity.Property(item => item.AccountNumber).HasMaxLength(100);
             entity.Property(item => item.BankName).HasMaxLength(150);
             entity.Property(item => item.OpeningBalance).HasPrecision(18, 2);
             entity.Property(item => item.Notes).HasMaxLength(1000);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => new { item.LegalEntityId, item.AccountName }).IsUnique();
+            entity.HasIndex(item => item.OwnerEmployeeId);
             entity.HasIndex(item => new { item.LegalEntityId, item.IsDefaultCollection })
                 .IsUnique()
                 .HasFilter("[IsDefaultCollection] = 1");
@@ -1032,6 +1055,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
                 .IsUnique()
                 .HasFilter("[IsDefaultInvoice] = 1");
             entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.OwnerEmployee).WithMany().HasForeignKey(item => item.OwnerEmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

@@ -6,6 +6,8 @@ public sealed record CreateBusinessYearRequest(string Name, DateOnly StartDate, 
 
 public sealed record BusinessYearDto(Guid Id, string Name, DateOnly StartDate, DateOnly EndDate, Guid ConcurrencyStamp);
 
+public sealed record EmployeePayableAttachmentUpload(string OriginalFileName, string ContentType, byte[] Content);
+
 public sealed record CreateEmployeeWageEntryRequest(
     Guid EmployeeId,
     Guid BusinessYearId,
@@ -22,7 +24,31 @@ public sealed record CreateEmployeeWageEntryRequest(
     Guid? ProjectId,
     Guid? LaborBusinessPartnerId,
     decimal AdjustmentAmount,
-    string? Notes);
+    string? Notes,
+    EmployeeWageEntryType EntryType = EmployeeWageEntryType.Attendance,
+    EmployeePayableAttachmentUpload? Attachment = null);
+
+public sealed record UpdateEmployeeWageEntryRequest(
+    Guid Id,
+    Guid ConcurrencyStamp,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    EmployeeWageEntryType EntryType,
+    EmployeeWageCategory WageCategory,
+    EmployeeWageCalculationMethod CalculationMethod,
+    PayrollItemNature Nature,
+    decimal? Quantity,
+    string? Unit,
+    decimal? UnitPrice,
+    decimal? ManualAmount,
+    Guid? LegalEntityId,
+    Guid? ProjectId,
+    Guid? LaborBusinessPartnerId,
+    decimal AdjustmentAmount,
+    string? Notes,
+    EmployeePayableAttachmentUpload? Attachment,
+    string Reason,
+    string? UserId = null);
 
 public sealed record EmployeeWageEntryDto(
     Guid Id,
@@ -43,7 +69,17 @@ public sealed record EmployeeWageEntryDto(
     decimal AdjustmentAmount,
     decimal FinalAmount,
     string? Notes,
-    bool IsUnassignedMigrantWage);
+    bool IsUnassignedMigrantWage,
+    EmployeeWageEntryType EntryType = EmployeeWageEntryType.Attendance,
+    Guid? AttachmentId = null,
+    string? AttachmentFileName = null,
+    Guid? SourcePersonalAdvanceBatchId = null,
+    bool IsSystemGenerated = false,
+    bool ExcludeFromWageCost = false,
+    Guid ConcurrencyStamp = default,
+    string? LegalEntityName = null,
+    string? ProjectName = null,
+    string? LaborBusinessPartnerName = null);
 
 public sealed record CreateEmployeeFinancialAdjustmentRequest(
     Guid EmployeeId,
@@ -117,4 +153,5 @@ public sealed record EmployeeAnnualLedgerReceiptLineDto(
     string? Recipient,
     string? Notes,
     Guid? PayrollBatchId = null,
-    Guid? PayrollPaymentId = null);
+    Guid? PayrollPaymentId = null,
+    PayrollPaymentCategory PaymentCategory = PayrollPaymentCategory.Other);

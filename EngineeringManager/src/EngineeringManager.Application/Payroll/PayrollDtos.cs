@@ -22,7 +22,11 @@ public sealed record PayrollDisbursementLineRequest(
     Guid? ConstructionWorkerId,
     Guid? CrewBusinessPartnerId,
     decimal Amount,
-    string? Notes);
+    string? Notes,
+    PayrollPaymentCategory PaymentCategory = PayrollPaymentCategory.Wage,
+    EmployeeWageCategory? WageCategory = EmployeeWageCategory.SocialSecurityWage,
+    Guid? LaborBusinessPartnerId = null,
+    Guid? ProjectId = null);
 
 public sealed record PayrollCrewAllocationRequest(
     Guid CrewBusinessPartnerId,
@@ -46,7 +50,10 @@ public sealed record SavePayrollDisbursementBatchRequest(
     Guid? ConcurrencyStamp,
     string Reason,
     IReadOnlyList<PayrollDisbursementLineRequest> Lines,
-    IReadOnlyList<PayrollCrewAllocationRequest> CrewAllocations);
+    IReadOnlyList<PayrollCrewAllocationRequest> CrewAllocations,
+    PayrollDisbursementType DisbursementType = PayrollDisbursementType.Wage,
+    PayrollFundingSource FundingSource = PayrollFundingSource.CompanyAccount,
+    Guid? RepaysPersonalAdvanceAccountId = null);
 
 public sealed record PayrollDisbursementLineDto(
     Guid Id,
@@ -62,7 +69,11 @@ public sealed record PayrollDisbursementLineDto(
     string? TradeSnapshot,
     string? CrewNameSnapshot,
     string? Notes,
-    Guid ConcurrencyStamp);
+    Guid ConcurrencyStamp,
+    PayrollPaymentCategory PaymentCategory = PayrollPaymentCategory.Wage,
+    EmployeeWageCategory? WageCategory = EmployeeWageCategory.SocialSecurityWage,
+    Guid? LaborBusinessPartnerId = null,
+    Guid? ProjectId = null);
 
 public sealed record PayrollCrewAllocationDto(
     Guid Id,
@@ -86,7 +97,10 @@ public sealed record PayrollDisbursementBatchDto(
     PayrollBatchStatus Status,
     string? Notes,
     bool IsUnifiedDisbursement,
-    Guid ConcurrencyStamp);
+    Guid ConcurrencyStamp,
+    PayrollDisbursementType DisbursementType = PayrollDisbursementType.Wage,
+    PayrollFundingSource FundingSource = PayrollFundingSource.CompanyAccount,
+    Guid? RepaysPersonalAdvanceAccountId = null);
 
 public sealed record PayrollDisbursementBatchDetailsDto(
     PayrollDisbursementBatchDto Batch,

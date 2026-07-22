@@ -9,6 +9,8 @@ public sealed class PayrollPayment
     public Guid PayrollBatchId { get; set; }
     public PayrollBatch Batch { get; set; } = null!;
     public PayrollRecipientType RecipientType { get; set; } = PayrollRecipientType.Employee;
+    public PayrollPaymentCategory PaymentCategory { get; set; } = PayrollPaymentCategory.Wage;
+    public EmployeeWageCategory? WageCategory { get; set; }
     public string? RecipientKey { get; set; }
     public Guid? EmployeeId { get; set; }
     public Employee? Employee { get; set; }
@@ -16,6 +18,10 @@ public sealed class PayrollPayment
     public ConstructionWorker? ConstructionWorker { get; set; }
     public Guid? CrewBusinessPartnerId { get; set; }
     public BusinessPartner? CrewBusinessPartner { get; set; }
+    public Guid? LaborBusinessPartnerId { get; set; }
+    public BusinessPartner? LaborBusinessPartner { get; set; }
+    public Guid? ProjectId { get; set; }
+    public Project? Project { get; set; }
     public Guid? AccountId { get; set; }
     public FinancialAccount? Account { get; set; }
     public DateOnly? PaymentDate { get; set; }

@@ -9,38 +9,69 @@
     {
         InlineFilters = new DataWorkbenchFilterField[]
         {
-            new("Search", "搜索", Model.Search, Placeholder: "搜索员工全部信息"),
+            new("Search", "搜索", Model.Search, Placeholder: "搜索员工、公司、项目、备注"),
             new("EmployeeType", "类型", Model.EmployeeType?.ToString(), DataWorkbenchFilterKind.Select,
-                new DataWorkbenchFilterOption[] { new("Formal", "正式员工"), new("Labor", "劳务员工"), new("Temporary", "特殊临时人员") })
+                [new("Formal", "正式员工"), new("Labor", "劳务员工"), new("Temporary", "特殊临时人员")])
         }
     };
 }
 
 <partial name="_EmployeeSubNavigation" />
 
-<section class="page-heading"><div><p class="eyebrow">人员主档</p><h1>员工管理</h1><p class="page-lead">统一管理正式员工和劳务员工。部门、项目、班组和签约公司归属按时间段保存，历史工资和往来不会随主档复制。</p></div>@if (Model.CanManage) { <a class="button button--secondary button--action" asp-page="/Employees/Create">新增员工</a> }</section>
-<section class="overview-strip" aria-label="员工统计"><article class="is-accent"><span>员工总数</span><strong>@Model.Employees.Count</strong></article><article><span>正式员工</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Formal)</strong></article><article><span>劳务员工</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Labor)</strong></article><article><span>特殊临时人员</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Temporary)</strong></article><article class="is-success"><span>在用员工</span><strong>@Model.Employees.Count(item => item.IsActive)</strong></article></section>
+<section class="page-heading employee-index-heading">
+    <div><p class="eyebrow">人员经营台账</p><h1>员工管理</h1><p class="page-lead">统一查看员工主档、当前归属、应付和付款数据。</p></div>
+    <div class="page-actions-inline">
+        <a class="button button--secondary button--action" asp-page="/Employees/Ledger">年度总账</a>
+        <a class="button button--secondary button--action" asp-page="/Employees/Certificates">证书总览</a>
+        @if (Model.CanManage) { <a class="button button--primary button--action" asp-page="/Employees/Create">新增员工</a> }
+    </div>
+</section>
 
-<section class="panel" style="margin-top: var(--space-3)">
-    <div class="panel-heading"><div><p class="eyebrow">员工清单</p><h2>基础资料</h2><small>@(Model.CanManage ? "点击每行的“快捷编辑员工”，可直接在当前单元格修改常用字段。" : "查看员工常用资料与归属记录。")</small></div></div>
+<section class="overview-strip employee-overview-strip" aria-label="员工经营汇总">
+    <article class="is-accent"><span>员工总数</span><strong>@Model.TotalCount</strong></article>
+    <article><span>正式员工</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Formal)</strong></article>
+    <article><span>劳务员工</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Labor)</strong></article>
+    <article><span>特殊临时人员</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Temporary)</strong></article>
+    <article class="is-success"><span>在职人数</span><strong>@Model.Employees.Count(item => item.IsActive)</strong></article>
+    <article><span>当前业务年度应付总额</span><strong>@Model.CurrentYearPayableTotal.ToString("N2")</strong></article>
+    <article><span>当前业务年度已付款</span><strong>@Model.CurrentYearPaidTotal.ToString("N2")</strong></article>
+    <article class="is-warning"><span>当前业务年度未付款</span><strong>@Model.CurrentYearUnpaidTotal.ToString("N2")</strong></article>
+</section>
+
+<section class="panel employee-list-workspace">
+    <div class="panel-heading"><div><p class="eyebrow">员工清单</p><h2>基础资料与年度财务摘要</h2><small>操作统一进入员工档案，工资、报销、利息分红和付款记录在详情页集中处理。</small></div></div>
     <partial name="_DataWorkbench" model="workbench" />
-    @if (Model.CanManage) { <div asp-validation-summary="All" class="panel-copy"></div> }
-    <div class="table-wrap"><table class="data-table" id="employees-table"><thead><tr><th data-column-key="employee_number">员工编号</th><th data-column-key="name">姓名</th><th data-column-key="employee_type">类型</th><th data-column-key="position">岗位</th><th data-column-key="phone">电话</th><th data-column-key="assignments">主归属记录</th><th data-column-key="notes">备注摘要</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead><tbody>
+    <div class="table-wrap"><table class="data-table" id="employees-table"><thead><tr>
+        <th data-column-key="employee_number">员工编号</th><th data-column-key="name">姓名</th><th data-column-key="employee_type">员工类型</th><th data-column-key="position">岗位</th><th data-column-key="phone">电话</th><th data-column-key="current_company">当前公司</th><th data-column-key="current_department">当前部门</th><th data-column-key="payable">应付合计</th><th data-column-key="paid">已付款</th><th data-column-key="unpaid">未付款</th><th data-column-key="notes">备注</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th>
+    </tr></thead><tbody>
     @foreach (var item in Model.Employees)
     {
-        var formId = $"employee-inline-{item.Id:N}";
-        var activeEditor = Model.QuickEditOpen && Model.QuickEdit.Id == item.Id;
-        <tr class="inline-edit-shell" data-inline-edit="employee-@item.Id" data-inline-cell-edit data-inline-edit-active="@(activeEditor ? "true" : "false")">
-            <td data-column-key="employee_number"><span data-inline-edit-value>@item.EmployeeNumber</span>@if (Model.CanManage) { <input class="inline-cell-control" name="QuickEdit.EmployeeNumber" value="@item.EmployeeNumber" form="@formId" data-inline-edit-control hidden required /> }</td>
-            <td data-column-key="name"><span data-inline-edit-value><a asp-page="/Employees/Details" asp-route-id="@item.Id">@item.Name</a></span>@if (Model.CanManage) { <input class="inline-cell-control" name="QuickEdit.Name" value="@item.Name" form="@formId" data-inline-edit-control hidden required /> }</td>
-            <td data-column-key="employee_type"><span data-inline-edit-value>@item.EmployeeType.ToChinese()</span>@if (Model.CanManage) { <select class="inline-cell-control" name="QuickEdit.EmployeeType" form="@formId" data-inline-edit-control hidden><option value="1" selected="@(item.EmployeeType == EmployeeType.Formal ? "selected" : null)">正式员工</option><option value="2" selected="@(item.EmployeeType == EmployeeType.Labor ? "selected" : null)">劳务员工</option><option value="3" selected="@(item.EmployeeType == EmployeeType.Temporary ? "selected" : null)">特殊临时人员</option></select> }</td>
-            <td data-column-key="position"><span data-inline-edit-value>@(item.PositionTitle ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="QuickEdit.PositionTitle" value="@item.PositionTitle" form="@formId" data-inline-edit-control hidden /> }</td>
-            <td data-column-key="phone"><span data-inline-edit-value>@(item.Phone ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="QuickEdit.Phone" value="@item.Phone" form="@formId" data-inline-edit-control hidden /> }</td>
-            <td data-column-key="assignments">@item.Affiliations.Count</td>
-            <td data-column-key="notes">@(string.IsNullOrWhiteSpace(item.Notes) ? "—" : item.Notes.Length > 40 ? item.Notes[..40] + "…" : item.Notes)</td>
-            <td data-column-key="status"><span data-inline-edit-value>@(item.IsActive ? "启用" : "停用")</span>@if (Model.CanManage) { <select class="inline-cell-control" name="QuickEdit.IsActive" form="@formId" data-inline-edit-control hidden><option value="true" selected="@(item.IsActive ? "selected" : null)">启用</option><option value="false" selected="@(!item.IsActive ? "selected" : null)">停用</option></select> }</td>
-            <td data-column-key="actions"><div class="table-action-buttons table-action-buttons--compact"><a class="button button--secondary button--small button--action" asp-page="/Employees/Details" asp-route-id="@item.Id">详情与总账</a>@if (Model.CanManage) { <button class="button button--primary button--small button--action" type="button" data-inline-edit-open>快捷编辑员工</button> }<a class="button button--secondary button--small button--action" asp-page="/Employees/Create" asp-route-id="@item.Id">详细编辑</a><a class="button button--text button--small" asp-page="/Employees/Create" asp-route-copyFrom="@item.Id">复制</a>@if (Model.CanManage) { <button class="button button--secondary button--small button--action" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button><button class="button button--primary button--small button--action" type="submit" form="@formId" data-inline-edit-actions hidden>保存</button><form id="@formId" method="post" asp-page-handler="QuickEdit"><input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="EmployeeType" value="@Model.EmployeeType" /><input type="hidden" name="QuickEdit.Id" value="@item.Id" /><input type="hidden" name="QuickEdit.IdentityNumber" value="@item.IdentityNumber" /><input type="hidden" name="QuickEdit.BankAccountNumber" value="@item.BankAccountNumber" /><input type="hidden" name="QuickEdit.BankName" value="@item.BankName" /><input type="hidden" name="QuickEdit.HireDate" value="@item.HireDate?.ToString("yyyy-MM-dd")" /><input type="hidden" name="QuickEdit.LeaveDate" value="@item.LeaveDate?.ToString("yyyy-MM-dd")" /><input type="hidden" name="QuickEdit.DefaultLegalEntityId" value="@item.DefaultLegalEntityId" /><input type="hidden" name="QuickEdit.DefaultMonthlySalary" value="@item.DefaultMonthlySalary" /><input type="hidden" name="QuickEdit.DefaultDailyRate" value="@item.DefaultDailyRate" /><input type="hidden" name="QuickEdit.DefaultHourlyRate" value="@item.DefaultHourlyRate" /><input type="hidden" name="QuickEdit.DefaultPieceworkRate" value="@item.DefaultPieceworkRate" /><input type="hidden" name="QuickEdit.ConcurrencyStamp" value="@item.ConcurrencyStamp" /><input type="hidden" name="QuickEdit.Reason" value="快捷编辑员工资料" /></form> }</div></td>
+        var affiliation = item.Affiliations.FirstOrDefault(affiliation => affiliation.IsPrimary);
+        var summary = Model.AnnualSummaries.GetValueOrDefault(item.Id);
+        var payable = summary?.CurrentYearNewPayable ?? 0m;
+        var paid = summary?.ReceivedAmount ?? 0m;
+        <tr>
+            <td data-column-key="employee_number">@item.EmployeeNumber</td>
+            <td data-column-key="name"><a asp-page="/Employees/Details" asp-route-id="@item.Id" asp-route-businessYearId="@Model.CurrentBusinessYearId">@item.Name</a></td>
+            <td data-column-key="employee_type">@item.EmployeeType.ToChinese()</td>
+            <td data-column-key="position">@(item.PositionTitle ?? affiliation?.PositionTitle ?? "未填写")</td>
+            <td data-column-key="phone">@(item.Phone ?? "未填写")</td>
+            <td data-column-key="current_company">@(affiliation?.LegalEntityName ?? "未归属")</td>
+            <td data-column-key="current_department">@(affiliation?.DepartmentName ?? "未归属")</td>
+            <td data-column-key="payable" class="numeric-cell">@payable.ToString("N2")</td>
+            <td data-column-key="paid" class="numeric-cell">@paid.ToString("N2")</td>
+            <td data-column-key="unpaid" class="numeric-cell">@((payable - paid).ToString("N2"))</td>
+            <td data-column-key="notes">@(item.Notes ?? "")</td>
+            <td data-column-key="status"><span class="status-chip @(item.IsActive ? "status-chip--success" : "status-chip--muted")">@(item.IsActive ? "启用" : "停用")</span></td>
+            <td data-column-key="actions"><div class="table-action-buttons table-action-buttons--compact"><a class="button button--secondary button--small button--action" asp-page="/Employees/Details" asp-route-id="@item.Id" asp-route-businessYearId="@Model.CurrentBusinessYearId">查看</a><a class="button button--primary button--small button--action" asp-page="/Employees/Create" asp-route-id="@item.Id">详细编辑</a></div></td>
         </tr>
     }
     </tbody></table></div>
+    <nav class="pagination" aria-label="员工分页">
+        <span>共 @Model.TotalCount 条，第 @Model.PageNumber/@Model.TotalPages 页</span>
+        <div class="pagination__actions">
+            @if (Model.PageNumber > 1) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber - 1)">上一页</a> }
+            @if (Model.PageNumber < Model.TotalPages) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber + 1)">下一页</a> }
+        </div>
+    </nav>
 </section>

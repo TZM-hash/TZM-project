@@ -289,8 +289,9 @@ public sealed class ProjectAuthorizationTests
         html.Should().NotContain("关联应收");
         html.Should().NotContain("发票方向");
         html.Should().Contain("新增工程量明细");
-        html.Should().Contain("上传附件");
-        html.Should().Contain("预览附件")
+        html.Should().Contain("data-auto-upload-trigger");
+        html.Should().Contain("data-attachment-preview-trigger")
+            .And.Contain("data-attachment-preview-dialog")
             .And.Contain("title=\"测试附件.pdf\"");
         html.Should().Contain("DeleteQuantityAttachment");
         html.Should().Contain("data-inline-edit=\"project-overview\"");
@@ -344,7 +345,7 @@ public sealed class ProjectAuthorizationTests
         page.Should().Contain("总包联系人 / 电话")
             .And.Contain("data-project-amount-view")
             .And.Contain("project-summary-half")
-            .And.Contain("<th>工程量</th><th>单价</th><th>小计</th><th>口径</th><th>是否开票</th><th class=\"quantity-upload-column\">上传</th><th class=\"quantity-attachment-column\">附件</th>")
+            .And.Contain("<th>工程量</th><th>单价</th><th>小计</th><th>口径</th><th>是否开票</th><th class=\"quantity-attachment-column\">附件</th>")
             .And.NotContain("<th>暂估工程量</th>")
             .And.NotContain("<th>结算工程量</th>")
             .And.NotContain("asp-page=\"/Projects/Records/Edit\"")

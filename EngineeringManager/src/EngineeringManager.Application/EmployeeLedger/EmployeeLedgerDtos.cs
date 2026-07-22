@@ -27,6 +27,31 @@ public sealed record RecordExpensePaymentRequest(
     EmployeeLedgerRecordKind RecordKind,
     string? Notes);
 
+public sealed record UpdateExpenseRequest(
+    Guid Id,
+    Guid ConcurrencyStamp,
+    DateOnly ExpenseDate,
+    decimal Amount,
+    Guid? ProjectId,
+    string? ReceiptNumber,
+    ExpenseAttachmentUpload? Attachment,
+    string? Description,
+    string Reason,
+    string? UserId = null);
+
+public sealed record EmployeeExpenseDto(
+    Guid Id,
+    Guid EmployeeId,
+    DateOnly ExpenseDate,
+    decimal Amount,
+    Guid? ProjectId,
+    string? ProjectName,
+    string? ReceiptNumber,
+    Guid? AttachmentId,
+    string? AttachmentFileName,
+    string? Description,
+    Guid ConcurrencyStamp);
+
 public sealed record RecordEmployeeAdvanceRequest(
     Guid EmployeeId,
     Guid? ProjectId,
@@ -54,6 +79,33 @@ public sealed record RecordEmployeeOtherPaymentRequest(
     PaymentMethod PaymentMethod,
     EmployeeLedgerRecordKind RecordKind,
     string? Description);
+
+public sealed record EmployeeOtherPayableDto(
+    Guid Id,
+    Guid EmployeeId,
+    DateOnly EntryDate,
+    decimal Amount,
+    EmployeeLedgerEntryType EntryType,
+    Guid LegalEntityId,
+    string LegalEntityName,
+    Guid? ProjectId,
+    string? ProjectName,
+    Guid? AttachmentId,
+    string? AttachmentFileName,
+    string? Description,
+    Guid ConcurrencyStamp);
+
+public sealed record UpdateEmployeeOtherPayableRequest(
+    Guid Id,
+    Guid ConcurrencyStamp,
+    DateOnly EntryDate,
+    decimal Amount,
+    EmployeeLedgerEntryType EntryType,
+    Guid LegalEntityId,
+    Guid? ProjectId,
+    string? Description,
+    string Reason,
+    string? UserId = null);
 
 public sealed record EmployeeLedgerSummaryDto(
     Guid EmployeeId,

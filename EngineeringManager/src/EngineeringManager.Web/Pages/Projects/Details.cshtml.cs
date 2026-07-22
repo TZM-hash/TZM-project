@@ -215,14 +215,16 @@ public sealed class DetailsModel(
         }
     }
 
-    public async Task<IActionResult> OnGetQuantityAttachmentAsync(Guid id, Guid attachmentId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnGetQuantityAttachmentAsync(Guid id, Guid attachmentId, bool download, CancellationToken cancellationToken)
     {
         var workspace = await workspaceService.GetAsync(id, cancellationToken);
         if (workspace is null) return NotFound();
         var attachments = await LoadQuantityAttachmentsAsync(workspace, cancellationToken);
         if (!attachments.Values.Any(item => item.Id == attachmentId)) return NotFound();
         var file = await attachmentService.DownloadAsync(id, attachmentId, cancellationToken);
-        return File(file.Content, file.ContentType, file.OriginalFileName);
+        return download
+            ? File(file.Content, file.ContentType, file.OriginalFileName)
+            : File(file.Content, file.ContentType);
     }
 
     public async Task<IActionResult> OnPostDeleteQuantityAttachmentAsync(Guid id, Guid attachmentId, Guid lineItemId, CancellationToken cancellationToken)
@@ -268,13 +270,15 @@ public sealed class DetailsModel(
         }
     }
 
-    public async Task<IActionResult> OnGetRecordAttachmentAsync(Guid id, Guid attachmentId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnGetRecordAttachmentAsync(Guid id, Guid attachmentId, bool download, CancellationToken cancellationToken)
     {
         var (workspace, construction) = await LoadAttachmentContextAsync(id, cancellationToken);
         var attachments = await LoadRecordAttachmentsAsync(workspace, construction, cancellationToken);
         if (!attachments.Values.Any(item => item.Id == attachmentId)) return NotFound();
         var file = await attachmentService.DownloadAsync(id, attachmentId, cancellationToken);
-        return File(file.Content, file.ContentType, file.OriginalFileName);
+        return download
+            ? File(file.Content, file.ContentType, file.OriginalFileName)
+            : File(file.Content, file.ContentType);
     }
 
     public async Task<IActionResult> OnPostDeleteRecordAttachmentAsync(

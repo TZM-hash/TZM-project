@@ -5,6 +5,7 @@ using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Files;
 using EngineeringManager.Domain.StageResults;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.EmployeeLedger;
 
@@ -72,6 +73,86 @@ public sealed class EmployeeLedgerService(ApplicationDbContext db, IFileStore? f
         db.ExpenseRecords.Add(expense);
         await db.SaveChangesAsync(cancellationToken);
         return expense.Id;
+    }
+
+    public async Task<IReadOnlyList<EmployeeExpenseDto>> GetExpensesAsync(Guid employeeId, CancellationToken cancellationToken)
+    {
+        if (!await db.Employees.AnyAsync(item => item.Id == employeeId, cancellationToken))
+        {
+            throw new InvalidOperationException("员工不存在。");
+        }
+
+        return await db.ExpenseRecords.AsNoTracking()
+            .Include(item => item.Project)
+            .Include(item => item.Attachment)
+            .Where(item => item.EmployeeId == employeeId && !item.IsVoided)
+            .OrderByDescending(item => item.ExpenseDate)
+            .ThenByDescending(item => item.Id)
+            .Select(item => new EmployeeExpenseDto(
+                item.Id,
+                item.EmployeeId,
+                item.ExpenseDate,
+                item.Amount,
+                item.ProjectId,
+                item.Project == null ? null : item.Project.Name,
+                item.ReceiptNumber,
+                item.AttachmentId,
+                item.Attachment == null ? null : item.Attachment.OriginalFileName,
+                item.Description,
+                item.ConcurrencyStamp))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<EmployeeExpenseDto> UpdateExpenseAsync(UpdateExpenseRequest request, CancellationToken cancellationToken)
+    {
+        EnsurePositive(request.Amount);
+        var expense = await db.ExpenseRecords
+            .Include(item => item.Project)
+            .Include(item => item.Attachment)
+            .SingleOrDefaultAsync(item => item.Id == request.Id && !item.IsVoided, cancellationToken)
+            ?? throw new InvalidOperationException("报销记录不存在或已作废。");
+        if (expense.ConcurrencyStamp != request.ConcurrencyStamp)
+        {
+            throw new InvalidOperationException("报销记录已被其他用户修改，请刷新后重试。");
+        }
+
+        if (request.ProjectId.HasValue && !await db.ProjectLegalEntities.AnyAsync(
+                item => item.ProjectId == request.ProjectId && item.LegalEntityId == expense.LegalEntityId,
+                cancellationToken))
+        {
+            throw new InvalidOperationException("项目不存在、已停用或未关联报销公司。");
+        }
+
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        var before = JsonSerializer.Serialize(ExpenseSnapshot(expense));
+        expense.ExpenseDate = request.ExpenseDate;
+        expense.ProjectId = request.ProjectId;
+        expense.Amount = request.Amount;
+        expense.OriginalAmount = request.Amount;
+        expense.AdjustmentAmount = 0m;
+        expense.Category = "报销";
+        expense.ReceiptNumber = NormalizeOptional(request.ReceiptNumber);
+        expense.Description = NormalizeOptional(request.Description);
+        if (request.Attachment is not null)
+        {
+            expense.Attachment = await SaveAttachmentAsync(request.Attachment, "员工报销附件", cancellationToken);
+        }
+
+        expense.ConcurrencyStamp = Guid.NewGuid();
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = request.UserId,
+            Action = "UpdateEmployeeExpense",
+            EntityType = nameof(ExpenseRecord),
+            EntityId = expense.Id.ToString(),
+            Reason = reason,
+            BeforeJson = before,
+            AfterJson = JsonSerializer.Serialize(ExpenseSnapshot(expense))
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        await db.Entry(expense).Reference(item => item.Project).LoadAsync(cancellationToken);
+        await db.Entry(expense).Reference(item => item.Attachment).LoadAsync(cancellationToken);
+        return ToDto(expense);
     }
 
     public async Task<Guid> RecordExpensePaymentAsync(RecordExpensePaymentRequest request, CancellationToken cancellationToken)
@@ -171,6 +252,97 @@ public sealed class EmployeeLedgerService(ApplicationDbContext db, IFileStore? f
         db.EmployeeOtherPayments.Add(entry);
         await db.SaveChangesAsync(cancellationToken);
         return entry.Id;
+    }
+
+    public async Task<IReadOnlyList<EmployeeOtherPayableDto>> GetOtherPayablesAsync(Guid employeeId, CancellationToken cancellationToken)
+    {
+        if (!await db.Employees.AnyAsync(item => item.Id == employeeId, cancellationToken))
+        {
+            throw new InvalidOperationException("员工不存在。");
+        }
+
+        return await db.EmployeeOtherPayments.AsNoTracking()
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Project)
+            .Include(item => item.Attachment)
+            .Where(item => item.EmployeeId == employeeId && item.RecordKind == EmployeeLedgerRecordKind.Payable)
+            .OrderByDescending(item => item.EntryDate)
+            .ThenByDescending(item => item.Id)
+            .Select(item => new EmployeeOtherPayableDto(
+                item.Id,
+                item.EmployeeId,
+                item.EntryDate,
+                item.Amount,
+                item.EntryType,
+                item.LegalEntityId,
+                item.LegalEntity.Name,
+                item.ProjectId,
+                item.Project == null ? null : item.Project.Name,
+                item.AttachmentId,
+                item.Attachment == null ? null : item.Attachment.OriginalFileName,
+                item.Description,
+                item.ConcurrencyStamp))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<EmployeeOtherPayableDto> UpdateOtherPayableAsync(
+        UpdateEmployeeOtherPayableRequest request,
+        CancellationToken cancellationToken)
+    {
+        EnsurePositive(request.Amount);
+        if (request.EntryType is not (EmployeeLedgerEntryType.Dividend or EmployeeLedgerEntryType.Interest or EmployeeLedgerEntryType.Other))
+        {
+            throw new ArgumentException("其他员工往来应付只支持分红、利息或其他类型。", nameof(request));
+        }
+
+        var entry = await db.EmployeeOtherPayments
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Project)
+            .Include(item => item.Attachment)
+            .SingleOrDefaultAsync(item => item.Id == request.Id && item.RecordKind == EmployeeLedgerRecordKind.Payable, cancellationToken)
+            ?? throw new InvalidOperationException("员工往来应付记录不存在。");
+        if (entry.ConcurrencyStamp != request.ConcurrencyStamp)
+        {
+            throw new InvalidOperationException("员工往来应付记录已被其他用户修改，请刷新后重试。");
+        }
+
+        await ValidateDimensionsAsync(entry.EmployeeId, request.ProjectId, null, request.LegalEntityId, cancellationToken);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        var before = JsonSerializer.Serialize(new { entry.EntryDate, entry.Amount, entry.EntryType, entry.LegalEntityId, entry.ProjectId, entry.Description });
+        entry.EntryDate = request.EntryDate;
+        entry.Amount = request.Amount;
+        entry.EntryType = request.EntryType;
+        entry.LegalEntityId = request.LegalEntityId;
+        entry.ProjectId = request.ProjectId;
+        entry.Description = NormalizeOptional(request.Description);
+        entry.ConcurrencyStamp = Guid.NewGuid();
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = request.UserId,
+            Action = "UpdateEmployeeOtherPayable",
+            EntityType = nameof(EmployeeOtherPayment),
+            EntityId = entry.Id.ToString(),
+            Reason = reason,
+            BeforeJson = before,
+            AfterJson = JsonSerializer.Serialize(new { entry.EntryDate, entry.Amount, entry.EntryType, entry.LegalEntityId, entry.ProjectId, entry.Description })
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        await db.Entry(entry).Reference(item => item.LegalEntity).LoadAsync(cancellationToken);
+        await db.Entry(entry).Reference(item => item.Project).LoadAsync(cancellationToken);
+        return new EmployeeOtherPayableDto(
+            entry.Id,
+            entry.EmployeeId,
+            entry.EntryDate,
+            entry.Amount,
+            entry.EntryType,
+            entry.LegalEntityId,
+            entry.LegalEntity?.Name ?? string.Empty,
+            entry.ProjectId,
+            entry.Project?.Name,
+            entry.AttachmentId,
+            entry.Attachment?.OriginalFileName,
+            entry.Description,
+            entry.ConcurrencyStamp);
     }
 
     public async Task<Guid> RecordOtherPaymentAsync(RecordEmployeeOtherPaymentRequest request, CancellationToken cancellationToken)
@@ -296,6 +468,72 @@ public sealed class EmployeeLedgerService(ApplicationDbContext db, IFileStore? f
 
     private static AccountTransaction CreateTransaction(Guid accountId, AccountTransactionDirection direction, AccountTransactionSourceType sourceType, Guid sourceId, DateOnly date, decimal amount, string? description) =>
         new() { AccountId = accountId, Direction = direction, SourceType = sourceType, SourceId = sourceId, TransactionDate = date, Amount = amount, Description = description };
+
+    private async Task<Attachment?> SaveAttachmentAsync(
+        ExpenseAttachmentUpload? upload,
+        string description,
+        CancellationToken cancellationToken)
+    {
+        if (upload is null)
+        {
+            return null;
+        }
+
+        if (fileStore is null)
+        {
+            throw new InvalidOperationException("当前环境未配置附件存储。");
+        }
+
+        if (upload.Content.Length == 0)
+        {
+            throw new ArgumentException("附件不能为空。", nameof(upload));
+        }
+
+        var safeName = Path.GetFileName(upload.OriginalFileName);
+        if (string.IsNullOrWhiteSpace(safeName) || !string.Equals(safeName, upload.OriginalFileName, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("附件文件名无效。", nameof(upload));
+        }
+
+        await using var content = new MemoryStream(upload.Content, writable: false);
+        var storedName = await fileStore.SaveAsync(content, safeName, cancellationToken);
+        var attachment = new Attachment
+        {
+            StoredName = storedName,
+            OriginalFileName = safeName,
+            ContentType = string.IsNullOrWhiteSpace(upload.ContentType) ? "application/octet-stream" : upload.ContentType.Trim(),
+            SizeBytes = upload.Content.LongLength,
+            Category = AttachmentCategory.General,
+            Description = description
+        };
+        db.Attachments.Add(attachment);
+        return attachment;
+    }
+
+    private static EmployeeExpenseDto ToDto(ExpenseRecord item) => new(
+        item.Id,
+        item.EmployeeId,
+        item.ExpenseDate,
+        item.Amount,
+        item.ProjectId,
+        item.Project?.Name,
+        item.ReceiptNumber,
+        item.AttachmentId,
+        item.Attachment?.OriginalFileName,
+        item.Description,
+        item.ConcurrencyStamp);
+
+    private static object ExpenseSnapshot(ExpenseRecord item) => new
+    {
+        item.ExpenseDate,
+        item.Amount,
+        item.OriginalAmount,
+        item.AdjustmentAmount,
+        item.ProjectId,
+        item.ReceiptNumber,
+        item.AttachmentId,
+        item.Description
+    };
 
     private static void EnsurePositive(decimal amount)
     {

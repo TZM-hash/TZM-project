@@ -1,97 +1,79 @@
-using System.Security.Claims;
+using EngineeringManager.Application.EmployeeAnnualLedger;
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Web.Pages.Employees;
 
 [Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly)]
-public sealed class IndexModel(IEmployeeService employeeService) : PageModel
+public sealed class IndexModel(
+    IEmployeeService employeeService,
+    IBusinessYearService? businessYearService = null,
+    IEmployeeAnnualLedgerService? annualLedgerService = null) : PageModel
 {
     public IReadOnlyList<EmployeeDto> Employees { get; private set; } = [];
+    public IReadOnlyDictionary<Guid, EmployeeAnnualLedgerSummary> AnnualSummaries { get; private set; } = new Dictionary<Guid, EmployeeAnnualLedgerSummary>();
+    public IReadOnlyList<BusinessYearDto> BusinessYears { get; private set; } = [];
+    public Guid? CurrentBusinessYearId { get; private set; }
+    public decimal CurrentYearPayableTotal => AnnualSummaries.Values.Sum(item => item.CurrentYearNewPayable);
+    public decimal CurrentYearPaidTotal => AnnualSummaries.Values.Sum(item => item.ReceivedAmount);
+    public decimal CurrentYearUnpaidTotal => CurrentYearPayableTotal - CurrentYearPaidTotal;
+    public int TotalCount { get; private set; }
+    public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
     public bool CanManage => PageContext?.HttpContext?.User?.IsInRole(SystemRoles.SystemAdministrator) == true
         || PageContext?.HttpContext?.User?.IsInRole(SystemRoles.ApplicationAdministrator) == true;
-    public bool QuickEditOpen { get; private set; }
+
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public EmployeeType? EmployeeType { get; set; }
-    [BindProperty] public QuickEditInput QuickEdit { get; set; } = new();
+    [BindProperty(SupportsGet = true)] public int PageNumber { get; set; } = 1;
+    [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 20;
 
-    public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadEmployeesAsync(cancellationToken);
-
-    public async Task<IActionResult> OnPostQuickEditAsync(CancellationToken cancellationToken)
+    public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        if (!CanManage) return Forbid();
-        try
+        PageSize = PageSize is 10 or 20 or 50 or 100 ? PageSize : 20;
+        PageNumber = Math.Max(1, PageNumber);
+        var all = await employeeService.ListAsync(Search, CanManage, cancellationToken);
+        all = EmployeeType.HasValue
+            ? all.Where(employee => employee.EmployeeType == EmployeeType.Value).ToArray()
+            : all;
+        TotalCount = all.Count;
+
+        if (businessYearService is not null && annualLedgerService is not null)
         {
-            var existing = await employeeService.GetAsync(QuickEdit.Id, cancellationToken);
-            await employeeService.UpdateAsync(
-                User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown",
-                new UpdateEmployeeRequest(
-                    QuickEdit.Id,
-                    QuickEdit.EmployeeNumber,
-                    QuickEdit.Name,
-                    QuickEdit.EmployeeType,
-                    QuickEdit.Phone,
-                    QuickEdit.IdentityNumber,
-                    QuickEdit.BankAccountNumber,
-                    QuickEdit.BankName,
-                    QuickEdit.HireDate,
-                    QuickEdit.LeaveDate,
-                    QuickEdit.PositionTitle,
-                    QuickEdit.DefaultLegalEntityId,
-                    QuickEdit.DefaultMonthlySalary,
-                    QuickEdit.DefaultDailyRate,
-                    QuickEdit.DefaultHourlyRate,
-                    QuickEdit.DefaultPieceworkRate,
-                    QuickEdit.IsActive,
-                    QuickEdit.ConcurrencyStamp,
-                    QuickEdit.Reason,
-                    existing?.Notes),
-                cancellationToken);
-            return RedirectToPage(new { search = Search, employeeType = EmployeeType });
+            BusinessYears = await businessYearService.ListAsync(cancellationToken);
+            var current = await businessYearService.GetByDateAsync(DateOnly.FromDateTime(DateTime.Today), cancellationToken)
+                ?? (BusinessYears.Count > 0 ? BusinessYears[0] : null);
+            if (current is not null)
+            {
+                CurrentBusinessYearId = current.Id;
+                var summaries = new Dictionary<Guid, EmployeeAnnualLedgerSummary>();
+                foreach (var employee in all)
+                {
+                    var ledger = await annualLedgerService.GetAnnualLedgerAsync(employee.Id, current.Id, cancellationToken);
+                    summaries[employee.Id] = ledger.Summary;
+                }
+
+                AnnualSummaries = summaries;
+            }
         }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
+
+        var skip = (PageNumber - 1) * PageSize;
+        Employees = all.Skip(skip).Take(PageSize).ToArray();
+        if (PageNumber > TotalPages)
         {
-            ModelState.AddModelError(string.Empty, exception.Message);
-            QuickEditOpen = true;
-            await LoadEmployeesAsync(cancellationToken);
-            return Page();
+            PageNumber = TotalPages;
+            Employees = all.Skip((PageNumber - 1) * PageSize).Take(PageSize).ToArray();
         }
     }
 
-    private async Task LoadEmployeesAsync(CancellationToken cancellationToken)
+    public string PageUrl(int page)
     {
-        var employees = await employeeService.ListAsync(Search, CanManage, cancellationToken);
-        Employees = EmployeeType.HasValue
-            ? employees.Where(employee => employee.EmployeeType == EmployeeType.Value).ToList()
-            : employees;
-    }
-
-    public sealed class QuickEditInput
-    {
-        public Guid Id { get; set; }
-        public string EmployeeNumber { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public EmployeeType EmployeeType { get; set; } = EmployeeType.Formal;
-        public string? Phone { get; set; }
-        public string? IdentityNumber { get; set; }
-        public string? BankAccountNumber { get; set; }
-        public string? BankName { get; set; }
-        public DateOnly? HireDate { get; set; }
-        public DateOnly? LeaveDate { get; set; }
-        public string? PositionTitle { get; set; }
-        public Guid? DefaultLegalEntityId { get; set; }
-        public decimal? DefaultMonthlySalary { get; set; }
-        public decimal? DefaultDailyRate { get; set; }
-        public decimal? DefaultHourlyRate { get; set; }
-        public decimal? DefaultPieceworkRate { get; set; }
-        public bool IsActive { get; set; } = true;
-        public Guid ConcurrencyStamp { get; set; }
-        public string Reason { get; set; } = "快捷编辑员工资料";
-        public string? Notes { get; set; }
+        var pairs = Request.Query.SelectMany(item => item.Value.Select(value => new KeyValuePair<string, string?>(item.Key, value)))
+            .Where(item => !string.Equals(item.Key, nameof(PageNumber), StringComparison.OrdinalIgnoreCase))
+            .Append(new KeyValuePair<string, string?>(nameof(PageNumber), page.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        return $"{Request.Path}{QueryString.Create(pairs)}";
     }
 }

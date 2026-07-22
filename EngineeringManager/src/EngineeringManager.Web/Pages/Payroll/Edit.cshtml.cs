@@ -23,6 +23,9 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
     public IReadOnlyList<SelectOption> Projects { get; private set; } = [];
     public IReadOnlyList<SelectOption> Companies { get; private set; } = [];
     public IReadOnlyList<AccountOption> Accounts { get; private set; } = [];
+    public IReadOnlyList<SelectOption> LaborPartners { get; private set; } = [];
+    public IEnumerable<AccountOption> CompanyAccounts => Accounts.Where(item => item.Type != FinancialAccountType.PersonalAdvance);
+    public IEnumerable<AccountOption> PersonalAdvanceAccounts => Accounts.Where(item => item.Type == FinancialAccountType.PersonalAdvance && item.OwnerEmployeeId.HasValue);
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
@@ -44,9 +47,9 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
                 existingAllocations = details.CrewAllocations.ToDictionary(item => item.CrewBusinessPartnerId);
             }
             var lines = Input.EmployeeLines.Where(item => item.Selected && item.Amount > 0m)
-                .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.Employee, item.PersonId, null, null, item.Amount, item.Notes))
+                .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.Employee, item.PersonId, null, null, item.Amount, item.Notes, item.PaymentCategory, item.WageCategory, item.LaborBusinessPartnerId, item.ProjectId))
                 .Concat(Input.CrewLines.Where(item => item.Selected && item.Amount > 0m)
-                    .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.CrewWorker, null, item.PersonId, item.CrewBusinessPartnerId, item.Amount, item.Notes)))
+                    .Select(item => new PayrollDisbursementLineRequest(item.PaymentId, PayrollRecipientType.CrewWorker, null, item.PersonId, item.CrewBusinessPartnerId, item.Amount, item.Notes, item.PaymentCategory, item.WageCategory, item.LaborBusinessPartnerId ?? item.CrewBusinessPartnerId, item.ProjectId)))
                 .ToArray();
             var crewAllocations = lines.Where(item => item.CrewBusinessPartnerId.HasValue).Select(item => item.CrewBusinessPartnerId!.Value).Distinct()
                 .Select(crewId => existingAllocations.TryGetValue(crewId, out var existing)
@@ -62,7 +65,7 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
                     Input.PaymentDate,
                     Input.ProjectId,
                     Input.LegalEntityId,
-                    Input.AccountId,
+                    Input.FundingSource == PayrollFundingSource.PersonalAdvance ? Input.PersonalAdvanceAccountId : Input.AccountId,
                     Input.ActualAmount,
                     Input.PaymentMethod,
                     Input.VoucherNumber,
@@ -71,7 +74,10 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
                     Input.ConcurrencyStamp,
                     Input.Reason,
                     lines,
-                    crewAllocations),
+                    crewAllocations,
+                    Input.DisbursementType,
+                    Input.FundingSource,
+                    Input.RepaysPersonalAdvanceAccountId),
                 cancellationToken);
             if (IsLocalReturnUrl(ReturnUrl)) return LocalRedirect(ReturnUrl!);
             return RedirectToPage(new { id = saved.Batch.Id });
@@ -95,7 +101,11 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
             Input.PaymentDate = details.Batch.PaymentDate;
             Input.ProjectId = details.Batch.ProjectId;
             Input.LegalEntityId = details.Batch.LegalEntityId;
-            Input.AccountId = details.Batch.AccountId;
+            Input.AccountId = details.Batch.FundingSource == PayrollFundingSource.CompanyAccount ? details.Batch.AccountId : null;
+            Input.DisbursementType = details.Batch.DisbursementType;
+            Input.FundingSource = details.Batch.FundingSource;
+            Input.PersonalAdvanceAccountId = details.Batch.FundingSource == PayrollFundingSource.PersonalAdvance ? details.Batch.AccountId : null;
+            Input.RepaysPersonalAdvanceAccountId = details.Batch.RepaysPersonalAdvanceAccountId;
             Input.ActualAmount = details.Batch.ActualAmount;
             Input.PaymentMethod = details.Batch.PaymentMethod;
             Input.VoucherNumber = details.Batch.VoucherNumber;
@@ -143,20 +153,39 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
     private static PersonLineInput MakeLine(Dictionary<(PayrollRecipientType, Guid, Guid?), PayrollDisbursementLineDto> existing, PayrollRecipientType type, Guid personId, string label, Guid? crewId, string? crewName = null)
     {
         existing.TryGetValue((type, personId, crewId), out var line);
-        return new PersonLineInput { PaymentId = line?.Id, PersonId = personId, CrewBusinessPartnerId = crewId, CrewName = crewName, Label = label, Selected = line is not null, Amount = line?.Amount ?? 0m, Notes = line?.Notes };
+        return new PersonLineInput
+        {
+            PaymentId = line?.Id,
+            PersonId = personId,
+            CrewBusinessPartnerId = crewId,
+            CrewName = crewName,
+            Label = label,
+            Selected = line is not null,
+            Amount = line?.Amount ?? 0m,
+            Notes = line?.Notes,
+            PaymentCategory = line?.PaymentCategory ?? PayrollPaymentCategory.Wage,
+            WageCategory = line?.WageCategory ?? (crewId.HasValue ? EmployeeWageCategory.MigrantWorkerWage : EmployeeWageCategory.SocialSecurityWage),
+            LaborBusinessPartnerId = line?.LaborBusinessPartnerId,
+            ProjectId = line?.ProjectId
+        };
     }
 
     private async Task LoadOptionsAsync(CancellationToken cancellationToken)
     {
         Projects = await db.Projects.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.ProjectNumber).Select(item => new SelectOption(item.Id, item.ProjectNumber + " · " + item.Name)).ToListAsync(cancellationToken);
         Companies = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Code).Select(item => new SelectOption(item.Id, item.ShortName)).ToListAsync(cancellationToken);
-        Accounts = await db.FinancialAccounts.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.AccountName).Select(item => new AccountOption(item.Id, item.LegalEntityId, item.AccountName)).ToListAsync(cancellationToken);
+        Accounts = await db.FinancialAccounts.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.AccountName).Select(item => new AccountOption(item.Id, item.LegalEntityId, item.AccountName, item.AccountType, item.OwnerName, item.OwnerEmployeeId)).ToListAsync(cancellationToken);
+        LaborPartners = await db.BusinessPartners.AsNoTracking()
+            .Where(item => item.IsActive && item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew))
+            .OrderBy(item => item.Name)
+            .Select(item => new SelectOption(item.Id, item.Name))
+            .ToListAsync(cancellationToken);
     }
 
     private static bool IsLocalReturnUrl(string? value) => !string.IsNullOrWhiteSpace(value) && value.StartsWith('/') && !value.StartsWith("//", StringComparison.Ordinal);
 
     public sealed record SelectOption(Guid Id, string Label);
-    public sealed record AccountOption(Guid Id, Guid LegalEntityId, string Label);
+    public sealed record AccountOption(Guid Id, Guid LegalEntityId, string Label, FinancialAccountType Type, string? OwnerName, Guid? OwnerEmployeeId);
     public sealed class BatchInput
     {
         public string BatchNumber { get; set; } = string.Empty;
@@ -165,11 +194,15 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
         public Guid? ProjectId { get; set; }
         public Guid? LegalEntityId { get; set; }
         public Guid? AccountId { get; set; }
+        public Guid? PersonalAdvanceAccountId { get; set; }
         public decimal ActualAmount { get; set; }
         public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.BankTransfer;
         public string? VoucherNumber { get; set; }
         public PayrollBatchStatus Status { get; set; }
         public string? Notes { get; set; }
+        public PayrollDisbursementType DisbursementType { get; set; } = PayrollDisbursementType.Wage;
+        public PayrollFundingSource FundingSource { get; set; } = PayrollFundingSource.CompanyAccount;
+        public Guid? RepaysPersonalAdvanceAccountId { get; set; }
         public Guid? ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = string.Empty;
         public List<PersonLineInput> EmployeeLines { get; set; } = [];
@@ -186,5 +219,9 @@ public sealed class EditModel(IPayrollService payrollService, ApplicationDbConte
         public bool Selected { get; set; }
         public decimal Amount { get; set; }
         public string? Notes { get; set; }
+        public PayrollPaymentCategory PaymentCategory { get; set; } = PayrollPaymentCategory.Wage;
+        public EmployeeWageCategory? WageCategory { get; set; } = EmployeeWageCategory.SocialSecurityWage;
+        public Guid? LaborBusinessPartnerId { get; set; }
+        public Guid? ProjectId { get; set; }
     }
 }

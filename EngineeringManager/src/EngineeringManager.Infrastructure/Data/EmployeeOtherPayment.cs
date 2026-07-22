@@ -22,6 +22,8 @@ public sealed class EmployeeOtherPayment
     public DateOnly EntryDate { get; set; }
     public decimal Amount { get; set; }
     public PaymentMethod? PaymentMethod { get; set; }
+    public Guid? AttachmentId { get; set; }
+    public Attachment? Attachment { get; set; }
     public string? Description { get; set; }
     public Guid? AccountTransactionId { get; set; }
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();

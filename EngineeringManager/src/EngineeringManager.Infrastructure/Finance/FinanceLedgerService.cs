@@ -22,6 +22,25 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             throw new InvalidOperationException($"当前签约公司下的账户名称已存在：{accountName}");
         }
 
+        var ownerName = NormalizeOptional(request.OwnerName);
+        Guid? ownerEmployeeId = null;
+        if (request.AccountType == FinancialAccountType.PersonalAdvance)
+        {
+            if (ownerName is null)
+            {
+                throw new ArgumentException("个人垫付账户必须填写实际付款人。", nameof(request));
+            }
+
+            if (request.OwnerEmployeeId.HasValue && !await db.Employees.AnyAsync(
+                    item => item.Id == request.OwnerEmployeeId.Value && item.IsActive,
+                    cancellationToken))
+            {
+                throw new InvalidOperationException("关联员工不存在或已停用。");
+            }
+
+            ownerEmployeeId = request.OwnerEmployeeId;
+        }
+
         var account = new FinancialAccount
         {
             LegalEntityId = request.LegalEntityId,
@@ -30,7 +49,9 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             BankName = NormalizeOptional(request.BankName),
             AccountType = request.AccountType,
             OpeningBalance = request.OpeningBalance,
-            Notes = NormalizeOptional(request.Notes)
+            Notes = NormalizeOptional(request.Notes),
+            OwnerName = ownerName,
+            OwnerEmployeeId = ownerEmployeeId
         };
         db.FinancialAccounts.Add(account);
         await db.SaveChangesAsync(cancellationToken);
@@ -49,13 +70,17 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         var movements = await db.AccountTransactions
             .AsNoTracking()
             .Where(item => accountIds.Contains(item.AccountId))
-            .GroupBy(item => new { item.AccountId, item.Direction })
-            .Select(group => new { group.Key.AccountId, group.Key.Direction, Amount = group.Sum(item => item.Amount) })
+            .GroupBy(item => new { item.AccountId, item.Direction, item.SourceType })
+            .Select(group => new { group.Key.AccountId, group.Key.Direction, group.Key.SourceType, Amount = group.Sum(item => item.Amount) })
             .ToListAsync(cancellationToken);
         return accounts.Select(account =>
         {
             var inflow = movements.Where(item => item.AccountId == account.Id && item.Direction == AccountTransactionDirection.Inflow).Sum(item => item.Amount);
             var outflow = movements.Where(item => item.AccountId == account.Id && item.Direction == AccountTransactionDirection.Outflow).Sum(item => item.Amount);
+            var advanceOutflow = movements.Where(item => item.AccountId == account.Id && item.Direction == AccountTransactionDirection.Outflow && item.SourceType == AccountTransactionSourceType.PayrollPayment).Sum(item => item.Amount);
+            var advanceReversal = movements.Where(item => item.AccountId == account.Id && item.Direction == AccountTransactionDirection.Inflow && item.SourceType == AccountTransactionSourceType.PayrollPaymentReversal).Sum(item => item.Amount);
+            var advancedAmount = Math.Max(0m, advanceOutflow - advanceReversal);
+            var repaidAmount = movements.Where(item => item.AccountId == account.Id && item.Direction == AccountTransactionDirection.Inflow && item.SourceType == AccountTransactionSourceType.PersonalAdvanceRepayment).Sum(item => item.Amount);
             return new FinancialAccountDto(
                 account.Id,
                 account.LegalEntityId,
@@ -67,7 +92,12 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
                 account.OpeningBalance,
                 account.OpeningBalance + inflow - outflow,
                 account.IsActive,
-                account.Notes);
+                account.Notes,
+                account.OwnerName,
+                account.OwnerEmployeeId,
+                account.AccountType == FinancialAccountType.PersonalAdvance ? advancedAmount : 0m,
+                account.AccountType == FinancialAccountType.PersonalAdvance ? repaidAmount : 0m,
+                account.AccountType == FinancialAccountType.PersonalAdvance ? Math.Max(0m, advancedAmount - repaidAmount) : 0m);
         }).ToArray();
     }
 

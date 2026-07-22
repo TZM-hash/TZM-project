@@ -1,13 +1,9 @@
 using System.Reflection;
-using System.Security.Claims;
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Employees;
-using EngineeringManager.Domain.Security;
 using EngineeringManager.Web.Pages.Employees;
 using FluentAssertions;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace EngineeringManager.Tests.Web;
 
@@ -23,6 +19,14 @@ public sealed class EmployeeIndexPageTests
     public void SearchFilterIsAnOptionalGetBinding()
     {
         AssertOptionalGetBinding("Search", typeof(string));
+    }
+
+    [Theory]
+    [InlineData("PageNumber", typeof(int))]
+    [InlineData("PageSize", typeof(int))]
+    public void PaginationInputsAreGetBindings(string propertyName, Type propertyType)
+    {
+        AssertOptionalGetBinding(propertyName, propertyType);
     }
 
     [Theory]
@@ -63,59 +67,6 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Fact]
-    public async Task SuccessfulQuickEditRedirectPreservesEmployeeType()
-    {
-        var service = new RecordingEmployeeService();
-        var model = CreateAdministratorModel(service);
-        model.EmployeeType = EmployeeType.Temporary;
-        model.QuickEdit = CreateQuickEdit(service.TemporaryEmployee);
-
-        var result = await model.OnPostQuickEditAsync(CancellationToken.None);
-
-        service.LastUpdate.Should().NotBeNull();
-        var redirect = result.Should().BeOfType<RedirectToPageResult>().Subject;
-        redirect.RouteValues.Should().ContainKey("employeeType").WhoseValue.Should().Be(EmployeeType.Temporary);
-    }
-
-    [Fact]
-    public async Task SuccessfulQuickEditRedirectPreservesCombinedFilters()
-    {
-        var service = new RecordingEmployeeService();
-        var model = CreateAdministratorModel(service);
-        model.Search = "MATCH";
-        model.EmployeeType = EmployeeType.Temporary;
-        model.QuickEdit = CreateQuickEdit(service.TemporaryEmployee);
-
-        var result = await model.OnPostQuickEditAsync(CancellationToken.None);
-
-        var redirect = result.Should().BeOfType<RedirectToPageResult>().Subject;
-        redirect.RouteValues.Should().ContainKey("employeeType").WhoseValue.Should().Be(EmployeeType.Temporary);
-        redirect.RouteValues.Should().ContainKey("search").WhoseValue.Should().Be("MATCH");
-    }
-
-    [Fact]
-    public async Task QuickEditValidationErrorReloadPreservesCombinedFilters()
-    {
-        var service = new RecordingEmployeeService
-        {
-            UpdateException = new ArgumentException("Employee validation failed.")
-        };
-        var model = CreateAdministratorModel(service);
-        model.Search = "MATCH";
-        model.EmployeeType = EmployeeType.Temporary;
-        model.QuickEdit = CreateQuickEdit(service.TemporaryEmployee);
-
-        var result = await model.OnPostQuickEditAsync(CancellationToken.None);
-
-        result.Should().BeOfType<PageResult>();
-        model.QuickEditOpen.Should().BeTrue();
-        model.ModelState.IsValid.Should().BeFalse();
-        service.LastSearch.Should().Be("MATCH");
-        model.Employees.Should().ContainSingle()
-            .Which.EmployeeType.Should().Be(EmployeeType.Temporary);
-    }
-
-    [Fact]
     public void EmployeeIndexOffersAllEmployeeTypeLabelsInSharedInlineFilter()
     {
         var razor = ReadPage("Employees", "Index.cshtml");
@@ -130,12 +81,22 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Fact]
-    public void EmployeeQuickEditPostCarriesCurrentFilters()
+    public void EmployeeListUsesProjectStyleWorkspaceWithoutRowQuickEdit()
     {
         var razor = ReadPage("Employees", "Index.cshtml");
 
-        razor.Should().Contain("name=\"Search\" value=\"@Model.Search\"")
-            .And.Contain("name=\"EmployeeType\" value=\"@Model.EmployeeType\"");
+        razor.Should().Contain("人员经营台账")
+            .And.Contain("年度总账")
+            .And.Contain("证书总览")
+            .And.Contain("当前业务年度应付总额")
+            .And.Contain("data-column-key=\"current_company\"")
+            .And.Contain("data-column-key=\"payable\"")
+            .And.Contain("data-column-key=\"paid\"")
+            .And.Contain("data-column-key=\"unpaid\"")
+            .And.Contain(">查看</a>")
+            .And.Contain("详细编辑")
+            .And.NotContain("data-inline-cell-edit")
+            .And.NotContain("QuickEdit");
     }
 
     private static void AssertOptionalGetBinding(string propertyName, Type propertyType)
@@ -148,34 +109,6 @@ public sealed class EmployeeIndexPageTests
         binding.Should().NotBeNull();
         binding!.SupportsGet.Should().BeTrue();
     }
-
-    private static IndexModel CreateAdministratorModel(RecordingEmployeeService service)
-    {
-        var identity = new ClaimsIdentity("EmployeeIndexTest", ClaimTypes.Name, ClaimTypes.Role);
-        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, "employee-index-test-user"));
-        identity.AddClaim(new Claim(ClaimTypes.Role, SystemRoles.SystemAdministrator));
-        return new IndexModel(service)
-        {
-            PageContext = new PageContext
-            {
-                HttpContext = new DefaultHttpContext
-                {
-                    User = new ClaimsPrincipal(identity)
-                }
-            }
-        };
-    }
-
-    private static IndexModel.QuickEditInput CreateQuickEdit(EmployeeDto employee) => new()
-    {
-        Id = employee.Id,
-        EmployeeNumber = employee.EmployeeNumber,
-        Name = employee.Name,
-        EmployeeType = employee.EmployeeType,
-        IsActive = employee.IsActive,
-        ConcurrencyStamp = employee.ConcurrencyStamp,
-        Reason = "Test filtered quick edit"
-    };
 
     private static string ReadPage(params string[] parts)
     {
@@ -201,8 +134,6 @@ public sealed class EmployeeIndexPageTests
 
         public EmployeeDto TemporaryEmployee => Items.Single(employee => employee.EmployeeType == EmployeeType.Temporary);
         public string? LastSearch { get; private set; }
-        public UpdateEmployeeRequest? LastUpdate { get; private set; }
-        public Exception? UpdateException { get; init; }
 
         public Task<IReadOnlyList<EmployeeDto>> ListAsync(string? search, CancellationToken cancellationToken)
         {
@@ -216,15 +147,7 @@ public sealed class EmployeeIndexPageTests
         }
 
         public Task<EmployeeDto> UpdateAsync(string userId, UpdateEmployeeRequest request, CancellationToken cancellationToken)
-        {
-            if (UpdateException is not null)
-            {
-                return Task.FromException<EmployeeDto>(UpdateException);
-            }
-
-            LastUpdate = request;
-            return Task.FromResult(TemporaryEmployee);
-        }
+            => Task.FromResult(TemporaryEmployee);
 
         public Task<EmployeeDto?> GetAsync(Guid employeeId, CancellationToken cancellationToken) =>
             Task.FromResult(Items.SingleOrDefault(employee => employee.Id == employeeId));

@@ -13,7 +13,7 @@ public sealed class ProjectQuantityInlineEntryPageTests
             .And.Contain("asp-page-handler=\"CreateQuantity\"")
             .And.Contain("asp-page-handler=\"QuantityAttachment\"")
             .And.Contain("asp-page-handler=\"DeleteQuantityAttachment\"")
-            .And.Contain("<th class=\"quantity-upload-column\">上传</th><th class=\"quantity-attachment-column\">附件</th><th class=\"quantity-notes-column\">备注</th>")
+            .And.Contain("<th class=\"quantity-attachment-column\">附件</th><th class=\"quantity-notes-column\">备注</th>")
             .And.Contain("enctype=\"multipart/form-data\"")
             .And.NotContain("/Projects/Contracts/Edit");
     }
@@ -56,9 +56,9 @@ public sealed class ProjectQuantityInlineEntryPageTests
         var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml.cs");
         var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
 
-        page.Should().Contain("class=\"quantity-attachment-tools\"")
-            .And.Contain("class=\"quantity-attachment-content\"")
-            .And.Contain("quantity-attachment-preview-link")
+        page.Should().Contain("class=\"quantity-attachment-content\"")
+            .And.Contain("attachment-file-link")
+            .And.Contain("data-attachment-preview-trigger")
             .And.Contain("id=\"quantity-batch-form\"")
             .And.Contain("asp-page-handler=\"Quantities\"")
             .And.Contain(">保存修改</button>")
@@ -103,7 +103,7 @@ public sealed class ProjectQuantityInlineEntryPageTests
     {
         var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
 
-        styles.Should().Contain(".quantity-inline-table { width: 100%; min-width: 82rem; table-layout: fixed; }")
+        styles.Should().Contain(".quantity-inline-table { width: 100%; min-width: 74rem; table-layout: fixed; }")
             .And.Contain(".quantity-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")
             .And.Contain(".quantity-notes-edit-trigger");
     }
@@ -151,8 +151,8 @@ public sealed class ProjectQuantityInlineEntryPageTests
 
         page.Should().Contain("data-auto-upload-picker")
             .And.Contain("data-auto-upload-input hidden")
-            .And.Contain("type=\"button\" data-auto-upload-trigger>上传附件</button>")
-            .And.NotContain("type=\"submit\">上传附件</button>");
+            .And.Contain("type=\"button\" data-auto-upload-trigger>上传</button>")
+            .And.NotContain("type=\"submit\">上传</button>");
         script.Should().Contain("document.querySelectorAll(\"[data-auto-upload-picker]\")")
             .And.Contain("trigger.addEventListener(\"click\", () => input.click())")
             .And.Contain("input.addEventListener(\"change\", () =>")
@@ -166,15 +166,15 @@ public sealed class ProjectQuantityInlineEntryPageTests
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
         var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
 
-        page.Should().Contain("<th class=\"quantity-upload-column\">上传</th>")
+        page.Should().NotContain("<th class=\"quantity-upload-column\">上传</th>")
+            .And.NotContain("<td class=\"quantity-upload-column\">")
             .And.Contain("<th class=\"quantity-attachment-column\">附件</th>")
-            .And.Contain("<td class=\"quantity-upload-column\">")
             .And.Contain("<td class=\"quantity-attachment-cell quantity-attachment-column\">");
-        styles.Should().Contain(".quantity-upload-column { width: 4.5rem;")
+        styles.Should().NotContain(".quantity-upload-column")
             .And.Contain(".quantity-attachment-column { width: 4.5rem;")
             .And.Contain(".quantity-notes-column { width: auto;")
             .And.Contain(".quantity-row-upload { display: flex;")
-            .And.Contain(".quantity-inline-table .quantity-upload-column, .quantity-inline-table .quantity-attachment-column { padding-inline: .25rem;")
+            .And.Contain(".quantity-inline-table .quantity-attachment-column { padding-inline: .25rem;")
             .And.Contain(".quantity-attachment-content { min-height: 2rem; flex-direction: column;")
             .And.Contain(".quantity-attachment-cell { min-width: 4.5rem;")
             .And.Contain("min-width: 3.75rem")
@@ -195,8 +195,40 @@ public sealed class ProjectQuantityInlineEntryPageTests
         model.Should().NotContain("QuantityAttachmentDescription")
             .And.Contain("BuildQuantityUploadAsync(Guid projectId, Guid lineItemId, IFormFile file, CancellationToken cancellationToken)");
         styles.Should().Contain(".quantity-row-upload { display: flex;")
-            .And.Contain(".quantity-notes-column { width: auto; min-width: 24rem;")
+            .And.Contain(".quantity-notes-column { width: auto; min-width: 28rem;")
             .And.NotContain(".table-empty-value");
+    }
+
+    [Fact]
+    public void AllProjectRecordAttachmentsUseFilenamePreviewDialogActions()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "attachment-preview.js");
+
+        page.Should().Contain("data-attachment-preview-trigger")
+            .And.Contain("data-attachment-preview-dialog")
+            .And.Contain("data-attachment-preview-replace")
+            .And.Contain("data-attachment-preview-delete")
+            .And.Contain("data-attachment-preview-download")
+            .And.Contain("data-attachment-preview-close")
+            .And.Contain(">上传</button>")
+            .And.NotContain("<th class=\"quantity-upload-column\">上传</th>")
+            .And.NotContain("<td class=\"quantity-upload-column\">");
+        script.Should().Contain("showModal")
+            .And.Contain("contentType.startsWith(\"image/\")")
+            .And.Contain("application/pdf")
+            .And.Contain("attachmentReplaceFormId")
+            .And.Contain("attachmentDeleteFormId");
+    }
+
+    [Fact]
+    public void AttachmentDownloadHandlersSupportInlinePreviewAndExplicitDownload()
+    {
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml.cs");
+
+        model.Should().Contain("bool download")
+            .And.Contain("ContentType, file.OriginalFileName")
+            .And.Contain("File(file.Content, file.ContentType)");
     }
 
     [Fact]

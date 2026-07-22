@@ -1,6 +1,6 @@
 namespace EngineeringManager.Domain.Finance;
 
-public enum FinancialAccountType { Bank = 1, Cash = 2, Other = 3 }
+public enum FinancialAccountType { Bank = 1, Cash = 2, Other = 3, PersonalAdvance = 4 }
 public enum ReceivableSourceType { ContractMilestone = 1, StageSettlement = 2, Manual = 3 }
 public enum PayableSourceType { Settlement = 1, Contract = 2, Manual = 3 }
 public enum FinancialAdjustmentType { Refund = 1, Reversal = 2, NegativeAdjustment = 3 }
@@ -23,5 +23,6 @@ public enum AccountTransactionSourceType
     EmployeeAdvanceRepayment = 11,
     EmployeeOtherPayment = 12,
     EmployeeReceipt = 13,
-    PayrollPaymentReversal = 14
+    PayrollPaymentReversal = 14,
+    PersonalAdvanceRepayment = 15
 }

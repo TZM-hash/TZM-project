@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
@@ -109,6 +110,80 @@ public sealed class FinanceLedgerServiceTests
 
         var account = (await fixture.Service.ListAccountsAsync(CancellationToken.None)).Single(item => item.Id == accountId);
         account.Notes.Should().Be("账户备注");
+    }
+
+    [Fact]
+    public async Task PersonalAdvanceAccountRequiresOwnerAndReturnsAdvanceBreakdown()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        var missingOwner = () => fixture.Service.CreateAccountAsync(
+            new CreateFinancialAccountRequest(
+                fixture.LegalEntity.Id,
+                "无所有人垫付账户",
+                null,
+                null,
+                FinancialAccountType.PersonalAdvance,
+                0m),
+            CancellationToken.None);
+
+        await missingOwner.Should().ThrowAsync<ArgumentException>().WithMessage("*实际付款人*");
+
+        var employee = new Employee
+        {
+            EmployeeNumber = "FIN-EMP-01",
+            Name = "张三",
+            EmployeeType = EmployeeType.Formal
+        };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var accountId = await fixture.Service.CreateAccountAsync(
+            new CreateFinancialAccountRequest(
+                fixture.LegalEntity.Id,
+                "张三个人垫付",
+                "62220000",
+                "个人账户",
+                FinancialAccountType.PersonalAdvance,
+                0m,
+                "测试账户",
+                "张三",
+                employee.Id),
+            CancellationToken.None);
+        fixture.Db.AccountTransactions.AddRange(
+            new AccountTransaction
+            {
+                AccountId = accountId,
+                TransactionDate = new DateOnly(2026, 7, 1),
+                Direction = AccountTransactionDirection.Outflow,
+                SourceType = AccountTransactionSourceType.PayrollPayment,
+                SourceId = Guid.NewGuid(),
+                Amount = 500m
+            },
+            new AccountTransaction
+            {
+                AccountId = accountId,
+                TransactionDate = new DateOnly(2026, 7, 2),
+                Direction = AccountTransactionDirection.Inflow,
+                SourceType = AccountTransactionSourceType.PersonalAdvanceRepayment,
+                SourceId = Guid.NewGuid(),
+                Amount = 200m
+            },
+            new AccountTransaction
+            {
+                AccountId = accountId,
+                TransactionDate = new DateOnly(2026, 7, 3),
+                Direction = AccountTransactionDirection.Inflow,
+                SourceType = AccountTransactionSourceType.PayrollPaymentReversal,
+                SourceId = Guid.NewGuid(),
+                Amount = 100m
+            });
+        await fixture.Db.SaveChangesAsync();
+
+        var account = (await fixture.Service.ListAccountsAsync(CancellationToken.None)).Single(item => item.Id == accountId);
+        account.OwnerName.Should().Be("张三");
+        account.OwnerEmployeeId.Should().Be(employee.Id);
+        account.AdvancedAmount.Should().Be(400m);
+        account.RepaidAmount.Should().Be(200m);
+        account.OutstandingAmount.Should().Be(200m);
     }
 
     [Fact]

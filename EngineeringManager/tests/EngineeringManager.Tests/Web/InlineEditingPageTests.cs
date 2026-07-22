@@ -13,14 +13,14 @@ public sealed class InlineEditingPageTests
             projectDetails,
             ReadPage("Companies", "Details.cshtml"),
             ReadPage("Equipment", "Details.cshtml"),
-            ReadPage("Employees", "Index.cshtml"),
             ReadPage("Partners", "Index.cshtml")
         };
 
         pages.Should().OnlyContain(page => page.Contains("data-inline-cell-edit", StringComparison.Ordinal));
         pages.Skip(1).Should().OnlyContain(page => !page.Contains("<dialog", StringComparison.OrdinalIgnoreCase));
         projectDetails.Should().Contain("<dialog class=\"workbench-dialog quantity-notes-dialog\"");
-        (projectDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(1);
+        projectDetails.Should().Contain("data-attachment-preview-dialog");
+        (projectDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(2);
         pages.Should().OnlyContain(page => !page.Contains("data-quick-edit-dialog", StringComparison.Ordinal));
     }
 
@@ -78,7 +78,7 @@ public sealed class InlineEditingPageTests
         var employees = ReadPage("Employees", "Index.cshtml");
         var partners = ReadPage("Partners", "Index.cshtml");
 
-        employees.Should().Contain("data-inline-edit=\"employee-@item.Id\"")
+        employees.Should().NotContain("data-inline-cell-edit")
             .And.NotContain("data-inline-edit=\"employee-list\"");
         partners.Should().Contain("data-inline-edit=\"partner-@partner.Id\"")
             .And.NotContain("data-inline-edit=\"partner-list\"");

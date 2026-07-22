@@ -57,7 +57,7 @@ public sealed class EmployeePayrollAuthorizationTests
     }
 
     [Fact]
-    public async Task AdministratorSeesEmployeeQuickEditWhileFinanceDoesNot()
+    public async Task EmployeeListNeverExposesRowQuickEditAndOnlyAdministratorsSeeCreateAction()
     {
         await using var administratorFactory = CreateFactory("ApplicationAdministrator");
         using var administratorClient = administratorFactory.CreateClient();
@@ -67,8 +67,9 @@ public sealed class EmployeePayrollAuthorizationTests
         using var financeClient = financeFactory.CreateClient();
         var financeHtml = System.Net.WebUtility.HtmlDecode(await financeClient.GetStringAsync("/Employees"));
 
-        administratorHtml.Should().Contain("快捷编辑员工");
-        administratorHtml.Should().NotContain("data-quick-edit-dialog");
+        administratorHtml.Should().Contain("新增员工");
+        administratorHtml.Should().NotContain("快捷编辑员工");
+        financeHtml.Should().NotContain("新增员工");
         financeHtml.Should().NotContain("快捷编辑员工");
     }
 
@@ -147,9 +148,13 @@ public sealed class EmployeePayrollAuthorizationTests
     private sealed class FakeEmployeeLedgerService : IEmployeeLedgerService
     {
         public Task<Guid> CreateExpenseAsync(CreateExpenseRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<EmployeeExpenseDto>> GetExpensesAsync(Guid employeeId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<EmployeeExpenseDto>>([]);
+        public Task<EmployeeExpenseDto> UpdateExpenseAsync(UpdateExpenseRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> RecordExpensePaymentAsync(RecordExpensePaymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> RecordAdvanceAsync(RecordEmployeeAdvanceRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> CreateOtherPayableAsync(CreateEmployeeOtherPayableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<EmployeeOtherPayableDto>> GetOtherPayablesAsync(Guid employeeId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<EmployeeOtherPayableDto>>([]);
+        public Task<EmployeeOtherPayableDto> UpdateOtherPayableAsync(UpdateEmployeeOtherPayableRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> RecordOtherPaymentAsync(RecordEmployeeOtherPaymentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeLedgerSummaryDto> GetEmployeeSummaryAsync(Guid employeeId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeLedgerOverviewDto> GetOverviewAsync(CancellationToken cancellationToken) => Task.FromResult(new EmployeeLedgerOverviewDto(0m, 0m, 0m, 0m, 0m, 0m, 0m, false, []));
@@ -165,6 +170,8 @@ public sealed class EmployeePayrollAuthorizationTests
     private sealed class FakeEmployeeAnnualLedgerService : IEmployeeAnnualLedgerService
     {
         public Task<EmployeeWageEntryDto> AddWageEntryAsync(CreateEmployeeWageEntryRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<EmployeeWageEntryDto>> GetWageEntriesAsync(Guid employeeId, Guid businessYearId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<EmployeeWageEntryDto>>([]);
+        public Task<EmployeeWageEntryDto> UpdateWageEntryAsync(UpdateEmployeeWageEntryRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeReceiptDto> RecordReceiptAsync(RecordEmployeeReceiptRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeFinancialAdjustmentDto> AddAdjustmentAsync(CreateEmployeeFinancialAdjustmentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeFinancialAdjustmentDto> ReverseAdjustmentAsync(Guid adjustmentId, DateOnly reversalDate, string notes, CancellationToken cancellationToken) => throw new NotSupportedException();

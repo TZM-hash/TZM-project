@@ -58,6 +58,9 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         batch.ActualAmount = request.ActualAmount;
         batch.PaymentMethod = request.PaymentMethod;
         batch.VoucherNumber = NormalizeOptional(request.VoucherNumber);
+        batch.DisbursementType = request.DisbursementType;
+        batch.FundingSource = request.FundingSource;
+        batch.RepaysPersonalAdvanceAccountId = request.RepaysPersonalAdvanceAccountId;
         batch.Status = request.Status;
         batch.Notes = NormalizeOptional(request.Notes);
         batch.IsUnifiedDisbursement = true;
@@ -77,6 +80,7 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         ApplyDisbursementLines(batch, request.Lines, resolvedLines);
         await ApplyCrewAllocationsAsync(batch, request.CrewAllocations, summary, cancellationToken);
         await ApplyBatchTransactionAsync(batch, cancellationToken);
+        await SyncPersonalAdvanceEffectsAsync(batch, cancellationToken);
         db.AuditLogs.Add(new AuditLog
         {
             UserId = userId,
@@ -457,6 +461,75 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         {
             throw new InvalidOperationException("付款账户不存在、已停用或不属于发放公司。");
         }
+
+        if (request.FundingSource == PayrollFundingSource.PersonalAdvance)
+        {
+            if (!request.AccountId.HasValue || !await db.FinancialAccounts.AnyAsync(item =>
+                    item.Id == request.AccountId &&
+                    item.AccountType == FinancialAccountType.PersonalAdvance &&
+                    item.OwnerEmployeeId.HasValue &&
+                    item.IsActive,
+                    cancellationToken))
+            {
+                throw new InvalidOperationException("个人垫付必须选择有员工所有人的个人垫付账户。");
+            }
+        }
+        else if (request.AccountId.HasValue && await db.FinancialAccounts.AnyAsync(item => item.Id == request.AccountId && item.AccountType == FinancialAccountType.PersonalAdvance, cancellationToken))
+        {
+            throw new InvalidOperationException("公司账户资金不能选择个人垫付账户。");
+        }
+
+        if (request.RepaysPersonalAdvanceAccountId.HasValue)
+        {
+            if (request.DisbursementType != PayrollDisbursementType.Other || request.FundingSource != PayrollFundingSource.CompanyAccount)
+            {
+                throw new InvalidOperationException("个人垫付归还必须是公司账户的其他付款批次。");
+            }
+
+            if (!await db.FinancialAccounts.AnyAsync(item =>
+                    item.Id == request.RepaysPersonalAdvanceAccountId &&
+                    item.AccountType == FinancialAccountType.PersonalAdvance &&
+                    item.OwnerEmployeeId.HasValue &&
+                    item.IsActive,
+                    cancellationToken))
+            {
+                throw new InvalidOperationException("归还目标不是有效的个人垫付账户。");
+            }
+        }
+
+        foreach (var line in request.Lines)
+        {
+            if (line.PaymentCategory != (request.DisbursementType == PayrollDisbursementType.Other ? PayrollPaymentCategory.Other : PayrollPaymentCategory.Wage))
+            {
+                throw new InvalidOperationException("付款行类别必须与工资批次类别一致。");
+            }
+
+            if (line.PaymentCategory == PayrollPaymentCategory.Wage && line.WageCategory == EmployeeWageCategory.MigrantWorkerWage)
+            {
+                if (!line.LaborBusinessPartnerId.HasValue || !await db.BusinessPartnerRoles.AnyAsync(item =>
+                        item.BusinessPartnerId == line.LaborBusinessPartnerId &&
+                        item.RoleType == BusinessPartnerRoleType.ConstructionCrew &&
+                        item.Partner.IsActive,
+                        cancellationToken))
+                {
+                    throw new InvalidOperationException("民工工资必须关联劳务公司。");
+                }
+            }
+
+            if (line.LaborBusinessPartnerId.HasValue && !await db.BusinessPartnerRoles.AnyAsync(item =>
+                    item.BusinessPartnerId == line.LaborBusinessPartnerId &&
+                    item.RoleType == BusinessPartnerRoleType.ConstructionCrew &&
+                    item.Partner.IsActive,
+                    cancellationToken))
+            {
+                throw new InvalidOperationException("劳务公司不存在、已停用或没有施工班组角色。");
+            }
+
+            if (line.ProjectId.HasValue && !await db.Projects.AnyAsync(item => item.Id == line.ProjectId && item.IsActive, cancellationToken))
+            {
+                throw new InvalidOperationException("付款行项目不存在或已停用。");
+            }
+        }
     }
 
     private async Task<IReadOnlyList<ResolvedDisbursementLine>> ResolveDisbursementLinesAsync(
@@ -527,6 +600,10 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             line.EmployeeId = request.EmployeeId;
             line.ConstructionWorkerId = request.ConstructionWorkerId;
             line.CrewBusinessPartnerId = request.CrewBusinessPartnerId;
+            line.PaymentCategory = request.PaymentCategory;
+            line.WageCategory = request.WageCategory;
+            line.LaborBusinessPartnerId = request.LaborBusinessPartnerId;
+            line.ProjectId = request.ProjectId;
             line.Amount = request.Amount;
             line.PayeeType = request.RecipientType == PayrollRecipientType.Employee ? PayrollPayeeType.Employee : PayrollPayeeType.CrewLeader;
             line.PayeeName = data.Name;
@@ -645,14 +722,97 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         }
     }
 
+    private async Task SyncPersonalAdvanceEffectsAsync(PayrollBatch batch, CancellationToken cancellationToken)
+    {
+        var source = await db.EmployeeWageEntries.SingleOrDefaultAsync(item => item.SourcePersonalAdvanceBatchId == batch.Id, cancellationToken);
+        var shouldPost = batch.Status is PayrollBatchStatus.Confirmed or PayrollBatchStatus.Closed or PayrollBatchStatus.ModifiedPendingReview;
+        var personallyFunded = shouldPost && batch.FundingSource == PayrollFundingSource.PersonalAdvance && batch.ActualAmount > 0m;
+        if (personallyFunded)
+        {
+            if (!batch.AccountId.HasValue || !batch.PaymentDate.HasValue)
+            {
+                throw new InvalidOperationException("个人垫付批次必须填写账户和发放日期。");
+            }
+
+            var account = await db.FinancialAccounts.AsNoTracking().SingleOrDefaultAsync(item => item.Id == batch.AccountId.Value, cancellationToken)
+                ?? throw new InvalidOperationException("个人垫付账户不存在。");
+            if (!account.OwnerEmployeeId.HasValue)
+            {
+                throw new InvalidOperationException("个人垫付账户必须关联员工所有人。");
+            }
+
+            var businessYear = await db.BusinessYears.SingleOrDefaultAsync(item =>
+                    item.StartDate <= batch.PaymentDate.Value && item.EndDate >= batch.PaymentDate.Value,
+                    cancellationToken)
+                ?? throw new InvalidOperationException("个人垫付日期没有对应的业务年度。");
+            source ??= new EmployeeWageEntry { SourcePersonalAdvanceBatchId = batch.Id };
+            source.EmployeeId = account.OwnerEmployeeId.Value;
+            source.BusinessYearId = businessYear.Id;
+            source.StartDate = batch.PaymentDate.Value;
+            source.EndDate = batch.PaymentDate.Value;
+            source.EntryType = EmployeeWageEntryType.Other;
+            source.WageCategory = EmployeeWageCategory.SocialSecurityWage;
+            source.CalculationMethod = EmployeeWageCalculationMethod.FixedAmount;
+            source.Nature = PayrollItemNature.Earning;
+            source.AutomaticAmount = batch.ActualAmount;
+            source.FinalAmount = batch.ActualAmount;
+            source.LegalEntityId = batch.LegalEntityId;
+            source.ProjectId = batch.ProjectId;
+            source.IsSystemGenerated = true;
+            source.ExcludeFromWageCost = true;
+            source.Notes = $"个人垫付待归还：{account.OwnerName ?? "账户所有人"} · 批次 {batch.BatchNumber}";
+            source.ConcurrencyStamp = Guid.NewGuid();
+            if (db.Entry(source).State == EntityState.Detached)
+            {
+                db.EmployeeWageEntries.Add(source);
+            }
+        }
+        else if (source is not null)
+        {
+            source.AutomaticAmount = 0m;
+            source.FinalAmount = 0m;
+            source.Notes = $"个人垫付待归还已冲销：批次 {batch.BatchNumber}";
+            source.ConcurrencyStamp = Guid.NewGuid();
+        }
+
+        var repayment = await db.AccountTransactions.SingleOrDefaultAsync(item =>
+            item.SourceType == AccountTransactionSourceType.PersonalAdvanceRepayment && item.SourceId == batch.Id,
+            cancellationToken);
+        var shouldRepay = shouldPost && batch.DisbursementType == PayrollDisbursementType.Other && batch.FundingSource == PayrollFundingSource.CompanyAccount && batch.RepaysPersonalAdvanceAccountId.HasValue;
+        if (shouldRepay)
+        {
+            repayment ??= new AccountTransaction
+            {
+                SourceType = AccountTransactionSourceType.PersonalAdvanceRepayment,
+                SourceId = batch.Id,
+                Direction = AccountTransactionDirection.Inflow
+            };
+            repayment.AccountId = batch.RepaysPersonalAdvanceAccountId!.Value;
+            repayment.TransactionDate = batch.PaymentDate ?? batch.StartDate;
+            repayment.Amount = batch.ActualAmount;
+            repayment.Description = $"个人垫付归还：{batch.BatchNumber} · {batch.Name}";
+            if (db.Entry(repayment).State == EntityState.Detached)
+            {
+                db.AccountTransactions.Add(repayment);
+            }
+        }
+        else if (repayment is not null)
+        {
+            repayment.Amount = 0m;
+            repayment.Description = $"个人垫付归还已冲销：{batch.BatchNumber} · {batch.Name}";
+        }
+    }
+
     private static PayrollDisbursementBatchDto ToDisbursementBatchDto(PayrollBatch batch) => new(
         batch.Id, batch.BatchNumber, batch.Name, batch.PaymentDate, batch.ProjectId, batch.LegalEntityId, batch.AccountId,
-        batch.ActualAmount, batch.PaymentMethod, batch.VoucherNumber, batch.Status, batch.Notes, batch.IsUnifiedDisbursement, batch.ConcurrencyStamp);
+        batch.ActualAmount, batch.PaymentMethod, batch.VoucherNumber, batch.Status, batch.Notes, batch.IsUnifiedDisbursement, batch.ConcurrencyStamp,
+        batch.DisbursementType, batch.FundingSource, batch.RepaysPersonalAdvanceAccountId);
 
     private static PayrollDisbursementLineDto ToDisbursementLineDto(PayrollPayment item) => new(
         item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.CrewBusinessPartnerId,
         item.Amount, item.RecipientNameSnapshot ?? item.PayeeName, item.IdentityNumberSnapshot, item.PhoneSnapshot, item.BankAccountSnapshot,
-        item.TradeSnapshot, item.CrewNameSnapshot, item.Notes, item.ConcurrencyStamp);
+        item.TradeSnapshot, item.CrewNameSnapshot, item.Notes, item.ConcurrencyStamp,
+        item.PaymentCategory, item.WageCategory, item.LaborBusinessPartnerId, item.ProjectId);
 
     private static PayrollDisbursementLineInput ToDisbursementSummaryInput(PayrollPayment item) =>
         new(

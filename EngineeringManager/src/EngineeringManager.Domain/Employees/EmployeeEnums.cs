@@ -42,5 +42,9 @@ public enum EmployeeLedgerRecordKind { Payable = 1, Payment = 2, RefundOrReversa
 public enum EmployeeAdvanceAction { Disbursement = 1, Repayment = 2, PayrollDeduction = 3 }
 public enum EmployeeWageCategory { SocialSecurityWage = 1, MigrantWorkerWage = 2, OtherWage = 3 }
 public enum EmployeeWageCalculationMethod { Monthly = 1, Daily = 2, Hourly = 3, Piecework = 4, FixedAmount = 5, CustomUnit = 6 }
+public enum EmployeeWageEntryType { Attendance = 1, Overtime = 2, Bonus = 3, Penalty = 4, Other = 5 }
+public enum PayrollDisbursementType { Wage = 1, Other = 2 }
+public enum PayrollPaymentCategory { Wage = 1, Other = 2 }
+public enum PayrollFundingSource { CompanyAccount = 1, PersonalAdvance = 2 }
 public enum EmployeeFinancialAdjustmentType { AdministratorAdjustment = 1, HistoricalOpeningBalance = 2, Reversal = 3 }
 public enum EmployeeReceiptType { Wage = 1, Expense = 2, DividendOrOther = 3, Advance = 4, General = 5 }

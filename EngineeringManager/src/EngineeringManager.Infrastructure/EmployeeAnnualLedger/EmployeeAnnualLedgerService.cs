@@ -3,11 +3,14 @@ using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Files;
+using EngineeringManager.Domain.StageResults;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.EmployeeAnnualLedger;
 
-public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimeProvider timeProvider) : IEmployeeAnnualLedgerService
+public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimeProvider timeProvider, IFileStore? fileStore = null) : IEmployeeAnnualLedgerService
 {
     public async Task<EmployeeWageEntryDto> AddWageEntryAsync(CreateEmployeeWageEntryRequest request, CancellationToken cancellationToken)
     {
@@ -30,8 +33,10 @@ public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimePro
             new BusinessYearPeriod(businessYear.StartDate, businessYear.EndDate),
             "工资段");
         await ValidateDimensionsAsync(request.LegalEntityId, request.ProjectId, request.LaborBusinessPartnerId, cancellationToken);
+        EnsureMigrantLaborCompany(request.WageCategory, request.LaborBusinessPartnerId);
+        var effectiveNature = request.EntryType == EmployeeWageEntryType.Penalty ? PayrollItemNature.Deduction : request.Nature;
         var amount = EmployeeAnnualLedgerCalculator.CalculateWageAmount(
-            request.Nature,
+            effectiveNature,
             request.Quantity,
             request.UnitPrice,
             request.ManualAmount,
@@ -42,9 +47,10 @@ public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimePro
             BusinessYearId = request.BusinessYearId,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
+            EntryType = request.EntryType,
             WageCategory = request.WageCategory,
             CalculationMethod = request.CalculationMethod,
-            Nature = request.Nature,
+            Nature = effectiveNature,
             Quantity = request.Quantity,
             Unit = NormalizeOptional(request.Unit),
             UnitPrice = request.UnitPrice,
@@ -54,10 +60,112 @@ public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimePro
             LaborBusinessPartnerId = request.LaborBusinessPartnerId,
             AdjustmentAmount = request.AdjustmentAmount,
             FinalAmount = amount.FinalAmount,
+            Attachment = await SaveAttachmentAsync(request.Attachment, "员工工资附件", cancellationToken),
             Notes = NormalizeOptional(request.Notes)
         };
         db.EmployeeWageEntries.Add(entry);
         await db.SaveChangesAsync(cancellationToken);
+        return ToDto(entry);
+    }
+
+    public async Task<IReadOnlyList<EmployeeWageEntryDto>> GetWageEntriesAsync(
+        Guid employeeId,
+        Guid businessYearId,
+        CancellationToken cancellationToken)
+    {
+        if (!await db.Employees.AnyAsync(item => item.Id == employeeId, cancellationToken))
+        {
+            throw new InvalidOperationException("员工不存在。");
+        }
+
+        return await db.EmployeeWageEntries.AsNoTracking()
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Project)
+            .Include(item => item.LaborBusinessPartner)
+            .Include(item => item.Attachment)
+            .Where(item => item.EmployeeId == employeeId && item.BusinessYearId == businessYearId)
+            .OrderByDescending(item => item.StartDate)
+            .ThenByDescending(item => item.Id)
+            .Select(item => ToDto(item))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<EmployeeWageEntryDto> UpdateWageEntryAsync(
+        UpdateEmployeeWageEntryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var entry = await db.EmployeeWageEntries
+            .Include(item => item.BusinessYear)
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Project)
+            .Include(item => item.LaborBusinessPartner)
+            .Include(item => item.Attachment)
+            .SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+            ?? throw new InvalidOperationException("工资明细不存在。");
+        if (entry.IsSystemGenerated)
+        {
+            throw new InvalidOperationException("系统生成的个人垫付应付记录不能直接编辑，请修改来源工资台账。");
+        }
+
+        if (entry.ConcurrencyStamp != request.ConcurrencyStamp)
+        {
+            throw new InvalidOperationException("工资明细已被其他用户修改，请刷新后重试。");
+        }
+
+        BusinessYearRules.EnsureContained(
+            request.StartDate,
+            request.EndDate,
+            new BusinessYearPeriod(entry.BusinessYear.StartDate, entry.BusinessYear.EndDate),
+            "工资段");
+        await ValidateDimensionsAsync(request.LegalEntityId, request.ProjectId, request.LaborBusinessPartnerId, cancellationToken);
+        EnsureMigrantLaborCompany(request.WageCategory, request.LaborBusinessPartnerId);
+        var effectiveNature = request.EntryType == EmployeeWageEntryType.Penalty ? PayrollItemNature.Deduction : request.Nature;
+        var amount = EmployeeAnnualLedgerCalculator.CalculateWageAmount(
+            effectiveNature,
+            request.Quantity,
+            request.UnitPrice,
+            request.ManualAmount,
+            request.AdjustmentAmount);
+        var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        var before = JsonSerializer.Serialize(WageSnapshot(entry));
+
+        entry.StartDate = request.StartDate;
+        entry.EndDate = request.EndDate;
+        entry.EntryType = request.EntryType;
+        entry.WageCategory = request.WageCategory;
+        entry.CalculationMethod = request.CalculationMethod;
+        entry.Nature = effectiveNature;
+        entry.Quantity = request.Quantity;
+        entry.Unit = NormalizeOptional(request.Unit);
+        entry.UnitPrice = request.UnitPrice;
+        entry.AutomaticAmount = amount.AutomaticAmount;
+        entry.LegalEntityId = request.LegalEntityId;
+        entry.ProjectId = request.ProjectId;
+        entry.LaborBusinessPartnerId = request.LaborBusinessPartnerId;
+        entry.AdjustmentAmount = request.AdjustmentAmount;
+        entry.FinalAmount = amount.FinalAmount;
+        entry.Notes = NormalizeOptional(request.Notes);
+        if (request.Attachment is not null)
+        {
+            entry.Attachment = await SaveAttachmentAsync(request.Attachment, "员工工资附件", cancellationToken);
+        }
+
+        entry.ConcurrencyStamp = Guid.NewGuid();
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = request.UserId,
+            Action = "UpdateEmployeeWageEntry",
+            EntityType = nameof(EmployeeWageEntry),
+            EntityId = entry.Id.ToString(),
+            Reason = reason,
+            BeforeJson = before,
+            AfterJson = JsonSerializer.Serialize(WageSnapshot(entry))
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        await db.Entry(entry).Reference(item => item.LegalEntity).LoadAsync(cancellationToken);
+        await db.Entry(entry).Reference(item => item.Project).LoadAsync(cancellationToken);
+        await db.Entry(entry).Reference(item => item.LaborBusinessPartner).LoadAsync(cancellationToken);
         return ToDto(entry);
     }
 
@@ -291,7 +399,8 @@ public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimePro
                 ReceiptDate = item.Batch.PaymentDate ?? item.PaymentDate!.Value,
                 item.Amount,
                 Recipient = item.RecipientNameSnapshot ?? item.PayeeName,
-                item.Notes
+                item.Notes,
+                item.PaymentCategory
             })
             .ToListAsync(cancellationToken);
         receipts.AddRange(payrollReceiptRows.Select(item => new AnnualLedgerReceiptInput(item.Id, item.ReceiptDate, item.Amount)));
@@ -357,7 +466,8 @@ public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimePro
                     payroll?.Recipient,
                     payroll?.Notes,
                     payroll?.PayrollBatchId,
-                    payroll?.Id);
+                    payroll?.Id,
+                    payroll?.PaymentCategory ?? PayrollPaymentCategory.Other);
             })
             .ToArray();
         return new EmployeeAnnualLedgerDto(employeeId, businessYearId, summary, payableLines, receiptLines);
@@ -409,7 +519,87 @@ public sealed class EmployeeAnnualLedgerService(ApplicationDbContext db, TimePro
             item.AdjustmentAmount,
             item.FinalAmount,
             item.Notes,
-            item.WageCategory == EmployeeWageCategory.MigrantWorkerWage && !item.ProjectId.HasValue && !item.LaborBusinessPartnerId.HasValue);
+            item.WageCategory == EmployeeWageCategory.MigrantWorkerWage && !item.LaborBusinessPartnerId.HasValue,
+            item.EntryType,
+            item.AttachmentId,
+            item.Attachment?.OriginalFileName,
+            item.SourcePersonalAdvanceBatchId,
+            item.IsSystemGenerated,
+            item.ExcludeFromWageCost,
+            item.ConcurrencyStamp,
+            item.LegalEntity?.Name,
+            item.Project?.Name,
+            item.LaborBusinessPartner?.Name);
+
+    private async Task<Attachment?> SaveAttachmentAsync(
+        EmployeePayableAttachmentUpload? upload,
+        string description,
+        CancellationToken cancellationToken)
+    {
+        if (upload is null)
+        {
+            return null;
+        }
+
+        if (fileStore is null)
+        {
+            throw new InvalidOperationException("当前环境未配置附件存储。");
+        }
+
+        if (upload.Content.Length == 0)
+        {
+            throw new ArgumentException("附件不能为空。", nameof(upload));
+        }
+
+        var safeName = Path.GetFileName(upload.OriginalFileName);
+        if (string.IsNullOrWhiteSpace(safeName) || !string.Equals(safeName, upload.OriginalFileName, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("附件文件名无效。", nameof(upload));
+        }
+
+        await using var content = new MemoryStream(upload.Content, writable: false);
+        var storedName = await fileStore.SaveAsync(content, safeName, cancellationToken);
+        var attachment = new Attachment
+        {
+            StoredName = storedName,
+            OriginalFileName = safeName,
+            ContentType = string.IsNullOrWhiteSpace(upload.ContentType) ? "application/octet-stream" : upload.ContentType.Trim(),
+            SizeBytes = upload.Content.LongLength,
+            Category = AttachmentCategory.General,
+            Description = description
+        };
+        db.Attachments.Add(attachment);
+        return attachment;
+    }
+
+    private static object WageSnapshot(EmployeeWageEntry item) => new
+    {
+        item.StartDate,
+        item.EndDate,
+        item.EntryType,
+        item.WageCategory,
+        item.CalculationMethod,
+        item.Nature,
+        item.Quantity,
+        item.Unit,
+        item.UnitPrice,
+        item.AutomaticAmount,
+        item.LegalEntityId,
+        item.ProjectId,
+        item.LaborBusinessPartnerId,
+        item.AdjustmentAmount,
+        item.FinalAmount,
+        item.AttachmentId,
+        item.Notes
+    };
+
+    private static void EnsureMigrantLaborCompany(EmployeeWageCategory wageCategory, Guid? laborBusinessPartnerId)
+    {
+        if (wageCategory == EmployeeWageCategory.MigrantWorkerWage && !laborBusinessPartnerId.HasValue)
+        {
+            throw new ArgumentException("民工工资必须关联劳务公司。", nameof(laborBusinessPartnerId));
+        }
+    }
 
     private static EmployeeFinancialAdjustmentDto ToDto(EmployeeFinancialAdjustment item) =>
         new(item.Id, item.EmployeeId, item.BusinessYearId, item.AdjustmentDate, item.Amount, item.AdjustmentType, item.Notes, item.ReversalOfId);

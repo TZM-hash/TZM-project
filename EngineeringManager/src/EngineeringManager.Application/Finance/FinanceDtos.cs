@@ -22,7 +22,9 @@ public sealed record CreateFinancialAccountRequest(
     string? BankName,
     FinancialAccountType AccountType,
     decimal OpeningBalance,
-    string? Notes = null);
+    string? Notes = null,
+    string? OwnerName = null,
+    Guid? OwnerEmployeeId = null);
 
 public sealed record FinancialAccountDto(
     Guid Id,
@@ -35,7 +37,12 @@ public sealed record FinancialAccountDto(
     decimal OpeningBalance,
     decimal CurrentBalance,
     bool IsActive,
-    string? Notes = null);
+    string? Notes = null,
+    string? OwnerName = null,
+    Guid? OwnerEmployeeId = null,
+    decimal AdvancedAmount = 0m,
+    decimal RepaidAmount = 0m,
+    decimal OutstandingAmount = 0m);
 
 public sealed record ProjectFinanceListItemDto(
     Guid ProjectId,
