@@ -193,7 +193,8 @@ public sealed record CreateInvoiceRequest(
     decimal GrossAmount,
     InvoiceStatus Status,
     IReadOnlyList<InvoiceAllocationRequest> ReceivableAllocations,
-    IReadOnlyList<InvoiceAllocationRequest> LineItemAllocations);
+    IReadOnlyList<InvoiceAllocationRequest> LineItemAllocations,
+    string? Notes = null);
 
 public sealed record FinanceRecordActor(string UserId, string? UserName);
 
@@ -230,7 +231,7 @@ public sealed record UpdateInvoiceRequest(
     Guid Id, Guid ProjectId, Guid? ContractId, Guid LegalEntityId, Guid? BusinessPartnerId,
     InvoiceDirection Direction, string InvoiceNumber, DateOnly InvoiceDate, Guid ProjectTaxConfigurationId,
     decimal NetAmount, decimal TaxAmount, decimal GrossAmount, InvoiceStatus Status,
-    Guid ConcurrencyStamp, string Reason);
+    Guid ConcurrencyStamp, string Reason, string? Notes = null);
 
 public sealed record UpdatePayableRequest(
     Guid Id, Guid ProjectId, Guid? ContractId, Guid LegalEntityId, Guid BusinessPartnerId,

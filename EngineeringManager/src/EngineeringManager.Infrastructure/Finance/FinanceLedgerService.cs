@@ -563,7 +563,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
                 request.NetAmount,
                 request.TaxAmount,
                 taxConfiguration.TaxRate,
-                null,
+                NormalizeOptional(request.Notes),
                 allocations,
                 AutoAllocate: ledgerDirection == LedgerDirection.Payable && allocations.Length == 0,
                 ProjectTaxConfigurationId: taxConfiguration.Id,
@@ -693,6 +693,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         entry.TaxAmount = request.TaxAmount;
         entry.Amount = request.GrossAmount;
         entry.Status = request.Status == InvoiceStatus.Voided ? LedgerRecordStatus.Voided : LedgerRecordStatus.Active;
+        entry.Notes = NormalizeOptional(request.Notes);
         entry.UpdatedAt = DateTimeOffset.UtcNow;
         entry.ConcurrencyStamp = Guid.NewGuid();
         if (ledgerDirection == LedgerDirection.Receivable)

@@ -97,7 +97,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
                 item.Contract?.ContractNumber ?? first?.Settlement.Contract?.ContractNumber, item.LegalEntity.ShortName, item.BusinessPartner?.Name,
                 item.TaxRate ?? 0m, (item.NetAmount ?? 0m) * ratio, (item.TaxAmount ?? 0m) * ratio, gross,
                 item.Status == LedgerRecordStatus.Voided ? InvoiceStatus.Voided : InvoiceStatus.IssuedOrReceived,
-                headerOwned ? item.ContractId : first?.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.InvoiceType, item.ProjectTaxConfigurationId, item.ConcurrencyStamp);
+                headerOwned ? item.ContractId : first?.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.InvoiceType, item.ProjectTaxConfigurationId, item.ConcurrencyStamp, item.Notes);
         }).ToList();
         var payrollCrewRows = await db.PayrollPayments.AsNoTracking()
             .Where(item => item.RecipientType == EngineeringManager.Domain.Employees.PayrollRecipientType.CrewWorker &&

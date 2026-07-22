@@ -127,7 +127,8 @@ public sealed record ProjectInvoiceItemDto(
     Guid? BusinessPartnerId = null,
     string? InvoiceType = null,
     Guid? ProjectTaxConfigurationId = null,
-    Guid ConcurrencyStamp = default);
+    Guid ConcurrencyStamp = default,
+    string? Notes = null);
 
 public sealed record ProjectPayableItemDto(
     Guid Id,

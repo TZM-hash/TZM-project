@@ -123,12 +123,16 @@ public sealed class ProjectCollectionEntryPageTests
         invoice.Should().Contain("id=\"invoice-batch-form\"")
             .And.Contain("InvoiceRowEdits[")
             .And.Contain("invoice-inline-table")
-            .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>");
+            .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>")
+            .And.Contain("asp-for=\"InvoiceEdit.Description\"")
+            .And.Contain("name=\"InvoiceRowEdits[@editIndex].Description\" value=\"@row.Notes\"");
         payment.Should().Contain("id=\"payment-batch-form\"")
             .And.Contain("PayableRowEdits[")
             .And.Contain("PaymentRowEdits[")
             .And.Contain("payment-inline-table")
-            .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>");
+            .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>")
+            .And.Contain("isPayrollPayment")
+            .And.Contain("PaymentRowEdits[@editIndex].SourceType");
         construction.Should().Contain("id=\"construction-batch-form\"")
             .And.Contain("ConstructionRowEdits[")
             .And.Contain("construction-inline-table")
@@ -140,7 +144,11 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain("List<FinanceRowEditInput> InvoiceRowEdits")
             .And.Contain("List<FinanceRowEditInput> PayableRowEdits")
             .And.Contain("List<FinanceRowEditInput> PaymentRowEdits")
-            .And.Contain("List<ConstructionEditInput> ConstructionRowEdits");
+            .And.Contain("List<ConstructionEditInput> ConstructionRowEdits")
+            .And.Contain("invoiceEdit.Description")
+            .And.Contain("InvoiceEdit.Description")
+            .And.Contain("PayrollCrewDisbursement")
+            .And.Contain("public string SourceType");
         styles.Should().Contain(".invoice-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")
             .And.Contain(".payment-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")
             .And.Contain(".construction-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")

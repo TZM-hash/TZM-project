@@ -365,7 +365,7 @@ public sealed class DetailsModel(
                     invoiceEdit.Id, id, invoiceEdit.ContractId, Required(invoiceEdit.LegalEntityId, "请选择签约公司。"), invoiceEdit.BusinessPartnerId,
                     InvoiceDirection.Output, RequiredText(invoiceEdit.InvoiceNumber, "请填写发票号码。"), invoiceEdit.EntryDate,
                     Required(invoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), invoiceEdit.NetAmount, invoiceEdit.TaxAmount, Positive(invoiceEdit.Amount), invoiceEdit.InvoiceStatus,
-                    invoiceEdit.ConcurrencyStamp, "项目管理页面快捷修改开票"), cancellationToken);
+                    invoiceEdit.ConcurrencyStamp, "项目管理页面快捷修改开票", invoiceEdit.Description), cancellationToken);
             }
             return RedirectToPage(new { id, tab = "invoice" });
         }
@@ -393,6 +393,8 @@ public sealed class DetailsModel(
             }
             foreach (var paymentEdit in PaymentRowEdits.Where(item => item.IsDirty))
             {
+                if (string.Equals(paymentEdit.SourceType, "PayrollCrewDisbursement", StringComparison.Ordinal))
+                    throw new InvalidOperationException("工资代发形成的付款记录由工资批次自动生成，不能在项目页快捷修改。");
                 await financeService.UpdatePaymentAsync(actor, new UpdatePaymentRequest(
                     paymentEdit.Id, paymentEdit.RelatedEntryId, id, paymentEdit.ContractId,
                     Required(paymentEdit.LegalEntityId, "请选择签约公司。"), Required(paymentEdit.BusinessPartnerId, "请选择收款单位。"),
@@ -446,7 +448,7 @@ public sealed class DetailsModel(
                 id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), InvoiceEdit.BusinessPartnerId,
                 InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
                 Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), InvoiceEdit.NetAmount, InvoiceEdit.TaxAmount, Positive(InvoiceEdit.GrossAmount),
-                InvoiceStatus.IssuedOrReceived, [], []), cancellationToken);
+                InvoiceStatus.IssuedOrReceived, [], [], InvoiceEdit.Description), cancellationToken);
             await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Invoice, invoiceId, "invoice", RecordAttachmentFile, cancellationToken);
             return RedirectToPage(new { id, tab = "invoice" });
         }
@@ -516,7 +518,7 @@ public sealed class DetailsModel(
                         FinanceRowEdit.Id, id, FinanceRowEdit.ContractId, Required(FinanceRowEdit.LegalEntityId, "请选择签约公司。"), FinanceRowEdit.BusinessPartnerId,
                         InvoiceDirection.Output, RequiredText(FinanceRowEdit.InvoiceNumber, "请填写发票号码。"), FinanceRowEdit.EntryDate,
                         Required(FinanceRowEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。"), FinanceRowEdit.NetAmount, FinanceRowEdit.TaxAmount, Positive(FinanceRowEdit.Amount), FinanceRowEdit.InvoiceStatus,
-                        FinanceRowEdit.ConcurrencyStamp, reason), cancellationToken);
+                        FinanceRowEdit.ConcurrencyStamp, reason, FinanceRowEdit.Description), cancellationToken);
                     break;
                 case FinanceEntryKind.Payable:
                     await financeService.UpdatePayableAsync(actor, new UpdatePayableRequest(
@@ -951,6 +953,7 @@ public sealed class DetailsModel(
         public decimal NetAmount { get; set; }
         public decimal TaxAmount { get; set; }
         public decimal GrossAmount { get; set; }
+        public string? Description { get; set; }
     }
 
     public sealed class PaymentEditInput
@@ -994,8 +997,9 @@ public sealed class DetailsModel(
         public InvoiceStatus InvoiceStatus { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "项目管理页面快捷修改";
-                public bool IsDirty { get; set; }
-}
+        public string SourceType { get; set; } = string.Empty;
+        public bool IsDirty { get; set; }
+    }
 
     public sealed class ConstructionEditInput
     {
