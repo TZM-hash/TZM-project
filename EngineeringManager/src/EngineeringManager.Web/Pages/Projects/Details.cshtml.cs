@@ -42,6 +42,7 @@ public sealed class DetailsModel(
     [BindProperty] public IFormFile? QuantityAttachmentFile { get; set; }
     [BindProperty] public IFormFile? RecordAttachmentFile { get; set; }
     [BindProperty] public CollectionEditInput CollectionEdit { get; set; } = new();
+    [BindProperty] public List<FinanceRowEditInput> CollectionRowEdits { get; set; } = [];
     [BindProperty] public InvoiceEditInput InvoiceEdit { get; set; } = new();
     [BindProperty] public PaymentEditInput PaymentEdit { get; set; } = new();
     [BindProperty] public FinanceRowEditInput FinanceRowEdit { get; set; } = new();
@@ -100,7 +101,8 @@ public sealed class DetailsModel(
                     QuickEdit.ActualCompletionDate,
                     QuickEdit.Notes,
                     QuickEdit.ContractSigningStatus,
-                    ParseTaxConfigurations(QuickEdit.TaxConfigurationSelections)),
+                    ParseTaxConfigurations(QuickEdit.TaxConfigurationSelections),
+                    QuickEdit.Contracts),
                 cancellationToken);
             return RedirectToPage(new { id });
         }
@@ -310,6 +312,32 @@ public sealed class DetailsModel(
                 CollectionEdit.EntryDate, Positive(CollectionEdit.Amount), CollectionEdit.PaymentMethod,
                 CollectionEdit.Description), cancellationToken);
             await TryAttachCreatedRecordAsync(id, ProjectRecordAttachmentType.Cash, collectionId, "collection", RecordAttachmentFile, cancellationToken);
+            return RedirectToPage(new { id, tab = "collection" });
+        }
+        catch (Exception exception) when (IsEditableException(exception))
+        {
+            Tab = "collection";
+            return await InlineErrorAsync(id, "project-collection", exception, cancellationToken);
+        }
+    }
+
+    public async Task<IActionResult> OnPostCollectionsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManageFinance) return Forbid();
+        if (!ModelState.IsValid) return await InlineValidationErrorAsync(id, "project-collection", cancellationToken);
+        try
+        {
+            var actor = new FinanceRecordActor(Actor().UserId, Actor().UserName);
+            foreach (var collectionEdit in CollectionRowEdits.Where(item => item.IsDirty))
+            {
+                await financeService.UpdateCollectionAsync(actor, new UpdateCollectionRequest(
+                    collectionEdit.Id, collectionEdit.RelatedEntryId, id, collectionEdit.ContractId,
+                    Required(collectionEdit.LegalEntityId, "请选择签约公司。"), collectionEdit.BusinessPartnerId,
+                    Required(collectionEdit.AccountId, "请选择收款账户。"), collectionEdit.EntryDate,
+                    Positive(collectionEdit.Amount), collectionEdit.CollectionPaymentMethod,
+                    collectionEdit.Description, collectionEdit.ConcurrencyStamp,
+                    "项目管理页面快捷修改收款"), cancellationToken);
+            }
             return RedirectToPage(new { id, tab = "collection" });
         }
         catch (Exception exception) when (IsEditableException(exception))
@@ -548,15 +576,29 @@ public sealed class DetailsModel(
         if (CanManage)
         {
             Options = await workspaceService.GetEditOptionsAsync(cancellationToken);
-            if (populateInputs) QuickEdit = QuickEditInput.From(Workspace.Overview);
+            if (populateInputs)
+            {
+                QuickEdit = QuickEditInput.From(Workspace.Overview);
+                QuickEdit.Contracts = Workspace.Contracts
+                    .OrderByDescending(contract => contract.ContractType == ContractType.MainContract)
+                    .ThenBy(contract => contract.ContractNumber)
+                    .Select(contract => new ProjectContractQuickEditInput(
+                        contract.Id,
+                        contract.Name,
+                        contract.TotalAmount == 0m ? null : contract.TotalAmount,
+                        contract.ConcurrencyStamp))
+                    .ToList();
+            }
         }
         if (CanManageFinance) FinanceOptions = await financeService.GetEntryOptionsAsync(cancellationToken);
         if (!populateInputs) return;
 
-        var defaultContractId = Workspace.Contracts.Count > 0 ? Workspace.Contracts[0].Id : (Guid?)null;
+        var defaultContract = Workspace.Contracts.Count > 0 ? Workspace.Contracts[0] : null;
+        var defaultContractId = defaultContract?.Id;
         CreateQuantity.ContractId = defaultContractId;
         var defaultLegalEntityId = Workspace.Overview.LegalEntities.Select(option => Guid.TryParse(option.Value, out var value) ? value : Guid.Empty).FirstOrDefault(value => value != Guid.Empty);
         CollectionEdit.ContractId = defaultContractId;
+        CollectionEdit.BusinessPartnerId = defaultContract?.BusinessPartnerId;
         CollectionEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
         InvoiceEdit.ContractId = defaultContractId;
         InvoiceEdit.LegalEntityId = defaultLegalEntityId == Guid.Empty ? null : defaultLegalEntityId;
@@ -736,6 +778,7 @@ public sealed class DetailsModel(
         public string? Notes { get; set; }
         public List<Guid> LegalEntityIds { get; set; } = [];
         public List<string> TaxConfigurationSelections { get; set; } = [];
+        public List<ProjectContractQuickEditInput> Contracts { get; set; } = [];
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "快捷编辑项目资料";
 
@@ -862,6 +905,7 @@ public sealed class DetailsModel(
         public InvoiceStatus InvoiceStatus { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "项目管理页面快捷修改";
+        public bool IsDirty { get; set; }
     }
 
     public sealed class ConstructionEditInput

@@ -48,6 +48,12 @@ public sealed record ProjectEditOptionsDto(
     IReadOnlyList<ProjectWorkspaceOptionDto> Branches,
     IReadOnlyList<ProjectWorkspaceOptionDto> LegalEntities);
 
+public sealed record ProjectContractQuickEditInput(
+    Guid? Id,
+    string Name,
+    decimal? TotalAmount,
+    Guid ConcurrencyStamp);
+
 public sealed record UpdateProjectRequest(
     Guid Id,
     string ProjectNumber,
@@ -68,7 +74,8 @@ public sealed record UpdateProjectRequest(
     DateOnly? ActualCompletionDate = null,
     string? Notes = null,
     ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
-    IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null);
+    IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null,
+    IReadOnlyCollection<ProjectContractQuickEditInput>? Contracts = null);
 
 public sealed record ProjectReceivableItemDto(
     Guid Id,

@@ -58,6 +58,47 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task UpdatePersistsOneToThreeProjectContractQuickEditsAndKeepsMainContractFirst()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var existing = await fixture.Db.Contracts.SingleAsync(item => item.ProjectId == fixture.Project.Id);
+
+        var updated = await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id,
+                fixture.Project.ProjectNumber,
+                fixture.Project.Name,
+                fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName,
+                fixture.Project.GeneralContractorContact,
+                fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId,
+                fixture.Project.DepartmentId,
+                fixture.Project.BranchId,
+                fixture.Project.Stage,
+                fixture.Project.AffiliationType,
+                [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp,
+                "维护项目合同",
+                Contracts:
+                [
+                    new ProjectContractQuickEditInput(existing.Id, "主合同更新", 350m, existing.ConcurrencyStamp),
+                    new ProjectContractQuickEditInput(null, "第二份合同", 125m, Guid.Empty)
+                ]),
+            CancellationToken.None);
+
+        updated.Contracts.Should().HaveCount(2);
+        updated.Contracts[0].Name.Should().Be("主合同更新");
+        updated.Contracts[0].ContractType.Should().Be(ContractType.MainContract);
+        updated.Contracts[0].TotalAmount.Should().Be(350m);
+        updated.Contracts[1].Name.Should().Be("第二份合同");
+        updated.Contracts[1].TotalAmount.Should().Be(125m);
+        updated.ProjectSummary.ContractAmount.Should().Be(475m);
+        updated.Contracts[1].ContractNumber.Should().Be("WORK-P-01-C02");
+    }
+
+    [Fact]
     public async Task ProjectInvoiceDetailsOnlyIncludeOutputInvoices()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();

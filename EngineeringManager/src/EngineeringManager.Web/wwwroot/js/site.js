@@ -4,6 +4,8 @@ import { initEffects } from "./core/effects.js";
 const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard()];
 initSmartBack();
 initProjectAmountViews();
+initCollectionContractPayerDefaults();
+initProjectContractEditor();
 if (document.querySelector("[data-conflict-notice]")) {
   jobs.push(import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
 }
@@ -55,6 +57,103 @@ function initProjectAmountViews() {
     };
     select.addEventListener("change", update);
     update();
+  });
+}
+
+
+function initProjectContractEditor() {
+  const root = document.querySelector("[data-project-contracts]");
+  if (!root) return;
+
+  const list = root.querySelector("[data-project-contract-list]");
+  const addButton = root.querySelector("[data-project-contract-add]");
+  const totalNode = document.querySelector("[data-project-contract-total]");
+  if (!list) return;
+
+  const reindex = () => {
+    list.querySelectorAll("[data-project-contract-row]").forEach((row, index) => {
+      row.querySelectorAll("input[name]").forEach((input) => {
+        input.name = input.name.replace(/QuickEdit\.Contracts\[\d+\]/, `QuickEdit.Contracts[${index}]`);
+      });
+    });
+    if (addButton) addButton.disabled = list.querySelectorAll("[data-project-contract-row]").length >= 3;
+  };
+
+  const refreshTotal = () => {
+    if (!totalNode) return;
+    let total = 0;
+    list.querySelectorAll("[data-project-contract-amount]").forEach((input) => {
+      const value = Number.parseFloat(String(input.value || "").replace(/,/g, ""));
+      if (Number.isFinite(value)) total += value;
+    });
+    totalNode.textContent = total.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const bindRow = (row) => {
+    row.querySelectorAll("[data-project-contract-amount]").forEach((input) => {
+      input.addEventListener("input", refreshTotal);
+      input.addEventListener("change", refreshTotal);
+    });
+    row.querySelectorAll("[data-project-contract-remove]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (row.dataset.projectContractNew !== "true") return;
+        row.remove();
+        reindex();
+        refreshTotal();
+      });
+    });
+  };
+
+  list.querySelectorAll("[data-project-contract-row]").forEach(bindRow);
+
+  addButton?.addEventListener("click", () => {
+    const count = list.querySelectorAll("[data-project-contract-row]").length;
+    if (count >= 3) return;
+    const index = count;
+    const row = document.createElement("div");
+    row.className = "project-contract-row";
+    row.dataset.projectContractRow = "";
+    row.dataset.projectContractNew = "true";
+    row.innerHTML = `
+      <div data-inline-edit-value class="project-contract-display" hidden><strong>新合同</strong><span>未设置</span></div>
+      <div class="project-contract-inputs compact-contact-editor inline-cell-control" data-inline-edit-control>
+        <input type="hidden" name="QuickEdit.Contracts[${index}].ConcurrencyStamp" value="00000000-0000-0000-0000-000000000000" />
+        <input name="QuickEdit.Contracts[${index}].Name" value="" placeholder="合同名称" aria-label="合同名称" data-project-contract-name />
+        <input name="QuickEdit.Contracts[${index}].TotalAmount" value="" type="number" step="0.01" min="0" placeholder="合同金额" aria-label="合同金额" data-project-contract-amount />
+      </div>
+      <button type="button" class="button button--secondary button--action project-contract-row-remove" data-project-contract-remove data-inline-edit-control>删除</button>
+    `;
+    list.appendChild(row);
+    bindRow(row);
+    reindex();
+    refreshTotal();
+    row.querySelector("[data-project-contract-name]")?.focus({ preventScroll: true });
+  });
+
+  document.querySelectorAll('[data-inline-edit="project-overview"] [data-inline-edit-cancel]').forEach((button) => {
+    button.addEventListener("click", () => {
+      list.querySelectorAll('[data-project-contract-new="true"]').forEach((row) => row.remove());
+      reindex();
+      // allow form.reset to restore values first
+      window.setTimeout(refreshTotal, 0);
+    });
+  });
+
+  reindex();
+  refreshTotal();
+}
+function initCollectionContractPayerDefaults() {
+  document.querySelectorAll("[data-collection-entry]").forEach((form) => {
+    const contract = form.querySelector("[data-collection-contract]");
+    const payer = form.querySelector("[data-collection-payer]");
+    if (!contract || !payer) return;
+
+    let defaultPayer = payer.value;
+    contract.addEventListener("change", () => {
+      const nextPayer = contract.selectedOptions[0]?.dataset.businessPartnerId || "";
+      if (!payer.value || payer.value === defaultPayer) payer.value = nextPayer;
+      defaultPayer = nextPayer;
+    });
   });
 }
 

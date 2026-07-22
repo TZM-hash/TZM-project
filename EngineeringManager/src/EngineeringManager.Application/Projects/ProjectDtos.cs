@@ -128,7 +128,10 @@ public sealed record ContractDto(
     ContractAllocationMode AllocationMode,
     decimal TotalAmount,
     IReadOnlyList<ContractLineItemDto> LineItems,
-    string? Notes = null);
+    string? Notes = null,
+    Guid? BusinessPartnerId = null,
+    string? BusinessPartnerName = null,
+    Guid ConcurrencyStamp = default);
 
 public sealed record ProjectListItemDto(ProjectDto Project, ProjectSummaryDto Summary);
 

@@ -128,6 +128,22 @@ public sealed class ProjectServiceTests
     }
 
     [Fact]
+    public async Task NewProjectStartsWithNamedMainContractAndEmptyAmount()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+
+        var project = await fixture.Service.CreateProjectAsync(
+            new CreateProjectRequest("P-DEFAULT-CONTRACT", "默认主合同项目", null, null, null, null, ProjectStage.AwaitingMobilization, []),
+            CancellationToken.None);
+
+        var contract = await fixture.Db.Contracts.SingleAsync(item => item.ProjectId == project.Id);
+        contract.ContractNumber.Should().Be("P-DEFAULT-CONTRACT-C01");
+        contract.Name.Should().Be("默认主合同项目");
+        contract.ContractType.Should().Be(ContractType.MainContract);
+        contract.TotalAmount.Should().Be(0m);
+    }
+
+    [Fact]
     public async Task AffiliationTypeFilterSeparatesAttachedProjects()
     {
         await using var fixture = await ProjectFixture.CreateAsync();
@@ -163,7 +179,7 @@ public sealed class ProjectServiceTests
         var action = () => fixture.Service.AddContractAsync(request, CancellationToken.None);
 
         await action.Should().ThrowAsync<ArgumentException>();
-        (await fixture.Db.Contracts.CountAsync()).Should().Be(0);
+        (await fixture.Db.Contracts.CountAsync(item => item.ProjectId == project.Id)).Should().Be(1);
     }
 
     [Fact]

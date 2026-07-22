@@ -169,6 +169,18 @@
 .project-summary-grid dd { margin-top: .18rem; overflow: hidden; font-size: .78rem; line-height: 1.35; text-overflow: ellipsis; }
 .project-summary-grid > .project-summary-wide { grid-column: 1 / -1; }
 .project-summary-grid > .project-summary-half { grid-column: span 2; }
+.project-contract-editor { grid-column: 1 / -1; }
+.project-contract-editor dd { overflow: visible; }
+.project-contract-list { display: grid; gap: .35rem; }
+.project-contract-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; align-items: center; }
+.project-contract-display { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(8rem, .8fr); gap: .4rem; align-items: center; }
+.project-contract-display strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-contract-display span { text-align: right; font-variant-numeric: tabular-nums; color: var(--app-muted); }
+.project-contract-inputs { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(8rem, .8fr); gap: .4rem; width: 100%; }
+.project-contract-inputs input { min-width: 0; min-height: 2.2rem; padding: .4rem .5rem; border: 1px solid var(--app-primary); border-radius: 6px; color: var(--app-text); background: var(--app-surface); font: inherit; }
+.project-contract-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .45rem; }
+.project-contract-hint { color: var(--app-muted); font-size: .7rem; }
+.project-contract-row-remove { min-height: 2.2rem; }
 .compact-contact-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; }
 .project-amount-switch dd { display: block; }
 .project-amount-view-label, .project-amount-edit-control { display: grid; grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); align-items: center; gap: .35rem; }
@@ -256,6 +268,16 @@
 .record-entry-form .inline-edit-grid input, .record-entry-form .inline-edit-grid select { min-width: 0; min-height: 2.15rem; box-sizing: border-box; }
 .record-entry-form .inline-edit-span { grid-column: span 2; }
 .record-entry-form .inline-edit-actions { margin-top: .7rem; }
+.collection-entry-compact-form { display: grid; gap: .45rem; margin-top: .5rem; padding: .85rem .9rem; }
+.collection-entry-compact-grid { display: grid; gap: .5rem; align-items: start; }
+.collection-entry-row { display: grid; gap: .4rem .55rem; align-items: start; }
+.collection-entry-row--1, .collection-entry-row--2 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.collection-entry-row--3 { grid-template-columns: minmax(0, 1fr); }
+.collection-entry-compact-field { display: grid; min-width: 0; gap: .18rem; color: var(--app-muted); font-size: .68rem; font-weight: 650; }
+.collection-entry-compact-field input, .collection-entry-compact-field select, .collection-entry-compact-field textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 2.05rem; padding: .34rem .5rem; border: 1px solid var(--app-border-strong); border-radius: 6px; color: var(--app-text); background: var(--app-surface); font: inherit; font-weight: 400; }
+.collection-entry-compact-field--notes { grid-column: 1 / -1; }
+.collection-entry-compact-field--notes textarea { min-height: 7rem; resize: vertical; }
+.collection-entry-attachment { min-height: 100%; box-sizing: border-box; }
 .finance-summary-strip { display: flex; align-items: center; gap: 1.25rem; margin: .25rem 0 .8rem; padding: .55rem .7rem; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-raised); color: var(--app-muted); font-size: .75rem; font-weight: 650; }
 .record-attachment-column { width: 9.5rem; min-width: 9.5rem; }
 .record-attachment-tools { display: flex; align-items: center; gap: .25rem; white-space: nowrap; }
@@ -404,6 +426,8 @@
     .quantity-entry-row--1 .quantity-entry-attachment { grid-column: 1 / -1; }
     .quantity-entry-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .quantity-entry-compact-field--span2 { grid-column: 1 / -1; }
+    .collection-entry-row--1, .collection-entry-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .collection-entry-row--1 .collection-entry-attachment { grid-column: 1 / -1; }
 }
 
 @media (max-width: 760px) {
@@ -422,6 +446,8 @@
     .quantity-entry-footer .button { width: 100%; }
     .quantity-entry-empty-state { align-items: stretch; flex-direction: column; }
     .quantity-entry-row--1, .quantity-entry-row--2, .quantity-entry-row--3 { grid-template-columns: minmax(0, 1fr); }
+    .collection-entry-row--1, .collection-entry-row--2, .collection-entry-row--3 { grid-template-columns: minmax(0, 1fr); }
+    .collection-entry-row--1 .collection-entry-attachment { grid-column: auto; }
     .quantity-entry-compact-field--span2 { grid-column: auto; }
     .quantity-entry-compact-field--notes { grid-column: auto; }
     .quantity-entry-row--1 .quantity-entry-attachment { grid-column: auto; }

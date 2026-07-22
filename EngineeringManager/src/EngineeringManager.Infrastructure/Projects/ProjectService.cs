@@ -61,6 +61,16 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             });
         }
 
+        project.Contracts.Add(new Contract
+        {
+            Project = project,
+            ContractNumber = BuildProjectContractNumber(projectNumber, 1),
+            Name = name,
+            ContractType = ContractType.MainContract,
+            AllocationMode = ContractAllocationMode.SingleCompany,
+            TotalAmount = 0m
+        });
+
         db.Projects.Add(project);
         await db.SaveChangesAsync(cancellationToken);
         return ToProjectDto(project);
@@ -403,6 +413,16 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             project.Branch?.Name,
             project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => item.LegalEntity?.ShortName).Where(name => !string.IsNullOrWhiteSpace(name)).Cast<string>().ToArray());
 
+    private static string BuildProjectContractNumber(string projectNumber, int sequence)
+    {
+        var suffix = $"-C{sequence:00}";
+        var maxPrefixLength = Math.Max(1, 80 - suffix.Length);
+        var prefix = projectNumber.Length <= maxPrefixLength
+            ? projectNumber
+            : projectNumber[..maxPrefixLength];
+        return prefix + suffix;
+    }
+
     private static void ValidateTaxConfigurations(IReadOnlyCollection<ProjectTaxConfigurationInput>? configurations)
     {
         if (configurations is null) return;
@@ -429,7 +449,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             contract.AllocationMode,
             contract.TotalAmount,
             contract.LineItems.OrderBy(item => item.SortOrder).ThenBy(item => item.Code).Select(ToLineItemDto).ToArray(),
-            contract.Notes);
+            contract.Notes, contract.BusinessPartnerId, contract.BusinessPartner?.Name, contract.ConcurrencyStamp);
 
     private static ContractLineItemDto ToLineItemDto(ContractLineItem item)
     {

@@ -23,6 +23,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .Include(item => item.LegalEntities).ThenInclude(item => item.LegalEntity)
             .Include(item => item.TaxConfigurations)
             .Include(item => item.Contracts).ThenInclude(item => item.LineItems)
+            .Include(item => item.Contracts).ThenInclude(item => item.BusinessPartner)
             .Include(item => item.Milestones)
             .Include(item => item.Assignments).ThenInclude(item => item.User)
             .Include(item => item.Partners).ThenInclude(item => item.Partner)
@@ -173,7 +174,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             ToOverview(project),
             projectSummary,
             financeSummary,
-            project.Contracts.Where(item => item.IsActive).OrderBy(item => item.ContractNumber).Select(ToContractDto).ToArray(),
+            project.Contracts.Where(item => item.IsActive).OrderByDescending(item => item.ContractType == ContractType.MainContract).ThenBy(item => item.ContractNumber).Select(ToContractDto).ToArray(),
             receivables,
             collections,
             invoices,
@@ -209,7 +210,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         var reason = Required(request.Reason, nameof(request.Reason));
         var number = Required(request.ProjectNumber, nameof(request.ProjectNumber));
         var name = Required(request.Name, nameof(request.Name));
-        var project = await db.Projects.Include(item => item.LegalEntities).Include(item => item.TaxConfigurations)
+        var project = await db.Projects.Include(item => item.LegalEntities).Include(item => item.TaxConfigurations).Include(item => item.Contracts)
             .SingleOrDefaultAsync(item => item.Id == request.Id && item.IsActive, cancellationToken)
             ?? throw new InvalidOperationException("项目不存在或已停用。");
         if (project.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("项目资料已被其他用户修改，请刷新后重试。");
@@ -283,6 +284,9 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
                 db.ProjectTaxConfigurations.Add(newConfiguration);
             }
         }
+
+        if (request.Contracts is not null)
+            SynchronizeProjectContracts(project, request.Contracts);
 
         db.AuditLogs.Add(new AuditLog
         {
@@ -366,7 +370,8 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             item.Id, item.Code, item.Name, item.Unit, item.Quantity, item.UnitPrice,
             (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m), item.Quantity, item.UnitPrice,
             (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m), false, item.ConcurrencyStamp, item.Notes,
-            item.Quantity, item.UnitPrice, item.AccountingLabel, item.RequiresInvoice, (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m))).ToArray(), contract.Notes);
+            item.Quantity, item.UnitPrice, item.AccountingLabel, item.RequiresInvoice, (item.Quantity ?? 0m) * (item.UnitPrice ?? 0m))).ToArray(),
+        contract.Notes, contract.BusinessPartnerId, contract.BusinessPartner?.Name, contract.ConcurrencyStamp);
 
     private static object Snapshot(Project item) => new
     {
@@ -375,8 +380,105 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         item.ActualStartDate, item.ActualCompletionDate, item.Notes,
         LegalEntityIds = item.LegalEntities.Select(link => link.LegalEntityId).Order().ToArray(),
         TaxConfigurations = item.TaxConfigurations.OrderBy(configuration => configuration.TaxRate).ThenBy(configuration => configuration.InvoiceType)
-            .Select(configuration => new { configuration.TaxRate, configuration.InvoiceType, configuration.IsActive }).ToArray()
+            .Select(configuration => new { configuration.TaxRate, configuration.InvoiceType, configuration.IsActive }).ToArray(),
+        Contracts = item.Contracts
+            .Where(contract => contract.IsActive)
+            .OrderByDescending(contract => contract.ContractType == ContractType.MainContract)
+            .ThenBy(contract => contract.ContractNumber)
+            .Select(contract => new
+            {
+                contract.Id,
+                contract.ContractNumber,
+                contract.Name,
+                contract.TotalAmount,
+                contract.ContractType
+            })
+            .ToArray()
     };
+
+    private void SynchronizeProjectContracts(Project project, IReadOnlyCollection<ProjectContractQuickEditInput> contracts)
+    {
+        if (contracts.Count is < 1 or > 3)
+            throw new ArgumentException("每个项目至少维护 1 份合同，最多 3 份。", nameof(contracts));
+
+        var rows = contracts.Select((item, index) => new
+        {
+            Index = index,
+            item.Id,
+            Name = Required(item.Name, nameof(item.Name)),
+            TotalAmount = NormalizeContractAmount(item.TotalAmount),
+            item.ConcurrencyStamp
+        }).ToArray();
+
+        var activeContracts = project.Contracts.Where(item => item.IsActive).ToDictionary(item => item.Id);
+        var submittedExistingIds = rows.Where(item => item.Id is Guid id && id != Guid.Empty).Select(item => item.Id!.Value).ToArray();
+        if (submittedExistingIds.Length != submittedExistingIds.Distinct().Count())
+            throw new ArgumentException("提交的合同存在重复项。", nameof(contracts));
+
+        foreach (var missing in activeContracts.Keys.Except(submittedExistingIds))
+            throw new InvalidOperationException("已有合同不能在快捷编辑中删除，请保留全部现有合同后继续。");
+
+        var usedNumbers = project.Contracts
+            .Select(item => item.ContractNumber)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var nextSequence = activeContracts.Count + 1;
+
+        for (var index = 0; index < rows.Length; index++)
+        {
+            var row = rows[index];
+            var contractType = index == 0 ? ContractType.MainContract : ContractType.Supplement;
+            if (row.Id is Guid existingId && existingId != Guid.Empty)
+            {
+                if (!activeContracts.TryGetValue(existingId, out var existing))
+                    throw new InvalidOperationException("提交的合同不属于当前项目。");
+                if (existing.ConcurrencyStamp != row.ConcurrencyStamp)
+                    throw new DbUpdateConcurrencyException("项目合同已被其他用户修改，请刷新后重试。");
+
+                existing.Name = row.Name;
+                existing.TotalAmount = row.TotalAmount;
+                existing.ContractType = contractType;
+                existing.UpdatedAt = DateTimeOffset.UtcNow;
+                existing.ConcurrencyStamp = Guid.NewGuid();
+                continue;
+            }
+
+            string contractNumber;
+            do
+            {
+                contractNumber = BuildProjectContractNumber(project.ProjectNumber, nextSequence++);
+            }
+            while (!usedNumbers.Add(contractNumber));
+
+            var created = new Contract
+            {
+                ProjectId = project.Id,
+                ContractNumber = contractNumber,
+                Name = row.Name,
+                ContractType = contractType,
+                AllocationMode = ContractAllocationMode.SingleCompany,
+                TotalAmount = row.TotalAmount
+            };
+            project.Contracts.Add(created);
+            db.Contracts.Add(created);
+        }
+    }
+
+    private static decimal NormalizeContractAmount(decimal? amount)
+    {
+        var value = amount ?? 0m;
+        if (value < 0m) throw new ArgumentException("合同金额不能小于 0。");
+        return value;
+    }
+
+    private static string BuildProjectContractNumber(string projectNumber, int sequence)
+    {
+        var suffix = $"-C{sequence:00}";
+        var maxPrefixLength = Math.Max(1, 80 - suffix.Length);
+        var prefix = projectNumber.Length <= maxPrefixLength
+            ? projectNumber
+            : projectNumber[..maxPrefixLength];
+        return prefix + suffix;
+    }
 
     private static void ValidateTaxConfigurations(IReadOnlyCollection<ProjectTaxConfigurationInput>? configurations)
     {
