@@ -38,13 +38,19 @@ export function initAttachmentPreview() {
       const contentType = (trigger.dataset.attachmentContentType || "").toLowerCase();
       const isImage = contentType.startsWith("image/");
       const isPdf = contentType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
+      const extension = fileName.includes(".") ? `.${fileName.split(".").pop().toLowerCase()}` : "";
+      const isOffice = new Set([".docx", ".xlsx", ".pptx"]).has(extension);
+      const isFramePreview = isPdf || isOffice;
       if (title) title.textContent = fileName;
       setHidden(image, !isImage);
-      setHidden(frame, !isPdf);
-      setHidden(fallback, isImage || isPdf);
+      setHidden(frame, !isFramePreview);
+      setHidden(fallback, isImage || isFramePreview);
       if (isImage && image) image.src = source;
       if (isPdf && frame) frame.src = source;
-      if (fallback) fallback.textContent = isImage || isPdf ? "" : "此文件类型不支持内嵌预览，请下载查看。";
+      if (isOffice && frame) {
+        frame.src = `${source}${source.includes("?") ? "&" : "?"}officePreview=true`;
+      }
+      if (fallback) fallback.textContent = isImage || isFramePreview ? "" : "此文件类型暂不支持内嵌预览，请下载查看。";
       if (download) {
         download.href = downloadUrl(source);
         download.download = fileName;
@@ -62,6 +68,7 @@ export function initAttachmentPreview() {
   });
 
   remove?.addEventListener("click", () => {
+    if (!window.confirm("确认删除此附件吗？删除后无法恢复。")) return;
     const form = activeTrigger && document.getElementById(activeTrigger.dataset.attachmentDeleteFormId);
     form?.requestSubmit();
     close();

@@ -214,6 +214,7 @@ public sealed class ProjectAuthorizationTests
         model.InvoiceEdit = new DetailsModel.InvoiceEditInput
         {
             LegalEntityId = FakeProjectWorkspaceService.LegalEntityId,
+            BusinessPartnerId = FakeFinanceLedgerService.BusinessPartnerId,
             InvoiceNumber = "INV-NEW",
             InvoiceDate = new DateOnly(2026, 7, 22),
             ProjectTaxConfigurationId = FakeProjectWorkspaceService.TaxConfigurationId,

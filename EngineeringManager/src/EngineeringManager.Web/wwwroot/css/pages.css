@@ -338,7 +338,7 @@
 .collection-entry-attachment { min-height: 100%; box-sizing: border-box; }
 .finance-summary-strip { display: flex; align-items: center; gap: 1.25rem; margin: .25rem 0 .8rem; padding: .55rem .7rem; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-raised); color: var(--app-muted); font-size: .75rem; font-weight: 650; }
 .record-attachment-column { width: 9.5rem; min-width: 9.5rem; }
-.record-attachment-tools { display: flex; align-items: center; gap: .25rem; white-space: nowrap; }
+.record-attachment-tools { justify-content: center; display: flex; align-items: center; gap: .25rem; white-space: nowrap; }
 .record-attachment-tools form { display: inline-flex; margin: 0; }
 .record-attachment-tools .button { min-width: 2.8rem; min-height: 1.8rem; padding-inline: .35rem; font-size: .66rem; }
 .attachment-file-link { display: inline-block; max-width: 9rem; overflow: hidden; color: var(--app-primary); text-overflow: ellipsis; text-decoration: none; vertical-align: middle; white-space: nowrap; }
@@ -467,7 +467,7 @@
 .construction-inline-table .record-attachment-column { width: 5.5rem; min-width: 5.5rem; vertical-align: middle; }
 .payment-inline-table th, .payment-inline-table td { padding: .38rem .42rem; overflow-wrap: anywhere; }
 .payment-inline-table .record-attachment-column { min-width: 0; }
-.payment-inline-table .record-attachment-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: .2rem; white-space: normal; }
+.payment-inline-table .record-attachment-tools { justify-items: center; display: grid; grid-template-columns: minmax(0, 1fr); gap: .2rem; white-space: normal; }
 .payment-inline-table .record-attachment-tools .button { width: 100%; min-width: 0; }
 .payable-inline-table th:nth-child(1), .payable-inline-table td:nth-child(1) { width: 9%; }
 .payable-inline-table th:nth-child(2), .payable-inline-table td:nth-child(2) { width: 12%; }
@@ -499,6 +499,7 @@
 .collection-inline-table th:nth-child(8), .collection-inline-table td:nth-child(8) { width: 5.5rem; }
 .collection-inline-table .quantity-notes-column { min-width: 16rem; }
 .collection-inline-table .record-attachment-column { width: 5.5rem; min-width: 5.5rem; vertical-align: middle; }
+.data-table .quantity-attachment-column, .data-table .record-attachment-column { text-align: center; vertical-align: middle; }
 .quantity-inline-table th:nth-child(1), .quantity-inline-table td:nth-child(1) { width: 6.5rem; }
 .quantity-inline-table th:nth-child(2), .quantity-inline-table td:nth-child(2) { width: 9rem; }
 .quantity-inline-table th:nth-child(3), .quantity-inline-table td:nth-child(3) { width: 4.5rem; }
@@ -520,7 +521,7 @@
 .quantity-row-upload { display: flex; width: 100%; justify-content: center; }
 .quantity-row-upload .button, .quantity-attachment-content .button { flex: 0 0 auto; min-width: 3.75rem; min-height: 1.8rem; padding-inline: .25rem; font-size: .66rem; white-space: nowrap; }
 .quantity-attachment-cell { min-width: 4.5rem; white-space: normal; }
-.quantity-attachment-content { min-height: 2rem; flex-direction: column; align-items: stretch; gap: .2rem; }
+.quantity-attachment-content { min-height: 2rem; flex-direction: column; align-items: center; gap: .2rem; }
 .quantity-attachment-preview-link { overflow: hidden; text-overflow: ellipsis; }
 .quantity-attachment-content .inline-form { display: flex; width: 100%; flex: 0 0 auto; align-items: center; margin: 0; }
 .quantity-attachment-content .inline-form .button, .quantity-attachment-preview-link { width: 100%; }
@@ -539,6 +540,8 @@
 .attachment-preview-body img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
 .attachment-preview-body iframe { display: block; width: 100%; height: 100%; min-height: 0; border: 0; background: #fff; }
 .attachment-preview-body p { max-width: 32rem; margin: 0; color: var(--app-muted); text-align: center; line-height: 1.6; }
+.attachment-preview-delete { color: var(--app-danger); }
+.attachment-preview-delete:hover, .attachment-preview-delete:focus-visible { color: var(--app-danger); }
 .quantity-inline-table tr:target td, .data-table tr:target td { background: var(--app-primary-soft); }
 .project-tab-panel > h3 { margin: var(--space-4) 0 var(--space-2); }
 

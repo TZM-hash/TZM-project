@@ -232,6 +232,38 @@ public sealed class ProjectQuantityInlineEntryPageTests
     }
 
     [Fact]
+    public void ProjectAttachmentColumnsCenterControlsAndUseDangerDeleteAction()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        page.Should().Contain("<th class=\"quantity-attachment-column\">附件</th>")
+            .And.Contain("<th class=\"record-attachment-column\">附件</th>");
+        styles.Should().Contain(".data-table .quantity-attachment-column, .data-table .record-attachment-column { text-align: center;")
+            .And.Contain(".record-attachment-tools { justify-content: center;")
+            .And.Contain(".payment-inline-table .record-attachment-tools { justify-items: center;")
+            .And.Contain(".attachment-preview-delete { color: var(--app-danger);");
+    }
+
+    [Fact]
+    public void InvoiceCreationRequiresSelectableBusinessPartnerAndSupportsOfficePreview()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml.cs");
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "attachment-preview.js");
+
+        page.Should().Contain("<label class=\"collection-entry-compact-field\">合作单位<select asp-for=\"InvoiceEdit.BusinessPartnerId\">")
+            .And.Contain("@foreach (var partner in Model.FinanceOptions.BusinessPartners)");
+        model.Should().Contain("Required(InvoiceEdit.BusinessPartnerId, \"请选择合作单位。\")")
+            .And.Contain("bool officePreview");
+        script.Should().Contain(".docx")
+            .And.Contain(".xlsx")
+            .And.Contain(".pptx")
+            .And.Contain("officePreview=true")
+            .And.Contain("window.confirm(\"确认删除此附件吗？删除后无法恢复。\")");
+    }
+
+    [Fact]
     public void LegacyContractEditPageIsRemoved()
     {
         var root = RepositoryRoot();

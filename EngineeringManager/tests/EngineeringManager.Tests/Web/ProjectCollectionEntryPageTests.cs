@@ -17,7 +17,7 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain("data-collection-contract")
             .And.Contain("data-collection-payer")
             .And.Contain("data-business-partner-id")
-            .And.Contain("<th>收款方式</th><th>附件</th><th>备注</th>");
+            .And.Contain("<th>收款方式</th><th class=\"record-attachment-column\">附件</th><th>备注</th>");
 
         var accountIndex = page.IndexOf("asp-for=\"CollectionEdit.AccountId\"", StringComparison.Ordinal);
         var dateIndex = page.IndexOf("asp-for=\"CollectionEdit.EntryDate\"", StringComparison.Ordinal);
@@ -133,7 +133,7 @@ public sealed class ProjectCollectionEntryPageTests
         invoice.Should().Contain("id=\"invoice-batch-form\"")
             .And.Contain("InvoiceRowEdits[")
             .And.Contain("invoice-inline-table")
-            .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>")
+            .And.Contain("<th class=\"record-attachment-column\">附件</th><th class=\"quantity-notes-column\">备注</th>")
             .And.Contain("asp-for=\"InvoiceEdit.Description\"")
             .And.Contain("name=\"InvoiceRowEdits[@editIndex].Description\" value=\"@row.Notes\"")
             .And.Contain("asp-for=\"InvoiceEdit.GrossAmount\"")
@@ -146,13 +146,13 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain("PayableRowEdits[")
             .And.Contain("PaymentRowEdits[")
             .And.Contain("payment-inline-table")
-            .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>")
+            .And.Contain("<th class=\"record-attachment-column\">附件</th><th class=\"quantity-notes-column\">备注</th>")
             .And.Contain("isPayrollPayment")
             .And.Contain("PaymentRowEdits[@editIndex].SourceType");
         construction.Should().Contain("id=\"construction-batch-form\"")
             .And.Contain("ConstructionRowEdits[")
             .And.Contain("construction-inline-table")
-            .And.Contain("<th>附件</th><th class=\"quantity-notes-column\">备注</th>");
+            .And.Contain("<th class=\"record-attachment-column\">附件</th><th class=\"quantity-notes-column\">备注</th>");
 
         model.Should().Contain("OnPostInvoicesAsync")
             .And.Contain("OnPostPaymentsAsync")

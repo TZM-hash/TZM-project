@@ -6,6 +6,7 @@ using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Security;
+using EngineeringManager.Web.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -215,13 +216,14 @@ public sealed class DetailsModel(
         }
     }
 
-    public async Task<IActionResult> OnGetQuantityAttachmentAsync(Guid id, Guid attachmentId, bool download, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnGetQuantityAttachmentAsync(Guid id, Guid attachmentId, bool download, bool officePreview, CancellationToken cancellationToken)
     {
         var workspace = await workspaceService.GetAsync(id, cancellationToken);
         if (workspace is null) return NotFound();
         var attachments = await LoadQuantityAttachmentsAsync(workspace, cancellationToken);
         if (!attachments.Values.Any(item => item.Id == attachmentId)) return NotFound();
         var file = await attachmentService.DownloadAsync(id, attachmentId, cancellationToken);
+        if (officePreview) return await OfficePreviewResultAsync(file, cancellationToken);
         return download
             ? File(file.Content, file.ContentType, file.OriginalFileName)
             : File(file.Content, file.ContentType);
@@ -270,12 +272,13 @@ public sealed class DetailsModel(
         }
     }
 
-    public async Task<IActionResult> OnGetRecordAttachmentAsync(Guid id, Guid attachmentId, bool download, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnGetRecordAttachmentAsync(Guid id, Guid attachmentId, bool download, bool officePreview, CancellationToken cancellationToken)
     {
         var (workspace, construction) = await LoadAttachmentContextAsync(id, cancellationToken);
         var attachments = await LoadRecordAttachmentsAsync(workspace, construction, cancellationToken);
         if (!attachments.Values.Any(item => item.Id == attachmentId)) return NotFound();
         var file = await attachmentService.DownloadAsync(id, attachmentId, cancellationToken);
+        if (officePreview) return await OfficePreviewResultAsync(file, cancellationToken);
         return download
             ? File(file.Content, file.ContentType, file.OriginalFileName)
             : File(file.Content, file.ContentType);
@@ -453,7 +456,7 @@ public sealed class DetailsModel(
             var taxConfigurationId = Required(InvoiceEdit.ProjectTaxConfigurationId, "请选择税率和发票类型。");
             var amounts = await ResolveInvoiceAmountsAsync(id, InvoiceEdit.GrossAmount, taxConfigurationId, cancellationToken);
             var invoiceId = await financeService.AddInvoiceAsync(new CreateInvoiceRequest(
-                id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), InvoiceEdit.BusinessPartnerId,
+                id, InvoiceEdit.ContractId, Required(InvoiceEdit.LegalEntityId, "请选择签约公司。"), Required(InvoiceEdit.BusinessPartnerId, "请选择合作单位。"),
                 InvoiceDirection.Output, RequiredText(InvoiceEdit.InvoiceNumber, "请填写发票号码。"), InvoiceEdit.InvoiceDate,
                 taxConfigurationId, amounts.NetAmount, amounts.TaxAmount, amounts.GrossAmount,
                 InvoiceStatus.IssuedOrReceived, [], [], InvoiceEdit.Description), cancellationToken);
@@ -665,6 +668,24 @@ public sealed class DetailsModel(
         ActiveInlineEditor = editor;
         await LoadAsync(id, false, cancellationToken);
         return Page();
+    }
+
+    private static async Task<IActionResult> OfficePreviewResultAsync(
+        ProjectRecordAttachmentFile file,
+        CancellationToken cancellationToken)
+    {
+        await using var content = file.Content;
+        await using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken);
+
+        var html = OfficeAttachmentPreview.Create(file.OriginalFileName, buffer.ToArray())
+            ?? "<!doctype html><html lang=\"zh-CN\"><body><p>此 Office 文件无法直接预览，请下载后打开。</p></body></html>";
+
+        return new ContentResult
+        {
+            Content = html,
+            ContentType = "text/html; charset=utf-8"
+        };
     }
 
     private async Task LoadAsync(Guid id, bool populateInputs, CancellationToken cancellationToken)

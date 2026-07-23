@@ -851,7 +851,7 @@ else
 
                         <div class="finance-summary-strip"><span>工程量应收 @item.FinanceSummary.ReceivableAmount.ToString("N2")</span><span>已收 @item.FinanceSummary.CollectedAmount.ToString("N2")</span><span>未收 @item.FinanceSummary.UncollectedAmount.ToString("N2")</span></div>
 
-                        <div><h3>收款记录</h3><div class="table-wrap"><table class="data-table collection-inline-table"><thead><tr><th>收款日期</th><th>合同</th><th>签约公司</th><th>付款方</th><th>收款账户</th><th>收款金额</th><th>收款方式</th><th>附件</th><th>备注</th></tr></thead><tbody>
+                        <div><h3>收款记录</h3><div class="table-wrap"><table class="data-table collection-inline-table"><thead><tr><th>收款日期</th><th>合同</th><th>签约公司</th><th>付款方</th><th>收款账户</th><th>收款金额</th><th>收款方式</th><th class="record-attachment-column">附件</th><th>备注</th></tr></thead><tbody>
 
                         @{
 
@@ -943,25 +943,11 @@ else
 
                                     </div>
 
-                                    @{
-
-                                        var invoiceContractorOptions = ProjectGeneralContractors.Parse(item.Overview.GeneralContractorName)
-
-                                            .Select(name => {
-
-                                                var match = Model.FinanceOptions.BusinessPartners.FirstOrDefault(partner => string.Equals(partner.Label, name, StringComparison.OrdinalIgnoreCase));
-
-                                                return match ?? new FinanceOptionDto(Guid.Empty, name);
-
-                                            }).ToArray();
-
-                                    }
-
                                     <div class="collection-entry-row collection-entry-row--2">
 
                                         <label class="collection-entry-compact-field">开票公司<select asp-for="InvoiceEdit.LegalEntityId"><option value="">请选择</option>@foreach (var company in projectLegalEntityOptions) { <option value="@company.Value">@company.Label</option> }</select></label>
 
-                                        <label class="collection-entry-compact-field">往来单位<select asp-for="InvoiceEdit.BusinessPartnerId"><option value="">未指定</option>@foreach (var partner in invoiceContractorOptions) { <option value="@(partner.Id == Guid.Empty ? "" : partner.Id.ToString())">@partner.Label</option> }</select></label>
+                                        <label class="collection-entry-compact-field">合作单位<select asp-for="InvoiceEdit.BusinessPartnerId"><option value="">请选择合作单位</option>@foreach (var partner in Model.FinanceOptions.BusinessPartners) { <option value="@partner.Id">@partner.Label</option> }</select></label>
 
                                         <label class="collection-entry-compact-field">税率与发票类型<select asp-for="InvoiceEdit.ProjectTaxConfigurationId" data-invoice-tax-rate>@foreach (var configuration in taxConfigurations) { <option value="@configuration.Id" data-tax-rate="@configuration.TaxRate.ToString(System.Globalization.CultureInfo.InvariantCulture)">@((configuration.TaxRate * 100m).ToString("0"))% · @configuration.InvoiceType.ToChinese()</option> }</select></label>
 
@@ -981,7 +967,7 @@ else
 
                         }
 
-                        <div class="table-wrap"><table class="data-table invoice-inline-table"><thead><tr><th>日期</th><th>号码</th><th>合同</th><th>开票公司</th><th>往来单位</th><th>税率</th><th>发票类型</th><th>含税金额</th><th>状态</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
+                        <div class="table-wrap"><table class="data-table invoice-inline-table"><thead><tr><th>日期</th><th>号码</th><th>合同</th><th>开票公司</th><th>往来单位</th><th>税率</th><th>发票类型</th><th>含税金额</th><th>状态</th><th class="record-attachment-column">附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
 
                         @{
 
@@ -1097,7 +1083,7 @@ else
 
                         }
 
-                        <div><h3>应付记录</h3><div class="table-wrap"><table class="data-table payment-inline-table payable-inline-table"><thead><tr><th>日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>金额</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
+                        <div><h3>应付记录</h3><div class="table-wrap"><table class="data-table payment-inline-table payable-inline-table"><thead><tr><th>日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>金额</th><th class="record-attachment-column">附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
 
                         @{ var payableEditIndex = 0; }
 
@@ -1131,7 +1117,7 @@ else
 
                         </tbody></table></div>
 
-                        <h3>付款记录</h3><div class="table-wrap"><table class="data-table payment-inline-table payment-record-inline-table"><thead><tr><th>付款日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>付款账户</th><th>付款金额</th><th>付款方式</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
+                        <h3>付款记录</h3><div class="table-wrap"><table class="data-table payment-inline-table payment-record-inline-table"><thead><tr><th>付款日期</th><th>合同</th><th>签约公司</th><th>收款单位</th><th>付款账户</th><th>付款金额</th><th>付款方式</th><th class="record-attachment-column">附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
 
                         @{ var paymentEditIndex = 0; }
 
@@ -1231,7 +1217,7 @@ else
 
                         <div asp-validation-summary="All" class="panel-copy"></div>
 
-                        <div class="table-wrap"><table class="data-table construction-inline-table construction-detail-table"><thead><tr><th>类型</th><th>设备/施工班组</th><th>项目总览</th><th>从哪个项目调入</th><th>进场日期</th><th>退场日期</th><th>总天数</th><th>停工天数</th><th>施工天数</th><th>退场到哪个项目</th><th>状态</th><th>附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
+                        <div class="table-wrap"><table class="data-table construction-inline-table construction-detail-table"><thead><tr><th>类型</th><th>设备/施工班组</th><th>项目总览</th><th>从哪个项目调入</th><th>进场日期</th><th>退场日期</th><th>总天数</th><th>停工天数</th><th>施工天数</th><th>退场到哪个项目</th><th>状态</th><th class="record-attachment-column">附件</th><th class="quantity-notes-column">备注</th></tr></thead><tbody>
 
                         @{ var constructionEditIndex = 0; }
 
@@ -1317,7 +1303,7 @@ else
                     <strong id="attachment-preview-title" data-attachment-preview-title>附件预览</strong>
                     <div class="attachment-preview-actions">
                         <button class="button button--secondary button--small" type="button" data-attachment-preview-replace hidden>替换</button>
-                        <button class="button button--ghost button--small" type="button" data-attachment-preview-delete hidden>删除</button>
+                        <button class="button button--secondary button--small attachment-preview-delete" type="button" data-attachment-preview-delete hidden>删除</button>
                         <a class="button button--secondary button--small" href="#" data-attachment-preview-download>下载</a>
                         <button class="button button--secondary button--small" type="button" data-attachment-preview-close>关闭</button>
                     </div>
