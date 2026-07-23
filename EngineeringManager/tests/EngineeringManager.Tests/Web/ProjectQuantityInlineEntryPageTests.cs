@@ -259,6 +259,9 @@ public sealed class ProjectQuantityInlineEntryPageTests
         script.Should().Contain(".docx")
             .And.Contain(".xlsx")
             .And.Contain(".pptx")
+            .And.Contain(".doc")
+            .And.Contain(".xls")
+            .And.Contain(".ppt")
             .And.Contain("officePreview=true")
             .And.Contain("window.confirm(\"确认删除此附件吗？删除后无法恢复。\")");
     }

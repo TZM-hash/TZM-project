@@ -39,7 +39,7 @@ export function initAttachmentPreview() {
       const isImage = contentType.startsWith("image/");
       const isPdf = contentType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
       const extension = fileName.includes(".") ? `.${fileName.split(".").pop().toLowerCase()}` : "";
-      const isOffice = new Set([".docx", ".xlsx", ".pptx"]).has(extension);
+      const isOffice = new Set([".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt"]).has(extension);
       const isFramePreview = isPdf || isOffice;
       if (title) title.textContent = fileName;
       setHidden(image, !isImage);
