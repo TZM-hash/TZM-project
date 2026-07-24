@@ -1,0 +1,19 @@
+@model (IReadOnlyList<EngineeringManager.Application.Companies.CompanyListItemDto> Companies, Guid? SelectedCompanyId, string? CurrentTab)
+@{
+    var companies = Model.Companies;
+    var selected = Model.SelectedCompanyId;
+    var tab = Model.CurrentTab;
+}
+<div class="company-scope-switcher" data-company-scope-switcher>
+    <label class="company-scope-label" for="company-scope-select">公司范围</label>
+    <select id="company-scope-select" class="company-scope-select" onchange="if (this.value) { window.location = this.value; }">
+        <option value="/Companies" selected="@(selected is null ? "selected" : null)">全部公司</option>
+        @foreach (var company in companies)
+        {
+            var href = string.IsNullOrWhiteSpace(tab)
+                ? $"/Companies/Details/{company.Id}?tab=overview"
+                : $"/Companies/Details/{company.Id}?tab={tab}";
+            <option value="@href" selected="@(selected == company.Id ? "selected" : null)">@company.Name</option>
+        }
+    </select>
+</div>

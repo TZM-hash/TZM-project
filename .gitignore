@@ -8,3 +8,9 @@
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Verification / test scratch artifacts (may contain sessions or hardcoded credentials)
+/EngineeringManager/test-results/
+
+# Imported business data snapshots
+/old-data/

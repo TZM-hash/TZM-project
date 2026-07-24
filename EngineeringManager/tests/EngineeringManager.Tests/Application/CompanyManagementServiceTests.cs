@@ -172,6 +172,93 @@ public sealed class CompanyManagementServiceTests
         (await scope.Service.SearchAsync(CompanyActor.Administrator("admin"), "搜索注册地址 搜索账户 搜索资质", CancellationToken.None)).Should().ContainSingle(item => item.Id == company.Id);
     }
 
+    [Fact]
+    public async Task DeactivatingAccountClearsDefaultFlags()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "LE-DEF", Name = "默认账户公司", ShortName = "默认" };
+        scope.Db.Add(company);
+        await scope.Db.SaveChangesAsync();
+        var actor = CompanyActor.Administrator("admin");
+        var created = await scope.Service.SaveAccountAsync(actor, new SaveCompanyAccountRequest(
+            null, company.Id, "默认户", "1", "行", (int)FinancialAccountType.Bank, 0m,
+            true, true, true, true, null, "新增"), default);
+
+        var updated = await scope.Service.SaveAccountAsync(actor, new SaveCompanyAccountRequest(
+            created.Id, company.Id, created.AccountName, "1", "行", (int)FinancialAccountType.Bank, 0m,
+            true, true, true, false, created.ConcurrencyStamp, "停用公司账户"), default);
+
+        updated.IsActive.Should().BeFalse();
+        updated.IsDefaultCollection.Should().BeFalse();
+        updated.IsDefaultPayment.Should().BeFalse();
+        updated.IsDefaultInvoice.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task WorkspaceQueriesReturnCompanyScopedRows()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "LE-WS", Name = "工作台公司", ShortName = "工作台" };
+        var other = new LegalEntity { Code = "LE-OTHER", Name = "其他公司", ShortName = "其他" };
+        var partner = new BusinessPartner { PartnerNumber = "BP-WS", Name = "客户甲", ShortName = "客户" };
+        var project = new Project { ProjectNumber = "P-WS-01", Name = "工作台项目", Stage = ProjectStage.UnderConstruction };
+        var contract = new Contract
+        {
+            Project = project,
+            ContractNumber = "C-WS-01",
+            Name = "工作台合同",
+            ContractType = ContractType.MainContract,
+            TotalAmount = 1000m,
+            LegalEntityAllocations = [new ContractLegalEntityAllocation { LegalEntity = company, Amount = 800m, Percentage = 80m }]
+        };
+        project.LegalEntities.Add(new ProjectLegalEntity { LegalEntity = company, IsPrimary = true });
+        var bank = new FinancialAccount { LegalEntity = company, AccountName = "工作台户", AccountType = FinancialAccountType.Bank, IsActive = true };
+        var inactive = new FinancialAccount { LegalEntity = company, AccountName = "停用户", AccountType = FinancialAccountType.Cash, IsActive = false };
+        var receivable = new ReceivableEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, SourceType = ReceivableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 20), Amount = 600m };
+        var collection = new CollectionEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, CollectionDate = new DateOnly(2026, 7, 21), Amount = 200m, Notes = "首笔收款" };
+        var payable = new PayableEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, SourceType = PayableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 20), Amount = 150m };
+        var payment = new PaymentEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, PaymentDate = new DateOnly(2026, 7, 22), Amount = 50m, Notes = "首笔付款" };
+        var invoice = new InvoiceEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Direction = InvoiceDirection.Output, InvoiceNumber = "INV-WS-01", InvoiceDate = new DateOnly(2026, 7, 23), GrossAmount = 300m, Status = InvoiceStatus.IssuedOrReceived };
+        var otherBank = new FinancialAccount { LegalEntity = other, AccountName = "其他户", AccountType = FinancialAccountType.Bank, IsActive = true };
+        var otherCollection = new CollectionEntry { Project = project, Contract = contract, LegalEntity = other, BusinessPartner = partner, Account = otherBank, CollectionDate = new DateOnly(2026, 7, 21), Amount = 999m };
+        var certValid = new CompanyCertificate { LegalEntity = company, CertificateType = "营业执照", CertificateNumber = "CERT-1", ExpiresOn = new DateOnly(2027, 1, 1) };
+        var certExpired = new CompanyCertificate { LegalEntity = company, CertificateType = "资质", CertificateNumber = "CERT-2", ExpiresOn = new DateOnly(2020, 1, 1) };
+        scope.Db.AddRange(company, other, partner, project, contract, bank, inactive, otherBank, receivable, collection, payable, payment, invoice, otherCollection, certValid, certExpired);
+        await scope.Db.SaveChangesAsync();
+
+        var actor = CompanyActor.Administrator("admin");
+        var summary = await scope.Service.GetWorkspaceSummaryAsync(actor, company.Id, default);
+        summary.ProjectCount.Should().Be(1);
+        summary.ContractCount.Should().Be(1);
+        summary.ActiveAccountCount.Should().Be(1);
+        summary.TotalAccountCount.Should().Be(2);
+        summary.TotalCertificateCount.Should().Be(2);
+        summary.ExpiredCertificateCount.Should().Be(1);
+        summary.ValidCertificateCount.Should().Be(1);
+
+        var projects = await scope.Service.ListCompanyProjectsAsync(actor, company.Id, null, 50, default);
+        projects.Should().ContainSingle();
+        projects[0].CompanyContractAmount.Should().Be(800m);
+        projects[0].ReceivableAmount.Should().Be(600m);
+        projects[0].CollectedAmount.Should().Be(200m);
+        projects[0].PayableAmount.Should().Be(150m);
+        projects[0].PaidAmount.Should().Be(50m);
+
+        var collections = await scope.Service.ListCompanyCollectionsAsync(actor, company.Id, 50, default);
+        collections.Should().ContainSingle(item => item.Amount == 200m);
+        collections.Should().NotContain(item => item.Amount == 999m);
+
+        var payments = await scope.Service.ListCompanyPaymentsAsync(actor, company.Id, 50, default);
+        payments.Should().ContainSingle(item => item.Amount == 50m);
+
+        var invoices = await scope.Service.ListCompanyInvoicesAsync(actor, company.Id, 50, default);
+        invoices.Should().ContainSingle(item => item.InvoiceNumber == "INV-WS-01" && item.Direction == "销项");
+
+        var activity = await scope.Service.ListRecentActivityAsync(actor, company.Id, 10, default);
+        activity.Count.Should().BeLessThanOrEqualTo(10);
+        activity.Should().NotBeEmpty();
+        activity.Select(item => item.Date).Should().BeInDescendingOrder();
+    }
     private static async Task<TestScope> CreateScopeAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:");

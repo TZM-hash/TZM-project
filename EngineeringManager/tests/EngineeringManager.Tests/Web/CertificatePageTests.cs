@@ -96,6 +96,20 @@ public sealed class CertificatePageTests
         public static readonly Guid Id = Guid.Parse("20000000-0000-0000-0000-000000000001");
         public Task<IReadOnlyList<CompanyListItemDto>> ListAsync(CompanyActor actor, CancellationToken token) => Task.FromResult<IReadOnlyList<CompanyListItemDto>>([new(Id, "C-001", "测试公司", "测试", null, null, true)]);
         public Task<CompanyDetailsDto> GetAsync(CompanyActor actor, Guid id, CancellationToken token) => throw new NotSupportedException();
+                public Task<CompanyWorkspaceSummaryDto> GetWorkspaceSummaryAsync(CompanyActor actor, Guid companyId, CancellationToken cancellationToken) =>
+            Task.FromResult(new CompanyWorkspaceSummaryDto(1, 1, 1, 1, 1, 1, 0));
+        public Task<IReadOnlyList<CompanyActivityItemDto>> ListRecentActivityAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanyActivityItemDto>>([new("collection", "测试收款", "摘要", 100m, new DateOnly(2026, 7, 20), Id, Guid.NewGuid())]);
+        public Task<IReadOnlyList<CompanyProjectRowDto>> ListCompanyProjectsAsync(CompanyActor actor, Guid companyId, string? search, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanyProjectRowDto>>([new(Id, "P-01", "测试项目", "InConstruction", 1000m, 600m, 400m, 300m, 100m)]);
+        public Task<IReadOnlyList<CompanyContractRowDto>> ListCompanyContractsAsync(CompanyActor actor, Guid companyId, Guid? projectId, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanyContractRowDto>>([new(Guid.NewGuid(), Id, "C-01", "测试合同", 1000m, 800m, 80m, true)]);
+        public Task<IReadOnlyList<CompanyCollectionRowDto>> ListCompanyCollectionsAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanyCollectionRowDto>>([new(Guid.NewGuid(), new DateOnly(2026, 7, 20), Id, "P-01", "测试项目", "收款摘要", Guid.NewGuid(), "基本户", true, 400m)]);
+        public Task<IReadOnlyList<CompanyPaymentRowDto>> ListCompanyPaymentsAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanyPaymentRowDto>>([new(Guid.NewGuid(), new DateOnly(2026, 7, 21), Id, "P-01", "测试项目", "付款摘要", Guid.NewGuid(), "基本户", true, 100m)]);
+        public Task<IReadOnlyList<CompanyInvoiceRowDto>> ListCompanyInvoicesAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanyInvoiceRowDto>>([new(Guid.NewGuid(), "销项", "INV-01", new DateOnly(2026, 7, 22), Id, "P-01", "测试项目", "测试自有公司", 200m)]);
         public Task<CompanyDetailsDto> SaveCompanyAsync(CompanyActor actor, SaveCompanyRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<SaveCompanyRequest> PrepareCopyAsync(CompanyActor actor, Guid sourceId, CancellationToken token) => throw new NotSupportedException();
         public Task<IReadOnlyList<CompanyCategoryDto>> ListCategoriesAsync(CancellationToken token) => throw new NotSupportedException();

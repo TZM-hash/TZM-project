@@ -224,10 +224,11 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         account.AccountType = Enum.IsDefined((FinancialAccountType)request.AccountType) ? (FinancialAccountType)request.AccountType : throw new ArgumentOutOfRangeException(nameof(request));
         account.OpeningBalance = request.OpeningBalance;
         account.Notes = Optional(request.Notes);
-        account.IsDefaultCollection = request.IsDefaultCollection;
-        account.IsDefaultPayment = request.IsDefaultPayment;
-        account.IsDefaultInvoice = request.IsDefaultInvoice;
-        account.IsActive = request.IsActive;
+        var isActive = request.IsActive;
+        account.IsActive = isActive;
+        account.IsDefaultCollection = isActive && request.IsDefaultCollection;
+        account.IsDefaultPayment = isActive && request.IsDefaultPayment;
+        account.IsDefaultInvoice = isActive && request.IsDefaultInvoice;
         account.ConcurrencyStamp = Guid.NewGuid();
         var siblings = await db.FinancialAccounts.AsNoTracking().Where(item => item.LegalEntityId == request.LegalEntityId && item.Id != account.Id)
             .Select(item => new CompanyAccountDefault(item.IsDefaultCollection, item.IsDefaultPayment, item.IsDefaultInvoice)).ToListAsync(cancellationToken);
@@ -282,6 +283,372 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         return ToCertificate(certificate);
     }
 
+    public async Task<CompanyWorkspaceSummaryDto> GetWorkspaceSummaryAsync(CompanyActor actor, Guid companyId, CancellationToken cancellationToken)
+    {
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var projectIds = await GetCompanyProjectIdsAsync(companyId, cancellationToken);
+        var contractCount = await db.ContractLegalEntityAllocations.AsNoTracking()
+            .CountAsync(item => item.LegalEntityId == companyId, cancellationToken);
+        var accounts = await db.FinancialAccounts.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .Select(item => item.IsActive)
+            .ToListAsync(cancellationToken);
+        var certificates = await db.CompanyCertificates.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId && !item.IsDeleted)
+            .Select(item => item.ExpiresOn)
+            .ToListAsync(cancellationToken);
+        var expired = certificates.Count(item => item.HasValue && item.Value < today);
+        return new CompanyWorkspaceSummaryDto(
+            projectIds.Count,
+            contractCount,
+            accounts.Count(item => item),
+            accounts.Count,
+            certificates.Count - expired,
+            certificates.Count,
+            expired);
+    }
+
+    public async Task<IReadOnlyList<CompanyActivityItemDto>> ListRecentActivityAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken)
+    {
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+        take = NormalizeTake(take, 10);
+        var projectIds = await GetCompanyProjectIdsAsync(companyId, cancellationToken);
+        var activities = new List<CompanyActivityItemDto>();
+
+        if (projectIds.Count > 0)
+        {
+            var projectActivityRows = await db.Projects.AsNoTracking()
+                .Where(item => projectIds.Contains(item.Id))
+                .Select(item => new { item.Id, item.ProjectNumber, item.Name, item.CreatedAt, item.UpdatedAt })
+                .ToListAsync(cancellationToken);
+            var projects = projectActivityRows
+                .OrderByDescending(item => item.UpdatedAt)
+                .Take(take)
+                .ToList();
+            activities.AddRange(projects.Select(item => new CompanyActivityItemDto(
+                "project",
+                item.ProjectNumber + " " + item.Name,
+                "关联项目",
+                null,
+                DateOnly.FromDateTime(item.CreatedAt.UtcDateTime),
+                item.Id,
+                item.Id)));
+        }
+
+        var contractActivityRows = await db.ContractLegalEntityAllocations.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .Select(item => new
+            {
+                item.ContractId,
+                item.Contract.ProjectId,
+                item.Contract.ContractNumber,
+                item.Contract.Name,
+                item.Contract.TotalAmount,
+                item.Contract.SignedDate,
+                item.Contract.CreatedAt,
+                item.Contract.UpdatedAt
+            })
+            .ToListAsync(cancellationToken);
+        var contracts = contractActivityRows
+            .OrderByDescending(item => item.UpdatedAt)
+            .Take(take)
+            .ToList();
+        activities.AddRange(contracts.Select(item => new CompanyActivityItemDto(
+            "contract",
+            item.ContractNumber + " " + item.Name,
+            "合同",
+            item.TotalAmount,
+            item.SignedDate ?? DateOnly.FromDateTime(item.CreatedAt.UtcDateTime),
+            item.ProjectId,
+            item.ContractId)));
+
+        var collections = await db.CollectionEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .OrderByDescending(item => item.CollectionDate)
+            .Take(take)
+            .Select(item => new
+            {
+                item.Id,
+                item.ProjectId,
+                item.Project.ProjectNumber,
+                item.Project.Name,
+                item.Amount,
+                item.CollectionDate,
+                item.Notes
+            })
+            .ToListAsync(cancellationToken);
+        activities.AddRange(collections.Select(item => new CompanyActivityItemDto(
+            "collection",
+            item.ProjectNumber + " 收款",
+            string.IsNullOrWhiteSpace(item.Notes) ? item.Name : item.Notes,
+            item.Amount,
+            item.CollectionDate,
+            item.ProjectId,
+            item.Id)));
+
+        var payments = await db.PaymentEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .OrderByDescending(item => item.PaymentDate)
+            .Take(take)
+            .Select(item => new
+            {
+                item.Id,
+                item.ProjectId,
+                item.Project.ProjectNumber,
+                item.Project.Name,
+                item.Amount,
+                item.PaymentDate,
+                item.Notes
+            })
+            .ToListAsync(cancellationToken);
+        activities.AddRange(payments.Select(item => new CompanyActivityItemDto(
+            "payment",
+            item.ProjectNumber + " 付款",
+            string.IsNullOrWhiteSpace(item.Notes) ? item.Name : item.Notes,
+            item.Amount,
+            item.PaymentDate,
+            item.ProjectId,
+            item.Id)));
+
+        var invoices = await db.InvoiceEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .OrderByDescending(item => item.InvoiceDate)
+            .Take(take)
+            .Select(item => new
+            {
+                item.Id,
+                item.ProjectId,
+                item.Project.ProjectNumber,
+                item.InvoiceNumber,
+                item.GrossAmount,
+                item.InvoiceDate,
+                item.Direction
+            })
+            .ToListAsync(cancellationToken);
+        activities.AddRange(invoices.Select(item => new CompanyActivityItemDto(
+            "invoice",
+            item.InvoiceNumber,
+            item.ProjectNumber + " " + (item.Direction == InvoiceDirection.Output ? "销项发票" : "进项发票"),
+            item.GrossAmount,
+            item.InvoiceDate,
+            item.ProjectId,
+            item.Id)));
+
+        return activities
+            .OrderByDescending(item => item.Date ?? DateOnly.MinValue)
+            .ThenByDescending(item => item.Title)
+            .Take(take)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<CompanyProjectRowDto>> ListCompanyProjectsAsync(CompanyActor actor, Guid companyId, string? search, int take, CancellationToken cancellationToken)
+    {
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+        take = NormalizeTake(take, 50);
+        var projectIds = await GetCompanyProjectIdsAsync(companyId, cancellationToken);
+        if (projectIds.Count == 0)
+        {
+            return [];
+        }
+
+        var query = db.Projects.AsNoTracking().Where(item => projectIds.Contains(item.Id));
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(item => item.ProjectNumber.Contains(term) || item.Name.Contains(term));
+        }
+
+        var projectRows = await query
+            .Select(item => new { item.Id, item.ProjectNumber, item.Name, item.Stage, item.UpdatedAt })
+            .ToListAsync(cancellationToken);
+        var projects = projectRows
+            .OrderByDescending(item => item.UpdatedAt)
+            .ThenBy(item => item.ProjectNumber)
+            .Take(take)
+            .Select(item => new { item.Id, item.ProjectNumber, item.Name, item.Stage })
+            .ToList();
+        var selectedIds = projects.Select(item => item.Id).ToHashSet();
+
+        var shareRows = await db.ContractLegalEntityAllocations.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId && selectedIds.Contains(item.Contract.ProjectId))
+            .Select(item => new { item.Contract.ProjectId, item.Amount, item.Percentage, item.Contract.TotalAmount })
+            .ToListAsync(cancellationToken);
+        var shareByProject = shareRows
+            .GroupBy(item => item.ProjectId)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount ?? item.TotalAmount * (item.Percentage ?? 0m) / 100m));
+
+        var receivables = await db.ReceivableEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId && !item.IsVoided && selectedIds.Contains(item.ProjectId))
+            .GroupBy(item => item.ProjectId)
+            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToListAsync(cancellationToken);
+        var collections = await db.CollectionEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId && selectedIds.Contains(item.ProjectId))
+            .GroupBy(item => item.ProjectId)
+            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToListAsync(cancellationToken);
+        var refunds = await db.RefundOrReversalEntries.AsNoTracking()
+            .Where(item =>
+                ((item.Receivable != null && item.Receivable.LegalEntityId == companyId) ||
+                 (item.Collection != null && item.Collection.LegalEntityId == companyId)) &&
+                ((item.Receivable != null && selectedIds.Contains(item.Receivable.ProjectId)) ||
+                 (item.Collection != null && selectedIds.Contains(item.Collection.ProjectId))))
+            .Select(item => new
+            {
+                ProjectId = item.Receivable != null ? item.Receivable.ProjectId : item.Collection!.ProjectId,
+                item.Amount
+            })
+            .ToListAsync(cancellationToken);
+        var payables = await db.PayableEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId && !item.IsVoided && selectedIds.Contains(item.ProjectId))
+            .GroupBy(item => item.ProjectId)
+            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToListAsync(cancellationToken);
+        var payments = await db.PaymentEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId && selectedIds.Contains(item.ProjectId))
+            .GroupBy(item => item.ProjectId)
+            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToListAsync(cancellationToken);
+        var reversals = await db.PaymentReversalEntries.AsNoTracking()
+            .Where(item => item.Payment.LegalEntityId == companyId && selectedIds.Contains(item.Payment.ProjectId))
+            .GroupBy(item => item.Payment.ProjectId)
+            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToListAsync(cancellationToken);
+
+        var receivableMap = receivables.ToDictionary(item => item.ProjectId, item => item.Amount);
+        var collectedMap = collections.ToDictionary(item => item.ProjectId, item => item.Amount);
+        var refundMap = refunds.GroupBy(item => item.ProjectId).ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
+        var payableMap = payables.ToDictionary(item => item.ProjectId, item => item.Amount);
+        var paidMap = payments.ToDictionary(item => item.ProjectId, item => item.Amount);
+        var reversalMap = reversals.ToDictionary(item => item.ProjectId, item => item.Amount);
+
+        return projects.Select(item =>
+        {
+            var collected = collectedMap.GetValueOrDefault(item.Id) - refundMap.GetValueOrDefault(item.Id);
+            var paid = paidMap.GetValueOrDefault(item.Id) - reversalMap.GetValueOrDefault(item.Id);
+            return new CompanyProjectRowDto(
+                item.Id,
+                item.ProjectNumber,
+                item.Name,
+                StageLabel(item.Stage),
+                shareByProject.GetValueOrDefault(item.Id),
+                receivableMap.GetValueOrDefault(item.Id),
+                collected,
+                payableMap.GetValueOrDefault(item.Id),
+                paid);
+        }).ToArray();
+    }
+
+    public async Task<IReadOnlyList<CompanyContractRowDto>> ListCompanyContractsAsync(CompanyActor actor, Guid companyId, Guid? projectId, int take, CancellationToken cancellationToken)
+    {
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+        take = NormalizeTake(take, 50);
+        var query = db.ContractLegalEntityAllocations.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId);
+        if (projectId.HasValue)
+        {
+            query = query.Where(item => item.Contract.ProjectId == projectId.Value);
+        }
+
+        var contractRows = await query
+            .Select(item => new
+            {
+                item.ContractId,
+                item.Contract.ProjectId,
+                item.Contract.ContractNumber,
+                item.Contract.Name,
+                item.Contract.TotalAmount,
+                item.Amount,
+                item.Percentage,
+                item.Contract.IsActive,
+                item.Contract.UpdatedAt
+            })
+            .ToListAsync(cancellationToken);
+        var rows = contractRows
+            .OrderByDescending(item => item.UpdatedAt)
+            .ThenBy(item => item.ContractNumber)
+            .Take(take)
+            .ToList();
+
+        return rows.Select(item => new CompanyContractRowDto(
+            item.ContractId,
+            item.ProjectId,
+            item.ContractNumber,
+            item.Name,
+            item.TotalAmount,
+            item.Amount ?? item.TotalAmount * (item.Percentage ?? 0m) / 100m,
+            item.Percentage,
+            item.IsActive)).ToArray();
+    }
+
+    public async Task<IReadOnlyList<CompanyCollectionRowDto>> ListCompanyCollectionsAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken)
+    {
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+        take = NormalizeTake(take, 50);
+        return await db.CollectionEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .OrderByDescending(item => item.CollectionDate)
+            .ThenByDescending(item => item.Id)
+            .Take(take)
+            .Select(item => new CompanyCollectionRowDto(
+                item.Id,
+                item.CollectionDate,
+                item.ProjectId,
+                item.Project.ProjectNumber,
+                item.Project.Name,
+                item.Notes ?? item.Project.Name,
+                item.AccountId,
+                item.Account.AccountName,
+                item.Account.IsActive,
+                item.Amount))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CompanyPaymentRowDto>> ListCompanyPaymentsAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken)
+    {
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+        take = NormalizeTake(take, 50);
+        return await db.PaymentEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .OrderByDescending(item => item.PaymentDate)
+            .ThenByDescending(item => item.Id)
+            .Take(take)
+            .Select(item => new CompanyPaymentRowDto(
+                item.Id,
+                item.PaymentDate,
+                item.ProjectId,
+                item.Project.ProjectNumber,
+                item.Project.Name,
+                item.Notes ?? item.Project.Name,
+                item.AccountId,
+                item.Account.AccountName,
+                item.Account.IsActive,
+                item.Amount))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CompanyInvoiceRowDto>> ListCompanyInvoicesAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken)
+    {
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+        take = NormalizeTake(take, 50);
+        return await db.InvoiceEntries.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .OrderByDescending(item => item.InvoiceDate)
+            .ThenByDescending(item => item.Id)
+            .Take(take)
+            .Select(item => new CompanyInvoiceRowDto(
+                item.Id,
+                item.Direction == InvoiceDirection.Output ? "销项" : "进项",
+                item.InvoiceNumber,
+                item.InvoiceDate,
+                item.ProjectId,
+                item.Project.ProjectNumber,
+                item.Project.Name,
+                item.LegalEntity.Name,
+                item.GrossAmount))
+            .ToListAsync(cancellationToken);
+    }
     public async Task<CompanyDashboardDto> GetDashboardAsync(CompanyActor actor, Guid? companyId, CancellationToken cancellationToken)
     {
         var authorizedIds = await AuthorizedCompanies(actor).Where(item => !companyId.HasValue || item.Id == companyId)
@@ -332,6 +699,32 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             accountBalance,
             DateTimeOffset.UtcNow);
     }
+
+    private async Task<HashSet<Guid>> GetCompanyProjectIdsAsync(Guid companyId, CancellationToken cancellationToken)
+    {
+        var fromOwnership = await db.ProjectLegalEntities.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .Select(item => item.ProjectId)
+            .ToListAsync(cancellationToken);
+        var fromContracts = await db.ContractLegalEntityAllocations.AsNoTracking()
+            .Where(item => item.LegalEntityId == companyId)
+            .Select(item => item.Contract.ProjectId)
+            .ToListAsync(cancellationToken);
+        return fromOwnership.Concat(fromContracts).ToHashSet();
+    }
+
+    
+    private static string StageLabel(ProjectStage stage) => stage switch
+    {
+        ProjectStage.AwaitingMobilization => "待进场",
+        ProjectStage.UnderConstruction => "施工中",
+        ProjectStage.Suspended => "停工中",
+        ProjectStage.CompletedUnsettled => "已完工未结算",
+        ProjectStage.PartiallySettled => "部分结算",
+        ProjectStage.SettledArchived => "已结算归档",
+        _ => stage.ToString()
+    };
+    private static int NormalizeTake(int take, int fallback) => take <= 0 ? fallback : Math.Min(take, 200);
 
     private IQueryable<LegalEntity> AuthorizedCompanies(CompanyActor actor)
     {
@@ -394,3 +787,6 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
 
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
+
+
+

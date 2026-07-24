@@ -133,3 +133,78 @@ public sealed record CompanyDashboardDto(
     decimal EquipmentCost,
     decimal AccountBalance,
     DateTimeOffset GeneratedAt);
+
+public sealed record CompanyWorkspaceSummaryDto(
+    int ProjectCount,
+    int ContractCount,
+    int ActiveAccountCount,
+    int TotalAccountCount,
+    int ValidCertificateCount,
+    int TotalCertificateCount,
+    int ExpiredCertificateCount);
+
+public sealed record CompanyActivityItemDto(
+    string Kind,
+    string Title,
+    string? Subtitle,
+    decimal? Amount,
+    DateOnly? Date,
+    Guid? ProjectId,
+    Guid? EntityId);
+
+public sealed record CompanyProjectRowDto(
+    Guid ProjectId,
+    string ProjectNumber,
+    string ProjectName,
+    string Stage,
+    decimal CompanyContractAmount,
+    decimal ReceivableAmount,
+    decimal CollectedAmount,
+    decimal PayableAmount,
+    decimal PaidAmount);
+
+public sealed record CompanyContractRowDto(
+    Guid ContractId,
+    Guid ProjectId,
+    string ContractNumber,
+    string ContractName,
+    decimal ContractTotalAmount,
+    decimal CompanyShareAmount,
+    decimal? CompanySharePercentage,
+    bool IsActive);
+
+public sealed record CompanyCollectionRowDto(
+    Guid Id,
+    DateOnly Date,
+    Guid ProjectId,
+    string ProjectNumber,
+    string ProjectName,
+    string Summary,
+    Guid AccountId,
+    string AccountName,
+    bool AccountIsActive,
+    decimal Amount);
+
+public sealed record CompanyPaymentRowDto(
+    Guid Id,
+    DateOnly Date,
+    Guid ProjectId,
+    string ProjectNumber,
+    string ProjectName,
+    string Summary,
+    Guid AccountId,
+    string AccountName,
+    bool AccountIsActive,
+    decimal Amount);
+
+public sealed record CompanyInvoiceRowDto(
+    Guid Id,
+    string Direction,
+    string InvoiceNumber,
+    DateOnly InvoiceDate,
+    Guid ProjectId,
+    string ProjectNumber,
+    string ProjectName,
+    string LegalEntityName,
+    decimal GrossAmount);
+

@@ -1,78 +1,393 @@
 @page "{id:guid}"
 @model EngineeringManager.Web.Pages.Companies.DetailsModel
 @using EngineeringManager.Domain.Finance
-@{ ViewData["Title"] = Model.Company.Name; }
-
-<section class="page-heading compact-page-heading"><div><p class="eyebrow">@Model.Company.Code · @(Model.Company.CompanyCategoryName ?? "未分类")</p><h1>@Model.Company.Name</h1><p class="page-lead">@Model.Company.ShortName · 法人/经营者：@(Model.Company.LegalRepresentative ?? "未填写")</p></div>@if (Model.CanManage) { <div class="button-row"><a class="button button--secondary button--action" asp-page="Edit" asp-route-id="@Model.Company.Id">详细编辑</a><a class="button button--secondary button--action" asp-page="Edit" asp-route-copyFrom="@Model.Company.Id">复制</a></div> }</section>
-<section class="overview-strip"><article class="is-accent"><span>合同额</span><strong>@Model.Dashboard.ContractAmount.ToString("N2")</strong></article><article><span>应收 / 已收</span><strong>@Model.Dashboard.ReceivableAmount.ToString("N2") / @Model.Dashboard.CollectedAmount.ToString("N2")</strong></article><article><span>应付 / 已付</span><strong>@Model.Dashboard.PayableAmount.ToString("N2") / @Model.Dashboard.PaidAmount.ToString("N2")</strong></article><article><span>账户余额</span><strong>@Model.Dashboard.AccountBalance.ToString("N2")</strong></article></section>
-
-<section class="content-grid">
-    <article class="panel compact-detail-panel inline-edit-shell" data-inline-edit="company-details" data-inline-cell-edit data-inline-edit-active="@(Model.QuickEditOpen ? "true" : "false")">
-        <form method="post" asp-page-handler="QuickEdit">
-            <div class="panel-heading"><h2>基础与开票资料</h2>@if (Model.CanManage) { <div class="button-row"><button class="button button--primary button--action" type="button" data-inline-edit-open>快捷编辑公司</button><a class="button button--secondary button--action" asp-page="Edit" asp-route-id="@Model.Company.Id">进入详细编辑</a><button class="button button--secondary button--action" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button><button class="button button--primary button--action" type="submit" data-inline-edit-actions hidden>保存</button></div> }</div>
-            <div asp-validation-summary="All" class="panel-copy"></div>
-            <dl class="detail-grid project-summary-grid">
-                <div><dt>公司编码</dt><dd><span data-inline-edit-value>@Model.Company.Code</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Code" data-inline-edit-control hidden required /> }</dd></div>
-                <div><dt>公司名称</dt><dd><span data-inline-edit-value>@Model.Company.Name</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Name" data-inline-edit-control hidden required /> }</dd></div>
-                <div><dt>简称</dt><dd><span data-inline-edit-value>@Model.Company.ShortName</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ShortName" data-inline-edit-control hidden required /> }</dd></div>
-                <div><dt>组合分类</dt><dd><span data-inline-edit-value>@(Model.Company.CompanyCategoryName ?? "未分类")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.CompanyCategoryId" data-inline-edit-control hidden><option value="">未分类</option>@foreach (var category in Model.Categories) { <option value="@category.Id">@category.Name</option> }</select> }</dd></div>
-                <div><dt>法人/经营者</dt><dd><span data-inline-edit-value>@(Model.Company.LegalRepresentative ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.LegalRepresentative" data-inline-edit-control hidden /> }</dd></div>
-                <div><dt>统一社会信用代码</dt><dd><span data-inline-edit-value>@(Model.Company.UnifiedSocialCreditCode ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.UnifiedSocialCreditCode" data-inline-edit-control hidden /> }</dd></div>
-                <div><dt>联系电话</dt><dd><span data-inline-edit-value>@(Model.Company.Phone ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Phone" data-inline-edit-control hidden /> }</dd></div>
-                <div><dt>开票抬头</dt><dd><span data-inline-edit-value>@(Model.Company.InvoiceTitle ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.InvoiceTitle" data-inline-edit-control hidden /> }</dd></div>
-                <div><dt>注册地址</dt><dd><span data-inline-edit-value>@(Model.Company.RegisteredAddress ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.RegisteredAddress" data-inline-edit-control hidden /> }</dd></div>
-                <div><dt>经营地址</dt><dd><span data-inline-edit-value>@(Model.Company.BusinessAddress ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.BusinessAddress" data-inline-edit-control hidden /> }</dd></div>
-                <div><dt>备注</dt><dd><span data-inline-edit-value>@(Model.Company.Notes ?? "未填写")</span>@if (Model.CanManage) { <textarea class="inline-cell-control" asp-for="QuickEdit.Notes" rows="2" data-inline-edit-control hidden></textarea> }</dd></div>
-            </dl>
-            @if (Model.CanManage) { <label class="inline-edit-reason" data-inline-edit-actions hidden>修改原因<input class="inline-cell-control" asp-for="QuickEdit.Reason" required /></label><input type="hidden" asp-for="QuickEdit.ConcurrencyStamp" /> }
-        </form>
-    </article>
-    <article class="panel compact-detail-panel"><div class="panel-heading"><h2>证书资料</h2><a class="button button--secondary button--action" asp-page="/Companies/Certificates/Index" asp-route-CompanyId="@Model.Company.Id">证书管理</a></div><p class="panel-copy">证书 @Model.Company.Certificates.Count 项。</p><ul class="check-list">@foreach (var certificate in Model.Company.Certificates) { <li>@certificate.CertificateType · @(certificate.CertificateNumber ?? "未编号") · @(certificate.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期")</li> }</ul></article>
-</section>
-
-<section class="panel" id="company-accounts" data-company-account-table>
-    <div class="panel-heading"><div><h2>公司账户</h2><p class="panel-copy">当前启用 @Model.Company.Accounts.Count(account => account.IsActive) 个，共 @Model.Company.Accounts.Count 个。</p></div></div>
-    <div asp-validation-summary="All" class="panel-copy"></div>
-    @if (Model.Company.Accounts.Count == 0)
-    {
-        <p class="panel-copy">还没有维护公司账户。</p>
-    }
-    else
-    {
-        <div class="table-wrap"><table class="data-table company-account-table"><thead><tr><th>账户名称</th><th>账号</th><th>开户行</th><th>账户类型</th><th>期初余额</th><th>默认用途</th><th>状态</th><th>账户备注</th>@if (Model.CanManage) { <th>操作</th> }</tr></thead><tbody>
-        @foreach (var account in Model.Company.Accounts)
-        {
-            var accountFormId = $"company-account-{account.Id:N}";
-            var accountTypeLabel = account.AccountType switch
-            {
-                nameof(FinancialAccountType.Bank) => "银行",
-                nameof(FinancialAccountType.Cash) => "现金",
-                _ => "其他"
-            };
-            var defaultLabels = new List<string>();
-            if (account.IsDefaultCollection) defaultLabels.Add("收款");
-            if (account.IsDefaultPayment) defaultLabels.Add("付款");
-            if (account.IsDefaultInvoice) defaultLabels.Add("开票");
-            <tr data-inline-edit="company-account-@account.Id" data-inline-cell-edit>
-                <td><span data-inline-edit-value>@account.AccountName</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.Name" value="@account.AccountName" form="@accountFormId" data-inline-edit-control hidden required /> }</td>
-                <td><span data-inline-edit-value>@(account.AccountNumber ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.Number" value="@account.AccountNumber" form="@accountFormId" data-inline-edit-control hidden /> }</td>
-                <td><span data-inline-edit-value>@(account.BankName ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.BankName" value="@account.BankName" form="@accountFormId" data-inline-edit-control hidden /> }</td>
-                <td><span data-inline-edit-value>@accountTypeLabel</span>@if (Model.CanManage) { <select class="inline-cell-control" name="Account.AccountType" form="@accountFormId" data-inline-edit-control hidden><option value="1" selected="@(account.AccountType == nameof(FinancialAccountType.Bank) ? "selected" : null)">银行</option><option value="2" selected="@(account.AccountType == nameof(FinancialAccountType.Cash) ? "selected" : null)">现金</option><option value="3" selected="@(account.AccountType == nameof(FinancialAccountType.Other) ? "selected" : null)">其他</option></select> }</td>
-                <td><span data-inline-edit-value>@account.OpeningBalance.ToString("N2")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.OpeningBalance" value="@account.OpeningBalance" type="number" step="0.01" form="@accountFormId" data-inline-edit-control hidden /> }</td>
-                <td><span data-inline-edit-value>@(defaultLabels.Count == 0 ? "无" : string.Join("、", defaultLabels))</span>@if (Model.CanManage) { <div class="company-account-defaults" data-inline-edit-control hidden><label><input type="checkbox" name="Account.DefaultCollection" value="true" checked="@(account.IsDefaultCollection ? "checked" : null)" form="@accountFormId" />收款</label><label><input type="checkbox" name="Account.DefaultPayment" value="true" checked="@(account.IsDefaultPayment ? "checked" : null)" form="@accountFormId" />付款</label><label><input type="checkbox" name="Account.DefaultInvoice" value="true" checked="@(account.IsDefaultInvoice ? "checked" : null)" form="@accountFormId" />开票</label></div> }</td>
-                <td><span data-inline-edit-value>@(account.IsActive ? "启用" : "已停用")</span></td>
-                <td><span data-inline-edit-value>@(account.Notes ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.Notes" value="@account.Notes" form="@accountFormId" data-inline-edit-control hidden /> }</td>
-                @if (Model.CanManage)
-                {
-                    <td class="table-actions"><form id="@accountFormId" method="post" asp-page-handler="Account" asp-route-id="@Model.Company.Id" class="inline-form"><input type="hidden" name="Account.Id" value="@account.Id" /><input type="hidden" name="Account.ConcurrencyStamp" value="@account.ConcurrencyStamp" /><input type="hidden" name="Account.IsActive" value="@account.IsActive.ToString().ToLowerInvariant()" /><button class="button button--secondary button--small" type="button" data-inline-edit-open>编辑</button><button class="button button--secondary button--small" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button><button class="button button--primary button--small" type="submit" data-inline-edit-actions hidden>保存</button></form><form method="post" asp-page-handler="AccountStatus" asp-route-id="@Model.Company.Id" class="inline-form" data-inline-edit-value><input type="hidden" name="accountId" value="@account.Id" /><input type="hidden" name="concurrencyStamp" value="@account.ConcurrencyStamp" /><input type="hidden" name="isActive" value="@(!account.IsActive ? "true" : "false")" /><button class="button button--ghost button--small" type="submit" onclick="return confirm('@(account.IsActive ? "确认删除这个账户吗？已关联的历史记录会保留。" : "确认恢复这个账户吗？")')">@(account.IsActive ? "删除" : "恢复")</button></form></td>
-                }
-            </tr>
-        }
-        </tbody></table></div>
-    }
-</section>
-
-@if (Model.CanManage)
-{
-    <section class="content-grid"><article class="panel"><div class="panel-heading"><h2>新增公司账户</h2></div><form method="post" asp-page-handler="Account" class="form-grid"><input asp-for="Account.IsActive" type="hidden" value="true" /><label>账户名称<input asp-for="Account.Name" required /></label><label>账户类型<select asp-for="Account.AccountType"><option value="1">银行</option><option value="2">现金</option><option value="3">其他</option></select></label><label>账号<input asp-for="Account.Number" /></label><label>开户行<input asp-for="Account.BankName" /></label><label>期初余额<input asp-for="Account.OpeningBalance" /></label><label>账户备注<textarea asp-for="Account.Notes"></textarea></label><label class="checkbox-row"><input asp-for="Account.DefaultCollection" />默认收款</label><label class="checkbox-row"><input asp-for="Account.DefaultPayment" />默认付款</label><label class="checkbox-row"><input asp-for="Account.DefaultInvoice" />默认开票</label><button class="button button--primary button--action" type="submit">保存账户</button></form></article><article class="panel"><div class="panel-heading"><h2>新增公司证照</h2></div><form method="post" asp-page-handler="Certificate" class="form-grid"><label>资料类型<input asp-for="Certificate.Type" required /></label><label>资料编号<input asp-for="Certificate.Number" /></label><label>签发日期<input asp-for="Certificate.IssuedOn" type="date" /></label><label>有效期<input asp-for="Certificate.ExpiresOn" type="date" /></label><label class="form-span">备注<textarea asp-for="Certificate.Notes"></textarea></label><button class="button button--primary button--action" type="submit">保存证照</button></form></article></section>
+@using EngineeringManager.Domain.Projects
+@using EngineeringManager.Web.Presentation
+@{
+    ViewData["Title"] = Model.Company.Name;
+    var uncollected = Model.Dashboard.ReceivableAmount - Model.Dashboard.CollectedAmount;
+    var unpaid = Model.Dashboard.PayableAmount - Model.Dashboard.PaidAmount;
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var collectionRate = Model.Dashboard.ReceivableAmount <= 0m
+        ? 0d
+        : (double)Math.Clamp(Model.Dashboard.CollectedAmount / Model.Dashboard.ReceivableAmount * 100m, 0m, 100m);
+    var paymentRate = Model.Dashboard.PayableAmount <= 0m
+        ? 0d
+        : (double)Math.Clamp(Model.Dashboard.PaidAmount / Model.Dashboard.PayableAmount * 100m, 0m, 100m);
+    var invoiceRate = Model.Dashboard.OutputInvoiceAmount <= 0m
+        ? 0d
+        : (double)Math.Clamp(Model.Dashboard.InputInvoiceAmount / Model.Dashboard.OutputInvoiceAmount * 100m, 0m, 100m);
+    var costTotal = Model.Dashboard.PayrollCost + Model.Dashboard.EquipmentCost;
+    var payrollShare = costTotal <= 0m
+        ? 0d
+        : (double)Math.Clamp(Model.Dashboard.PayrollCost / costTotal * 100m, 0m, 100m);
 }
+
+<div class="company-workspace company-workspace--details" data-company-detail-workspace>
+<section class="page-heading compact-page-heading company-workspace-heading company-detail-heading">
+    <div>
+        <p class="eyebrow company-detail-kicker">@Model.Company.Code · @(Model.Company.CompanyCategoryName ?? "未分类")</p>
+        <div class="company-detail-title-row">
+            <h1>@Model.Company.Name</h1>
+            <span class="pill @(Model.Company.IsActive ? "pill--success" : "pill--warning")">@(Model.Company.IsActive ? "启用" : "停用")</span>
+        </div>
+        <p class="page-lead">@(string.IsNullOrWhiteSpace(Model.Company.ShortName) ? "未设置公司简称" : Model.Company.ShortName) · 法人/经营者：@(Model.Company.LegalRepresentative ?? "未填写")</p>
+    </div>
+    <div class="button-row company-workspace-actions">
+        <partial name="_CompanyScopeSwitcher" model="(Model.CompanyOptions, (Guid?)Model.Company.Id, Model.ActiveTab)" />
+        @if (Model.CanManage)
+        {
+            <a class="button button--secondary button--action" asp-page="Edit" asp-route-copyFrom="@Model.Company.Id">复制公司</a>
+            <a class="button button--primary button--action" asp-page="Edit">新增公司</a>
+        }
+        <a class="button button--secondary button--action" asp-page="Index">返回全部公司</a>
+    </div>
+</section>
+
+<section class="overview-strip company-stat-strip" aria-label="公司经营速览">
+    <article class="is-accent"><span>应收 / 已收</span><strong>@Model.Dashboard.ReceivableAmount.ToString("N2") / @Model.Dashboard.CollectedAmount.ToString("N2")</strong><small>回款进度 @collectionRate.ToString("0.#")%</small></article>
+    <article class="is-success"><span>应付 / 已付</span><strong>@Model.Dashboard.PayableAmount.ToString("N2") / @Model.Dashboard.PaidAmount.ToString("N2")</strong><small>付款进度 @paymentRate.ToString("0.#")%</small></article>
+    <article class="@(uncollected > 0m ? "is-warning" : "is-success")"><span>未收款</span><strong class="@(uncollected > 0m ? "company-amount--warning" : null)">@uncollected.ToString("N2")</strong><small>待跟进应收余额</small></article>
+    <article class="@(unpaid > 0m ? "is-danger" : "is-success")"><span>未付款</span><strong class="@(unpaid > 0m ? "company-amount--danger" : null)">@unpaid.ToString("N2")</strong><small>待安排应付余额</small></article>
+</section>
+
+<nav class="company-tabs" data-company-tabs aria-label="公司工作台标签">
+    <a class="@(Model.ActiveTab == "overview" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="overview">经营概览</a>
+    <a class="@(Model.ActiveTab == "profile" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="profile">基本信息</a>
+    <a class="@(Model.ActiveTab == "certificates" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="certificates">证书信息</a>
+    <a class="@(Model.ActiveTab == "accounts" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="accounts">账户信息</a>
+    <a class="@(Model.ActiveTab == "projects" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="projects">项目与合同</a>
+    <a class="@(Model.ActiveTab == "finance" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="finance">收付款与发票</a>
+</nav>
+
+@if (Model.ActiveTab == "overview")
+{
+    <section class="dashboard-grid company-dashboard-grid company-overview-grid">
+        <article class="panel company-panel">
+            <div class="panel-heading"><div><p class="eyebrow">金额对比</p><h2>收款、付款与开票</h2></div></div>
+            <div class="comparison-chart company-comparison-chart">
+                <div class="comparison-row"><div class="chart-label"><strong>应收 / 已收</strong><span>@Model.Dashboard.ReceivableAmount.ToString("N2") / @Model.Dashboard.CollectedAmount.ToString("N2")</span></div><div class="progress-track"><span class="progress-fill" style="width:@collectionRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></div></div>
+                <div class="comparison-row"><div class="chart-label"><strong>应付 / 已付</strong><span>@Model.Dashboard.PayableAmount.ToString("N2") / @Model.Dashboard.PaidAmount.ToString("N2")</span></div><div class="progress-track"><span class="progress-fill progress-fill--stage" style="width:@paymentRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></div></div>
+                <div class="comparison-row"><div class="chart-label"><strong>销项 / 进项发票</strong><span>@Model.Dashboard.OutputInvoiceAmount.ToString("N2") / @Model.Dashboard.InputInvoiceAmount.ToString("N2")</span></div><div class="progress-track"><span class="progress-fill company-progress-fill--violet" style="width:@invoiceRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></div></div>
+                <div class="comparison-row"><div class="chart-label"><strong>工资 / 设备成本</strong><span>@Model.Dashboard.PayrollCost.ToString("N2") / @Model.Dashboard.EquipmentCost.ToString("N2")</span></div><div class="progress-track"><span class="progress-fill company-progress-fill--amber" style="width:@payrollShare.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></div></div>
+            </div>
+        </article>
+        <article class="panel company-panel company-summary-panel">
+            <div class="panel-heading"><div><p class="eyebrow">结构摘要</p><h2>关联规模</h2></div></div>
+            @if (Model.WorkspaceSummary is null)
+            {
+                <p class="panel-copy">暂无结构摘要。</p>
+            }
+            else
+            {
+                <dl class="detail-grid project-summary-grid company-summary-tiles">
+                    <div><dt>关联项目</dt><dd>@Model.WorkspaceSummary.ProjectCount</dd></div>
+                    <div><dt>合同份数</dt><dd>@Model.WorkspaceSummary.ContractCount</dd></div>
+                    <div><dt>启用账户 / 总数</dt><dd>@Model.WorkspaceSummary.ActiveAccountCount / @Model.WorkspaceSummary.TotalAccountCount</dd></div>
+                    <div><dt>有效证书 / 总数</dt><dd>@Model.WorkspaceSummary.ValidCertificateCount / @Model.WorkspaceSummary.TotalCertificateCount</dd></div>
+                    <div><dt>过期证书</dt><dd><span class="@(Model.WorkspaceSummary.ExpiredCertificateCount > 0 ? "text-danger" : null)">@Model.WorkspaceSummary.ExpiredCertificateCount</span></dd></div>
+                </dl>
+            }
+        </article>
+    </section>
+    <section class="panel company-panel company-activity-panel">
+        <div class="panel-heading"><div><p class="eyebrow">动态</p><h2>近期动态</h2></div></div>
+        @if (Model.RecentActivity.Count == 0)
+        {
+            <p class="panel-copy">暂无近期项目、收付款或发票动态。</p>
+        }
+        else
+        {
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>类型</th><th>摘要</th><th>金额</th><th>日期</th></tr></thead><tbody>
+            @foreach (var item in Model.RecentActivity)
+            {
+                var kindLabel = item.Kind switch { "project" => "项目", "contract" => "合同", "collection" => "收款", "payment" => "付款", "invoice" => "发票", _ => item.Kind };
+                <tr>
+                    <td><span class="company-activity-pill company-activity-pill--@item.Kind">@kindLabel</span></td>
+                    <td>
+                        @if (item.ProjectId.HasValue)
+                        {
+                            <a asp-page="/Projects/Details" asp-route-id="@item.ProjectId">@item.Title</a>
+                        }
+                        else { @item.Title }
+                        @if (!string.IsNullOrWhiteSpace(item.Subtitle)) { <span class="panel-copy"> · @item.Subtitle</span> }
+                    </td>
+                    <td>@(item.Amount?.ToString("N2") ?? "—")</td>
+                    <td>@(item.Date?.ToString("yyyy-MM-dd") ?? "—")</td>
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+}
+else if (Model.ActiveTab == "profile")
+{
+    <section class="content-grid">
+        <article class="panel compact-detail-panel inline-edit-shell" data-inline-edit="company-details" data-inline-cell-edit data-inline-edit-active="@(Model.QuickEditOpen ? "true" : "false")">
+            <form method="post" asp-page-handler="QuickEdit" asp-route-id="@Model.Company.Id" asp-route-tab="profile">
+                <div class="panel-heading"><h2>基本信息</h2>@if (Model.CanManage) { <div class="button-row"><button class="button button--primary button--action" type="button" data-inline-edit-open>快捷编辑公司</button><a class="button button--secondary button--action" asp-page="Edit" asp-route-id="@Model.Company.Id">进入详细编辑</a><button class="button button--secondary button--action" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button><button class="button button--primary button--action" type="submit" data-inline-edit-actions hidden>保存</button></div> }</div>
+                <div asp-validation-summary="All" class="panel-copy"></div>
+                <dl class="detail-grid project-summary-grid">
+                    <div><dt>公司编码</dt><dd><span data-inline-edit-value>@Model.Company.Code</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Code" data-inline-edit-control hidden required /> }</dd></div>
+                    <div><dt>公司名称</dt><dd><span data-inline-edit-value>@Model.Company.Name</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Name" data-inline-edit-control hidden required /> }</dd></div>
+                    <div><dt>简称</dt><dd><span data-inline-edit-value>@Model.Company.ShortName</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ShortName" data-inline-edit-control hidden required /> }</dd></div>
+                    <div><dt>组合分类</dt><dd><span data-inline-edit-value>@(Model.Company.CompanyCategoryName ?? "未分类")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.CompanyCategoryId" data-inline-edit-control hidden><option value="">未分类</option>@foreach (var category in Model.Categories) { <option value="@category.Id">@category.Name</option> }</select> }</dd></div>
+                    <div><dt>状态</dt><dd>@(Model.Company.IsActive ? "启用" : "停用")</dd></div>
+                    <div><dt>法人/经营者</dt><dd><span data-inline-edit-value>@(Model.Company.LegalRepresentative ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.LegalRepresentative" data-inline-edit-control hidden /> }</dd></div>
+                    <div><dt>统一社会信用代码</dt><dd><span data-inline-edit-value>@(Model.Company.UnifiedSocialCreditCode ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.UnifiedSocialCreditCode" data-inline-edit-control hidden /> }</dd></div>
+                    <div><dt>联系电话</dt><dd><span data-inline-edit-value>@(Model.Company.Phone ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Phone" data-inline-edit-control hidden /> }</dd></div>
+                    <div><dt>开票抬头</dt><dd><span data-inline-edit-value>@(Model.Company.InvoiceTitle ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.InvoiceTitle" data-inline-edit-control hidden /> }</dd></div>
+                    <div><dt>注册地址</dt><dd><span data-inline-edit-value>@(Model.Company.RegisteredAddress ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.RegisteredAddress" data-inline-edit-control hidden /> }</dd></div>
+                    <div><dt>经营地址</dt><dd><span data-inline-edit-value>@(Model.Company.BusinessAddress ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.BusinessAddress" data-inline-edit-control hidden /> }</dd></div>
+                    <div><dt>备注</dt><dd><span data-inline-edit-value>@(Model.Company.Notes ?? "未填写")</span>@if (Model.CanManage) { <textarea class="inline-cell-control" asp-for="QuickEdit.Notes" data-inline-edit-control hidden></textarea> }</dd></div>
+                </dl>
+                @if (Model.CanManage) { <label class="inline-edit-reason" data-inline-edit-actions hidden>修改原因<input asp-for="QuickEdit.Reason" required /></label><input type="hidden" asp-for="QuickEdit.Id" /><input type="hidden" asp-for="QuickEdit.ConcurrencyStamp" /> }
+            </form>
+        </article>
+    </section>
+}
+else if (Model.ActiveTab == "certificates")
+{
+    <section class="panel">
+        <div class="panel-heading"><h2>证书信息</h2></div>
+        @if (Model.Company.Certificates.Count == 0)
+        {
+            <p class="panel-copy">还没有维护公司证照。</p>
+        }
+        else
+        {
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>资料类型</th><th>资料编号</th><th>签发日期</th><th>有效期</th><th>到期状态</th><th>备注</th></tr></thead><tbody>
+            @foreach (var cert in Model.Company.Certificates)
+            {
+                string status;
+                string badgeClass;
+                if (!cert.ExpiresOn.HasValue) { status = "长期有效"; badgeClass = "status-badge status-badge--ok"; }
+                else if (cert.ExpiresOn.Value < today) { status = "已过期"; badgeClass = "status-badge status-badge--danger"; }
+                else if (cert.ExpiresOn.Value <= today.AddDays(30)) { status = "30天内"; badgeClass = "status-badge status-badge--warn"; }
+                else if (cert.ExpiresOn.Value <= today.AddDays(60)) { status = "60天内"; badgeClass = "status-badge status-badge--warn"; }
+                else if (cert.ExpiresOn.Value <= today.AddDays(90)) { status = "90天内"; badgeClass = "status-badge status-badge--warn"; }
+                else { status = "正常"; badgeClass = "status-badge status-badge--ok"; }
+                <tr>
+                    <td>@cert.CertificateType</td>
+                    <td>@(cert.CertificateNumber ?? "—")</td>
+                    <td>@(cert.IssuedOn?.ToString("yyyy-MM-dd") ?? "—")</td>
+                    <td>@(cert.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</td>
+                    <td><span class="@badgeClass">@status</span></td>
+                    <td>@(cert.Notes ?? "—")</td>
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+    @if (Model.CanManage)
+    {
+        <section class="panel">
+            <div class="panel-heading"><h2>新增公司证照</h2></div>
+            <form method="post" asp-page-handler="Certificate" asp-route-id="@Model.Company.Id" asp-route-tab="certificates" class="form-grid">
+                <label>资料类型<input asp-for="Certificate.Type" required /></label>
+                <label>资料编号<input asp-for="Certificate.Number" /></label>
+                <label>签发日期<input asp-for="Certificate.IssuedOn" type="date" /></label>
+                <label>有效期<input asp-for="Certificate.ExpiresOn" type="date" /></label>
+                <label class="form-span">备注<textarea asp-for="Certificate.Notes"></textarea></label>
+                <button class="button button--primary button--action" type="submit">保存证照</button>
+            </form>
+        </section>
+    }
+}
+else if (Model.ActiveTab == "accounts")
+{
+    <section class="panel" id="company-accounts" data-company-account-table>
+        <div class="panel-heading"><div><h2>账户信息</h2><p class="panel-copy">当前启用 @Model.Company.Accounts.Count(account => account.IsActive) 个，共 @Model.Company.Accounts.Count 个。</p></div></div>
+        <div asp-validation-summary="All" class="panel-copy"></div>
+        @if (Model.Company.Accounts.Count == 0)
+        {
+            <p class="panel-copy">还没有维护公司账户。</p>
+        }
+        else
+        {
+            <div class="table-wrap"><table class="data-table company-account-table"><thead><tr><th>账户名称</th><th>账号</th><th>开户行</th><th>账户类型</th><th>期初余额</th><th>默认用途</th><th>状态</th><th>账户备注</th>@if (Model.CanManage) { <th>操作</th> }</tr></thead><tbody>
+            @foreach (var account in Model.Company.Accounts.OrderByDescending(a => a.IsActive).ThenBy(a => a.AccountName))
+            {
+                var accountFormId = $"company-account-{account.Id:N}";
+                var accountTypeLabel = account.AccountType switch
+                {
+                    nameof(FinancialAccountType.Bank) => "银行",
+                    nameof(FinancialAccountType.Cash) => "现金",
+                    _ => "其他"
+                };
+                var defaultLabels = new List<string>();
+                if (account.IsDefaultCollection) defaultLabels.Add("收款");
+                if (account.IsDefaultPayment) defaultLabels.Add("付款");
+                if (account.IsDefaultInvoice) defaultLabels.Add("开票");
+                <tr class="@(account.IsActive ? null : "is-account-inactive")" data-inline-edit="company-account-@account.Id" data-inline-cell-edit>
+                    <td>
+                        <span data-inline-edit-value>@account.AccountName</span>
+                        @if (!account.IsActive) { <span class="status-badge status-badge--muted">已停用</span> }
+                        @if (Model.CanManage) { <input class="inline-cell-control" name="Account.Name" value="@account.AccountName" form="@accountFormId" data-inline-edit-control hidden required /> }
+                    </td>
+                    <td><span data-inline-edit-value>@(account.AccountNumber ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.Number" value="@account.AccountNumber" form="@accountFormId" data-inline-edit-control hidden /> }</td>
+                    <td><span data-inline-edit-value>@(account.BankName ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.BankName" value="@account.BankName" form="@accountFormId" data-inline-edit-control hidden /> }</td>
+                    <td><span data-inline-edit-value>@accountTypeLabel</span>@if (Model.CanManage) { <select class="inline-cell-control" name="Account.AccountType" form="@accountFormId" data-inline-edit-control hidden><option value="1" selected="@(account.AccountType == nameof(FinancialAccountType.Bank) ? "selected" : null)">银行</option><option value="2" selected="@(account.AccountType == nameof(FinancialAccountType.Cash) ? "selected" : null)">现金</option><option value="3" selected="@(account.AccountType == nameof(FinancialAccountType.Other) ? "selected" : null)">其他</option></select> }</td>
+                    <td><span data-inline-edit-value>@account.OpeningBalance.ToString("N2")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.OpeningBalance" value="@account.OpeningBalance" type="number" step="0.01" form="@accountFormId" data-inline-edit-control hidden /> }</td>
+                    <td><span data-inline-edit-value>@(defaultLabels.Count == 0 ? "无" : string.Join("、", defaultLabels))</span>@if (Model.CanManage) { <div class="company-account-defaults" data-inline-edit-control hidden><label><input type="checkbox" name="Account.DefaultCollection" value="true" checked="@(account.IsDefaultCollection ? "checked" : null)" form="@accountFormId" />收款</label><label><input type="checkbox" name="Account.DefaultPayment" value="true" checked="@(account.IsDefaultPayment ? "checked" : null)" form="@accountFormId" />付款</label><label><input type="checkbox" name="Account.DefaultInvoice" value="true" checked="@(account.IsDefaultInvoice ? "checked" : null)" form="@accountFormId" />开票</label></div> }</td>
+                    <td><span class="status-badge @(account.IsActive ? "status-badge--ok" : "status-badge--muted")">@(account.IsActive ? "启用" : "已停用")</span></td>
+                    <td><span data-inline-edit-value>@(account.Notes ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Account.Notes" value="@account.Notes" form="@accountFormId" data-inline-edit-control hidden /> }</td>
+                    @if (Model.CanManage)
+                    {
+                        <td class="table-actions">
+                            <form id="@accountFormId" method="post" asp-page-handler="Account" asp-route-id="@Model.Company.Id" asp-route-tab="accounts" class="inline-form">
+                                <input type="hidden" name="Account.Id" value="@account.Id" />
+                                <input type="hidden" name="Account.ConcurrencyStamp" value="@account.ConcurrencyStamp" />
+                                <input type="hidden" name="Account.IsActive" value="@account.IsActive.ToString().ToLowerInvariant()" />
+                                <button class="button button--secondary button--small" type="button" data-inline-edit-open>编辑</button>
+                                <button class="button button--secondary button--small" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button>
+                                <button class="button button--primary button--small" type="submit" data-inline-edit-actions hidden>保存</button>
+                            </form>
+                            <form method="post" asp-page-handler="AccountStatus" asp-route-id="@Model.Company.Id" asp-route-tab="accounts" class="inline-form" data-inline-edit-value>
+                                <input type="hidden" name="accountId" value="@account.Id" />
+                                <input type="hidden" name="concurrencyStamp" value="@account.ConcurrencyStamp" />
+                                <input type="hidden" name="isActive" value="@(!account.IsActive ? "true" : "false")" />
+                                <button class="button button--ghost button--small" type="submit" data-account-status-action="@(account.IsActive ? "disable" : "enable")" onclick="return confirm('@(account.IsActive ? "确认停用该账户？停用后不能作为新的默认收付款/开票账户，历史记录保留。" : "确认重新启用该账户？")')">@(account.IsActive ? "停用" : "启用")</button>
+                            </form>
+                        </td>
+                    }
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+    @if (Model.CanManage)
+    {
+        <section class="panel">
+            <div class="panel-heading"><h2>新增公司账户</h2></div>
+            <form method="post" asp-page-handler="Account" asp-route-id="@Model.Company.Id" asp-route-tab="accounts" class="form-grid">
+                <input asp-for="Account.IsActive" type="hidden" value="true" />
+                <label>账户名称<input asp-for="Account.Name" required /></label>
+                <label>账户类型<select asp-for="Account.AccountType"><option value="1">银行</option><option value="2">现金</option><option value="3">其他</option></select></label>
+                <label>账号<input asp-for="Account.Number" /></label>
+                <label>开户行<input asp-for="Account.BankName" /></label>
+                <label>期初余额<input asp-for="Account.OpeningBalance" /></label>
+                <label>账户备注<textarea asp-for="Account.Notes"></textarea></label>
+                <label class="checkbox-row"><input asp-for="Account.DefaultCollection" />默认收款</label>
+                <label class="checkbox-row"><input asp-for="Account.DefaultPayment" />默认付款</label>
+                <label class="checkbox-row"><input asp-for="Account.DefaultInvoice" />默认开票</label>
+                <button class="button button--primary button--action" type="submit">保存账户</button>
+            </form>
+        </section>
+    }
+}
+else if (Model.ActiveTab == "projects")
+{
+    <section class="panel">
+        <div class="panel-heading">
+            <div><h2>项目与合同</h2><p class="panel-copy">只读展示本公司关联项目与合同；点击名称进入项目管理编辑。</p></div>
+            <a class="button button--secondary button--action" asp-page="/Projects/Index" asp-route-LegalEntityId="@Model.Company.Id">在项目管理中查看全部</a>
+        </div>
+        @if (Model.Projects.Count == 0)
+        {
+            <p class="panel-copy">本公司暂无关联项目或合同。</p>
+        }
+        else
+        {
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>项目编号</th><th>项目名称</th><th>阶段</th><th>本公司合同额</th><th>应收 / 已收</th><th>应付 / 已付</th><th>操作</th></tr></thead><tbody>
+            @foreach (var project in Model.Projects)
+            {
+                <tr>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@project.ProjectId">@project.ProjectNumber</a></td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@project.ProjectId">@project.ProjectName</a></td>
+                    <td>@(Enum.TryParse<ProjectStage>(project.Stage, out var stage) ? stage.ToChinese() : project.Stage)</td>
+                    <td>@project.CompanyContractAmount.ToString("N2")</td>
+                    <td>@project.ReceivableAmount.ToString("N2") / @project.CollectedAmount.ToString("N2")</td>
+                    <td>@project.PayableAmount.ToString("N2") / @project.PaidAmount.ToString("N2")</td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@project.ProjectId">打开项目</a></td>
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+    <section class="panel">
+        <div class="panel-heading"><h2>合同明细</h2></div>
+        @if (Model.Contracts.Count == 0)
+        {
+            <p class="panel-copy">本公司暂无合同分配记录。</p>
+        }
+        else
+        {
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>合同编号</th><th>合同名称</th><th>合同总额</th><th>本公司份额</th><th>比例</th><th>状态</th></tr></thead><tbody>
+            @foreach (var contract in Model.Contracts)
+            {
+                <tr>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@contract.ProjectId">@contract.ContractNumber</a></td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@contract.ProjectId">@contract.ContractName</a></td>
+                    <td>@contract.ContractTotalAmount.ToString("N2")</td>
+                    <td>@contract.CompanyShareAmount.ToString("N2")</td>
+                    <td>@(contract.CompanySharePercentage?.ToString("N2") is string p ? p + "%" : "—")</td>
+                    <td>@(contract.IsActive ? "有效" : "停用")</td>
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+}
+else if (Model.ActiveTab == "finance")
+{
+    <section class="panel">
+        <div class="panel-heading"><div><h2>收款明细</h2><p class="panel-copy">本页只读汇总公司收付款与发票；点击项目或打开经营台账进行业务维护。</p></div><a class="button button--secondary button--action" asp-page="/Finance/Index">打开经营台账</a></div>
+        @if (Model.Collections.Count == 0) { <p class="panel-copy">本公司暂无收款记录。</p> }
+        else
+        {
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>项目</th><th>摘要</th><th>账户</th><th>金额</th></tr></thead><tbody>
+            @foreach (var row in Model.Collections)
+            {
+                <tr>
+                    <td>@row.Date.ToString("yyyy-MM-dd")</td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@row.ProjectId">@row.ProjectNumber @row.ProjectName</a></td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@row.ProjectId">@row.Summary</a></td>
+                    <td>@row.AccountName@if (!row.AccountIsActive) { <span class="status-badge status-badge--muted">已停用</span> }</td>
+                    <td>@row.Amount.ToString("N2")</td>
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+    <section class="panel">
+        <div class="panel-heading"><h2>付款明细</h2></div>
+        @if (Model.Payments.Count == 0) { <p class="panel-copy">本公司暂无付款记录。</p> }
+        else
+        {
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>项目</th><th>摘要</th><th>账户</th><th>金额</th></tr></thead><tbody>
+            @foreach (var row in Model.Payments)
+            {
+                <tr>
+                    <td>@row.Date.ToString("yyyy-MM-dd")</td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@row.ProjectId">@row.ProjectNumber @row.ProjectName</a></td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@row.ProjectId">@row.Summary</a></td>
+                    <td>@row.AccountName@if (!row.AccountIsActive) { <span class="status-badge status-badge--muted">已停用</span> }</td>
+                    <td>@row.Amount.ToString("N2")</td>
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+    <section class="panel">
+        <div class="panel-heading"><h2>发票明细</h2></div>
+        @if (Model.Invoices.Count == 0) { <p class="panel-copy">本公司暂无发票记录。</p> }
+        else
+        {
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>方向</th><th>发票号</th><th>项目</th><th>开票公司</th><th>含税金额</th><th>日期</th></tr></thead><tbody>
+            @foreach (var row in Model.Invoices)
+            {
+                <tr>
+                    <td>@row.Direction</td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@row.ProjectId">@row.InvoiceNumber</a></td>
+                    <td><a asp-page="/Projects/Details" asp-route-id="@row.ProjectId">@row.ProjectNumber @row.ProjectName</a></td>
+                    <td>@row.LegalEntityName</td>
+                    <td>@row.GrossAmount.ToString("N2")</td>
+                    <td>@row.InvoiceDate.ToString("yyyy-MM-dd")</td>
+                </tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+}
+</div>
