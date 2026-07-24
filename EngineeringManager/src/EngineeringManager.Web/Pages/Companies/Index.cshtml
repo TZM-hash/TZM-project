@@ -123,7 +123,7 @@
                         {
                             <tr>
                                 <td data-column-key="code">@company.Code</td>
-                                <td data-column-key="company"><a class="company-name-link" asp-page="Details" asp-route-id="@company.Id">@company.Name</a></td>
+                                <td data-column-key="company"><a class="company-name-link" asp-page="Details" asp-route-id="@company.Id" asp-route-tab="overview">@company.Name</a></td>
                                 <td data-column-key="category">@(company.CategoryName ?? "未分类")</td>
                                 <td data-column-key="representative">@(string.IsNullOrWhiteSpace(company.LegalRepresentative) ? "—" : company.LegalRepresentative)</td>
                                 <td data-column-key="accounts">
@@ -141,7 +141,7 @@
                                 </td>
                                 <td data-column-key="actions">
                                     <div class="company-row-actions">
-                                        <a asp-page="Details" asp-route-id="@company.Id">查看</a>
+                                        <a asp-page="Details" asp-route-id="@company.Id" asp-route-tab="overview">查看</a>
                                         @if (Model.CanManage)
                                         {
                                             <a asp-page="Edit" asp-route-id="@company.Id">编辑</a>

@@ -148,17 +148,27 @@ else if (Model.ActiveTab == "profile")
 }
 else if (Model.ActiveTab == "certificates")
 {
-    <section class="panel">
+    <section class="panel" data-company-certificate-table>
         <div class="panel-heading"><h2>证书信息</h2></div>
-        @if (Model.Company.Certificates.Count == 0)
+        <div asp-validation-summary="All" class="panel-copy"></div>
+        @if (Model.Certificates.Count == 0)
         {
             <p class="panel-copy">还没有维护公司证照。</p>
         }
         else
         {
-            <div class="table-wrap"><table class="data-table"><thead><tr><th>资料类型</th><th>资料编号</th><th>签发日期</th><th>有效期</th><th>到期状态</th><th>备注</th></tr></thead><tbody>
-            @foreach (var cert in Model.Company.Certificates)
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>资料类型</th><th>资料编号</th><th>签发日期</th><th>有效期</th><th>到期状态</th><th>备注</th>@if (Model.CanManage) { <th>操作</th> }</tr></thead><tbody>
+            @foreach (var cert in Model.Certificates)
             {
+                var certificateFormId = $"company-certificate-{cert.Id:N}";
+                var keepPostedValues = Model.CertificateEditId == cert.Id;
+                var certificateType = keepPostedValues ? Model.Certificate.Type : cert.CertificateType;
+                var certificateNumber = keepPostedValues ? Model.Certificate.Number : cert.CertificateNumber;
+                var issuedOn = keepPostedValues ? Model.Certificate.IssuedOn : cert.IssuedOn;
+                var expiresOn = keepPostedValues ? Model.Certificate.ExpiresOn : cert.ExpiresOn;
+                var notes = keepPostedValues ? Model.Certificate.Notes : cert.Notes;
+                var reason = keepPostedValues ? Model.Certificate.Reason : "修改公司证书";
+                var concurrencyStamp = keepPostedValues ? Model.Certificate.ConcurrencyStamp : cert.ConcurrencyStamp;
                 string status;
                 string badgeClass;
                 if (!cert.ExpiresOn.HasValue) { status = "长期有效"; badgeClass = "status-badge status-badge--ok"; }
@@ -167,23 +177,37 @@ else if (Model.ActiveTab == "certificates")
                 else if (cert.ExpiresOn.Value <= today.AddDays(60)) { status = "60天内"; badgeClass = "status-badge status-badge--warn"; }
                 else if (cert.ExpiresOn.Value <= today.AddDays(90)) { status = "90天内"; badgeClass = "status-badge status-badge--warn"; }
                 else { status = "正常"; badgeClass = "status-badge status-badge--ok"; }
-                <tr>
-                    <td>@cert.CertificateType</td>
-                    <td>@(cert.CertificateNumber ?? "—")</td>
-                    <td>@(cert.IssuedOn?.ToString("yyyy-MM-dd") ?? "—")</td>
-                    <td>@(cert.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</td>
+                <tr data-inline-edit="company-certificate-@cert.Id" data-inline-cell-edit data-inline-edit-active="@(keepPostedValues ? "true" : "false")">
+                    <td><span data-inline-edit-value>@cert.CertificateType</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Certificate.Type" value="@certificateType" form="@certificateFormId" data-inline-edit-control hidden required /> }</td>
+                    <td><span data-inline-edit-value>@(cert.CertificateNumber ?? "—")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Certificate.Number" value="@certificateNumber" form="@certificateFormId" data-inline-edit-control hidden /> }</td>
+                    <td><span data-inline-edit-value>@(cert.IssuedOn?.ToString("yyyy-MM-dd") ?? "—")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Certificate.IssuedOn" value="@issuedOn?.ToString("yyyy-MM-dd")" type="date" form="@certificateFormId" data-inline-edit-control hidden /> }</td>
+                    <td><span data-inline-edit-value>@(cert.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Certificate.ExpiresOn" value="@expiresOn?.ToString("yyyy-MM-dd")" type="date" form="@certificateFormId" data-inline-edit-control hidden /> }</td>
                     <td><span class="@badgeClass">@status</span></td>
-                    <td>@(cert.Notes ?? "—")</td>
+                    <td><span data-inline-edit-value>@(cert.Notes ?? "—")</span>@if (Model.CanManage) { <input class="inline-cell-control" name="Certificate.Notes" value="@notes" form="@certificateFormId" data-inline-edit-control hidden /> }</td>
+                    @if (Model.CanManage)
+                    {
+                        <td class="table-actions">
+                            <form id="@certificateFormId" method="post" asp-page-handler="Certificate" asp-route-id="@Model.Company.Id" asp-route-tab="certificates" class="inline-form">
+                                <input type="hidden" name="Certificate.Id" value="@cert.Id" />
+                                <input type="hidden" name="Certificate.ConcurrencyStamp" value="@concurrencyStamp" />
+                                <input class="inline-cell-control" name="Certificate.Reason" value="@reason" form="@certificateFormId" data-inline-edit-control hidden required aria-label="修改原因" placeholder="修改原因" />
+                                <button class="button button--secondary button--small" type="button" data-inline-edit-open>编辑</button>
+                                <button class="button button--secondary button--small" type="button" data-inline-edit-cancel data-inline-edit-actions hidden>取消</button>
+                                <button class="button button--primary button--small" type="submit" data-inline-edit-actions hidden>保存</button>
+                            </form>
+                        </td>
+                    }
                 </tr>
             }
             </tbody></table></div>
         }
     </section>
-    @if (Model.CanManage)
+    @if (Model.CanManage && !Model.CertificateEditId.HasValue)
     {
         <section class="panel">
             <div class="panel-heading"><h2>新增公司证照</h2></div>
             <form method="post" asp-page-handler="Certificate" asp-route-id="@Model.Company.Id" asp-route-tab="certificates" class="form-grid">
+                <input type="hidden" asp-for="Certificate.Reason" value="新增公司证照" />
                 <label>资料类型<input asp-for="Certificate.Type" required /></label>
                 <label>资料编号<input asp-for="Certificate.Number" /></label>
                 <label>签发日期<input asp-for="Certificate.IssuedOn" type="date" /></label>

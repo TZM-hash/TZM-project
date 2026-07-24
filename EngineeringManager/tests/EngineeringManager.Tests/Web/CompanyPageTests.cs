@@ -1,12 +1,16 @@
 using System.Net;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
+using EngineeringManager.Application.Certificates;
 using EngineeringManager.Application.Companies;
+using EngineeringManager.Domain.Certificates;
 using EngineeringManager.Web;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -112,6 +116,120 @@ public sealed class CompanyPageTests
     }
 
     [Fact]
+    public async Task CompanyListLinksOpenExplicitOverviewTab()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies"));
+
+        html.Should().Contain($"class=\"company-name-link\" href=\"/Companies/Details/{FakeCompanyService.CompanyId}?tab=overview\"");
+    }
+
+    [Fact]
+    public async Task AdministratorCertificatesTabProvidesInlineEditing()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates"));
+
+        html.Should().Contain("data-company-certificate-table");
+        html.Should().Contain($"data-inline-edit=\"company-certificate-{FakeCompanyCertificateService.CertificateId}\"");
+        html.Should().Contain("name=\"Certificate.Id\"");
+        html.Should().Contain("name=\"Certificate.ConcurrencyStamp\"");
+        html.Should().Contain("修改原因");
+    }
+
+    [Fact]
+    public async Task AdministratorCanUpdateCertificateInlineWithoutLosingExtendedFields()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var certificateService = (FakeCompanyCertificateService)factory.Services.GetRequiredService<ICompanyCertificateService>();
+        var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates");
+
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificate", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["Certificate.Id"] = FakeCompanyCertificateService.CertificateId.ToString(),
+            ["Certificate.ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
+            ["Certificate.Type"] = "更新营业执照",
+            ["Certificate.Number"] = "CERT-002",
+            ["Certificate.IssuedOn"] = "2026-02-01",
+            ["Certificate.ExpiresOn"] = "2031-02-01",
+            ["Certificate.Notes"] = "更新证书备注",
+            ["Certificate.Reason"] = "行内修改证书",
+            ["__RequestVerificationToken"] = token
+        }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location!.OriginalString.Should().Contain("tab=certificates");
+        certificateService.LastSavedRequest.Should().NotBeNull();
+        certificateService.LastSavedRequest!.SpecialtyLevelScope.Should().Be("建筑二级");
+        certificateService.LastSavedRequest.IssuingAuthority.Should().Be("住建部门");
+        certificateService.LastSavedRequest.NewAttachment.Should().BeNull();
+        certificateService.LastSavedRequest.RemoveAttachment.Should().BeFalse();
+        certificateService.LastSavedRequest.ConcurrencyStamp.Should().Be(FakeCompanyCertificateService.InitialConcurrencyStamp);
+    }
+
+    [Fact]
+    public async Task CertificateConcurrencyConflictKeepsOldStampAndRequiresRefresh()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var certificateService = (FakeCompanyCertificateService)factory.Services.GetRequiredService<ICompanyCertificateService>();
+        certificateService.ThrowConcurrencyOnSave = true;
+        var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates");
+
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificate", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["Certificate.Id"] = FakeCompanyCertificateService.CertificateId.ToString(),
+            ["Certificate.ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
+            ["Certificate.Type"] = "冲突前的本地修改",
+            ["Certificate.Number"] = "CERT-LOCAL",
+            ["Certificate.IssuedOn"] = "2026-03-01",
+            ["Certificate.ExpiresOn"] = "2031-03-01",
+            ["Certificate.Notes"] = "本地备注",
+            ["Certificate.Reason"] = "并发测试",
+            ["__RequestVerificationToken"] = token
+        }));
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        html.Should().Contain("数据已被他人更新，请刷新后重试。");
+        html.Should().Contain("data-inline-edit-active=\"true\"");
+        html.Should().Contain($"name=\"Certificate.ConcurrencyStamp\" value=\"{FakeCompanyCertificateService.InitialConcurrencyStamp}\"");
+        html.Should().Contain("value=\"冲突前的本地修改\"");
+        html.Should().NotContain($"name=\"Certificate.ConcurrencyStamp\" value=\"{FakeCompanyCertificateService.NewerConcurrencyStamp}\"");
+    }
+
+    [Fact]
+    public async Task InvalidCertificateDateStaysOnTabWithoutSaving()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var certificateService = (FakeCompanyCertificateService)factory.Services.GetRequiredService<ICompanyCertificateService>();
+        var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates");
+
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificate", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["Certificate.Type"] = "日期校验证书",
+            ["Certificate.Number"] = "CERT-DATE",
+            ["Certificate.IssuedOn"] = "not-a-date",
+            ["Certificate.ExpiresOn"] = "2031-03-01",
+            ["Certificate.Notes"] = "日期校验",
+            ["Certificate.Reason"] = "新增公司证照",
+            ["__RequestVerificationToken"] = token
+        }));
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        certificateService.LastSavedRequest.Should().BeNull();
+        html.Should().Contain("validation-summary-errors");
+        html.Should().Contain("tab=certificates");
+    }
+
+    [Fact]
     public void CompanyAccountDtoCarriesConcurrencyStampForReliableEditing()
     {
         var root = RepositoryRoot();
@@ -174,10 +292,20 @@ public sealed class CompanyPageTests
                 }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.Scheme, _ => { });
                 services.RemoveAll<ICompanyManagementService>();
                 services.AddSingleton<ICompanyManagementService, FakeCompanyService>();
+                services.RemoveAll<ICompanyCertificateService>();
+                services.AddSingleton<ICompanyCertificateService, FakeCompanyCertificateService>();
                 services.RemoveAll<ICompanyActorService>();
                 services.AddSingleton<ICompanyActorService, FakeCompanyActorService>();
             });
         });
+
+    private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client, string path)
+    {
+        var html = await client.GetStringAsync(path);
+        var match = Regex.Match(html, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
+        match.Success.Should().BeTrue("Razor form should render an antiforgery token");
+        return WebUtility.HtmlDecode(match.Groups[1].Value);
+    }
 
     private sealed class FakeCompanyActorService : ICompanyActorService
     {
@@ -216,6 +344,67 @@ public sealed class CompanyPageTests
         public Task<CompanyCategoryDto> SaveCategoryAsync(CompanyActor actor, SaveCompanyCategoryRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CompanyAccountDto> SaveAccountAsync(CompanyActor actor, SaveCompanyAccountRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CompanyCertificateDto> SaveCertificateAsync(CompanyActor actor, SaveCompanyCertificateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeCompanyCertificateService : ICompanyCertificateService
+    {
+        public static readonly Guid CertificateId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        public static readonly Guid InitialConcurrencyStamp = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        public static readonly Guid NewerConcurrencyStamp = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        private CompanyCertificateItemDto currentItem = CreateItem(InitialConcurrencyStamp);
+
+        public SaveCompanyCertificateItemRequest? LastSavedRequest { get; private set; }
+        public bool ThrowConcurrencyOnSave { get; set; }
+
+        private static CompanyCertificateItemDto CreateItem(Guid concurrencyStamp) => new(
+            CertificateId,
+            FakeCompanyService.CompanyId,
+            "TEST",
+            "测试自有公司",
+            "营业执照",
+            "CERT-001",
+            "建筑二级",
+            "住建部门",
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2030, 12, 31),
+            null,
+            null,
+            "证书备注",
+            CertificateExpiryState.Normal,
+            concurrencyStamp);
+
+        public Task<IReadOnlyList<CompanyCertificateItemDto>> ListAsync(CompanyActor actor, CertificateFilter filter, DateOnly today, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CompanyCertificateItemDto>>([currentItem]);
+
+        public Task<CompanyCertificateItemDto> GetAsync(CompanyActor actor, Guid id, DateOnly today, CancellationToken cancellationToken) =>
+            Task.FromResult(currentItem);
+
+        public Task<CompanyCertificateItemDto> SaveAsync(CompanyActor actor, SaveCompanyCertificateItemRequest request, DateOnly today, CancellationToken cancellationToken)
+        {
+            LastSavedRequest = request;
+            if (ThrowConcurrencyOnSave)
+            {
+                currentItem = CreateItem(NewerConcurrencyStamp) with { CertificateType = "他人已修改证书" };
+                throw new DbUpdateConcurrencyException("公司证书已被其他用户修改。");
+            }
+
+            currentItem = currentItem with
+            {
+                CertificateType = request.CertificateType,
+                CertificateNumber = request.CertificateNumber,
+                IssuedOn = request.IssuedOn,
+                ExpiresOn = request.ExpiresOn,
+                Notes = request.Notes,
+                ConcurrencyStamp = NewerConcurrencyStamp
+            };
+            return Task.FromResult(currentItem);
+        }
+
+        public Task DeleteAsync(CompanyActor actor, Guid id, Guid concurrencyStamp, string reason, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<CertificateFileDto> DownloadAttachmentAsync(CompanyActor actor, Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, System.Text.Encodings.Web.UrlEncoder encoder)

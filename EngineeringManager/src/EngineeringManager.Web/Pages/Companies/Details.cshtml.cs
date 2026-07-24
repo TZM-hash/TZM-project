@@ -1,3 +1,4 @@
+using EngineeringManager.Application.Certificates;
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Security;
@@ -9,7 +10,10 @@ using System.ComponentModel.DataAnnotations;
 namespace EngineeringManager.Web.Pages.Companies;
 
 [Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly)]
-public sealed class DetailsModel(ICompanyManagementService companyService, ICompanyActorService actorService) : CompanyPageModel(actorService)
+public sealed class DetailsModel(
+    ICompanyManagementService companyService,
+    ICompanyCertificateService certificateService,
+    ICompanyActorService actorService) : CompanyPageModel(actorService)
 {
     public CompanyDetailsDto Company { get; private set; } = null!;
     public CompanyDashboardDto Dashboard { get; private set; } = null!;
@@ -22,8 +26,10 @@ public sealed class DetailsModel(ICompanyManagementService companyService, IComp
     public IReadOnlyList<CompanyCollectionRowDto> Collections { get; private set; } = [];
     public IReadOnlyList<CompanyPaymentRowDto> Payments { get; private set; } = [];
     public IReadOnlyList<CompanyInvoiceRowDto> Invoices { get; private set; } = [];
+    public IReadOnlyList<CompanyCertificateItemDto> Certificates { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
     public bool QuickEditOpen { get; private set; }
+    public Guid? CertificateEditId { get; private set; }
     public string ActiveTab => NormalizeTab(Tab);
 
     [BindProperty(SupportsGet = true)] public string? Tab { get; set; }
@@ -125,10 +131,53 @@ public sealed class DetailsModel(ICompanyManagementService companyService, IComp
     {
         if (!CanManage) return Forbid();
         Tab = "certificates";
-        var actor = await ResolveActorAsync(cancellationToken);
-        await companyService.SaveCertificateAsync(actor, new SaveCompanyCertificateRequest(null, id, Certificate.Type, Certificate.Number,
-            Certificate.IssuedOn, Certificate.ExpiresOn, null, Certificate.Notes, null, "维护公司证照"), cancellationToken);
-        return RedirectToPage(new { id, tab = "certificates" });
+        var certificatePrefix = $"{nameof(Certificate)}.";
+        foreach (var key in ModelState.Keys.Where(key => !key.StartsWith(certificatePrefix, StringComparison.Ordinal)).ToArray())
+        {
+            ModelState.Remove(key);
+        }
+        if (!TryValidateModel(Certificate, nameof(Certificate)))
+        {
+            CertificateEditId = Certificate.Id;
+            await LoadAsync(id, true, cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            var actor = await ResolveActorAsync(cancellationToken);
+            CompanyCertificateItemDto? existing = null;
+            if (Certificate.Id.HasValue)
+            {
+                existing = await certificateService.GetAsync(actor, Certificate.Id.Value, DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+                if (existing.LegalEntityId != id) throw new KeyNotFoundException("公司证照不存在或无权访问。");
+            }
+
+            await certificateService.SaveAsync(actor, new SaveCompanyCertificateItemRequest(
+                Certificate.Id,
+                id,
+                Certificate.Type,
+                Certificate.Number,
+                existing?.SpecialtyLevelScope,
+                existing?.IssuingAuthority,
+                Certificate.IssuedOn,
+                Certificate.ExpiresOn,
+                null,
+                false,
+                Certificate.Notes,
+                Certificate.ConcurrencyStamp,
+                Certificate.Reason), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+            return RedirectToPage(new { id, tab = "certificates" });
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException or DbUpdateConcurrencyException)
+        {
+            ModelState.AddModelError(string.Empty, exception is DbUpdateConcurrencyException
+                ? "数据已被他人更新，请刷新后重试。"
+                : exception.Message);
+            CertificateEditId = Certificate.Id;
+            await LoadAsync(id, true, cancellationToken);
+            return Page();
+        }
     }
 
     private async Task LoadAsync(Guid id, bool populateQuickEdit, CancellationToken cancellationToken)
@@ -149,6 +198,9 @@ public sealed class DetailsModel(ICompanyManagementService companyService, IComp
             case "overview":
                 WorkspaceSummary = await companyService.GetWorkspaceSummaryAsync(actor, id, cancellationToken);
                 RecentActivity = await companyService.ListRecentActivityAsync(actor, id, 10, cancellationToken);
+                break;
+            case "certificates":
+                Certificates = await certificateService.ListAsync(actor, new CertificateFilter(OwnerId: id), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
                 break;
             case "projects":
                 Projects = await companyService.ListCompanyProjectsAsync(actor, id, ProjectSearch, 50, cancellationToken);
@@ -191,10 +243,15 @@ public sealed class DetailsModel(ICompanyManagementService companyService, IComp
 
     public sealed class CertificateInput
     {
-        public string Type { get; set; } = string.Empty;
+        public Guid? Id { get; set; }
+        public Guid? ConcurrencyStamp { get; set; }
+        [Required, StringLength(100)] public string Type { get; set; } = string.Empty;
+        [StringLength(100)]
         public string? Number { get; set; }
         public DateOnly? IssuedOn { get; set; }
         public DateOnly? ExpiresOn { get; set; }
+        [StringLength(1000)]
         public string? Notes { get; set; }
+        [Required, StringLength(500)] public string Reason { get; set; } = "维护公司证照";
     }
 }
