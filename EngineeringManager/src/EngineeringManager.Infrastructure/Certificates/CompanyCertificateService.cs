@@ -88,6 +88,62 @@ public sealed class CompanyCertificateService(ApplicationDbContext db, IFileStor
         return await GetAsync(actor, item.Id, today, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<CompanyCertificateItemDto>> SaveManyAsync(
+        CompanyActor actor,
+        IReadOnlyList<SaveCompanyCertificateItemRequest> requests,
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        EnsureManage(actor);
+        if (requests.Count == 0) throw new ArgumentException("没有可保存的公司证照。", nameof(requests));
+        if (requests.Any(request => !request.Id.HasValue)) throw new ArgumentException("批量修改只能保存已有公司证照。", nameof(requests));
+        if (requests.Any(request => request.NewAttachment is not null || request.RemoveAttachment))
+            throw new ArgumentException("批量修改不处理证书附件。", nameof(requests));
+
+        var ids = requests.Select(request => request.Id!.Value).ToArray();
+        if (ids.Distinct().Count() != ids.Length) throw new ArgumentException("批量修改中存在重复的公司证照。", nameof(requests));
+        var prepared = requests.Select(request => new
+        {
+            Request = request,
+            CertificateType = CertificateServiceSupport.Required(request.CertificateType, nameof(request.CertificateType)),
+            CertificateNumber = CertificateServiceSupport.Optional(request.CertificateNumber),
+            Notes = CertificateServiceSupport.Optional(request.Notes),
+            Reason = CertificateServiceSupport.Required(request.Reason, nameof(request.Reason))
+        }).ToList();
+        foreach (var item in prepared) CertificateServiceSupport.ValidateDates(item.Request.IssuedOn, item.Request.ExpiresOn, nameof(requests));
+
+        var certificates = await Authorized(actor).Where(item => ids.Contains(item.Id) && !item.IsDeleted).ToListAsync(cancellationToken);
+        if (certificates.Count != ids.Length) throw new KeyNotFoundException("公司证书不存在或无权访问。");
+        var certificateById = certificates.ToDictionary(item => item.Id);
+        foreach (var item in prepared)
+        {
+            var certificate = certificateById[item.Request.Id!.Value];
+            if (certificate.LegalEntityId != item.Request.LegalEntityId) throw new KeyNotFoundException("公司证书不存在或无权访问。");
+            if (!item.Request.ConcurrencyStamp.HasValue || item.Request.ConcurrencyStamp != certificate.ConcurrencyStamp)
+                throw new DbUpdateConcurrencyException("公司证书已被其他用户修改。");
+        }
+
+        foreach (var item in prepared)
+        {
+            var certificate = certificateById[item.Request.Id!.Value];
+            var before = JsonSerializer.Serialize(Snapshot(certificate));
+            certificate.CertificateType = item.CertificateType;
+            certificate.CertificateNumber = item.CertificateNumber;
+            certificate.IssuedOn = item.Request.IssuedOn;
+            certificate.ExpiresOn = item.Request.ExpiresOn;
+            certificate.Notes = item.Notes;
+            certificate.ConcurrencyStamp = Guid.NewGuid();
+            certificate.UpdatedAt = DateTimeOffset.UtcNow;
+            AddAudit(actor.UserId, "Update", certificate, item.Reason, before, JsonSerializer.Serialize(Snapshot(certificate)));
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        var saved = await Authorized(actor).AsNoTracking().Include(item => item.LegalEntity).Include(item => item.Attachment)
+            .Where(item => ids.Contains(item.Id) && !item.IsDeleted).ToListAsync(cancellationToken);
+        var savedById = saved.ToDictionary(item => item.Id);
+        return ids.Select(id => ToDto(savedById[id], today)).ToList();
+    }
+
     public async Task DeleteAsync(CompanyActor actor, Guid id, Guid concurrencyStamp, string reason, CancellationToken cancellationToken)
     {
         EnsureManage(actor);

@@ -9,6 +9,21 @@ namespace EngineeringManager.Infrastructure.Certificates;
 internal static class CertificateServiceSupport
 {
     private const int MaxAttachmentBytes = 20 * 1024 * 1024;
+    private const string BinaryContentType = "application/octet-stream";
+    private static readonly Dictionary<string, string> AttachmentContentTypes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [".pdf"] = "application/pdf",
+            [".jpg"] = "image/jpeg",
+            [".jpeg"] = "image/jpeg",
+            [".png"] = "image/png",
+            [".doc"] = "application/msword",
+            [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            [".xls"] = "application/vnd.ms-excel",
+            [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            [".ppt"] = "application/vnd.ms-powerpoint",
+            [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        };
 
     public static string Required(string? value, string parameterName) => string.IsNullOrWhiteSpace(value)
         ? throw new ArgumentException("值不能为空。", parameterName)
@@ -40,6 +55,10 @@ internal static class CertificateServiceSupport
         {
             throw new ArgumentException("附件文件名无效。", nameof(upload));
         }
+        if (!TryGetAttachmentContentType(originalName, out var contentType))
+        {
+            throw new ArgumentException("证书附件类型不受支持。", nameof(upload));
+        }
         await using var stream = new MemoryStream(upload.Content, writable: false);
         var storedName = await fileStore.SaveAsync(stream, originalName, cancellationToken);
         var uploadedByUserId = await db.Users.AnyAsync(item => item.Id == userId, cancellationToken) ? userId : null;
@@ -47,7 +66,7 @@ internal static class CertificateServiceSupport
         {
             StoredName = storedName,
             OriginalFileName = originalName,
-            ContentType = Optional(upload.ContentType) ?? "application/octet-stream",
+            ContentType = contentType,
             SizeBytes = upload.Content.LongLength,
             Category = AttachmentCategory.General,
             Description = "证书附件",
@@ -63,7 +82,10 @@ internal static class CertificateServiceSupport
         await using var stream = await fileStore.OpenReadAsync(attachment.StoredName, cancellationToken);
         await using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken);
-        return new CertificateFileDto(attachment.OriginalFileName, attachment.ContentType, memory.ToArray());
+        var contentType = TryGetAttachmentContentType(attachment.OriginalFileName, out var normalizedContentType)
+            ? normalizedContentType
+            : BinaryContentType;
+        return new CertificateFileDto(attachment.OriginalFileName, contentType, memory.ToArray());
     }
 
     public static async Task RemoveAttachmentAsync(Attachment? attachment, IFileStore fileStore, CancellationToken cancellationToken)
@@ -72,4 +94,7 @@ internal static class CertificateServiceSupport
         attachment.IsDeleted = true;
         await fileStore.DeleteAsync(attachment.StoredName, cancellationToken);
     }
+
+    private static bool TryGetAttachmentContentType(string fileName, out string contentType) =>
+        AttachmentContentTypes.TryGetValue(Path.GetExtension(fileName), out contentType!);
 }

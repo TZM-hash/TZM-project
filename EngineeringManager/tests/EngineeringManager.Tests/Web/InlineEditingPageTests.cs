@@ -5,7 +5,7 @@ namespace EngineeringManager.Tests.Web;
 public sealed class InlineEditingPageTests
 {
     [Fact]
-    public void ExistingQuickEditPagesKeepMainEditorsInlineAndOnlyUseDialogsForNotesOrAttachmentPreview()
+    public void ExistingQuickEditPagesKeepEditorsInlineAndUseDialogsForFocusedCreateOrPreviewFlows()
     {
         var projectDetails = ReadPage("Projects", "Details.cshtml");
         var companyDetails = ReadPage("Companies", "Details.cshtml");
@@ -24,8 +24,10 @@ public sealed class InlineEditingPageTests
         projectDetails.Should().Contain("<dialog class=\"workbench-dialog quantity-notes-dialog\"");
         projectDetails.Should().Contain("data-attachment-preview-dialog");
         (projectDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(2);
-        companyDetails.Should().Contain("data-attachment-preview-dialog");
-        (companyDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(1);
+        companyDetails.Should().Contain("data-attachment-preview-dialog")
+            .And.Contain("data-company-certificate-create-dialog")
+            .And.Contain("data-company-account-create-dialog");
+        (companyDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(3);
         pages.Should().OnlyContain(page => !page.Contains("data-quick-edit-dialog", StringComparison.Ordinal));
     }
 

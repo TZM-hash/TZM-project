@@ -82,6 +82,17 @@ public sealed class ResponsiveUiAssetTests
         pageCss.Should().NotContain(".company-list-panel .data-table th, .company-list-panel .data-table td { height: 2rem;");
     }
 
+    [Fact]
+    public void CompanyInlineEditorsStayInTheirDisplayedCellsAndCategoryInputsUseEqualColumns()
+    {
+        var pageCss = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        pageCss.Should().Contain(".company-category-create-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));")
+            .And.Contain(".company-workspace--details .inline-edit-shell [data-inline-edit-control].inline-cell-control:not([hidden])")
+            .And.Contain(".company-category-panel [data-inline-edit-control].inline-cell-control:not([hidden])")
+            .And.Contain("position: static;");
+    }
+
     private static string ReadCss()
     {
         var directory = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "wwwroot", "css");

@@ -288,10 +288,31 @@ public sealed class CompanyPageTests
         var html = WebUtility.HtmlDecode(await client.GetStringAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates"));
 
         html.Should().Contain("data-company-certificate-table");
-        html.Should().Contain($"data-inline-edit=\"company-certificate-{FakeCompanyCertificateService.CertificateId}\"");
-        html.Should().Contain("name=\"Certificate.Id\"");
-        html.Should().Contain("name=\"Certificate.ConcurrencyStamp\"");
-        html.Should().Contain("修改原因");
+        html.Should().Contain("data-inline-edit=\"company-certificates\"");
+        html.Should().Contain("name=\"CertificateRows[0].Id\"");
+        html.Should().Contain("name=\"CertificateRows[0].ConcurrencyStamp\"");
+        html.Should().Contain("handler=Certificates");
+    }
+
+    [Fact]
+    public async Task AdministratorCertificatesAndAccountsUseHeaderCreateDialogsAndBatchEditors()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var certificates = WebUtility.HtmlDecode(await client.GetStringAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates"));
+        var accounts = WebUtility.HtmlDecode(await client.GetStringAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=accounts"));
+
+        certificates.Should().Contain("data-company-certificate-create-open")
+            .And.Contain("data-company-certificate-create-dialog")
+            .And.Contain("id=\"certificate-batch-form\"")
+            .And.Contain("name=\"CertificateRows[0].Id\"")
+            .And.Contain("name=\"CertificateAttachmentFile\"")
+            .And.NotContain(">操作</th>")
+            .And.NotContain("data-inline-edit=\"company-certificate-");
+        accounts.Should().Contain("data-company-account-create-open")
+            .And.Contain("data-company-account-create-dialog")
+            .And.Contain("id=\"account-batch-form\"");
     }
 
     [Fact]
@@ -310,6 +331,80 @@ public sealed class CompanyPageTests
             .And.Contain("data-attachment-preview-dialog")
             .And.Contain("/js/components/attachment-picker.js")
             .And.Contain("/js/components/attachment-preview.js");
+    }
+
+    [Fact]
+    public async Task AdministratorCanCreateCertificateWithAttachmentFromDialog()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var certificateService = (FakeCompanyCertificateService)factory.Services.GetRequiredService<ICompanyCertificateService>();
+        var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates");
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(token), "__RequestVerificationToken");
+        content.Add(new StringContent("安全生产许可证"), "Certificate.Type");
+        content.Add(new StringContent("SAFE-001"), "Certificate.Number");
+        content.Add(new StringContent("2026-01-01"), "Certificate.IssuedOn");
+        content.Add(new StringContent("2030-01-01"), "Certificate.ExpiresOn");
+        content.Add(new StringContent("弹窗新增证照"), "Certificate.Notes");
+        content.Add(new StringContent("新增公司证照"), "Certificate.Reason");
+        content.Add(new ByteArrayContent([9, 8, 7]), "CertificateAttachmentFile", "安全生产许可证.pdf");
+
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificate", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        certificateService.LastSavedRequest.Should().NotBeNull();
+        certificateService.LastSavedRequest!.Id.Should().BeNull();
+        certificateService.LastSavedRequest.NewAttachment.Should().NotBeNull();
+        certificateService.LastSavedRequest.NewAttachment!.OriginalFileName.Should().Be("安全生产许可证.pdf");
+        certificateService.LastSavedRequest.NewAttachment.Content.Should().Equal(9, 8, 7);
+    }
+
+    [Fact]
+    public async Task AdministratorCanBatchUpdateCompanyCertificates()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var certificateService = (FakeCompanyCertificateService)factory.Services.GetRequiredService<ICompanyCertificateService>();
+        var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates");
+
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificates", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["CertificateRows[0].Id"] = FakeCompanyCertificateService.CertificateId.ToString(),
+            ["CertificateRows[0].ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
+            ["CertificateRows[0].Type"] = "批量更新营业执照",
+            ["CertificateRows[0].Number"] = "CERT-BATCH",
+            ["CertificateRows[0].IssuedOn"] = "2026-04-01",
+            ["CertificateRows[0].ExpiresOn"] = "2031-04-01",
+            ["CertificateRows[0].Notes"] = "批量更新备注",
+            ["__RequestVerificationToken"] = token
+        }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        certificateService.LastSavedRequests.Should().ContainSingle();
+        certificateService.LastSavedRequests[0].CertificateType.Should().Be("批量更新营业执照");
+        certificateService.LastSavedRequests[0].Reason.Should().Be("批量修改公司证照");
+    }
+
+    [Fact]
+    public async Task InvalidAccountCreateKeepsCreateDialogOpen()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=accounts");
+
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=accounts&handler=Account", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["Account.Name"] = string.Empty,
+            ["Account.AccountType"] = "1",
+            ["Account.IsActive"] = "true",
+            ["__RequestVerificationToken"] = token
+        }));
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        html.Should().Contain("data-company-account-create-dialog")
+            .And.Contain("data-dialog-open=\"true\"");
     }
 
     [Fact]
@@ -373,27 +468,26 @@ public sealed class CompanyPageTests
         var certificateService = (FakeCompanyCertificateService)factory.Services.GetRequiredService<ICompanyCertificateService>();
         var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates");
 
-        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificate", new FormUrlEncodedContent(new Dictionary<string, string>
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificates", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["Certificate.Id"] = FakeCompanyCertificateService.CertificateId.ToString(),
-            ["Certificate.ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
-            ["Certificate.Type"] = "更新营业执照",
-            ["Certificate.Number"] = "CERT-002",
-            ["Certificate.IssuedOn"] = "2026-02-01",
-            ["Certificate.ExpiresOn"] = "2031-02-01",
-            ["Certificate.Notes"] = "更新证书备注",
-            ["Certificate.Reason"] = "行内修改证书",
+            ["CertificateRows[0].Id"] = FakeCompanyCertificateService.CertificateId.ToString(),
+            ["CertificateRows[0].ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
+            ["CertificateRows[0].Type"] = "更新营业执照",
+            ["CertificateRows[0].Number"] = "CERT-002",
+            ["CertificateRows[0].IssuedOn"] = "2026-02-01",
+            ["CertificateRows[0].ExpiresOn"] = "2031-02-01",
+            ["CertificateRows[0].Notes"] = "更新证书备注",
             ["__RequestVerificationToken"] = token
         }));
 
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location!.OriginalString.Should().Contain("tab=certificates");
-        certificateService.LastSavedRequest.Should().NotBeNull();
-        certificateService.LastSavedRequest!.SpecialtyLevelScope.Should().Be("建筑二级");
-        certificateService.LastSavedRequest.IssuingAuthority.Should().Be("住建部门");
-        certificateService.LastSavedRequest.NewAttachment.Should().BeNull();
-        certificateService.LastSavedRequest.RemoveAttachment.Should().BeFalse();
-        certificateService.LastSavedRequest.ConcurrencyStamp.Should().Be(FakeCompanyCertificateService.InitialConcurrencyStamp);
+        certificateService.LastSavedRequests.Should().ContainSingle();
+        certificateService.LastSavedRequests[0].SpecialtyLevelScope.Should().Be("建筑二级");
+        certificateService.LastSavedRequests[0].IssuingAuthority.Should().Be("住建部门");
+        certificateService.LastSavedRequests[0].NewAttachment.Should().BeNull();
+        certificateService.LastSavedRequests[0].RemoveAttachment.Should().BeFalse();
+        certificateService.LastSavedRequests[0].ConcurrencyStamp.Should().Be(FakeCompanyCertificateService.InitialConcurrencyStamp);
     }
 
     [Fact]
@@ -405,16 +499,15 @@ public sealed class CompanyPageTests
         certificateService.ThrowConcurrencyOnSave = true;
         var token = await GetAntiforgeryTokenAsync(client, $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates");
 
-        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificate", new FormUrlEncodedContent(new Dictionary<string, string>
+        using var response = await client.PostAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=certificates&handler=Certificates", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["Certificate.Id"] = FakeCompanyCertificateService.CertificateId.ToString(),
-            ["Certificate.ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
-            ["Certificate.Type"] = "冲突前的本地修改",
-            ["Certificate.Number"] = "CERT-LOCAL",
-            ["Certificate.IssuedOn"] = "2026-03-01",
-            ["Certificate.ExpiresOn"] = "2031-03-01",
-            ["Certificate.Notes"] = "本地备注",
-            ["Certificate.Reason"] = "并发测试",
+            ["CertificateRows[0].Id"] = FakeCompanyCertificateService.CertificateId.ToString(),
+            ["CertificateRows[0].ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
+            ["CertificateRows[0].Type"] = "冲突前的本地修改",
+            ["CertificateRows[0].Number"] = "CERT-LOCAL",
+            ["CertificateRows[0].IssuedOn"] = "2026-03-01",
+            ["CertificateRows[0].ExpiresOn"] = "2031-03-01",
+            ["CertificateRows[0].Notes"] = "本地备注",
             ["__RequestVerificationToken"] = token
         }));
         var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
@@ -422,9 +515,9 @@ public sealed class CompanyPageTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         html.Should().Contain("数据已被他人更新，请刷新后重试。");
         html.Should().Contain("data-inline-edit-active=\"true\"");
-        html.Should().Contain($"name=\"Certificate.ConcurrencyStamp\" value=\"{FakeCompanyCertificateService.InitialConcurrencyStamp}\"");
+        html.Should().Contain($"name=\"CertificateRows[0].ConcurrencyStamp\" value=\"{FakeCompanyCertificateService.InitialConcurrencyStamp}\"");
         html.Should().Contain("value=\"冲突前的本地修改\"");
-        html.Should().NotContain($"name=\"Certificate.ConcurrencyStamp\" value=\"{FakeCompanyCertificateService.NewerConcurrencyStamp}\"");
+        html.Should().NotContain($"name=\"CertificateRows[0].ConcurrencyStamp\" value=\"{FakeCompanyCertificateService.NewerConcurrencyStamp}\"");
     }
 
     [Fact]
@@ -451,6 +544,7 @@ public sealed class CompanyPageTests
         certificateService.LastSavedRequest.Should().BeNull();
         html.Should().Contain("validation-summary-errors");
         html.Should().Contain("tab=certificates");
+        html.Should().Contain("data-dialog-open=\"true\"");
     }
 
     [Fact]
@@ -643,6 +737,7 @@ public sealed class CompanyPageTests
         private CompanyCertificateItemDto currentItem = CreateItem(InitialConcurrencyStamp);
 
         public SaveCompanyCertificateItemRequest? LastSavedRequest { get; private set; }
+        public SaveCompanyCertificateItemRequest[] LastSavedRequests { get; private set; } = [];
         public bool ThrowConcurrencyOnSave { get; set; }
 
         private static CompanyCertificateItemDto CreateItem(Guid concurrencyStamp) => new(
@@ -689,6 +784,14 @@ public sealed class CompanyPageTests
                 ConcurrencyStamp = NewerConcurrencyStamp
             };
             return Task.FromResult(currentItem);
+        }
+
+        public async Task<IReadOnlyList<CompanyCertificateItemDto>> SaveManyAsync(CompanyActor actor, IReadOnlyList<SaveCompanyCertificateItemRequest> requests, DateOnly today, CancellationToken cancellationToken)
+        {
+            LastSavedRequests = requests.ToArray();
+            var saved = new List<CompanyCertificateItemDto>();
+            foreach (var request in requests) saved.Add(await SaveAsync(actor, request, today, cancellationToken));
+            return saved;
         }
 
         public Task DeleteAsync(CompanyActor actor, Guid id, Guid concurrencyStamp, string reason, CancellationToken cancellationToken) =>

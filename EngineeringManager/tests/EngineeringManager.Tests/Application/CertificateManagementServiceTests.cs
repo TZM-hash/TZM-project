@@ -76,6 +76,48 @@ public sealed class CertificateManagementServiceTests
     }
 
     [Fact]
+    public async Task CompanyCertificatesCanBeBatchUpdatedWithoutPartialSaveOnConcurrencyConflict()
+    {
+        await using var fixture = await CertificateFixture.CreateAsync();
+        var company = new LegalEntity { Code = "CERT-BATCH", Name = "批量证书公司", ShortName = "批量公司" };
+        fixture.Db.Add(company);
+        await fixture.Db.SaveChangesAsync();
+        var actor = CompanyActor.Administrator("admin");
+        var today = new DateOnly(2026, 7, 26);
+        var first = await fixture.CompanyService.SaveAsync(actor, new SaveCompanyCertificateItemRequest(
+            null, company.Id, "营业执照", "BATCH-1", "原范围一", "原机关一", null, null, null, false, "原备注一", null, "新增一"), today, default);
+        var second = await fixture.CompanyService.SaveAsync(actor, new SaveCompanyCertificateItemRequest(
+            null, company.Id, "资质证书", "BATCH-2", "原范围二", "原机关二", null, null, null, false, "原备注二", null, "新增二"), today, default);
+
+        var updated = await fixture.CompanyService.SaveManyAsync(actor,
+        [
+            new SaveCompanyCertificateItemRequest(first.Id, company.Id, "更新营业执照", "BATCH-1A", first.SpecialtyLevelScope, first.IssuingAuthority,
+                new DateOnly(2025, 1, 1), new DateOnly(2030, 1, 1), null, false, "更新备注一", first.ConcurrencyStamp, "批量修改公司证照"),
+            new SaveCompanyCertificateItemRequest(second.Id, company.Id, "更新资质证书", "BATCH-2A", second.SpecialtyLevelScope, second.IssuingAuthority,
+                new DateOnly(2025, 2, 1), new DateOnly(2030, 2, 1), null, false, "更新备注二", second.ConcurrencyStamp, "批量修改公司证照")
+        ], today, default);
+
+        updated.Select(item => item.CertificateType).Should().Equal("更新营业执照", "更新资质证书");
+        (await fixture.Db.AuditLogs.CountAsync(item => item.EntityType == nameof(CompanyCertificate) && item.Action == "Update")).Should().Be(2);
+        var stableFirst = updated[0];
+        var stableSecond = updated[1];
+
+        await fixture.CompanyService.Invoking(service => service.SaveManyAsync(actor,
+        [
+            new SaveCompanyCertificateItemRequest(stableFirst.Id, company.Id, "不应保存一", stableFirst.CertificateNumber,
+                stableFirst.SpecialtyLevelScope, stableFirst.IssuingAuthority, stableFirst.IssuedOn, stableFirst.ExpiresOn,
+                null, false, stableFirst.Notes, stableFirst.ConcurrencyStamp, "并发失败测试"),
+            new SaveCompanyCertificateItemRequest(stableSecond.Id, company.Id, "不应保存二", stableSecond.CertificateNumber,
+                stableSecond.SpecialtyLevelScope, stableSecond.IssuingAuthority, stableSecond.IssuedOn, stableSecond.ExpiresOn,
+                null, false, stableSecond.Notes, Guid.NewGuid(), "并发失败测试")
+        ], today, default)).Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+        fixture.Db.ChangeTracker.Clear();
+        var afterConflict = await fixture.CompanyService.ListAsync(actor, new CertificateFilter(OwnerId: company.Id), today, default);
+        afterConflict.Select(item => item.CertificateType).Should().BeEquivalentTo(["更新营业执照", "更新资质证书"]);
+    }
+
+    [Fact]
     public async Task CertificateAttachmentCanBeUploadedDownloadedAndRemoved()
     {
         await using var fixture = await CertificateFixture.CreateAsync();
@@ -96,6 +138,41 @@ public sealed class CertificateManagementServiceTests
             null, true, null, saved.ConcurrencyStamp, "删除附件"), new DateOnly(2026, 7, 17), default);
         updated.AttachmentId.Should().BeNull();
         await fixture.EmployeeService.Invoking(service => service.DownloadAttachmentAsync(saved.Id, default)).Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task CertificateAttachmentRejectsUnsupportedFileExtension()
+    {
+        await using var fixture = await CertificateFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "CERT-FILE-TYPE", Name = "附件类型员工", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var request = new SaveEmployeeCertificateRequest(
+            null, employee.Id, "操作员证", "FILE-TYPE-01", null, null, null, null,
+            new CertificateAttachmentUpload("恶意页面.html", "text/html", "<script>alert(1)</script>"u8.ToArray()),
+            false, null, null, "上传附件");
+
+        await fixture.EmployeeService.Invoking(service => service.SaveAsync(
+                "admin", true, request, new DateOnly(2026, 7, 26), default))
+            .Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*附件类型*");
+    }
+
+    [Fact]
+    public async Task CertificateAttachmentContentTypeIsNormalizedFromExtension()
+    {
+        await using var fixture = await CertificateFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "CERT-FILE-MIME", Name = "附件类型员工", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var saved = await fixture.EmployeeService.SaveAsync("admin", true, new SaveEmployeeCertificateRequest(
+            null, employee.Id, "操作员证", "FILE-MIME-01", null, null, null, null,
+            new CertificateAttachmentUpload("操作员证.pdf", "text/html", "%PDF-test"u8.ToArray()),
+            false, null, null, "上传附件"), new DateOnly(2026, 7, 26), default);
+
+        var downloaded = await fixture.EmployeeService.DownloadAttachmentAsync(saved.Id, default);
+
+        downloaded.ContentType.Should().Be("application/pdf");
     }
 
     private sealed class CertificateFixture : IAsyncDisposable

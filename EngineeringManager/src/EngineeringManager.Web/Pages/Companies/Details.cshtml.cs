@@ -33,8 +33,10 @@ public sealed class DetailsModel(
     public int EmployeeCount { get; private set; }
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
     public bool QuickEditOpen { get; private set; }
+    public bool AccountCreateOpen { get; private set; }
     public bool AccountEditOpen { get; private set; }
-    public Guid? CertificateEditId { get; private set; }
+    public bool CertificateCreateOpen { get; private set; }
+    public bool CertificateEditOpen { get; private set; }
     public string ActiveTab => NormalizeTab(Tab);
 
     [BindProperty(SupportsGet = true)] public string? Tab { get; set; }
@@ -42,6 +44,7 @@ public sealed class DetailsModel(
     [BindProperty] public AccountInput Account { get; set; } = new();
     [BindProperty] public List<AccountRowInput> AccountRows { get; set; } = [];
     [BindProperty] public CertificateInput Certificate { get; set; } = new();
+    [BindProperty] public List<CertificateRowInput> CertificateRows { get; set; } = [];
     [BindProperty] public IFormFile? CertificateAttachmentFile { get; set; }
     [BindProperty] public EditModel.InputModel QuickEdit { get; set; } = new();
 
@@ -91,6 +94,7 @@ public sealed class DetailsModel(
         RemoveUnrelatedModelState($"{nameof(Account)}.");
         if (!TryValidateModel(Account, nameof(Account)))
         {
+            AccountCreateOpen = true;
             await LoadAsync(id, true, cancellationToken);
             return Page();
         }
@@ -105,6 +109,7 @@ public sealed class DetailsModel(
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException or DbUpdateConcurrencyException)
         {
             ModelState.AddModelError(string.Empty, exception.Message);
+            AccountCreateOpen = true;
             await LoadAsync(id, true, cancellationToken);
             return Page();
         }
@@ -145,7 +150,8 @@ public sealed class DetailsModel(
         }
         if (!TryValidateModel(Certificate, nameof(Certificate)))
         {
-            CertificateEditId = Certificate.Id;
+            CertificateCreateOpen = !Certificate.Id.HasValue;
+            CertificateEditOpen = Certificate.Id.HasValue;
             await LoadAsync(id, true, cancellationToken);
             return Page();
         }
@@ -159,6 +165,9 @@ public sealed class DetailsModel(
                 existing = await certificateService.GetAsync(actor, Certificate.Id.Value, DateOnly.FromDateTime(DateTime.Today), cancellationToken);
                 if (existing.LegalEntityId != id) throw new KeyNotFoundException("公司证照不存在或无权访问。");
             }
+            var attachment = CertificateAttachmentFile is null
+                ? null
+                : await BuildAttachmentUploadAsync(CertificateAttachmentFile, cancellationToken);
 
             await certificateService.SaveAsync(actor, new SaveCompanyCertificateItemRequest(
                 Certificate.Id,
@@ -169,7 +178,7 @@ public sealed class DetailsModel(
                 existing?.IssuingAuthority,
                 Certificate.IssuedOn,
                 Certificate.ExpiresOn,
-                null,
+                attachment,
                 false,
                 Certificate.Notes,
                 Certificate.ConcurrencyStamp,
@@ -181,7 +190,48 @@ public sealed class DetailsModel(
             ModelState.AddModelError(string.Empty, exception is DbUpdateConcurrencyException
                 ? "数据已被他人更新，请刷新后重试。"
                 : exception.Message);
-            CertificateEditId = Certificate.Id;
+            CertificateCreateOpen = !Certificate.Id.HasValue;
+            CertificateEditOpen = Certificate.Id.HasValue;
+            await LoadAsync(id, true, cancellationToken);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostCertificatesAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        Tab = "certificates";
+        RemoveUnrelatedModelState($"{nameof(CertificateRows)}[");
+        if (CertificateRows.Count == 0 || !TryValidateModel(CertificateRows, nameof(CertificateRows)))
+        {
+            if (CertificateRows.Count == 0) ModelState.AddModelError(string.Empty, "没有可保存的公司证照。");
+            CertificateEditOpen = true;
+            await LoadAsync(id, true, cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            var actor = await ResolveActorAsync(cancellationToken);
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var existing = await certificateService.ListAsync(actor, new CertificateFilter(OwnerId: id), today, cancellationToken);
+            var existingById = existing.ToDictionary(item => item.Id);
+            var requests = CertificateRows.Select(row =>
+            {
+                if (!existingById.TryGetValue(row.Id, out var certificate)) throw new KeyNotFoundException("公司证照不存在或无权访问。");
+                return new SaveCompanyCertificateItemRequest(row.Id, id, row.Type, row.Number,
+                    certificate.SpecialtyLevelScope, certificate.IssuingAuthority, row.IssuedOn, row.ExpiresOn,
+                    null, false, row.Notes, row.ConcurrencyStamp, "批量修改公司证照");
+            }).ToList();
+            await certificateService.SaveManyAsync(actor, requests, today, cancellationToken);
+            return RedirectToPage(new { id, tab = "certificates" });
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException or DbUpdateConcurrencyException)
+        {
+            ModelState.AddModelError(string.Empty, exception is DbUpdateConcurrencyException
+                ? "数据已被他人更新，请刷新后重试。"
+                : exception.Message);
+            CertificateEditOpen = true;
             await LoadAsync(id, true, cancellationToken);
             return Page();
         }
@@ -364,6 +414,10 @@ public sealed class DetailsModel(
                 break;
             case "certificates":
                 Certificates = await certificateService.ListAsync(actor, new CertificateFilter(OwnerId: id), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
+                if (CanManage && CertificateRows.Count == 0)
+                {
+                    CertificateRows = Certificates.Select(CertificateRowInput.From).ToList();
+                }
                 break;
             case "projects":
                 Projects = await companyService.ListCompanyProjectsAsync(actor, id, ProjectSearch, 50, cancellationToken);
@@ -456,5 +510,27 @@ public sealed class DetailsModel(
         [StringLength(1000)]
         public string? Notes { get; set; }
         [Required, StringLength(500)] public string Reason { get; set; } = "维护公司证照";
+    }
+
+    public sealed class CertificateRowInput
+    {
+        public Guid Id { get; set; }
+        public Guid ConcurrencyStamp { get; set; }
+        [Required, StringLength(100)] public string Type { get; set; } = string.Empty;
+        [StringLength(100)] public string? Number { get; set; }
+        public DateOnly? IssuedOn { get; set; }
+        public DateOnly? ExpiresOn { get; set; }
+        [StringLength(1000)] public string? Notes { get; set; }
+
+        public static CertificateRowInput From(CompanyCertificateItemDto certificate) => new()
+        {
+            Id = certificate.Id,
+            ConcurrencyStamp = certificate.ConcurrencyStamp,
+            Type = certificate.CertificateType,
+            Number = certificate.CertificateNumber,
+            IssuedOn = certificate.IssuedOn,
+            ExpiresOn = certificate.ExpiresOn,
+            Notes = certificate.Notes
+        };
     }
 }
