@@ -14,6 +14,93 @@ namespace EngineeringManager.Tests.Application;
 public sealed class CompanyManagementServiceTests
 {
     [Fact]
+    public async Task CategoryBatchIsAtomicWhenAnyRowHasAConcurrencyConflict()
+    {
+        await using var scope = await CreateScopeAsync();
+        var first = new CompanyCategory { Code = "BATCH-A", Name = "分类 A" };
+        var second = new CompanyCategory { Code = "BATCH-B", Name = "分类 B" };
+        scope.Db.CompanyCategories.AddRange(first, second);
+        await scope.Db.SaveChangesAsync();
+        var method = scope.Service.GetType().GetMethod("SaveCategoriesAsync");
+        var requests = new[]
+        {
+            new SaveCompanyCategoryRequest(first.Id, first.Code, "已修改 A", 10, true, first.ConcurrencyStamp, "批量修改"),
+            new SaveCompanyCategoryRequest(second.Id, second.Code, "已修改 B", 20, true, Guid.NewGuid(), "批量修改")
+        };
+
+        method.Should().NotBeNull();
+        var save = async () => await (Task)method!.Invoke(scope.Service,
+            [CompanyActor.Administrator("admin"), requests, CancellationToken.None])!;
+
+        await save.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        scope.Db.ChangeTracker.Clear();
+        (await scope.Db.CompanyCategories.SingleAsync(item => item.Id == first.Id)).Name.Should().Be("分类 A");
+    }
+
+    [Fact]
+    public async Task AccountBatchSupportsDefaultSwapsAndSkipsUnchangedRows()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "LE-BATCH", Name = "批量账户公司", ShortName = "批量账户" };
+        var first = new FinancialAccount
+        {
+            LegalEntity = company,
+            AccountName = "账户 A",
+            AccountType = FinancialAccountType.Bank,
+            IsDefaultCollection = true
+        };
+        var second = new FinancialAccount
+        {
+            LegalEntity = company,
+            AccountName = "账户 B",
+            AccountType = FinancialAccountType.Bank,
+            IsDefaultPayment = true
+        };
+        scope.Db.AddRange(company, first, second);
+        await scope.Db.SaveChangesAsync();
+        var method = scope.Service.GetType().GetMethod("SaveAccountsAsync");
+        var requests = new[]
+        {
+            AccountRequest(first, collection: false, payment: true),
+            AccountRequest(second, collection: true, payment: false)
+        };
+
+        method.Should().NotBeNull();
+        await (Task)method!.Invoke(scope.Service, [CompanyActor.Administrator("admin"), requests, CancellationToken.None])!;
+        scope.Db.ChangeTracker.Clear();
+        var saved = await scope.Db.FinancialAccounts.OrderBy(item => item.AccountName).ToListAsync();
+        var auditCount = await scope.Db.AuditLogs.CountAsync(item => item.EntityType == nameof(FinancialAccount));
+        var unchangedRequests = saved.Select(item => AccountRequest(item, item.IsDefaultCollection, item.IsDefaultPayment)).ToArray();
+
+        await (Task)method.Invoke(scope.Service, [CompanyActor.Administrator("admin"), unchangedRequests, CancellationToken.None])!;
+
+        saved[0].IsDefaultPayment.Should().BeTrue();
+        saved[1].IsDefaultCollection.Should().BeTrue();
+        auditCount.Should().Be(2);
+        (await scope.Db.AuditLogs.CountAsync(item => item.EntityType == nameof(FinancialAccount))).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task UnusedCompanyCategoryCanBeDeletedButAssignedCategoryIsProtected()
+    {
+        await using var scope = await CreateScopeAsync();
+        var unused = new CompanyCategory { Code = "UNUSED", Name = "未使用分类" };
+        var assigned = new CompanyCategory { Code = "ASSIGNED", Name = "使用中分类" };
+        scope.Db.CompanyCategories.AddRange(unused, assigned);
+        scope.Db.LegalEntities.Add(new LegalEntity { Code = "LE-CATEGORY", Name = "分类公司", ShortName = "分类", CompanyCategory = assigned });
+        await scope.Db.SaveChangesAsync();
+        var deleteMethod = scope.Service.GetType().GetMethod("DeleteCategoryAsync");
+
+        deleteMethod.Should().NotBeNull();
+        var deleteUnused = (Task)deleteMethod!.Invoke(scope.Service, [CompanyActor.Administrator("admin"), unused.Id, unused.ConcurrencyStamp, CancellationToken.None])!;
+        await deleteUnused;
+        var deleteAssigned = async () => await (Task)deleteMethod.Invoke(scope.Service, [CompanyActor.Administrator("admin"), assigned.Id, assigned.ConcurrencyStamp, CancellationToken.None])!;
+
+        (await scope.Db.CompanyCategories.AnyAsync(item => item.Id == unused.Id)).Should().BeFalse();
+        await deleteAssigned.Should().ThrowAsync<InvalidOperationException>().WithMessage("*已有公司使用*");
+    }
+
+    [Fact]
     public async Task CompanyAccountNotesRoundTripAndEnterAuditLog()
     {
         await using var scope = await CreateScopeAsync();
@@ -267,6 +354,25 @@ public sealed class CompanyManagementServiceTests
         await db.Database.EnsureCreatedAsync();
         return new TestScope(connection, db, new CompanyManagementService(db));
     }
+
+    private static SaveCompanyAccountRequest AccountRequest(
+        FinancialAccount account,
+        bool collection,
+        bool payment) => new(
+        account.Id,
+        account.LegalEntityId,
+        account.AccountName,
+        account.AccountNumber,
+        account.BankName,
+        (int)account.AccountType,
+        account.OpeningBalance,
+        collection,
+        payment,
+        account.IsDefaultInvoice,
+        account.IsActive,
+        account.ConcurrencyStamp,
+        "批量修改",
+        account.Notes);
 
     private sealed class TestScope(SqliteConnection connection, ApplicationDbContext db, CompanyManagementService service) : IAsyncDisposable
     {

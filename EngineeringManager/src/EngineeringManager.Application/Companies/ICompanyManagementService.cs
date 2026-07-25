@@ -9,7 +9,13 @@ public interface ICompanyManagementService
     Task<SaveCompanyRequest> PrepareCopyAsync(CompanyActor actor, Guid sourceId, CancellationToken cancellationToken);
     Task<IReadOnlyList<CompanyCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken);
     Task<CompanyCategoryDto> SaveCategoryAsync(CompanyActor actor, SaveCompanyCategoryRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<CompanyCategoryDto>> SaveCategoriesAsync(CompanyActor actor, IReadOnlyList<SaveCompanyCategoryRequest> requests, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+    Task DeleteCategoryAsync(CompanyActor actor, Guid id, Guid concurrencyStamp, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
     Task<CompanyAccountDto> SaveAccountAsync(CompanyActor actor, SaveCompanyAccountRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<CompanyAccountDto>> SaveAccountsAsync(CompanyActor actor, IReadOnlyList<SaveCompanyAccountRequest> requests, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
     Task<CompanyCertificateDto> SaveCertificateAsync(CompanyActor actor, SaveCompanyCertificateRequest request, CancellationToken cancellationToken);
     Task<CompanyDashboardDto> GetDashboardAsync(CompanyActor actor, Guid? companyId, CancellationToken cancellationToken);
 

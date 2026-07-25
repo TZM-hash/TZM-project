@@ -5,22 +5,27 @@ namespace EngineeringManager.Tests.Web;
 public sealed class InlineEditingPageTests
 {
     [Fact]
-    public void ExistingQuickEditPagesKeepMainEditorsInlineWithOnlyTheQuantityNotesDialogException()
+    public void ExistingQuickEditPagesKeepMainEditorsInlineAndOnlyUseDialogsForNotesOrAttachmentPreview()
     {
         var projectDetails = ReadPage("Projects", "Details.cshtml");
+        var companyDetails = ReadPage("Companies", "Details.cshtml");
+        var equipmentDetails = ReadPage("Equipment", "Details.cshtml");
+        var partnerIndex = ReadPage("Partners", "Index.cshtml");
         var pages = new[]
         {
             projectDetails,
-            ReadPage("Companies", "Details.cshtml"),
-            ReadPage("Equipment", "Details.cshtml"),
-            ReadPage("Partners", "Index.cshtml")
+            companyDetails,
+            equipmentDetails,
+            partnerIndex
         };
 
         pages.Should().OnlyContain(page => page.Contains("data-inline-cell-edit", StringComparison.Ordinal));
-        pages.Skip(1).Should().OnlyContain(page => !page.Contains("<dialog", StringComparison.OrdinalIgnoreCase));
+        new[] { equipmentDetails, partnerIndex }.Should().OnlyContain(page => !page.Contains("<dialog", StringComparison.OrdinalIgnoreCase));
         projectDetails.Should().Contain("<dialog class=\"workbench-dialog quantity-notes-dialog\"");
         projectDetails.Should().Contain("data-attachment-preview-dialog");
         (projectDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(2);
+        companyDetails.Should().Contain("data-attachment-preview-dialog");
+        (companyDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(1);
         pages.Should().OnlyContain(page => !page.Contains("data-quick-edit-dialog", StringComparison.Ordinal));
     }
 

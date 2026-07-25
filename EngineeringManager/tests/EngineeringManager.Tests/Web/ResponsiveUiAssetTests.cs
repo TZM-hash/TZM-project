@@ -50,8 +50,36 @@ public sealed class ResponsiveUiAssetTests
     public void CompanyDetailsUsesResponsiveDetailGrid()
     {
         var markup = ReadFile("src", "EngineeringManager.Web", "Pages", "Companies", "Details.cshtml");
+        var css = ReadCss();
 
-        markup.Should().Contain("detail-grid");
+        markup.Should().Contain("detail-grid").And.Contain("company-detail-full-grid");
+        css.Should().Contain(".company-detail-full-grid");
+    }
+
+    [Fact]
+    public void CompanyOverviewGivesTheCompactListMostOfTheHorizontalWorkspace()
+    {
+        var markup = ReadFile("src", "EngineeringManager.Web", "Pages", "Companies", "Index.cshtml");
+        var css = ReadCss();
+
+        markup.Should().Contain("company-workspace--overview")
+            .And.Contain("company-dashboard-stack")
+            .And.Contain("company-list-panel");
+        css.Should().Contain(".company-workspace--overview")
+            .And.Contain(".company-portfolio-grid")
+            .And.Contain("grid-template-columns: minmax(18rem, .4fr) minmax(0, 1.6fr)")
+            .And.Contain(".company-category-table-wrap { max-height: none; overflow: visible; }")
+            .And.Contain(".company-list-panel { display: flex; min-width: 0; align-self: stretch;");
+    }
+
+    [Fact]
+    public void CompanyListDensityControlsAreNotOverriddenByAFixedRowHeight()
+    {
+        var pageCss = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var tableScript = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "data-table.js");
+
+        tableScript.Should().Contain("table.classList.add(`row-spacing-${value}`)");
+        pageCss.Should().NotContain(".company-list-panel .data-table th, .company-list-panel .data-table td { height: 2rem;");
     }
 
     private static string ReadCss()

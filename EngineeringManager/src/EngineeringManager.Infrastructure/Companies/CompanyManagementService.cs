@@ -196,6 +196,92 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         return new CompanyCategoryDto(category.Id, category.Code, category.Name, category.SortOrder, category.IsActive, category.ConcurrencyStamp);
     }
 
+    public async Task<IReadOnlyList<CompanyCategoryDto>> SaveCategoriesAsync(
+        CompanyActor actor,
+        IReadOnlyList<SaveCompanyCategoryRequest> requests,
+        CancellationToken cancellationToken)
+    {
+        EnsureManage(actor);
+        if (requests.Count == 0) return [];
+        var ids = requests.Select(request => request.Id ?? throw new ArgumentException("批量修改分类时分类标识不能为空。", nameof(requests))).ToArray();
+        if (ids.Distinct().Count() != ids.Length) throw new ArgumentException("批量修改分类中存在重复行。", nameof(requests));
+
+        var categories = await db.CompanyCategories.Where(item => ids.Contains(item.Id)).ToListAsync(cancellationToken);
+        if (categories.Count != ids.Length) throw new KeyNotFoundException("公司组合分类不存在。");
+        var categoryById = categories.ToDictionary(item => item.Id);
+        var prepared = requests.Select(request =>
+        {
+            var category = categoryById[request.Id!.Value];
+            if (!request.ConcurrencyStamp.HasValue || request.ConcurrencyStamp.Value != category.ConcurrencyStamp)
+            {
+                throw new DbUpdateConcurrencyException("公司组合分类已被其他用户修改。");
+            }
+            return (Request: request, Category: category, Code: Required(request.Code, nameof(request.Code)), Name: Required(request.Name, nameof(request.Name)));
+        }).ToList();
+
+        var finalCodes = prepared.Select(item => item.Code).ToArray();
+        if (finalCodes.Distinct(StringComparer.OrdinalIgnoreCase).Count() != finalCodes.Length)
+        {
+            throw new InvalidOperationException("批量修改后的公司组合分类编码不能重复。");
+        }
+        var otherCodes = await db.CompanyCategories.AsNoTracking().Where(item => !ids.Contains(item.Id)).Select(item => item.Code).ToListAsync(cancellationToken);
+        var duplicateCode = finalCodes.FirstOrDefault(code => otherCodes.Contains(code, StringComparer.OrdinalIgnoreCase));
+        if (duplicateCode is not null) throw new InvalidOperationException($"公司组合分类编码已存在：{duplicateCode}");
+
+        var changed = prepared.Where(item => item.Category.Code != item.Code
+            || item.Category.Name != item.Name
+            || item.Category.SortOrder != item.Request.SortOrder
+            || item.Category.IsActive != item.Request.IsActive).ToList();
+        if (changed.Count == 0) return requests.Select(request => ToCategory(categoryById[request.Id!.Value])).ToList();
+
+        var codeChanges = changed.Where(item => item.Category.Code != item.Code).ToList();
+        await using var transaction = codeChanges.Count > 0
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (codeChanges.Count > 0)
+        {
+            foreach (var item in codeChanges) item.Category.Code = $"~{Guid.NewGuid():N}";
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        foreach (var item in changed)
+        {
+            item.Category.Code = item.Code;
+            item.Category.Name = item.Name;
+            item.Category.SortOrder = item.Request.SortOrder;
+            item.Category.IsActive = item.Request.IsActive;
+            item.Category.ConcurrencyStamp = Guid.NewGuid();
+            item.Category.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return requests.Select(request => ToCategory(categoryById[request.Id!.Value])).ToList();
+    }
+
+    public async Task DeleteCategoryAsync(CompanyActor actor, Guid id, Guid concurrencyStamp, CancellationToken cancellationToken)
+    {
+        EnsureManage(actor);
+        var category = await db.CompanyCategories.SingleOrDefaultAsync(item => item.Id == id, cancellationToken)
+            ?? throw new KeyNotFoundException("公司组合分类不存在。");
+        if (category.ConcurrencyStamp != concurrencyStamp)
+        {
+            throw new DbUpdateConcurrencyException("公司组合分类已被其他用户修改。");
+        }
+        if (await db.LegalEntities.AnyAsync(item => item.CompanyCategoryId == id, cancellationToken))
+        {
+            throw new InvalidOperationException("已有公司使用此分类，请先调整公司分类或将该分类停用。");
+        }
+
+        db.CompanyCategories.Remove(category);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            throw new InvalidOperationException("已有公司使用此分类，请先调整公司分类或将该分类停用。", exception);
+        }
+    }
+
     public async Task<CompanyAccountDto> SaveAccountAsync(CompanyActor actor, SaveCompanyAccountRequest request, CancellationToken cancellationToken)
     {
         EnsureManage(actor);
@@ -246,6 +332,103 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         });
         await db.SaveChangesAsync(cancellationToken);
         return ToAccount(account);
+    }
+
+    public async Task<IReadOnlyList<CompanyAccountDto>> SaveAccountsAsync(
+        CompanyActor actor,
+        IReadOnlyList<SaveCompanyAccountRequest> requests,
+        CancellationToken cancellationToken)
+    {
+        EnsureManage(actor);
+        if (requests.Count == 0) return [];
+        var companyIds = requests.Select(request => request.LegalEntityId).Distinct().ToArray();
+        if (companyIds.Length != 1) throw new ArgumentException("一次只能批量修改同一家公司的账户。", nameof(requests));
+        var companyId = companyIds[0];
+        await EnsureAccessAsync(actor, companyId, cancellationToken);
+
+        var ids = requests.Select(request => request.Id ?? throw new ArgumentException("批量修改账户时账户标识不能为空。", nameof(requests))).ToArray();
+        if (ids.Distinct().Count() != ids.Length) throw new ArgumentException("批量修改账户中存在重复行。", nameof(requests));
+        var accounts = await db.FinancialAccounts.Where(item => item.LegalEntityId == companyId).ToListAsync(cancellationToken);
+        var accountById = accounts.ToDictionary(item => item.Id);
+        if (ids.Any(id => !accountById.ContainsKey(id))) throw new KeyNotFoundException("公司账户不存在。");
+
+        var prepared = requests.Select(request =>
+        {
+            var account = accountById[request.Id!.Value];
+            if (!request.ConcurrencyStamp.HasValue || request.ConcurrencyStamp.Value != account.ConcurrencyStamp)
+            {
+                throw new DbUpdateConcurrencyException("公司账户已被其他用户修改。");
+            }
+            var accountType = Enum.IsDefined((FinancialAccountType)request.AccountType)
+                ? (FinancialAccountType)request.AccountType
+                : throw new ArgumentOutOfRangeException(nameof(requests));
+            var isActive = request.IsActive;
+            return (
+                Request: request,
+                Account: account,
+                Name: Required(request.AccountName, nameof(request.AccountName)),
+                Number: Optional(request.AccountNumber),
+                BankName: Optional(request.BankName),
+                Notes: Optional(request.Notes),
+                AccountType: accountType,
+                IsActive: isActive,
+                Collection: isActive && request.IsDefaultCollection,
+                Payment: isActive && request.IsDefaultPayment,
+                Invoice: isActive && request.IsDefaultInvoice,
+                Reason: Required(request.Reason, nameof(request.Reason)));
+        }).ToList();
+        var preparedById = prepared.ToDictionary(item => item.Account.Id);
+        CompanyAccountRules.Validate(accounts.Select(account => preparedById.TryGetValue(account.Id, out var item)
+            ? new CompanyAccountDefault(item.Collection, item.Payment, item.Invoice)
+            : new CompanyAccountDefault(account.IsDefaultCollection, account.IsDefaultPayment, account.IsDefaultInvoice)));
+
+        var changed = prepared.Where(item => !AccountMatches(item.Account, item.Name, item.Number, item.BankName, item.Notes, item.AccountType,
+            item.Request.OpeningBalance, item.Collection, item.Payment, item.Invoice, item.IsActive)).ToList();
+        if (changed.Count == 0) return requests.Select(request => ToAccount(accountById[request.Id!.Value])).ToList();
+        var beforeById = changed.ToDictionary(item => item.Account.Id, item => JsonSerializer.Serialize(Snapshot(item.Account)));
+        var defaultChanges = changed.Where(item => item.Account.IsDefaultCollection != item.Collection
+            || item.Account.IsDefaultPayment != item.Payment
+            || item.Account.IsDefaultInvoice != item.Invoice).ToList();
+        await using var transaction = defaultChanges.Count > 0
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (defaultChanges.Count > 0)
+        {
+            foreach (var item in defaultChanges)
+            {
+                item.Account.IsDefaultCollection = false;
+                item.Account.IsDefaultPayment = false;
+                item.Account.IsDefaultInvoice = false;
+            }
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        foreach (var item in changed)
+        {
+            item.Account.AccountName = item.Name;
+            item.Account.AccountNumber = item.Number;
+            item.Account.BankName = item.BankName;
+            item.Account.Notes = item.Notes;
+            item.Account.AccountType = item.AccountType;
+            item.Account.OpeningBalance = item.Request.OpeningBalance;
+            item.Account.IsDefaultCollection = item.Collection;
+            item.Account.IsDefaultPayment = item.Payment;
+            item.Account.IsDefaultInvoice = item.Invoice;
+            item.Account.IsActive = item.IsActive;
+            item.Account.ConcurrencyStamp = Guid.NewGuid();
+            db.AuditLogs.Add(new AuditLog
+            {
+                UserId = actor.UserId,
+                Action = "Update",
+                EntityType = nameof(FinancialAccount),
+                EntityId = item.Account.Id.ToString(),
+                Reason = item.Reason,
+                BeforeJson = beforeById[item.Account.Id],
+                AfterJson = JsonSerializer.Serialize(Snapshot(item.Account))
+            });
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return requests.Select(request => ToAccount(accountById[request.Id!.Value])).ToList();
     }
 
     public async Task<CompanyCertificateDto> SaveCertificateAsync(CompanyActor actor, SaveCompanyCertificateRequest request, CancellationToken cancellationToken)
@@ -763,6 +946,32 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
     private static CompanyAccountDto ToAccount(FinancialAccount account) => new(account.Id, account.AccountName, account.AccountNumber,
         account.BankName, account.AccountType.ToString(), account.OpeningBalance, account.IsDefaultCollection,
         account.IsDefaultPayment, account.IsDefaultInvoice, account.IsActive, account.Notes, account.ConcurrencyStamp);
+
+    private static CompanyCategoryDto ToCategory(CompanyCategory category) => new(category.Id, category.Code, category.Name,
+        category.SortOrder, category.IsActive, category.ConcurrencyStamp);
+
+    private static bool AccountMatches(
+        FinancialAccount account,
+        string name,
+        string? number,
+        string? bankName,
+        string? notes,
+        FinancialAccountType accountType,
+        decimal openingBalance,
+        bool collection,
+        bool payment,
+        bool invoice,
+        bool isActive) =>
+        account.AccountName == name
+        && account.AccountNumber == number
+        && account.BankName == bankName
+        && account.Notes == notes
+        && account.AccountType == accountType
+        && account.OpeningBalance == openingBalance
+        && account.IsDefaultCollection == collection
+        && account.IsDefaultPayment == payment
+        && account.IsDefaultInvoice == invoice
+        && account.IsActive == isActive;
 
     private static CompanyCertificateDto ToCertificate(CompanyCertificate item) => new(item.Id, item.CertificateType,
         item.CertificateNumber, item.IssuedOn, item.ExpiresOn, item.AttachmentId, item.Notes);
