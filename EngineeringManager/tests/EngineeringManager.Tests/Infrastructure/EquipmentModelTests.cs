@@ -12,6 +12,61 @@ namespace EngineeringManager.Tests.Infrastructure;
 public sealed class EquipmentModelTests
 {
     [Fact]
+    public async Task EquipmentManagingCompanyPurchaseAndQualificationCanBePersisted()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateContext(connection);
+        await db.Database.EnsureCreatedAsync();
+
+        var company = new LegalEntity
+        {
+            Code = "EQ-MANAGE",
+            Name = "设备管理公司",
+            ShortName = "设备管理",
+            CompanyCategoryId = CompanyCategoryDefaults.OtherId
+        };
+        var attachment = new Attachment
+        {
+            StoredName = "equipment-certificate.pdf",
+            OriginalFileName = "设备合格证.pdf",
+            ContentType = "application/pdf",
+            SizeBytes = 128
+        };
+        var equipment = new Equipment
+        {
+            EquipmentNumber = "EQ-CERT-001",
+            Name = "合格证测试设备",
+            OwnershipType = EquipmentOwnershipType.SelfOwned,
+            ManagingLegalEntity = company,
+            OwnerLegalEntity = company,
+            PurchaseDate = new DateOnly(2026, 6, 1),
+            PurchaseAmount = 120000m,
+            QualificationCertificateNumber = "CERT-001",
+            QualificationIssuedOn = new DateOnly(2026, 6, 2),
+            QualificationExpiresOn = new DateOnly(2027, 6, 1),
+            QualificationAttachment = attachment
+        };
+        db.Add(equipment);
+
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var saved = await db.Equipment
+            .Include(item => item.ManagingLegalEntity)
+            .Include(item => item.QualificationAttachment)
+            .SingleAsync(item => item.Id == equipment.Id);
+        saved.ManagingLegalEntityId.Should().Be(company.Id);
+        saved.ManagingLegalEntity!.Name.Should().Be("设备管理公司");
+        saved.PurchaseDate.Should().Be(new DateOnly(2026, 6, 1));
+        saved.PurchaseAmount.Should().Be(120000m);
+        saved.QualificationCertificateNumber.Should().Be("CERT-001");
+        saved.QualificationIssuedOn.Should().Be(new DateOnly(2026, 6, 2));
+        saved.QualificationExpiresOn.Should().Be(new DateOnly(2027, 6, 1));
+        saved.QualificationAttachment!.OriginalFileName.Should().Be("设备合格证.pdf");
+    }
+
+    [Fact]
     public async Task EquipmentLeaseUsagePeriodsSettlementOwnershipAndMaintenanceCanBePersisted()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

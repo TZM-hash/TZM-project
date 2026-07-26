@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Globalization;
+using EngineeringManager.Application.Equipment;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Projects;
@@ -620,13 +621,13 @@ public sealed class DetailsModel(
 
     public async Task<IActionResult> OnPostCreateEquipmentAsync(Guid id, CancellationToken cancellationToken)
     {
-        if (!CanManage) return Forbid();
+        if (!CanManageEquipment) return Forbid();
         try
         {
-            var option = await constructionService.CreateEquipmentAsync(ConstructionActor(), new CreateProjectEquipmentRequest(
+            var option = await constructionService.CreateEquipmentAsync(ProjectEquipmentActor(), new CreateProjectEquipmentRequest(
                 RequiredText(NewEquipment.EquipmentNumber, "请填写设备编号。"), RequiredText(NewEquipment.Name, "请填写设备名称。"), NewEquipment.Model, NewEquipment.Category,
                 NewEquipment.OwnershipType, NewEquipment.OwnerLegalEntityId, NewEquipment.LessorBusinessPartnerId, NewEquipment.InternalDailyRate,
-                RequiredText(NewEquipment.Reason, "请填写创建原因。")), cancellationToken);
+                RequiredText(NewEquipment.Reason, "请填写创建原因。"), NewEquipment.ManagingLegalEntityId), cancellationToken);
             await constructionService.SaveAsync(ConstructionActor(), new SaveProjectConstructionRecordRequest(null, id, ProjectConstructionRecordType.Equipment, option.Id, null, null, null, null, null, 0, null, false, null, "项目内新建设备施工记录"), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
             return RedirectToPage(new { id, tab = "construction" });
         }
@@ -750,6 +751,14 @@ public sealed class DetailsModel(
     private ProjectWorkbookActor WorkbookActor() =>
         new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.FindAll(ClaimTypes.Role).Select(item => item.Value).Distinct(StringComparer.Ordinal).ToArray());
     private ProjectConstructionActor ConstructionActor() => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.Identity?.Name);
+    private bool CanManageEquipment => User.IsInRole(SystemRoles.SystemAdministrator)
+        || User.IsInRole(SystemRoles.ApplicationAdministrator)
+        || User.IsInRole(SystemRoles.EquipmentManager);
+    private EquipmentActor ProjectEquipmentActor()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException("用户身份无效。");
+        return new EquipmentActor(userId, true, CanSettle: false, CanOverrideSharedUsage: false, CanAccessAll: true, [], []);
+    }
     private static bool IsEditableException(Exception exception) => exception is ArgumentException or InvalidOperationException or KeyNotFoundException or IOException or DbUpdateConcurrencyException;
     private static Guid Required(Guid? value, string message) => value is { } id && id != Guid.Empty ? id : throw new ArgumentException(message);
     private static string RequiredText(string? value, string message) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException(message);
@@ -1118,6 +1127,7 @@ public sealed class DetailsModel(
         public string? Model { get; set; }
         public string? Category { get; set; }
         public EngineeringManager.Domain.Equipment.EquipmentOwnershipType OwnershipType { get; set; } = EngineeringManager.Domain.Equipment.EquipmentOwnershipType.SelfOwned;
+        public Guid? ManagingLegalEntityId { get; set; }
         public Guid? OwnerLegalEntityId { get; set; }
         public Guid? LessorBusinessPartnerId { get; set; }
         public decimal? InternalDailyRate { get; set; }

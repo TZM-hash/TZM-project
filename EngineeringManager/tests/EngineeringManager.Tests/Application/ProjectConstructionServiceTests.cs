@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Projects;
+using EngineeringManager.Application.Equipment;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
@@ -14,6 +15,77 @@ namespace EngineeringManager.Tests.Application;
 
 public sealed class ProjectConstructionServiceTests
 {
+    [Fact]
+    public async Task ProjectEquipmentOptionsAndInlineCreateUseManagingCompany()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var company = new EngineeringManager.Domain.Organization.LegalEntity
+        {
+            Code = "CONS-COMP",
+            Name = "施工设备公司",
+            ShortName = "设备公司"
+        };
+        var inaccessibleCompany = new EngineeringManager.Domain.Organization.LegalEntity
+        {
+            Code = "CONS-OTHER",
+            Name = "无权设备公司",
+            ShortName = "无权公司"
+        };
+        var project = new Project { ProjectNumber = "CONS-P", Name = "设备读取项目" };
+        var equipment = new Equipment
+        {
+            EquipmentNumber = "CONS-EQ",
+            Name = "项目读取设备",
+            OwnershipType = EquipmentOwnershipType.SelfOwned,
+            ManagingLegalEntity = company,
+            OwnerLegalEntity = company
+        };
+        db.AddRange(company, inaccessibleCompany, project, equipment);
+        await db.SaveChangesAsync();
+        var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
+
+        var workspace = await service.GetWorkspaceAsync(project.Id, new DateOnly(2026, 7, 26), default);
+        workspace.Equipment.Should().ContainSingle(item => item.Id == equipment.Id)
+            .Which.Label.Should().Be("CONS-EQ · 项目读取设备 · 设备公司 · 自有");
+
+        var created = await service.CreateEquipmentAsync(
+            new EquipmentActor("project-manager", true, false, false, false, [company.Id], []),
+            new CreateProjectEquipmentRequest(
+                "CONS-EQ-NEW",
+                "项目新增设备",
+                null,
+                null,
+                EquipmentOwnershipType.SelfOwned,
+                company.Id,
+                null,
+                null,
+                "项目内新增",
+                ManagingLegalEntityId: company.Id),
+            default);
+        (await db.Equipment.SingleAsync(item => item.Id == created.Id)).ManagingLegalEntityId.Should().Be(company.Id);
+        created.Label.Should().Contain("设备公司").And.Contain("自有");
+
+        var unauthorizedCreate = () => service.CreateEquipmentAsync(
+            new EquipmentActor("project-manager", true, false, false, false, [company.Id], []),
+            new CreateProjectEquipmentRequest(
+                "CONS-EQ-DENIED",
+                "越权项目设备",
+                null,
+                null,
+                EquipmentOwnershipType.SelfOwned,
+                inaccessibleCompany.Id,
+                null,
+                null,
+                "越权测试",
+                ManagingLegalEntityId: inaccessibleCompany.Id),
+            default);
+        await unauthorizedCreate.Should().ThrowAsync<InvalidOperationException>().WithMessage("*无权访问*");
+        (await db.Equipment.AnyAsync(item => item.EquipmentNumber == "CONS-EQ-DENIED")).Should().BeFalse();
+    }
+
     [Fact]
     public async Task SavesMultipleCyclesAndCreatesLinkedDraftInDestinationProject()
     {

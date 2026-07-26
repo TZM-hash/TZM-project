@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using EngineeringManager.Application.DataViews;
 using EngineeringManager.Application.DataExchange;
+using EngineeringManager.Application.Equipment;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
@@ -174,19 +175,25 @@ public sealed class ProjectAuthorizationTests
         model.ActiveInlineEditor.Should().Be("project-construction");
     }
 
-    [Theory]
-    [InlineData("equipment")]
-    [InlineData("crew")]
-    public async Task ConstructionMasterCreationErrorsKeepTheMatchingCreateFormOpen(string kind)
+    [Fact]
+    public async Task ConstructionCrewCreationErrorsKeepTheMatchingCreateFormOpen()
     {
         var model = CreateDetailsModel();
 
-        var result = kind == "equipment"
-            ? await model.OnPostCreateEquipmentAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None)
-            : await model.OnPostCreateCrewAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+        var result = await model.OnPostCreateCrewAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
 
         result.Should().BeOfType<PageResult>();
-        model.ActiveInlineEditor.Should().Be($"project-{kind}-create");
+        model.ActiveInlineEditor.Should().Be("project-crew-create");
+    }
+
+    [Fact]
+    public async Task ProjectManagerCannotCallHiddenEquipmentCreationHandler()
+    {
+        var model = CreateDetailsModel();
+
+        var result = await model.OnPostCreateEquipmentAsync(FakeProjectWorkspaceService.ProjectId, CancellationToken.None);
+
+        result.Should().BeOfType<ForbidResult>();
     }
 
     [Fact]
@@ -854,7 +861,7 @@ public sealed class ProjectAuthorizationTests
         public Task<ProjectConstructionRecordDto> LinkPreviousAsync(ProjectConstructionActor actor, LinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) =>
             rejectFlow ? throw new ArgumentException("模拟施工流转校验失败") : throw new NotSupportedException();
         public Task<ProjectConstructionRecordDto> UnlinkAsync(ProjectConstructionActor actor, UnlinkProjectConstructionRecordRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
-        public Task<ProjectConstructionOptionDto> CreateEquipmentAsync(ProjectConstructionActor actor, CreateProjectEquipmentRequest request, CancellationToken token) => throw new NotSupportedException();
+        public Task<ProjectConstructionOptionDto> CreateEquipmentAsync(EquipmentActor actor, CreateProjectEquipmentRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<ProjectConstructionOptionDto> CreateCrewAsync(ProjectConstructionActor actor, CreateProjectCrewRequest request, CancellationToken token) => throw new NotSupportedException();
     }
 

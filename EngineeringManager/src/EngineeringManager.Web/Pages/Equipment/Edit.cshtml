@@ -1,11 +1,77 @@
 @page
-@using EngineeringManager.Domain.Equipment
 @model EngineeringManager.Web.Pages.Equipment.EditModel
-@{ ViewData["Title"] = "设备档案"; }
-<section class="page-heading"><div><p class="eyebrow">逐台建档</p><h1>设备档案</h1><p class="page-lead">复制时会清空设备编号，保存前填写新的唯一编号。</p></div></section>
-<form method="post" class="panel form-grid"><input asp-for="Input.Id" type="hidden" /><input asp-for="Input.ConcurrencyStamp" type="hidden" />
-    <section class="form-section"><h2 class="section-heading">设备识别</h2><label>设备编号<input asp-for="Input.EquipmentNumber" required /></label><label>名称<input asp-for="Input.Name" required /></label><label>型号<input asp-for="Input.Model" /></label><label>分类<input asp-for="Input.Category" /></label></section>
-    <section class="form-section"><h2 class="section-heading">权属与计价</h2><label>权属<select asp-for="Input.OwnershipType" asp-items="Html.GetEnumSelectList<EquipmentOwnershipType>()"></select></label><label>所属自有公司 ID<input asp-for="Input.OwnerLegalEntityId" /></label><label>出租方 ID<input asp-for="Input.LessorBusinessPartnerId" /></label><label>内部日参考价<input asp-for="Input.InternalDailyRate" type="number" step="0.01" /></label></section>
-    <section class="form-section"><h2 class="section-heading">备注与修改记录</h2><label class="form-span">备注<textarea asp-for="Input.Notes" rows="4"></textarea></label><label class="form-span">修改原因<input asp-for="Input.Reason" required /></label></section>
-    <div class="sticky-actions form-span"><button class="button button--primary">保存</button><a class="button button--secondary" asp-page="Index">返回</a></div>
-</form>
+@{
+    ViewData["Title"] = "设备档案";
+}
+
+@section Scripts {
+    <script type="module" src="~/js/pages/equipment-workspace.js"></script>
+}
+
+<div data-equipment-workspace>
+    <section class="page-heading">
+        <div>
+            <p class="eyebrow">兼容编辑入口</p>
+            <h1>设备档案</h1>
+            <p class="page-lead">设备信息将同步供项目管理等业务模块使用。</p>
+        </div>
+    </section>
+
+    <form method="post" enctype="multipart/form-data" class="panel form-grid" data-equipment-editor-form>
+        <div asp-validation-summary="All" class="validation-summary form-span"></div>
+        <input asp-for="Input.Id" type="hidden" />
+        <input asp-for="Input.ConcurrencyStamp" type="hidden" />
+        <input asp-for="Input.QualificationAttachmentId" type="hidden" />
+        <input asp-for="Input.QualificationAttachmentFileName" type="hidden" />
+
+        <section class="form-section">
+            <h2 class="section-heading">设备识别</h2>
+            <label>设备编号<input asp-for="Input.EquipmentNumber" required /></label>
+            <label>设备名称<input asp-for="Input.Name" required /></label>
+            <label>型号<input asp-for="Input.Model" /></label>
+            <label>分类<input asp-for="Input.Category" /></label>
+        </section>
+
+        <section class="form-section">
+            <h2 class="section-heading">公司与权属</h2>
+            <label>管理公司<select asp-for="Input.ManagingLegalEntityId" required><option value="">请选择自有公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label>
+            <label>权属类型<select asp-for="Input.OwnershipType"><option value="SelfOwned">自有</option><option value="Rented">租赁</option></select></label>
+            <label data-equipment-self-owned>产权公司<select asp-for="Input.OwnerLegalEntityId"><option value="">请选择产权公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label>
+            <label data-equipment-rented>出租方<select asp-for="Input.LessorBusinessPartnerId"><option value="">请选择出租方</option>@foreach (var lessor in Model.Lessors) { <option value="@lessor.Id">@lessor.PartnerNumber · @lessor.ShortName</option> }</select></label>
+        </section>
+
+        <section class="form-section">
+            <h2 class="section-heading">采购与计价</h2>
+            <label>购买日期<input asp-for="Input.PurchaseDate" type="date" /></label>
+            <label>购买金额<input asp-for="Input.PurchaseAmount" type="number" min="0" step="0.01" /></label>
+            <label>内部日参考价<input asp-for="Input.InternalDailyRate" type="number" min="0" step="0.01" /></label>
+            <label class="compact-check"><input asp-for="Input.IsActive" type="checkbox" /> 档案启用</label>
+        </section>
+
+        <section class="form-section">
+            <h2 class="section-heading">当前合格证</h2>
+            <label>证书编号<input asp-for="Input.QualificationCertificateNumber" /></label>
+            <label>发证日期<input asp-for="Input.QualificationIssuedOn" type="date" /></label>
+            <label>有效期至<input asp-for="Input.QualificationExpiresOn" type="date" /></label>
+            <label>合格证附件<input asp-for="QualificationAttachmentFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx" /></label>
+            @if (Model.Input.QualificationAttachmentId.HasValue)
+            {
+                <div class="equipment-current-attachment form-span" data-equipment-current-attachment>
+                    <a asp-page="Index" asp-page-handler="QualificationAttachment" asp-route-equipmentId="@Model.Input.Id">@Model.Input.QualificationAttachmentFileName</a>
+                    <label class="compact-check"><input asp-for="Input.RemoveQualificationAttachment" type="checkbox" /> 删除当前附件</label>
+                </div>
+            }
+        </section>
+
+        <section class="form-section form-span">
+            <h2 class="section-heading">备注与修改记录</h2>
+            <label class="form-span">备注<textarea asp-for="Input.Notes" rows="4"></textarea></label>
+            <label class="form-span">修改原因<input asp-for="Input.Reason" required /></label>
+        </section>
+
+        <div class="sticky-actions form-span">
+            <button class="button button--primary" type="submit">保存</button>
+            <a class="button button--secondary" asp-page="Index">返回设备工作台</a>
+        </div>
+    </form>
+</div>

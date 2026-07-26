@@ -317,11 +317,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.Category).HasMaxLength(100);
             entity.Property(item => item.PurchaseAmount).HasPrecision(18, 2);
             entity.Property(item => item.InternalDailyRate).HasPrecision(18, 2);
+            entity.Property(item => item.QualificationCertificateNumber).HasMaxLength(100);
             entity.Property(item => item.Notes).HasMaxLength(1000);
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => item.EquipmentNumber).IsUnique();
+            entity.HasIndex(item => item.ManagingLegalEntityId);
+            entity.HasOne(item => item.ManagingLegalEntity).WithMany().HasForeignKey(item => item.ManagingLegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.OwnerLegalEntity).WithMany().HasForeignKey(item => item.OwnerLegalEntityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.LessorBusinessPartner).WithMany().HasForeignKey(item => item.LessorBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.QualificationAttachment).WithMany().HasForeignKey(item => item.QualificationAttachmentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<EquipmentLeaseAgreement>(entity =>

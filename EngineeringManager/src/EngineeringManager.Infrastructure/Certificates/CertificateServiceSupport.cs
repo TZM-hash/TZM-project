@@ -8,7 +8,6 @@ namespace EngineeringManager.Infrastructure.Certificates;
 
 internal static class CertificateServiceSupport
 {
-    private const int MaxAttachmentBytes = 20 * 1024 * 1024;
     private const string BinaryContentType = "application/octet-stream";
     private static readonly Dictionary<string, string> AttachmentContentTypes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -46,7 +45,7 @@ internal static class CertificateServiceSupport
         string userId,
         CancellationToken cancellationToken)
     {
-        if (upload.Content.Length == 0 || upload.Content.Length > MaxAttachmentBytes)
+        if (upload.Content.Length == 0 || upload.Content.Length > CertificateAttachmentUpload.MaxSizeBytes)
         {
             throw new ArgumentException("证书附件不能为空且不能超过 20MB。", nameof(upload));
         }
@@ -91,8 +90,18 @@ internal static class CertificateServiceSupport
     public static async Task RemoveAttachmentAsync(Attachment? attachment, IFileStore fileStore, CancellationToken cancellationToken)
     {
         if (attachment is null || attachment.IsDeleted) return;
-        attachment.IsDeleted = true;
-        await fileStore.DeleteAsync(attachment.StoredName, cancellationToken);
+        MarkAttachmentDeleted(attachment);
+        await DeleteStoredFileAsync(attachment, fileStore, cancellationToken);
+    }
+
+    public static void MarkAttachmentDeleted(Attachment? attachment)
+    {
+        if (attachment is not null) attachment.IsDeleted = true;
+    }
+
+    public static async Task DeleteStoredFileAsync(Attachment? attachment, IFileStore fileStore, CancellationToken cancellationToken)
+    {
+        if (attachment is not null) await fileStore.DeleteAsync(attachment.StoredName, cancellationToken);
     }
 
     private static bool TryGetAttachmentContentType(string fileName, out string contentType) =>

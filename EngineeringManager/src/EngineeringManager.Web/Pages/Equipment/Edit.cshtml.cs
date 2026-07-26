@@ -1,46 +1,73 @@
-using System.ComponentModel.DataAnnotations;
+using EngineeringManager.Application.Certificates;
+using EngineeringManager.Application.Companies;
 using EngineeringManager.Application.Equipment;
-using EngineeringManager.Domain.Equipment;
+using EngineeringManager.Application.Partners;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Web.Pages.Equipment;
 
 [Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.EquipmentManager)]
-public sealed class EditModel(IEquipmentService service) : EquipmentPageModel
+public sealed class EditModel(
+    IEquipmentService service,
+    ICompanyManagementService companyService,
+    IBusinessPartnerService partnerService) : EquipmentPageModel
 {
-    [BindProperty] public InputModel Input { get; set; } = new();
+    [BindProperty] public EquipmentEditorInput Input { get; set; } = new();
+    [BindProperty] public IFormFile? QualificationAttachmentFile { get; set; }
+    public IReadOnlyList<CompanyListItemDto> Companies { get; private set; } = [];
+    public IReadOnlyList<BusinessPartnerDto> Lessors { get; private set; } = [];
+
     public async Task OnGetAsync(Guid? id, Guid? copyFrom, CancellationToken token)
     {
         if (id.HasValue)
-        {
-            var dashboard = await service.GetDashboardAsync(ResolveActor(), new EquipmentFilter(null, null, null, null), token);
-            Input = InputModel.From(dashboard.Items.Single(item => item.Id == id.Value));
-        }
-        else if (copyFrom.HasValue) Input = InputModel.From(await service.CopyEquipmentAsync(ResolveActor(), copyFrom.Value, token));
+            Input = EquipmentEditorInput.From(await service.GetEquipmentAsync(ResolveActor(), id.Value, token));
+        else if (copyFrom.HasValue)
+            Input = EquipmentEditorInput.From(await service.GetEquipmentAsync(ResolveActor(), copyFrom.Value, token), true);
+
+        await LoadOptionsAsync(token);
     }
+
     public async Task<IActionResult> OnPostAsync(CancellationToken token)
     {
-        if(!ModelState.IsValid) return Page();
-        var saved = await service.SaveEquipmentAsync(ResolveActor(), Input.ToRequest(), token);
-        return RedirectToPage("Details", new { id = saved.Id });
+        if (!ModelState.IsValid)
+        {
+            await LoadOptionsAsync(token);
+            return Page();
+        }
+
+        try
+        {
+            CertificateAttachmentUpload? upload = null;
+            if (QualificationAttachmentFile is not null)
+            {
+                await using var buffer = new MemoryStream();
+                await QualificationAttachmentFile.CopyToAsync(buffer, token);
+                upload = new CertificateAttachmentUpload(
+                    QualificationAttachmentFile.FileName,
+                    QualificationAttachmentFile.ContentType,
+                    buffer.ToArray());
+            }
+
+            await service.SaveEquipmentAsync(ResolveActor(), Input.ToRequest(upload), token);
+            return RedirectToPage("Index");
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            await LoadOptionsAsync(token);
+            return Page();
+        }
     }
-    public sealed class InputModel
+
+    private async Task LoadOptionsAsync(CancellationToken token)
     {
-        public Guid? Id { get; set; }
-        [Required] public string EquipmentNumber { get; set; } = string.Empty;
-        [Required] public string Name { get; set; } = string.Empty;
-        public string? Model { get; set; }
-        public string? Category { get; set; }
-        public EquipmentOwnershipType OwnershipType { get; set; } = EquipmentOwnershipType.SelfOwned;
-        public Guid? OwnerLegalEntityId { get; set; }
-        public Guid? LessorBusinessPartnerId { get; set; }
-        public decimal? InternalDailyRate { get; set; }
-        public string? Notes { get; set; }
-        public Guid? ConcurrencyStamp { get; set; }
-        [Required] public string Reason { get; set; } = "维护设备档案";
-        public SaveEquipmentRequest ToRequest() => new(Id, EquipmentNumber, Name, Model, Category, OwnershipType, OwnerLegalEntityId, LessorBusinessPartnerId, InternalDailyRate, ConcurrencyStamp, Reason, Notes);
-        public static InputModel From(EquipmentDetailsDto item) => new() { Id = item.Id == Guid.Empty ? null : item.Id, EquipmentNumber = item.EquipmentNumber, Name = item.Name, Model = item.Model, Category = item.Category, OwnershipType = item.OwnershipType, OwnerLegalEntityId = item.OwnerLegalEntityId, LessorBusinessPartnerId = item.LessorBusinessPartnerId, InternalDailyRate = item.InternalDailyRate, Notes = item.Notes, ConcurrencyStamp = item.ConcurrencyStamp };
+        var actor = ResolveActor();
+        Companies = (await companyService.ListAsync(new CompanyActor(actor.UserId, false, actor.CanAccessAll, actor.AccessibleCompanyIds), token))
+            .Where(item => item.IsActive)
+            .ToArray();
+        Lessors = await partnerService.ListAsync(null, null, token);
     }
 }

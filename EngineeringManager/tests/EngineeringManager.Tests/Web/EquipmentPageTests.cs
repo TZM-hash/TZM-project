@@ -3,8 +3,10 @@ using System.Security.Claims;
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Application.Equipment;
 using EngineeringManager.Application.Partners;
+using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Web;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
@@ -37,6 +39,21 @@ public sealed class EquipmentPageTests
         using var client = factory.CreateClient();
         var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Equipment"));
         html.Should().Contain("data-equipment-dashboard");
+        html.Should().Contain("data-equipment-company-filter");
+        html.Should().Contain("data-equipment-workspace-summary");
+        html.Should().Contain("data-equipment-workspace-list");
+        html.Should().Contain("data-equipment-editor-dialog");
+        html.Should().Contain("data-equipment-details-dialog");
+        html.Should().Contain("data-equipment-usage-dialog");
+        html.Should().Contain("name=\"Editor.ManagingLegalEntityId\"");
+        html.Should().Contain("enctype=\"multipart/form-data\"");
+        html.Should().Contain("data-equipment-dialog-open=\"edit\"");
+        html.Should().Contain("data-equipment-dialog-open=\"copy\"");
+        html.Should().Contain("data-equipment-dialog-open=\"usage\"");
+        html.Should().Contain("<select required")
+            .And.Contain("id=\"UsageInput_ProjectId\" name=\"UsageInput.ProjectId\"");
+        html.Should().Contain("PRJ-001 · 测试项目");
+        html.Should().NotContain("href=\"/Equipment/Edit");
         html.Should().Contain("测试挖掘机");
         html.Should().Contain("现场离线记录");
     }
@@ -72,6 +89,14 @@ public sealed class EquipmentPageTests
         details.Should().Contain("设备备注");
         details.Should().Contain("name=\"QuickEdit.Notes\"");
         edit.Should().Contain("name=\"Input.Notes\"");
+        edit.Should().Contain("name=\"Input.ManagingLegalEntityId\"");
+        edit.Should().Contain("name=\"Input.PurchaseDate\"");
+        edit.Should().Contain("name=\"Input.PurchaseAmount\"");
+        edit.Should().Contain("name=\"Input.QualificationCertificateNumber\"");
+        edit.Should().Contain("name=\"QualificationAttachmentFile\"");
+        edit.Should().Contain("enctype=\"multipart/form-data\"");
+        edit.Should().Contain("EQ-COMP · 设备公司");
+        edit.Should().Contain("测试出租方");
         settlement.Should().Contain("name=\"Notes\"");
     }
 
@@ -88,19 +113,48 @@ public sealed class EquipmentPageTests
             services.AddSingleton<ICompanyManagementService, FakeCompanyService>();
             services.RemoveAll<IBusinessPartnerService>();
             services.AddSingleton<IBusinessPartnerService, FakePartnerService>();
+            services.RemoveAll<IProjectService>();
+            services.AddSingleton<IProjectService, FakeProjectService>();
         });
     });
 
     private sealed class FakeEquipmentService : IEquipmentService
     {
         public static readonly Guid EquipmentId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        public Task<EquipmentDetailsDto> GetEquipmentAsync(EquipmentActor actor, Guid id, CancellationToken token) =>
+            Task.FromResult(CreateEquipment());
+        public Task<EngineeringManager.Application.Certificates.CertificateFileDto> DownloadQualificationAttachmentAsync(EquipmentActor actor, Guid equipmentId, CancellationToken token) => throw new NotSupportedException();
         public Task<EquipmentDashboardDto> GetDashboardAsync(EquipmentActor actor, EquipmentFilter filter, CancellationToken token) =>
-            Task.FromResult(new EquipmentDashboardDto(1, 1, 0, 1, 1200m, new Dictionary<string, int> { ["InUse"] = 1 }, [new EquipmentDetailsDto(EquipmentId, "EQ-TEST", "测试挖掘机", "X1", "挖掘机", EquipmentOwnershipType.Rented, EquipmentStatus.InUse, null, FakePartnerService.PartnerId, 500m, Guid.NewGuid(), "设备备注")]));
+            Task.FromResult(new EquipmentDashboardDto(1, 1, 0, 1, 1200m, new Dictionary<string, int> { ["InUse"] = 1 }, [CreateEquipment()]));
         public Task<EquipmentDetailsDto> SaveEquipmentAsync(EquipmentActor actor, SaveEquipmentRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<EquipmentDetailsDto> CopyEquipmentAsync(EquipmentActor actor, Guid sourceId, CancellationToken token) => throw new NotSupportedException();
         public Task<EquipmentUsageDto> SaveUsageAsync(EquipmentActor actor, SaveEquipmentUsageRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task TransferOwnershipAsync(EquipmentActor actor, TransferEquipmentOwnershipRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<Guid> SaveMaintenanceAsync(EquipmentActor actor, SaveEquipmentMaintenanceRequest request, CancellationToken token) => throw new NotSupportedException();
+        private static EquipmentDetailsDto CreateEquipment() => new(
+            EquipmentId,
+            "EQ-TEST",
+            "测试挖掘机",
+            "X1",
+            "挖掘机",
+            EquipmentOwnershipType.Rented,
+            EquipmentStatus.InUse,
+            null,
+            FakePartnerService.PartnerId,
+            500m,
+            Guid.NewGuid(),
+            "设备备注",
+            FakeCompanyService.CompanyId,
+            "测试设备公司",
+            null,
+            "测试出租方",
+            new DateOnly(2026, 1, 1),
+            300000m,
+            "QC-TEST",
+            new DateOnly(2026, 1, 2),
+            new DateOnly(2027, 1, 1),
+            Guid.NewGuid(),
+            "设备合格证.pdf");
     }
 
     private sealed class FakeCompanyService : ICompanyManagementService
@@ -140,6 +194,21 @@ public sealed class EquipmentPageTests
         public Task<BusinessPartnerDto> UpdateAsync(string userId, UpdateBusinessPartnerRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LinkToProjectAsync(LinkPartnerToProjectRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BusinessPartnerDto?> GetAsync(Guid partnerId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeProjectService : IProjectService
+    {
+        private static readonly ProjectDto Project = new(Guid.Parse("77777777-7777-7777-7777-777777777777"), "PRJ-001", "测试项目", null, ProjectStage.UnderConstruction);
+
+        public Task<IReadOnlyList<ProjectListItemDto>> ListProjectsAsync(string? search, ProjectStage? stage, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ProjectListItemDto>>([new ProjectListItemDto(Project, new ProjectSummaryDto(0, 0, 0, 0, default, 0, 0))]);
+        public Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ContractDto> AddContractAsync(CreateContractRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ContractLineItemDto> AddLineItemAsync(CreateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ContractLineItemDto> UpdateLineItemAsync(UpdateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ProjectListPageDto> SearchProjectsAsync(ProjectListActor actor, ProjectListQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ProjectListOptionsDto> GetListOptionsAsync(ProjectListActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class AuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, System.Text.Encodings.Web.UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)

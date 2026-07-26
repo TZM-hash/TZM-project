@@ -19,10 +19,22 @@
             <div><dt>分类</dt><dd><span data-inline-edit-value>@(Model.Equipment.Category ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Category" data-inline-edit-control hidden /> }</dd></div>
             <div><dt>权属</dt><dd><span data-inline-edit-value>@Model.Equipment.OwnershipType.ToChinese()</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.OwnershipType" data-inline-edit-control hidden>@foreach (var value in Enum.GetValues<EquipmentOwnershipType>()) { <option value="@value">@value.ToChinese()</option> }</select> }</dd></div>
             <div><dt>内部参考日价</dt><dd><span data-inline-edit-value>@(Model.Equipment.InternalDailyRate?.ToString("N2") ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.InternalDailyRate" type="number" step="0.01" data-inline-edit-control hidden /> }</dd></div>
-            <div><dt>所属公司</dt><dd><span data-inline-edit-value>@(Model.Companies.FirstOrDefault(item => item.Id == Model.Equipment.OwnerLegalEntityId)?.ShortName ?? "不适用")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.OwnerLegalEntityId" data-inline-edit-control hidden><option value="">不适用</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select> }</dd></div>
+            <div><dt>管理公司</dt><dd><span data-inline-edit-value>@(Model.Equipment.ManagingLegalEntityName ?? "待分配")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.ManagingLegalEntityId" data-inline-edit-control hidden required><option value="">请选择管理公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select> }</dd></div>
+            <div><dt>产权公司</dt><dd><span data-inline-edit-value>@(Model.Equipment.OwnerLegalEntityName ?? "不适用")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.OwnerLegalEntityId" data-inline-edit-control hidden><option value="">不适用</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select> }</dd></div>
             <div><dt>出租方</dt><dd><span data-inline-edit-value>@(Model.Lessors.FirstOrDefault(item => item.Id == Model.Equipment.LessorBusinessPartnerId)?.ShortName ?? "不适用")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.LessorBusinessPartnerId" data-inline-edit-control hidden><option value="">不适用</option>@foreach (var lessor in Model.Lessors) { <option value="@lessor.Id">@lessor.PartnerNumber · @lessor.ShortName</option> }</select> }</dd></div>
             <div><dt>备注</dt><dd><span data-inline-edit-value>@(Model.Equipment.Notes ?? "未填写")</span>@if (Model.CanManage) { <textarea class="inline-cell-control" asp-for="QuickEdit.Notes" rows="3" data-inline-edit-control hidden></textarea> }</dd></div>
         </dl>
-        @if (Model.CanManage) { <label class="inline-edit-reason" data-inline-edit-actions hidden>修改原因<input class="inline-cell-control" asp-for="QuickEdit.Reason" required /></label><input type="hidden" asp-for="QuickEdit.ConcurrencyStamp" /> }
+        @if (Model.CanManage) {
+            <label class="inline-edit-reason" data-inline-edit-actions hidden>修改原因<input class="inline-cell-control" asp-for="QuickEdit.Reason" required /></label>
+            <input type="hidden" asp-for="QuickEdit.ConcurrencyStamp" />
+            <input type="hidden" asp-for="QuickEdit.PurchaseDate" />
+            <input type="hidden" asp-for="QuickEdit.PurchaseAmount" />
+            <input type="hidden" asp-for="QuickEdit.QualificationCertificateNumber" />
+            <input type="hidden" asp-for="QuickEdit.QualificationIssuedOn" />
+            <input type="hidden" asp-for="QuickEdit.QualificationExpiresOn" />
+            <input type="hidden" asp-for="QuickEdit.QualificationAttachmentId" />
+            <input type="hidden" asp-for="QuickEdit.QualificationAttachmentFileName" />
+            <input type="hidden" asp-for="QuickEdit.IsActive" />
+        }
     </form>
 </section>

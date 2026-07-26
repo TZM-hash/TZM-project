@@ -2,7 +2,10 @@ using EngineeringManager.Domain.Certificates;
 
 namespace EngineeringManager.Application.Certificates;
 
-public sealed record CertificateAttachmentUpload(string OriginalFileName, string ContentType, byte[] Content);
+public sealed record CertificateAttachmentUpload(string OriginalFileName, string ContentType, byte[] Content)
+{
+    public const int MaxSizeBytes = 20 * 1024 * 1024;
+}
 
 public sealed record CertificateFileDto(string OriginalFileName, string ContentType, byte[] Content);
 

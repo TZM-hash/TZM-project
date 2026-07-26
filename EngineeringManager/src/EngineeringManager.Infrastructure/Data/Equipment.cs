@@ -12,6 +12,8 @@ public sealed class Equipment
     public string? Category { get; set; }
     public EquipmentOwnershipType OwnershipType { get; set; }
     public EquipmentStatus Status { get; set; } = EquipmentStatus.Idle;
+    public Guid? ManagingLegalEntityId { get; set; }
+    public LegalEntity? ManagingLegalEntity { get; set; }
     public Guid? OwnerLegalEntityId { get; set; }
     public LegalEntity? OwnerLegalEntity { get; set; }
     public Guid? LessorBusinessPartnerId { get; set; }
@@ -19,6 +21,11 @@ public sealed class Equipment
     public DateOnly? PurchaseDate { get; set; }
     public decimal? PurchaseAmount { get; set; }
     public decimal? InternalDailyRate { get; set; }
+    public string? QualificationCertificateNumber { get; set; }
+    public DateOnly? QualificationIssuedOn { get; set; }
+    public DateOnly? QualificationExpiresOn { get; set; }
+    public Guid? QualificationAttachmentId { get; set; }
+    public Attachment? QualificationAttachment { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();

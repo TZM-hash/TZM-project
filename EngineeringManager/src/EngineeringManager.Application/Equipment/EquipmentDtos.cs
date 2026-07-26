@@ -1,3 +1,5 @@
+using EngineeringManager.Application.Certificates;
+using EngineeringManager.Domain.Certificates;
 using EngineeringManager.Domain.Equipment;
 
 namespace EngineeringManager.Application.Equipment;
@@ -26,7 +28,16 @@ public sealed record SaveEquipmentRequest(
     decimal? InternalDailyRate,
     Guid? ConcurrencyStamp,
     string Reason,
-    string? Notes = null);
+    string? Notes = null,
+    Guid? ManagingLegalEntityId = null,
+    DateOnly? PurchaseDate = null,
+    decimal? PurchaseAmount = null,
+    string? QualificationCertificateNumber = null,
+    DateOnly? QualificationIssuedOn = null,
+    DateOnly? QualificationExpiresOn = null,
+    CertificateAttachmentUpload? NewQualificationAttachment = null,
+    bool RemoveQualificationAttachment = false,
+    bool IsActive = true);
 
 public sealed record EquipmentDetailsDto(
     Guid Id,
@@ -40,7 +51,20 @@ public sealed record EquipmentDetailsDto(
     Guid? LessorBusinessPartnerId,
     decimal? InternalDailyRate,
     Guid ConcurrencyStamp,
-    string? Notes = null);
+    string? Notes = null,
+    Guid? ManagingLegalEntityId = null,
+    string? ManagingLegalEntityName = null,
+    string? OwnerLegalEntityName = null,
+    string? LessorBusinessPartnerName = null,
+    DateOnly? PurchaseDate = null,
+    decimal? PurchaseAmount = null,
+    string? QualificationCertificateNumber = null,
+    DateOnly? QualificationIssuedOn = null,
+    DateOnly? QualificationExpiresOn = null,
+    Guid? QualificationAttachmentId = null,
+    string? QualificationAttachmentFileName = null,
+    CertificateExpiryState QualificationState = CertificateExpiryState.LongTerm,
+    bool IsActive = true);
 
 public sealed record EquipmentPeriodRequest(
     DateOnly StartDate,
@@ -79,7 +103,7 @@ public sealed record EquipmentUsageDto(
     int UnclassifiedDays,
     Guid ConcurrencyStamp);
 
-public sealed record EquipmentFilter(Guid? CompanyId, Guid? ProjectId, EquipmentStatus? Status, string? Keyword);
+public sealed record EquipmentFilter(Guid? CompanyId, Guid? ProjectId, EquipmentStatus? Status, string? Keyword, bool UnassignedOnly = false);
 
 public sealed record EquipmentDashboardDto(
     int TotalCount,
@@ -88,7 +112,9 @@ public sealed record EquipmentDashboardDto(
     int RentedCount,
     decimal SettledAmount,
     IReadOnlyDictionary<string, int> StatusDistribution,
-    IReadOnlyList<EquipmentDetailsDto> Items);
+    IReadOnlyList<EquipmentDetailsDto> Items,
+    int ExpiringQualificationCount = 0,
+    int ExpiredQualificationCount = 0);
 
 public sealed record EquipmentSettlementAdjustmentRequest(
     EquipmentAdjustmentDirection Direction,

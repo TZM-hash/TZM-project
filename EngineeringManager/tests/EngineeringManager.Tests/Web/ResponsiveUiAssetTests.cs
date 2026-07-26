@@ -93,6 +93,50 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("position: static;");
     }
 
+    [Fact]
+    public void EquipmentWorkspaceKeepsTheDesktopListCompactAndStacksOnNarrowScreens()
+    {
+        var pageCss = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        pageCss.Should().Contain(".equipment-workspace-layout { display: grid; grid-template-columns: minmax(230px, .32fr) minmax(0, 1fr);")
+            .And.Contain(".equipment-table-wrap { overflow-x: hidden; }")
+            .And.Contain(".equipment-table { width: 100%; table-layout: fixed;")
+            .And.Contain("@media (max-width: 900px)")
+            .And.Contain(".equipment-workspace-layout { grid-template-columns: 1fr; }")
+            .And.Contain(".equipment-table-wrap { overflow-x: auto; }");
+
+        pageCss.Should().Contain("var(--app-border)")
+            .And.Contain("var(--app-surface)")
+            .And.NotContain(".equipment-company-filter a { flex: 0 0 auto; padding: .48rem .78rem; border: 1px solid var(--line)");
+    }
+
+    [Fact]
+    public void EquipmentWorkspaceScriptUsesDialogsAndSynchronizesOwnershipFields()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "equipment-workspace.js");
+
+        script.Should().Contain("dialog.showModal()")
+            .And.Contain("field(\"OwnershipType\")?.addEventListener(\"change\", syncOwnership)")
+            .And.Contain("selfOwned.hidden = ownership !== \"SelfOwned\"")
+            .And.Contain("rented.hidden = ownership !== \"Rented\"")
+            .And.Contain("if (ownership === \"SelfOwned\" && lessor) lessor.value = \"\"")
+            .And.Contain("if (ownership === \"Rented\" && owner) owner.value = \"\"")
+            .And.Contain("page.querySelector(\".workbench-inline-filters\")")
+            .And.Contain("[\"CompanyId\", page.dataset.companyId]")
+            .And.Contain("[\"Unassigned\", page.dataset.unassigned === \"true\" ? \"true\" : \"\"]")
+            .And.Contain("page.querySelector(\".workbench-inline-clear\")");
+    }
+
+    [Fact]
+    public void EquipmentUploadAndDownloadHandlersEnforceWebBoundaryChecks()
+    {
+        var pageModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Equipment", "Index.cshtml.cs");
+
+        pageModel.Should().Contain("QualificationAttachmentFile.Length is <= 0 or > CertificateAttachmentUpload.MaxSizeBytes")
+            .And.Contain("catch (KeyNotFoundException)")
+            .And.Contain("return NotFound()");
+    }
+
     private static string ReadCss()
     {
         var directory = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "wwwroot", "css");

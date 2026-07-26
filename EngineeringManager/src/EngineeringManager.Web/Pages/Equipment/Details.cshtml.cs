@@ -16,7 +16,7 @@ public sealed class DetailsModel(IEquipmentService service, ICompanyManagementSe
     public IReadOnlyList<BusinessPartnerDto> Lessors { get; private set; } = [];
     public bool CanManage => ResolveActor().CanManage;
     public bool QuickEditOpen { get; private set; }
-    [BindProperty] public EditModel.InputModel QuickEdit { get; set; } = new();
+    [BindProperty] public EquipmentEditorInput QuickEdit { get; set; } = new();
 
     public async Task OnGetAsync(Guid id, CancellationToken token) => await LoadAsync(id, true, token);
 
@@ -32,7 +32,7 @@ public sealed class DetailsModel(IEquipmentService service, ICompanyManagementSe
         }
         try
         {
-            await service.SaveEquipmentAsync(ResolveActor(), QuickEdit.ToRequest(), token);
+            await service.SaveEquipmentAsync(ResolveActor(), QuickEdit.ToRequest(null), token);
             return RedirectToPage(new { id });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
@@ -47,11 +47,12 @@ public sealed class DetailsModel(IEquipmentService service, ICompanyManagementSe
     private async Task LoadAsync(Guid id, bool populateQuickEdit, CancellationToken token)
     {
         var equipmentActor = ResolveActor();
-        var dashboard = await service.GetDashboardAsync(equipmentActor, new EquipmentFilter(null, null, null, null), token);
-        Equipment = dashboard.Items.SingleOrDefault(item => item.Id == id) ?? throw new KeyNotFoundException("设备不存在或无权访问。");
+        Equipment = await service.GetEquipmentAsync(equipmentActor, id, token);
         if (!equipmentActor.CanManage) return;
-        Companies = await companyService.ListAsync(new CompanyActor(equipmentActor.UserId, false, equipmentActor.CanAccessAll, equipmentActor.AccessibleCompanyIds), token);
+        Companies = (await companyService.ListAsync(new CompanyActor(equipmentActor.UserId, false, equipmentActor.CanAccessAll, equipmentActor.AccessibleCompanyIds), token))
+            .Where(item => item.IsActive)
+            .ToArray();
         Lessors = await partnerService.ListAsync(null, null, token);
-        if (populateQuickEdit) QuickEdit = EditModel.InputModel.From(Equipment);
+        if (populateQuickEdit) QuickEdit = EquipmentEditorInput.From(Equipment);
     }
 }

@@ -1,28 +1,56 @@
 using System.Text.Json;
+using EngineeringManager.Domain.Certificates;
 using EngineeringManager.Application.Equipment;
 using EngineeringManager.Domain.Equipment;
+using EngineeringManager.Infrastructure.Certificates;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Files;
 using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Equipment;
 
-public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentService
+public sealed class EquipmentService(ApplicationDbContext db, IFileStore? fileStore = null) : IEquipmentService
 {
+    public async Task<EquipmentDetailsDto> GetEquipmentAsync(EquipmentActor actor, Guid id, CancellationToken token)
+    {
+        var item = await EquipmentDetailsQuery(actor).AsNoTracking()
+            .SingleOrDefaultAsync(value => value.Id == id, token)
+            ?? throw new KeyNotFoundException("设备不存在或无权访问。");
+        return ToDto(item);
+    }
+
+    public async Task<EngineeringManager.Application.Certificates.CertificateFileDto> DownloadQualificationAttachmentAsync(
+        EquipmentActor actor,
+        Guid equipmentId,
+        CancellationToken token)
+    {
+        var item = await EquipmentDetailsQuery(actor).AsNoTracking()
+            .SingleOrDefaultAsync(value => value.Id == equipmentId, token)
+            ?? throw new KeyNotFoundException("设备不存在或无权访问。");
+        return await CertificateServiceSupport.DownloadAsync(item.QualificationAttachment, RequiredFileStore(), token);
+    }
+
     public async Task<EquipmentDetailsDto> SaveEquipmentAsync(EquipmentActor actor, SaveEquipmentRequest request, CancellationToken token)
     {
         EnsureManage(actor);
         var number = Required(request.EquipmentNumber, "设备编号");
         var name = Required(request.Name, "设备名称");
         var reason = Required(request.Reason, "修改原因");
+        if (!request.ManagingLegalEntityId.HasValue)
+            throw new ArgumentException("设备必须选择管理公司。", nameof(request));
         if (request.OwnershipType == EquipmentOwnershipType.SelfOwned && !request.OwnerLegalEntityId.HasValue)
             throw new ArgumentException("自有设备必须选择所属公司。", nameof(request));
         if (request.OwnershipType == EquipmentOwnershipType.Rented && !request.LessorBusinessPartnerId.HasValue)
             throw new ArgumentException("租赁设备必须选择出租方。", nameof(request));
         if (request.OwnerLegalEntityId.HasValue && !await AuthorizedCompanies(actor).AnyAsync(item => item.Id == request.OwnerLegalEntityId, token))
             throw new InvalidOperationException("所属公司不存在或无权访问。");
+        if (!await AuthorizedCompanies(actor).AnyAsync(item => item.Id == request.ManagingLegalEntityId, token))
+            throw new InvalidOperationException("管理公司不存在或无权访问。");
         if (request.LessorBusinessPartnerId.HasValue && !await db.BusinessPartners.AnyAsync(item => item.Id == request.LessorBusinessPartnerId && item.IsActive, token))
             throw new InvalidOperationException("出租方不存在或已停用。");
+        if (request.QualificationIssuedOn.HasValue && request.QualificationExpiresOn.HasValue && request.QualificationExpiresOn < request.QualificationIssuedOn)
+            throw new ArgumentException("合格证到期日期不能早于发证日期。", nameof(request));
         if (await db.Equipment.AnyAsync(item => item.EquipmentNumber == number && item.Id != request.Id, token))
             throw new InvalidOperationException($"设备编号已存在：{number}");
 
@@ -30,7 +58,7 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
         string? before = null;
         if (request.Id.HasValue)
         {
-            entity = await AuthorizedEquipment(actor).SingleOrDefaultAsync(item => item.Id == request.Id, token)
+            entity = await EquipmentDetailsQuery(actor).SingleOrDefaultAsync(item => item.Id == request.Id, token)
                 ?? throw new KeyNotFoundException("设备不存在或无权访问。");
             if (!request.ConcurrencyStamp.HasValue || request.ConcurrencyStamp != entity.ConcurrencyStamp)
                 throw new DbUpdateConcurrencyException("设备档案已被其他用户修改。");
@@ -46,24 +74,66 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
         entity.Model = Optional(request.Model);
         entity.Category = Optional(request.Category);
         entity.OwnershipType = request.OwnershipType;
+        entity.ManagingLegalEntityId = request.ManagingLegalEntityId;
         entity.OwnerLegalEntityId = request.OwnershipType == EquipmentOwnershipType.SelfOwned ? request.OwnerLegalEntityId : null;
         entity.LessorBusinessPartnerId = request.OwnershipType == EquipmentOwnershipType.Rented ? request.LessorBusinessPartnerId : null;
+        entity.PurchaseDate = request.PurchaseDate;
+        entity.PurchaseAmount = request.PurchaseAmount;
         entity.InternalDailyRate = request.InternalDailyRate;
+        entity.QualificationCertificateNumber = Optional(request.QualificationCertificateNumber);
+        entity.QualificationIssuedOn = request.QualificationIssuedOn;
+        entity.QualificationExpiresOn = request.QualificationExpiresOn;
+        Attachment? qualificationAttachmentToRemove = null;
+        Attachment? newQualificationAttachment = null;
+        if (request.NewQualificationAttachment is not null)
+        {
+            qualificationAttachmentToRemove = entity.QualificationAttachment;
+            newQualificationAttachment = await CertificateServiceSupport.SaveAttachmentAsync(
+                db,
+                RequiredFileStore(),
+                request.NewQualificationAttachment,
+                actor.UserId,
+                token);
+            entity.QualificationAttachment = newQualificationAttachment;
+        }
+        else if (request.RemoveQualificationAttachment)
+        {
+            qualificationAttachmentToRemove = entity.QualificationAttachment;
+            entity.QualificationAttachmentId = null;
+            entity.QualificationAttachment = null;
+        }
+        CertificateServiceSupport.MarkAttachmentDeleted(qualificationAttachmentToRemove);
         entity.Notes = Optional(request.Notes);
+        entity.IsActive = request.IsActive;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.ConcurrencyStamp = Guid.NewGuid();
         AddAudit(actor, request.Id.HasValue ? "Update" : "Create", nameof(Data.Equipment), entity.Id, reason, before, JsonSerializer.Serialize(Snapshot(entity)));
-        await db.SaveChangesAsync(token);
-        return ToDto(entity);
+        try
+        {
+            await db.SaveChangesAsync(token);
+        }
+        catch
+        {
+            if (newQualificationAttachment is not null)
+                await CertificateServiceSupport.RemoveAttachmentAsync(newQualificationAttachment, RequiredFileStore(), token);
+            throw;
+        }
+        if (qualificationAttachmentToRemove is not null)
+            await CertificateServiceSupport.DeleteStoredFileAsync(qualificationAttachmentToRemove, RequiredFileStore(), token);
+        return await GetEquipmentAsync(actor, entity.Id, token);
     }
 
     public async Task<EquipmentDetailsDto> CopyEquipmentAsync(EquipmentActor actor, Guid sourceId, CancellationToken token)
     {
-        var source = await AuthorizedEquipment(actor).AsNoTracking().SingleOrDefaultAsync(item => item.Id == sourceId, token)
+        var source = await EquipmentDetailsQuery(actor).AsNoTracking().SingleOrDefaultAsync(item => item.Id == sourceId, token)
             ?? throw new KeyNotFoundException("设备不存在或无权访问。");
         return new EquipmentDetailsDto(Guid.Empty, string.Empty, $"{source.Name} - 副本", source.Model, source.Category,
             source.OwnershipType, EquipmentStatus.Idle, source.OwnerLegalEntityId, source.LessorBusinessPartnerId,
-            source.InternalDailyRate, Guid.Empty, source.Notes);
+            source.InternalDailyRate, Guid.Empty, source.Notes, source.ManagingLegalEntityId,
+            source.ManagingLegalEntity?.Name, source.OwnerLegalEntity?.Name, source.LessorBusinessPartner?.Name,
+            source.PurchaseDate, source.PurchaseAmount, source.QualificationCertificateNumber,
+            source.QualificationIssuedOn, source.QualificationExpiresOn, null, null,
+            CertificateExpiryCalculator.GetState(DateOnly.FromDateTime(DateTime.Today), source.QualificationExpiresOn), source.IsActive);
     }
 
     public async Task<EquipmentUsageDto> SaveUsageAsync(EquipmentActor actor, SaveEquipmentUsageRequest request, CancellationToken token)
@@ -128,8 +198,9 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
 
     public async Task<EquipmentDashboardDto> GetDashboardAsync(EquipmentActor actor, EquipmentFilter filter, CancellationToken token)
     {
-        var query = AuthorizedEquipment(actor).AsNoTracking();
-        if (filter.CompanyId.HasValue) query = query.Where(item => item.OwnerLegalEntityId == filter.CompanyId || item.ProjectUsages.Any(usage => usage.LegalEntityId == filter.CompanyId));
+        var query = EquipmentDetailsQuery(actor).AsNoTracking();
+        if (filter.CompanyId.HasValue) query = query.Where(item => item.ManagingLegalEntityId == filter.CompanyId);
+        if (filter.UnassignedOnly) query = query.Where(item => item.ManagingLegalEntityId == null);
         if (filter.ProjectId.HasValue) query = query.Where(item => item.ProjectUsages.Any(usage => usage.ProjectId == filter.ProjectId));
         if (filter.Status.HasValue) query = query.Where(item => item.Status == filter.Status);
         foreach (var term in SearchTerms.Parse(filter.Keyword))
@@ -144,8 +215,11 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
                 || (item.Model != null && item.Model.Contains(term))
                 || (item.Category != null && item.Category.Contains(term))
                 || (item.Notes != null && item.Notes.Contains(term))
+                || (item.ManagingLegalEntity != null && (item.ManagingLegalEntity.Code.Contains(term) || item.ManagingLegalEntity.Name.Contains(term) || item.ManagingLegalEntity.ShortName.Contains(term)))
                 || (item.OwnerLegalEntity != null && (item.OwnerLegalEntity.Code.Contains(term) || item.OwnerLegalEntity.Name.Contains(term) || item.OwnerLegalEntity.ShortName.Contains(term)))
                 || (item.LessorBusinessPartner != null && (item.LessorBusinessPartner.PartnerNumber.Contains(term) || item.LessorBusinessPartner.Name.Contains(term) || item.LessorBusinessPartner.ShortName.Contains(term)))
+                || (item.QualificationCertificateNumber != null && item.QualificationCertificateNumber.Contains(term))
+                || (item.QualificationAttachment != null && item.QualificationAttachment.OriginalFileName.Contains(term))
                 || (item.ProjectUsages.Any(usage =>
                     (usage.Project.ProjectNumber.Contains(term) || usage.Project.Name.Contains(term))
                     || usage.LegalEntity.Code.Contains(term)
@@ -159,7 +233,7 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
                     || (record.Notes != null && record.Notes.Contains(term))
                     || (hasDate && (record.MaintenanceDate == date || record.NextDueDate == date))
                     || (hasAmount && record.Amount == amount))
-                || (hasDate && item.PurchaseDate == date)
+                || (hasDate && (item.PurchaseDate == date || item.QualificationIssuedOn == date || item.QualificationExpiresOn == date))
                 || (hasAmount && (item.PurchaseAmount == amount || item.InternalDailyRate == amount))
                 || (ownership.HasValue && item.OwnershipType == ownership.Value)
                 || (status.HasValue && item.Status == status.Value));
@@ -168,7 +242,18 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
         var ids = items.Select(item => item.Id).ToHashSet();
         var settled = await db.EquipmentSettlements.AsNoTracking().Where(item => ids.Contains(item.Usage.EquipmentId)).SumAsync(item => (decimal?)item.TotalAmount, token) ?? 0m;
         var distribution = items.GroupBy(item => item.Status.ToString()).ToDictionary(group => group.Key, group => group.Count());
-        return new EquipmentDashboardDto(items.Count, items.Count(item => item.Status == EquipmentStatus.InUse), items.Count(item => item.Status == EquipmentStatus.Idle), items.Count(item => item.OwnershipType == EquipmentOwnershipType.Rented), settled, distribution, items.Select(ToDto).ToArray());
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var qualificationStates = items.Select(item => CertificateExpiryCalculator.GetState(today, item.QualificationExpiresOn)).ToArray();
+        return new EquipmentDashboardDto(
+            items.Count,
+            items.Count(item => item.Status == EquipmentStatus.InUse),
+            items.Count(item => item.Status == EquipmentStatus.Idle),
+            items.Count(item => item.OwnershipType == EquipmentOwnershipType.Rented),
+            settled,
+            distribution,
+            items.Select(ToDto).ToArray(),
+            qualificationStates.Count(state => state is CertificateExpiryState.Info or CertificateExpiryState.Warning or CertificateExpiryState.Critical),
+            qualificationStates.Count(state => state == CertificateExpiryState.Expired));
     }
 
     public async Task TransferOwnershipAsync(EquipmentActor actor, TransferEquipmentOwnershipRequest request, CancellationToken token)
@@ -236,22 +321,37 @@ public sealed class EquipmentService(ApplicationDbContext db) : IEquipmentServic
         {
             var companies = actor.AccessibleCompanyIds.ToHashSet();
             var projects = actor.AccessibleProjectIds.ToHashSet();
-            query = query.Where(item => (item.OwnerLegalEntityId.HasValue && companies.Contains(item.OwnerLegalEntityId.Value)) || item.ProjectUsages.Any(usage => companies.Contains(usage.LegalEntityId) && projects.Contains(usage.ProjectId)));
+            query = query.Where(item => (item.ManagingLegalEntityId.HasValue && companies.Contains(item.ManagingLegalEntityId.Value)) || (item.OwnerLegalEntityId.HasValue && companies.Contains(item.OwnerLegalEntityId.Value)) || item.ProjectUsages.Any(usage => companies.Contains(usage.LegalEntityId) && projects.Contains(usage.ProjectId)));
         }
         return query;
     }
-    private IQueryable<Domain.Organization.LegalEntity> AuthorizedCompanies(EquipmentActor actor) => actor.CanAccessAll ? db.LegalEntities : db.LegalEntities.Where(item => actor.AccessibleCompanyIds.Contains(item.Id));
+    private IQueryable<Data.Equipment> EquipmentDetailsQuery(EquipmentActor actor) => AuthorizedEquipment(actor)
+        .Include(item => item.ManagingLegalEntity)
+        .Include(item => item.OwnerLegalEntity)
+        .Include(item => item.LessorBusinessPartner)
+        .Include(item => item.QualificationAttachment);
+    private IQueryable<Domain.Organization.LegalEntity> AuthorizedCompanies(EquipmentActor actor) => actor.CanAccessAll
+        ? db.LegalEntities.Where(item => item.IsActive)
+        : db.LegalEntities.Where(item => item.IsActive && actor.AccessibleCompanyIds.Contains(item.Id));
     private static EquipmentUsagePeriodInput ToInput(EquipmentPeriodRequest item) => new(item.StartDate, item.EndDate, item.PeriodType, item.IsChargeable);
-    private static EquipmentDetailsDto ToDto(Data.Equipment item) => new(item.Id, item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate, item.ConcurrencyStamp, item.Notes);
+    private static EquipmentDetailsDto ToDto(Data.Equipment item) => new(
+        item.Id, item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status,
+        item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate, item.ConcurrencyStamp, item.Notes,
+        item.ManagingLegalEntityId, item.ManagingLegalEntity?.Name, item.OwnerLegalEntity?.Name,
+        item.LessorBusinessPartner?.Name, item.PurchaseDate, item.PurchaseAmount,
+        item.QualificationCertificateNumber, item.QualificationIssuedOn, item.QualificationExpiresOn,
+        item.QualificationAttachmentId, item.QualificationAttachment?.OriginalFileName,
+        CertificateExpiryCalculator.GetState(DateOnly.FromDateTime(DateTime.Today), item.QualificationExpiresOn), item.IsActive);
     private static EquipmentUsageDto ToUsageDto(EquipmentProjectUsage item)
     {
         var calculation = item.ExitDate.HasValue ? EquipmentUsageCalculator.Calculate(item.EntryDate, item.ExitDate.Value, item.Periods.Select(period => new EquipmentUsagePeriodInput(period.StartDate, period.EndDate, period.PeriodType, period.IsChargeable))) : new EquipmentUsageCalculation(0, 0, 0, 0, 0, 0);
         return new EquipmentUsageDto(item.Id, item.EquipmentId, item.ProjectId, item.LegalEntityId, item.EntryDate, item.ExitDate, calculation.TotalDays, calculation.WorkDays, calculation.StopDays, calculation.UnclassifiedDays, item.ConcurrencyStamp);
     }
     private void AddAudit(EquipmentActor actor, string action, string type, Guid id, string reason, string? before, string? after) => db.AuditLogs.Add(new AuditLog { UserId = actor.UserId, Action = action, EntityType = type, EntityId = id.ToString(), Reason = reason, BeforeJson = before, AfterJson = after });
-    private static object Snapshot(Data.Equipment item) => new { item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.InternalDailyRate, item.Notes };
+    private static object Snapshot(Data.Equipment item) => new { item.EquipmentNumber, item.Name, item.Model, item.Category, item.OwnershipType, item.Status, item.ManagingLegalEntityId, item.OwnerLegalEntityId, item.LessorBusinessPartnerId, item.PurchaseDate, item.PurchaseAmount, item.InternalDailyRate, item.QualificationCertificateNumber, item.QualificationIssuedOn, item.QualificationExpiresOn, item.QualificationAttachmentId, item.IsActive, item.Notes };
     private static object UsageSnapshot(EquipmentProjectUsage item) => new { item.EquipmentId, item.ProjectId, item.LegalEntityId, item.EntryDate, item.ExitDate, item.RentMode, item.UnitRate, item.SharedUsageOverride, Periods = item.Periods.Select(period => new { period.StartDate, period.EndDate, period.PeriodType, period.IsChargeable }) };
     private static void EnsureManage(EquipmentActor actor) { if (!actor.CanManage) throw new UnauthorizedAccessException("当前用户没有设备管理权限。"); }
+    private IFileStore RequiredFileStore() => fileStore ?? throw new InvalidOperationException("设备附件存储服务未配置。");
     private static EquipmentStatus? ParseStatus(string term) => term switch
     {
         "闲置" => EquipmentStatus.Idle,

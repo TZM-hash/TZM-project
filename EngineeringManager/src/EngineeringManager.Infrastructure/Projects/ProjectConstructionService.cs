@@ -24,7 +24,12 @@ public sealed class ProjectConstructionService(
             .OrderByDescending(item => item.EntryDate).ThenByDescending(item => item.Id)
             .ToListAsync(token);
         var equipment = await db.Equipment.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.EquipmentNumber)
-            .Select(item => new ProjectConstructionOptionDto(item.Id, item.EquipmentNumber + " · " + item.Name)).ToListAsync(token);
+            .Select(item => new ProjectConstructionOptionDto(
+                item.Id,
+                item.EquipmentNumber + " · " + item.Name + " · "
+                + (item.ManagingLegalEntity == null ? "待分配公司" : item.ManagingLegalEntity.ShortName) + " · "
+                + (item.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.SelfOwned ? "自有" : "租赁")))
+            .ToListAsync(token);
         var crews = await db.BusinessPartnerRoles.AsNoTracking().Where(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew && item.Partner.IsActive)
             .OrderBy(item => item.Partner.PartnerNumber).Select(item => new ProjectConstructionOptionDto(item.Partner.Id, item.Partner.PartnerNumber + " · " + item.Partner.ShortName)).ToListAsync(token);
         var projects = await db.Projects.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.ProjectNumber)
@@ -250,12 +255,15 @@ public sealed class ProjectConstructionService(
         return ToDto(saved, today);
     }
 
-    public async Task<ProjectConstructionOptionDto> CreateEquipmentAsync(ProjectConstructionActor actor, CreateProjectEquipmentRequest request, CancellationToken token)
+    public async Task<ProjectConstructionOptionDto> CreateEquipmentAsync(EquipmentActor actor, CreateProjectEquipmentRequest request, CancellationToken token)
     {
-        var saved = await equipmentService.SaveEquipmentAsync(EquipmentActor.Administrator(actor.UserId), new SaveEquipmentRequest(
+        var saved = await equipmentService.SaveEquipmentAsync(actor, new SaveEquipmentRequest(
             null, request.EquipmentNumber, request.Name, request.Model, request.Category, request.OwnershipType,
-            request.OwnerLegalEntityId, request.LessorBusinessPartnerId, request.InternalDailyRate, null, request.Reason), token);
-        return new ProjectConstructionOptionDto(saved.Id, saved.EquipmentNumber + " · " + saved.Name);
+            request.OwnerLegalEntityId, request.LessorBusinessPartnerId, request.InternalDailyRate, null, request.Reason,
+            ManagingLegalEntityId: request.ManagingLegalEntityId), token);
+        var companyName = saved.ManagingLegalEntityName ?? "待分配公司";
+        var ownershipName = saved.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.SelfOwned ? "自有" : "租赁";
+        return new ProjectConstructionOptionDto(saved.Id, $"{saved.EquipmentNumber} · {saved.Name} · {companyName} · {ownershipName}");
     }
 
     public async Task<ProjectConstructionOptionDto> CreateCrewAsync(ProjectConstructionActor actor, CreateProjectCrewRequest request, CancellationToken token)

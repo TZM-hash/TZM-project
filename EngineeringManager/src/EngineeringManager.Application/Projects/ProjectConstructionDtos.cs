@@ -35,7 +35,7 @@ public sealed record UnlinkProjectConstructionRecordRequest(
 public sealed record CreateProjectEquipmentRequest(
     string EquipmentNumber, string Name, string? Model, string? Category,
     EquipmentOwnershipType OwnershipType, Guid? OwnerLegalEntityId, Guid? LessorBusinessPartnerId,
-    decimal? InternalDailyRate, string Reason);
+    decimal? InternalDailyRate, string Reason, Guid? ManagingLegalEntityId = null);
 
 public sealed record CreateProjectCrewRequest(
     string PartnerNumber, string Name, string? ContactName, string? ContactPhone, string Reason);
