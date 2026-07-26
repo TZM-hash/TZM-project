@@ -616,6 +616,11 @@ else
                     else { <ul class="project-related-party-list">@{ var generalContractorIndex = 0; }@foreach (var relatedParty in generalContractorParties) { generalContractorIndex++; <li><span class="project-related-party-index">@generalContractorIndex</span><strong>@relatedParty.Name</strong></li> }</ul> }
                 </article>
                 <article class="panel compact-detail-panel project-related-card">
+                    <div class="panel-heading"><h2>施工机械</h2><span>@overviewEquipment.Count</span></div>
+                    @if (overviewEquipment.Count == 0) { <p class="panel-copy">暂无施工机械。</p> }
+                    else { <div class="project-equipment-list project-related-equipment-list">@foreach (var equipment in overviewEquipment) { <a asp-page="Details" asp-route-id="@item.Overview.Id" asp-route-tab="construction" asp-route-recordId="@equipment.ConstructionRecordId"><strong>@equipment.EquipmentNumber · @equipment.EquipmentName</strong><span>@(equipment.EntryDate?.ToString("yyyy-MM-dd") ?? "未进场") 至 @(equipment.ExitDate?.ToString("yyyy-MM-dd") ?? "仍在场")</span></a> }</div> }
+                </article>
+                <article class="panel compact-detail-panel project-related-card">
                     <div class="panel-heading"><h2>施工班组</h2><span>@constructionCrewParties.Length</span></div>
                     @if (constructionCrewParties.Length == 0) { <p class="panel-copy">暂无施工班组。</p> }
                     else { <ul class="project-related-party-list">@{ var constructionCrewIndex = 0; }@foreach (var relatedParty in constructionCrewParties) { constructionCrewIndex++; <li><span class="project-related-party-index">@constructionCrewIndex</span><strong>@relatedParty.Name</strong></li> }</ul> }

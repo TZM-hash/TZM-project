@@ -247,13 +247,15 @@
 .project-equipment-list a { display: grid; min-width: 0; gap: .15rem; padding: .5rem .6rem; border: 1px solid var(--app-border); border-radius: 6px; color: var(--app-text); background: var(--app-surface); text-decoration: none; }
 .project-equipment-list a:hover { border-color: var(--app-primary); }
 .project-equipment-list span { color: var(--app-muted); font-size: .7rem; }
-.project-related-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; margin-top: .4rem; align-items: stretch; }
+.project-related-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; margin-top: .4rem; align-items: stretch; }
 .project-related-card { min-height: 5.4rem; }
 .project-related-card.compact-detail-panel { padding: .4rem .5rem; }
 .project-related-card .panel-heading { margin-bottom: .12rem; }
 .project-related-card .panel-heading h2 { font-size: .82rem; line-height: 1.25; }
 .project-related-card .panel-heading span { font-size: .68rem; }
 .project-related-card .panel-copy { margin: 0; font-size: .7rem; line-height: 1.25; }
+.project-related-equipment-list { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
+.project-related-equipment-list a { padding: .28rem .36rem; }
 .project-related-party-list { display: grid; gap: .16rem; margin: 0; padding: 0; list-style: none; }
 .project-related-party-list li { display: flex; align-items: center; gap: .35rem; padding: .08rem 0; font-size: .74rem; line-height: 1.25; color: var(--app-text); }
 .project-related-party-index { display: inline-grid; place-items: center; min-width: 1.05rem; height: 1.05rem; padding: 0 .2rem; border-radius: 999px; background: #e8eef8; color: #3b5bdb; font-size: .62rem; font-weight: 700; line-height: 1; flex: 0 0 auto; }
@@ -743,7 +745,7 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .company-mini-progress .progress-track { height: .42rem; }
 .company-mini-progress small { color: var(--app-muted); font-size: .68rem; white-space: nowrap; }
 .company-dashboard-grid { grid-template-columns: minmax(19rem, .78fr) minmax(0, 1.22fr); margin-top: 0; }
-.company-portfolio-grid { grid-template-columns: minmax(18rem, .4fr) minmax(0, 1.6fr); align-items: stretch; }
+.company-portfolio-grid { grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr); align-items: stretch; }
 .company-dashboard-stack { display: grid; min-width: 0; grid-template-rows: auto auto; align-content: start; gap: .75rem; }
 .company-dashboard-stack--single { align-self: start; grid-template-rows: auto; }
 .company-dashboard-stack > .company-panel { min-height: 0; padding: 1rem; overflow: hidden; }
@@ -913,6 +915,10 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .status-badge--warn { color: #9a5d08; border-color: rgba(214, 139, 23, .24); background: rgba(246, 185, 79, .15); }
 .status-badge--danger { color: #a92e3d; border-color: rgba(217, 75, 91, .23); background: rgba(251, 113, 133, .12); }
 .text-danger { color: #b91c1c; font-weight: 650; }
+
+@media (max-width: 1380px) {
+  .company-portfolio-grid { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 1180px) {
   .company-workspace-heading { align-items: flex-start; flex-direction: column; }

@@ -89,7 +89,24 @@ public sealed class CompanyPageTests
             .And.Contain("CategoryRows[0].SortOrder")
             .And.Contain("CategoryRows[0].IsActive")
             .And.Contain("DeleteCategory")
-            .And.Contain(">删除行</button>");
+            .And.Contain(">删除</button>")
+            .And.NotContain(">删除行</button>");
+    }
+
+    [Fact]
+    public void CompanyPortfolioGivesCategoryEditorOneQuarterOfDesktopWidth()
+    {
+        var css = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "EngineeringManager.Web",
+            "wwwroot",
+            "css",
+            "pages.css"));
+
+        css.Should().Contain(".company-portfolio-grid { grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr);");
+        css.Should().Contain("@media (max-width: 1380px)")
+            .And.Contain(".company-portfolio-grid { grid-template-columns: 1fr; }");
     }
 
     [Fact]

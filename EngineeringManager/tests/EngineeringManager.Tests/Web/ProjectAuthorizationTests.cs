@@ -310,8 +310,15 @@ public sealed class ProjectAuthorizationTests
         html.Should().NotContain("项目里程碑");
         html.Should().NotContain("节点备注");
         html.Should().Contain("<h2>总包单位</h2>");
+        html.Should().Contain("<h2>施工机械</h2>");
         html.Should().Contain("<h2>施工班组</h2>");
         html.Should().Contain("<h2>合作单位</h2>");
+        html.Should().Contain("EQ-WEB-001 · 测试施工机械")
+            .And.Contain("2026-07-01 至 仍在场");
+        html.IndexOf("<h2>施工机械</h2>", StringComparison.Ordinal)
+            .Should().BeGreaterThan(html.IndexOf("<h2>总包单位</h2>", StringComparison.Ordinal));
+        html.IndexOf("<h2>施工机械</h2>", StringComparison.Ordinal)
+            .Should().BeLessThan(html.IndexOf("<h2>施工班组</h2>", StringComparison.Ordinal));
         html.Should().NotContain("<h2>项目人员</h2>");
         html.Should().Contain("合作单位").And.Contain("施工班组");
         html.Should().NotContain("合作备注");
@@ -385,7 +392,8 @@ public sealed class ProjectAuthorizationTests
             .And.Contain("<h2>施工班组</h2>").And.Contain("<h2>合作单位</h2>")
             .And.Contain("relatedParty.Roles");
         styles.Should().Contain(".project-legal-entity-list li")
-            .And.Contain(".project-legal-entity-selector .column-manager-menu");
+            .And.Contain(".project-legal-entity-selector .column-manager-menu")
+            .And.Contain(".project-related-overview { grid-template-columns: repeat(4, minmax(0, 1fr));");
         selectorScript.Should().Contain("data-check-selector-clear");
         quickEditScript.Should().Contain("querySelectorAll(\"[data-check-selector][open]\")")
             .And.Contain("querySelector(\"[data-check-selector-option]\")")
@@ -760,7 +768,8 @@ public sealed class ProjectAuthorizationTests
                 [new ProjectActivityItemDto(new DateTimeOffset(2026, 7, 17, 8, 30, 0, TimeSpan.Zero), "修改记录", "编辑项目资料", "页面测试记录", "项目管理员", "normal")],
                 [new ProjectMilestoneDto(Guid.NewGuid(), "阶段验收", new DateOnly(2026, 8, 1), null, false, 10, "节点备注")],
                 [new ProjectAssignmentDto(Guid.NewGuid(), "member", "项目成员", ProjectAssignmentType.SiteStaff, true, "人员备注")],
-                [new ProjectPartnerLinkDto(Guid.NewGuid(), Guid.NewGuid(), "施工班组", BusinessPartnerRoleType.ConstructionCrew, null, null, true, true, "合作备注")]));
+                [new ProjectPartnerLinkDto(Guid.NewGuid(), Guid.NewGuid(), "施工班组", BusinessPartnerRoleType.ConstructionCrew, null, null, true, true, "合作备注")],
+                [new ProjectOverviewEquipmentDto(Guid.NewGuid(), Guid.NewGuid(), "EQ-WEB-001", "测试施工机械", new DateOnly(2026, 7, 1), null)]));
 
         public Task<ProjectEditOptionsDto> GetEditOptionsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new ProjectEditOptionsDto([], [], [], []));
