@@ -105,6 +105,7 @@ public sealed class EquipmentService(ApplicationDbContext db, IFileStore? fileSt
         CertificateServiceSupport.MarkAttachmentDeleted(qualificationAttachmentToRemove);
         entity.Notes = Optional(request.Notes);
         entity.IsActive = request.IsActive;
+        entity.Status = request.Status;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.ConcurrencyStamp = Guid.NewGuid();
         AddAudit(actor, request.Id.HasValue ? "Update" : "Create", nameof(Data.Equipment), entity.Id, reason, before, JsonSerializer.Serialize(Snapshot(entity)));
@@ -121,6 +122,43 @@ public sealed class EquipmentService(ApplicationDbContext db, IFileStore? fileSt
         if (qualificationAttachmentToRemove is not null)
             await CertificateServiceSupport.DeleteStoredFileAsync(qualificationAttachmentToRemove, RequiredFileStore(), token);
         return await GetEquipmentAsync(actor, entity.Id, token);
+    }
+
+    public async Task DeleteEquipmentAsync(
+        EquipmentActor actor,
+        Guid id,
+        Guid concurrencyStamp,
+        string confirmationNumber,
+        string reason,
+        CancellationToken token)
+    {
+        EnsureManage(actor);
+        var deletionReason = Required(reason, "删除原因");
+        var entity = await EquipmentDetailsQuery(actor).SingleOrDefaultAsync(item => item.Id == id, token)
+            ?? throw new KeyNotFoundException("设备不存在或无权访问。");
+        if (entity.ConcurrencyStamp != concurrencyStamp)
+            throw new DbUpdateConcurrencyException("设备档案已被其他用户修改。");
+        if (!string.Equals(entity.EquipmentNumber, confirmationNumber?.Trim(), StringComparison.Ordinal))
+            throw new InvalidOperationException("请输入完整且一致的设备编号后再确认删除。");
+
+        var hasBusinessRecords = await db.EquipmentLeaseAgreements.AnyAsync(item => item.EquipmentId == id, token)
+            || await db.EquipmentProjectUsages.AnyAsync(item => item.EquipmentId == id, token)
+            || await db.EquipmentOwnershipHistories.AnyAsync(item => item.EquipmentId == id, token)
+            || await db.EquipmentMaintenanceRecords.AnyAsync(item => item.EquipmentId == id, token)
+            || await db.ProjectConstructionRecords.AnyAsync(item => item.EquipmentId == id, token);
+        if (hasBusinessRecords)
+            throw new InvalidOperationException("该设备已有业务记录，不能物理删除；请改为停用设备。");
+
+        var attachment = entity.QualificationAttachment;
+        var before = JsonSerializer.Serialize(Snapshot(entity));
+        entity.QualificationAttachmentId = null;
+        entity.QualificationAttachment = null;
+        CertificateServiceSupport.MarkAttachmentDeleted(attachment);
+        AddAudit(actor, "Delete", nameof(Data.Equipment), entity.Id, deletionReason, before, null);
+        db.Equipment.Remove(entity);
+        await db.SaveChangesAsync(token);
+        if (attachment is not null)
+            await CertificateServiceSupport.DeleteStoredFileAsync(attachment, RequiredFileStore(), token);
     }
 
     public async Task<EquipmentDetailsDto> CopyEquipmentAsync(EquipmentActor actor, Guid sourceId, CancellationToken token)
@@ -164,6 +202,10 @@ public sealed class EquipmentService(ApplicationDbContext db, IFileStore? fileSt
         {
             usage = await db.EquipmentProjectUsages.Include(item => item.Periods).SingleOrDefaultAsync(item => item.Id == request.Id, token)
                 ?? throw new KeyNotFoundException("设备使用记录不存在。");
+            if (usage.EquipmentId != request.EquipmentId)
+                throw new InvalidOperationException("已有使用记录不能变更设备。");
+            if (!actor.CanAccessAll && !actor.AccessibleProjectIds.Contains(usage.ProjectId))
+                throw new UnauthorizedAccessException("无权操作原使用记录所属项目。");
             if (!request.ConcurrencyStamp.HasValue || request.ConcurrencyStamp != usage.ConcurrencyStamp)
                 throw new DbUpdateConcurrencyException("设备使用记录已被其他用户修改。");
             before = JsonSerializer.Serialize(UsageSnapshot(usage));
@@ -187,13 +229,65 @@ public sealed class EquipmentService(ApplicationDbContext db, IFileStore? fileSt
         usage.SharedUsageReason = Optional(request.SharedUsageReason);
         usage.Notes = null;
         usage.ConcurrencyStamp = Guid.NewGuid();
-        usage.Periods = request.Periods.Select(item => new EquipmentWorkPeriod { Usage = usage, StartDate = item.StartDate, EndDate = item.EndDate, PeriodType = item.PeriodType, IsChargeable = item.IsChargeable, Notes = Optional(item.Notes) }).ToList();
-        equipment.Status = request.ExitDate.HasValue ? EquipmentStatus.Idle : EquipmentStatus.InUse;
+        var replacementPeriods = request.Periods.Select(item => new EquipmentWorkPeriod { Usage = usage, StartDate = item.StartDate, EndDate = item.EndDate, PeriodType = item.PeriodType, IsChargeable = item.IsChargeable, Notes = Optional(item.Notes) }).ToList();
+        usage.Periods = replacementPeriods;
+        if (request.Id.HasValue) db.EquipmentWorkPeriods.AddRange(replacementPeriods);
+        var hasOtherOpenUsage = request.ExitDate.HasValue && await db.EquipmentProjectUsages.AsNoTracking()
+            .AnyAsync(item => item.EquipmentId == request.EquipmentId && item.Id != usage.Id && item.ExitDate == null, token);
+        equipment.Status = !request.ExitDate.HasValue || hasOtherOpenUsage ? EquipmentStatus.InUse : EquipmentStatus.Idle;
         equipment.UpdatedAt = DateTimeOffset.UtcNow;
         equipment.ConcurrencyStamp = Guid.NewGuid();
         AddAudit(actor, request.Id.HasValue ? "Update" : "Create", nameof(EquipmentProjectUsage), usage.Id, reason, before, JsonSerializer.Serialize(UsageSnapshot(usage)));
         await db.SaveChangesAsync(token);
         return ToUsageDto(usage);
+    }
+
+    public async Task<IReadOnlyList<EquipmentUsageHistoryDto>> ListUsagesAsync(
+        EquipmentActor actor,
+        EquipmentUsageFilter filter,
+        CancellationToken token)
+    {
+        if (filter.EndDate < filter.StartDate)
+            throw new ArgumentException("查询结束日期不能早于开始日期。", nameof(filter));
+
+        var authorizedEquipmentIds = AuthorizedEquipment(actor).Select(item => item.Id);
+        var query = db.EquipmentProjectUsages.AsNoTracking()
+            .Where(item => authorizedEquipmentIds.Contains(item.EquipmentId))
+            .Where(item => item.EntryDate <= filter.EndDate && (item.ExitDate == null || item.ExitDate >= filter.StartDate));
+        if (!actor.CanAccessAll)
+            query = query.Where(item => actor.AccessibleProjectIds.Contains(item.ProjectId));
+        if (filter.EquipmentId.HasValue)
+            query = query.Where(item => item.EquipmentId == filter.EquipmentId.Value);
+
+        var items = await query
+            .Include(item => item.Equipment)
+            .Include(item => item.Project)
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Periods)
+            .OrderByDescending(item => item.EntryDate)
+            .ThenByDescending(item => item.Id)
+            .ToListAsync(token);
+
+        return items.Select(item => new EquipmentUsageHistoryDto(
+            item.Id,
+            item.EquipmentId,
+            item.Equipment.EquipmentNumber,
+            item.Equipment.Name,
+            item.ProjectId,
+            item.Project.ProjectNumber,
+            item.Project.Name,
+            item.LegalEntityId,
+            item.LegalEntity.Name,
+            item.EntryDate,
+            item.ExitDate,
+            item.RentMode,
+            item.UnitRate,
+            item.ConcurrencyStamp,
+            item.Periods
+                .OrderBy(period => period.StartDate)
+                .Select(period => new EquipmentPeriodRequest(period.StartDate, period.EndDate, period.PeriodType, period.IsChargeable, period.Notes))
+                .ToArray()))
+            .ToArray();
     }
 
     public async Task<EquipmentDashboardDto> GetDashboardAsync(EquipmentActor actor, EquipmentFilter filter, CancellationToken token)
@@ -366,6 +460,7 @@ public sealed class EquipmentService(ApplicationDbContext db, IFileStore? fileSt
     {
         "自有" or "自有设备" => EquipmentOwnershipType.SelfOwned,
         "租赁" or "租赁设备" => EquipmentOwnershipType.Rented,
+        "其他" or "其他设备" => EquipmentOwnershipType.Other,
         _ => Enum.TryParse<EquipmentOwnershipType>(term, true, out var value) ? value : null
     };
     private static string Required(string? value, string name) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException($"{name}不能为空。") : value.Trim();

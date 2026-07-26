@@ -273,6 +273,143 @@ public sealed class EquipmentServiceTests
     }
 
     [Fact]
+    public async Task OtherEquipmentCanBeSavedWithoutOwnerOrLessor()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "EQ-OTHER", Name = "其他设备公司", ShortName = "其他设备" };
+        scope.Db.LegalEntities.Add(company);
+        await scope.Db.SaveChangesAsync();
+
+        var saved = await scope.Service.SaveEquipmentAsync(
+            EquipmentActor.Administrator("admin"),
+            new SaveEquipmentRequest(
+                null,
+                "EQ-OTHER-001",
+                "其他来源设备",
+                null,
+                null,
+                EquipmentOwnershipType.Other,
+                null,
+                null,
+                null,
+                null,
+                "新增其他设备",
+                ManagingLegalEntityId: company.Id),
+            default);
+
+        saved.OwnershipType.Should().Be(EquipmentOwnershipType.Other);
+        saved.OwnerLegalEntityId.Should().BeNull();
+        saved.LessorBusinessPartnerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UsageHistoryReturnsOnlyRecordsOverlappingSelectedBusinessYear()
+    {
+        await using var scope = await CreateScopeAsync();
+        var actor = EquipmentActor.Administrator("admin");
+        var company = new LegalEntity { Code = "EQ-YEAR", Name = "业务年公司", ShortName = "业务年" };
+        var project = new Project { ProjectNumber = "EQ-YEAR-P", Name = "业务年项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        scope.Db.AddRange(company, project);
+        await scope.Db.SaveChangesAsync();
+        var equipment = await scope.Service.SaveEquipmentAsync(
+            actor,
+            new SaveEquipmentRequest(null, "EQ-YEAR-001", "业务年设备", null, null, EquipmentOwnershipType.Other, null, null, 680m, null, "新增", ManagingLegalEntityId: company.Id),
+            default);
+        var included = await scope.Service.SaveUsageAsync(
+            actor,
+            new SaveEquipmentUsageRequest(null, equipment.Id, project.Id, company.Id, null, new DateOnly(2025, 12, 20), new DateOnly(2026, 1, 10), RentMode.Daily, MonthlyProrationMode.ThirtyDay, 680m, false, null, [new EquipmentPeriodRequest(new DateOnly(2025, 12, 20), new DateOnly(2026, 1, 10), EquipmentPeriodType.Work, true, "跨年施工")], null, "跨年进退场"),
+            default);
+        await scope.Service.SaveUsageAsync(
+            actor,
+            new SaveEquipmentUsageRequest(null, equipment.Id, project.Id, company.Id, null, new DateOnly(2024, 1, 1), new DateOnly(2024, 1, 5), RentMode.Daily, MonthlyProrationMode.ThirtyDay, 500m, false, null, [new EquipmentPeriodRequest(new DateOnly(2024, 1, 1), new DateOnly(2024, 1, 5), EquipmentPeriodType.Work, true, null)], null, "往年进退场"),
+            default);
+
+        var history = await scope.Service.ListUsagesAsync(
+            actor,
+            new EquipmentUsageFilter(equipment.Id, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+            default);
+
+        history.Should().ContainSingle();
+        history[0].Id.Should().Be(included.Id);
+        history[0].EquipmentName.Should().Be("业务年设备");
+        history[0].ProjectName.Should().Be("业务年项目");
+        history[0].LegalEntityName.Should().Be("业务年公司");
+        history[0].Periods.Should().ContainSingle(period => period.Notes == "跨年施工");
+    }
+
+    [Fact]
+    public async Task EditingClosedHistoryKeepsEquipmentInUseWhenAnotherUsageIsOpen()
+    {
+        await using var scope = await CreateScopeAsync();
+        var actor = EquipmentActor.Administrator("admin");
+        var company = new LegalEntity { Code = "EQ-STATUS", Name = "设备状态公司", ShortName = "设备状态" };
+        var project = new Project { ProjectNumber = "EQ-STATUS-P", Name = "设备状态项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        scope.Db.AddRange(company, project);
+        await scope.Db.SaveChangesAsync();
+        var equipment = await scope.Service.SaveEquipmentAsync(
+            actor,
+            new SaveEquipmentRequest(null, "EQ-STATUS-001", "状态设备", null, null, EquipmentOwnershipType.Other, null, null, 300m, null, "新增", ManagingLegalEntityId: company.Id),
+            default);
+        var closed = await scope.Service.SaveUsageAsync(
+            actor,
+            new SaveEquipmentUsageRequest(null, equipment.Id, project.Id, company.Id, null, new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 5), RentMode.Daily, MonthlyProrationMode.ThirtyDay, 300m, false, null, [new EquipmentPeriodRequest(new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 5), EquipmentPeriodType.Work, true, null)], null, "历史记录"),
+            default);
+        await scope.Service.SaveUsageAsync(
+            actor,
+            new SaveEquipmentUsageRequest(null, equipment.Id, project.Id, company.Id, null, new DateOnly(2026, 1, 1), null, RentMode.Daily, MonthlyProrationMode.ThirtyDay, 300m, false, null, [], null, "当前在场"),
+            default);
+        scope.Db.ChangeTracker.Clear();
+
+        await scope.Service.SaveUsageAsync(
+            actor,
+            new SaveEquipmentUsageRequest(closed.Id, equipment.Id, project.Id, company.Id, null, new DateOnly(2025, 1, 2), new DateOnly(2025, 1, 5), RentMode.Daily, MonthlyProrationMode.ThirtyDay, 320m, false, null, [new EquipmentPeriodRequest(new DateOnly(2025, 1, 2), new DateOnly(2025, 1, 5), EquipmentPeriodType.Work, true, null)], closed.ConcurrencyStamp, "编辑历史记录"),
+            default);
+
+        (await scope.Db.Equipment.SingleAsync(item => item.Id == equipment.Id)).Status.Should().Be(EquipmentStatus.InUse);
+    }
+
+    [Fact]
+    public async Task ExistingUsageCannotBeMovedToAnotherEquipment()
+    {
+        await using var scope = await CreateScopeAsync();
+        var actor = EquipmentActor.Administrator("admin");
+        var company = new LegalEntity { Code = "EQ-MOVE", Name = "设备迁移公司", ShortName = "设备迁移" };
+        var project = new Project { ProjectNumber = "EQ-MOVE-P", Name = "设备迁移项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        scope.Db.AddRange(company, project);
+        await scope.Db.SaveChangesAsync();
+        var source = await scope.Service.SaveEquipmentAsync(actor, new SaveEquipmentRequest(null, "EQ-MOVE-1", "原设备", null, null, EquipmentOwnershipType.Other, null, null, 300m, null, "新增", ManagingLegalEntityId: company.Id), default);
+        var target = await scope.Service.SaveEquipmentAsync(actor, new SaveEquipmentRequest(null, "EQ-MOVE-2", "目标设备", null, null, EquipmentOwnershipType.Other, null, null, 300m, null, "新增", ManagingLegalEntityId: company.Id), default);
+        var usage = await scope.Service.SaveUsageAsync(actor, new SaveEquipmentUsageRequest(null, source.Id, project.Id, company.Id, null, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 3), RentMode.Daily, MonthlyProrationMode.ThirtyDay, 300m, false, null, [new EquipmentPeriodRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 3), EquipmentPeriodType.Work, true, null)], null, "新增使用"), default);
+
+        var move = () => scope.Service.SaveUsageAsync(actor, new SaveEquipmentUsageRequest(usage.Id, target.Id, project.Id, company.Id, null, usage.EntryDate, usage.ExitDate, RentMode.Daily, MonthlyProrationMode.ThirtyDay, 300m, false, null, [new EquipmentPeriodRequest(usage.EntryDate, usage.ExitDate!.Value, EquipmentPeriodType.Work, true, null)], usage.ConcurrencyStamp, "尝试迁移"), default);
+
+        await move.Should().ThrowAsync<InvalidOperationException>().WithMessage("*不能变更设备*");
+        (await scope.Db.EquipmentProjectUsages.AsNoTracking().SingleAsync(item => item.Id == usage.Id)).EquipmentId.Should().Be(source.Id);
+    }
+
+    [Fact]
+    public async Task UsageHistoryExcludesProjectsOutsideTheActorScope()
+    {
+        await using var scope = await CreateScopeAsync();
+        var administrator = EquipmentActor.Administrator("admin");
+        var company = new LegalEntity { Code = "EQ-SCOPE", Name = "设备范围公司", ShortName = "设备范围" };
+        var project = new Project { ProjectNumber = "EQ-SCOPE-P", Name = "无权项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        scope.Db.AddRange(company, project);
+        await scope.Db.SaveChangesAsync();
+        var equipment = await scope.Service.SaveEquipmentAsync(administrator, new SaveEquipmentRequest(null, "EQ-SCOPE-1", "范围设备", null, null, EquipmentOwnershipType.Other, null, null, 200m, null, "新增", ManagingLegalEntityId: company.Id), default);
+        await scope.Service.SaveUsageAsync(administrator, new SaveEquipmentUsageRequest(null, equipment.Id, project.Id, company.Id, null, new DateOnly(2026, 5, 1), null, RentMode.Daily, MonthlyProrationMode.ThirtyDay, 200m, false, null, [], null, "进场"), default);
+        var scopedActor = new EquipmentActor("scoped", true, false, false, false, [company.Id], []);
+
+        var history = await scope.Service.ListUsagesAsync(scopedActor, new EquipmentUsageFilter(equipment.Id, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)), default);
+
+        history.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task InactiveCompaniesCannotOwnOrManageNewEquipment()
     {
         await using var scope = await CreateScopeAsync();
@@ -349,6 +486,113 @@ public sealed class EquipmentServiceTests
         managed.Items.Should().ContainSingle(item => item.EquipmentNumber == "EQ-SCOPED");
         owned.Items.Should().BeEmpty();
         unassigned.Items.Should().ContainSingle(item => item.EquipmentNumber == "EQ-UNASSIGNED");
+    }
+
+    [Fact]
+    public async Task EquipmentStatusCanBeChangedFromTheEditor()
+    {
+        await using var scope = await CreateScopeAsync();
+        var actor = EquipmentActor.Administrator("admin");
+        var company = new LegalEntity { Code = "EQ-EDIT-STATUS", Name = "状态编辑公司", ShortName = "状态编辑" };
+        scope.Db.LegalEntities.Add(company);
+        await scope.Db.SaveChangesAsync();
+        var equipment = await scope.Service.SaveEquipmentAsync(
+            actor,
+            new SaveEquipmentRequest(null, "EQ-EDIT-STATUS-001", "状态设备", null, null, EquipmentOwnershipType.Other, null, null, null, null, "新增", ManagingLegalEntityId: company.Id),
+            default);
+
+        var updated = await scope.Service.SaveEquipmentAsync(
+            actor,
+            new SaveEquipmentRequest(equipment.Id, equipment.EquipmentNumber, equipment.Name, equipment.Model, equipment.Category, equipment.OwnershipType, equipment.OwnerLegalEntityId, equipment.LessorBusinessPartnerId, equipment.InternalDailyRate, equipment.ConcurrencyStamp, "调整设备状态", ManagingLegalEntityId: company.Id, Status: EquipmentStatus.Maintenance),
+            default);
+
+        updated.Status.Should().Be(EquipmentStatus.Maintenance);
+    }
+
+    [Fact]
+    public async Task EquipmentWithoutBusinessRecordsCanBePhysicallyDeleted()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "EQ-DELETE", Name = "设备删除公司", ShortName = "删除公司" };
+        var equipment = new Equipment
+        {
+            EquipmentNumber = "EQ-DELETE-001",
+            Name = "待删除设备",
+            ManagingLegalEntity = company,
+            OwnershipType = EquipmentOwnershipType.Other
+        };
+        scope.Db.Add(equipment);
+        await scope.Db.SaveChangesAsync();
+
+        await scope.Service.DeleteEquipmentAsync(
+            EquipmentActor.Administrator("admin"),
+            equipment.Id,
+            equipment.ConcurrencyStamp,
+            equipment.EquipmentNumber,
+            "删除无业务设备",
+            default);
+
+        (await scope.Db.Equipment.AnyAsync(item => item.Id == equipment.Id)).Should().BeFalse();
+        (await scope.Db.AuditLogs.AnyAsync(item => item.EntityType == nameof(Equipment) && item.Action == "Delete")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task EquipmentDeletionRequiresTheExactEquipmentNumber()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "EQ-CONFIRM", Name = "删除确认公司", ShortName = "确认公司" };
+        var equipment = new Equipment
+        {
+            EquipmentNumber = "EQ-CONFIRM-001",
+            Name = "确认设备",
+            ManagingLegalEntity = company,
+            OwnershipType = EquipmentOwnershipType.Other
+        };
+        scope.Db.Add(equipment);
+        await scope.Db.SaveChangesAsync();
+
+        var delete = () => scope.Service.DeleteEquipmentAsync(
+            EquipmentActor.Administrator("admin"),
+            equipment.Id,
+            equipment.ConcurrencyStamp,
+            "WRONG-NUMBER",
+            "测试二次确认",
+            default);
+
+        await delete.Should().ThrowAsync<InvalidOperationException>().WithMessage("*设备编号*");
+        (await scope.Db.Equipment.AnyAsync(item => item.Id == equipment.Id)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task EquipmentWithBusinessRecordsCannotBePhysicallyDeleted()
+    {
+        await using var scope = await CreateScopeAsync();
+        var company = new LegalEntity { Code = "EQ-PROTECTED", Name = "删除保护公司", ShortName = "保护公司" };
+        var equipment = new Equipment
+        {
+            EquipmentNumber = "EQ-PROTECTED-001",
+            Name = "有关联设备",
+            ManagingLegalEntity = company,
+            OwnershipType = EquipmentOwnershipType.Other
+        };
+        scope.Db.AddRange(equipment, new EquipmentMaintenanceRecord
+        {
+            Equipment = equipment,
+            MaintenanceDate = new DateOnly(2026, 7, 1),
+            MaintenanceType = "例行维护"
+        });
+        await scope.Db.SaveChangesAsync();
+
+        var delete = () => scope.Service.DeleteEquipmentAsync(
+            EquipmentActor.Administrator("admin"),
+            equipment.Id,
+            equipment.ConcurrencyStamp,
+            equipment.EquipmentNumber,
+            "测试关联保护",
+            default);
+
+        await delete.Should().ThrowAsync<InvalidOperationException>().WithMessage("*业务记录*");
+        (await scope.Db.Equipment.AnyAsync(item => item.Id == equipment.Id)).Should().BeTrue();
     }
 
     private static async Task<TestScope> CreateScopeAsync()

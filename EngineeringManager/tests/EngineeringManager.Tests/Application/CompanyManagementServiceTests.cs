@@ -187,7 +187,7 @@ public sealed class CompanyManagementServiceTests
 
         var company = await scope.Service.SaveCompanyAsync(actor, new SaveCompanyRequest(
             null, "LE-01", "测试工程有限公司", "测试工程", category.Id, "测试法人",
-            "913TEST", "注册地址", "经营地址", "13800000000", "测试工程有限公司", "备注", null, "新增"), default);
+            "913TEST", "注册地址", "经营地址", "13800000000", "测试工程有限公司", "备注", true, null, "新增"), default);
         var copy = await scope.Service.PrepareCopyAsync(actor, company.Id, default);
         var items = await scope.Service.ListAsync(actor, default);
 
@@ -196,6 +196,30 @@ public sealed class CompanyManagementServiceTests
         copy.Code.Should().BeEmpty();
         copy.UnifiedSocialCreditCode.Should().BeNull();
         copy.Name.Should().Be("测试工程有限公司 - 副本");
+        copy.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CompanyStatusCanBeChangedAndCopiedCompanyDefaultsToActive()
+    {
+        await using var scope = await CreateScopeAsync();
+        var category = new CompanyCategory { Code = "STATUS", Name = "状态分类" };
+        scope.Db.CompanyCategories.Add(category);
+        await scope.Db.SaveChangesAsync();
+        var actor = CompanyActor.Administrator("admin");
+        var created = await scope.Service.SaveCompanyAsync(actor, new SaveCompanyRequest(
+            null, "LE-STATUS", "状态公司", "状态", category.Id, null, null, null, null, null, null, null,
+            true, null, "新增"), default);
+
+        var disabled = await scope.Service.SaveCompanyAsync(actor, new SaveCompanyRequest(
+            created.Id, created.Code, created.Name, created.ShortName, created.CompanyCategoryId,
+            created.LegalRepresentative, created.UnifiedSocialCreditCode, created.RegisteredAddress,
+            created.BusinessAddress, created.Phone, created.InvoiceTitle, created.Notes,
+            false, created.ConcurrencyStamp, "停用"), default);
+        var copy = await scope.Service.PrepareCopyAsync(actor, disabled.Id, default);
+
+        disabled.IsActive.Should().BeFalse();
+        copy.IsActive.Should().BeTrue();
     }
 
     [Fact]

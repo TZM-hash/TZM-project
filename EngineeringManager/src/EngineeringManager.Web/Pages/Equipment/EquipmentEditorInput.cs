@@ -18,6 +18,7 @@ public sealed class EquipmentEditorInput
     public string? Model { get; set; }
     public string? Category { get; set; }
     public EquipmentOwnershipType OwnershipType { get; set; } = EquipmentOwnershipType.SelfOwned;
+    public EquipmentStatus Status { get; set; } = EquipmentStatus.Idle;
 
     [Required(ErrorMessage = "请选择管理公司。")]
     public Guid? ManagingLegalEntityId { get; set; }
@@ -61,7 +62,8 @@ public sealed class EquipmentEditorInput
         QualificationExpiresOn,
         upload,
         RemoveQualificationAttachment,
-        IsActive);
+        IsActive,
+        Status);
 
     public static EquipmentEditorInput From(EquipmentDetailsDto item, bool copy = false) => new()
     {
@@ -71,6 +73,7 @@ public sealed class EquipmentEditorInput
         Model = item.Model,
         Category = item.Category,
         OwnershipType = item.OwnershipType,
+        Status = copy ? EquipmentStatus.Idle : item.Status,
         ManagingLegalEntityId = item.ManagingLegalEntityId,
         OwnerLegalEntityId = item.OwnerLegalEntityId,
         LessorBusinessPartnerId = item.LessorBusinessPartnerId,

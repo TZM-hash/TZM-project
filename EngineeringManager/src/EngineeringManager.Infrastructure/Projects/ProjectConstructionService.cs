@@ -28,7 +28,9 @@ public sealed class ProjectConstructionService(
                 item.Id,
                 item.EquipmentNumber + " · " + item.Name + " · "
                 + (item.ManagingLegalEntity == null ? "待分配公司" : item.ManagingLegalEntity.ShortName) + " · "
-                + (item.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.SelfOwned ? "自有" : "租赁")))
+                + (item.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.SelfOwned
+                    ? "自有"
+                    : item.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.Rented ? "租赁" : "其他")))
             .ToListAsync(token);
         var crews = await db.BusinessPartnerRoles.AsNoTracking().Where(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew && item.Partner.IsActive)
             .OrderBy(item => item.Partner.PartnerNumber).Select(item => new ProjectConstructionOptionDto(item.Partner.Id, item.Partner.PartnerNumber + " · " + item.Partner.ShortName)).ToListAsync(token);
@@ -262,7 +264,9 @@ public sealed class ProjectConstructionService(
             request.OwnerLegalEntityId, request.LessorBusinessPartnerId, request.InternalDailyRate, null, request.Reason,
             ManagingLegalEntityId: request.ManagingLegalEntityId), token);
         var companyName = saved.ManagingLegalEntityName ?? "待分配公司";
-        var ownershipName = saved.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.SelfOwned ? "自有" : "租赁";
+        var ownershipName = saved.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.SelfOwned
+            ? "自有"
+            : saved.OwnershipType == EngineeringManager.Domain.Equipment.EquipmentOwnershipType.Rented ? "租赁" : "其他";
         return new ProjectConstructionOptionDto(saved.Id, $"{saved.EquipmentNumber} · {saved.Name} · {companyName} · {ownershipName}");
     }
 

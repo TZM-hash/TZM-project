@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EngineeringManager.Web.Pages.Companies.Certificates;
 
-[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly)]
+[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly + "," + SystemRoles.EquipmentManager)]
 public sealed class IndexModel(ICompanyCertificateService certificateService, ICompanyManagementService companyService, ICompanyActorService actorService) : CompanyPageModel(actorService)
 {
     public IReadOnlyList<CompanyCertificateItemDto> Certificates { get; private set; } = [];

@@ -1,6 +1,6 @@
 namespace EngineeringManager.Domain.Equipment;
 
-public enum EquipmentOwnershipType { SelfOwned = 1, Rented = 2 }
+public enum EquipmentOwnershipType { SelfOwned = 1, Rented = 2, Other = 3 }
 public enum EquipmentStatus { Idle = 1, InUse = 2, Maintenance = 3, Disabled = 4, Scrapped = 5, TransferredOut = 6 }
 public enum EquipmentPeriodType { Work = 1, Stop = 2 }
 public enum RentMode { Daily = 1, Monthly = 2, StagePackage = 3 }

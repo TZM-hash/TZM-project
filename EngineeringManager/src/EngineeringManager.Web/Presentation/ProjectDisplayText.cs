@@ -29,6 +29,7 @@ public static class ProjectDisplayText
     {
         EquipmentOwnershipType.SelfOwned => "自有设备",
         EquipmentOwnershipType.Rented => "租赁设备",
+        EquipmentOwnershipType.Other => "其他",
         _ => value.ToString()
     };
 

@@ -32,7 +32,7 @@
                     @if (field.Kind == DataWorkbenchFilterKind.Select)
                     {
                         <select name="@field.Key" data-inline-filter-key="@field.Key">
-                            <option value="">全部</option>
+                            <option value="">@(field.Key == "CompanyId" ? "全部公司" : "全部")</option>
                             @foreach (var option in field.Options ?? [])
                             {
                                 <option value="@option.Value" selected="@(option.Value == value)">@option.Label</option>

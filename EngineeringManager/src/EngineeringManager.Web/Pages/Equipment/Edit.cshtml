@@ -1,4 +1,5 @@
 @page
+@using EngineeringManager.Web.Presentation
 @model EngineeringManager.Web.Pages.Equipment.EditModel
 @{
     ViewData["Title"] = "设备档案";
@@ -35,7 +36,7 @@
         <section class="form-section">
             <h2 class="section-heading">公司与权属</h2>
             <label>管理公司<select asp-for="Input.ManagingLegalEntityId" required><option value="">请选择自有公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label>
-            <label>权属类型<select asp-for="Input.OwnershipType"><option value="SelfOwned">自有</option><option value="Rented">租赁</option></select></label>
+            <label>权属类型<select asp-for="Input.OwnershipType"><option value="SelfOwned">自有</option><option value="Rented">租赁</option><option value="Other">其他</option></select></label>
             <label data-equipment-self-owned>产权公司<select asp-for="Input.OwnerLegalEntityId"><option value="">请选择产权公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label>
             <label data-equipment-rented>出租方<select asp-for="Input.LessorBusinessPartnerId"><option value="">请选择出租方</option>@foreach (var lessor in Model.Lessors) { <option value="@lessor.Id">@lessor.PartnerNumber · @lessor.ShortName</option> }</select></label>
         </section>
@@ -45,6 +46,7 @@
             <label>购买日期<input asp-for="Input.PurchaseDate" type="date" /></label>
             <label>购买金额<input asp-for="Input.PurchaseAmount" type="number" min="0" step="0.01" /></label>
             <label>内部日参考价<input asp-for="Input.InternalDailyRate" type="number" min="0" step="0.01" /></label>
+            <label>设备状态<select asp-for="Input.Status">@foreach (var status in Enum.GetValues<EngineeringManager.Domain.Equipment.EquipmentStatus>()) { <option value="@status">@status.ToChinese()</option> }</select></label>
             <label class="compact-check"><input asp-for="Input.IsActive" type="checkbox" /> 档案启用</label>
         </section>
 

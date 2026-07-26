@@ -1,6 +1,7 @@
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
+using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.DataExchange;
 using FluentAssertions;
@@ -167,12 +168,15 @@ public sealed class StandardImportTests
         fixture.Db.LegalEntities.Add(new EngineeringManager.Domain.Organization.LegalEntity { Code = "EQ-OWNER", Name = "设备所属公司", ShortName = "设备公司" });
         await fixture.Db.SaveChangesAsync();
         var workbook = new SimpleXlsxWorkbook();
-        workbook.AddWorksheet("设备导入", ["设备编号", "设备名称", "权属", "所属公司编码", "型号"], [["IMP-EQ", "导入挖掘机", "自有", "EQ-OWNER", "X100"]]);
+        workbook.AddWorksheet("设备导入", ["设备编号", "设备名称", "权属", "所属公司编码", "型号"], [["IMP-EQ", "导入挖掘机", "自有", "EQ-OWNER", "X100"], ["IMP-EQ-OTHER", "其他来源设备", "其他", "", "O100"]]);
         var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("user", ExportDataset.Equipment, "设备.xlsx", workbook.ToArray(), null), default);
         await fixture.Service.ConfirmAsync(preview.BatchId, default);
-        var equipment = await fixture.Db.Equipment.SingleAsync();
+        var equipment = await fixture.Db.Equipment.SingleAsync(item => item.EquipmentNumber == "IMP-EQ");
         equipment.EquipmentNumber.Should().Be("IMP-EQ");
         equipment.OwnerLegalEntityId.Should().NotBeNull();
+        var other = await fixture.Db.Equipment.SingleAsync(item => item.EquipmentNumber == "IMP-EQ-OTHER");
+        other.OwnershipType.Should().Be(EquipmentOwnershipType.Other);
+        other.OwnerLegalEntityId.Should().BeNull();
     }
 
     [Fact]

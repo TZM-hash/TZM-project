@@ -309,7 +309,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             if (dataset == ExportDataset.Equipment)
             {
                 var ownership = values.GetValueOrDefault("ownership");
-                if (!TryParseOwnership(ownership, out var ownershipType)) errors.Add(new ImportErrorDto(excelRow, "权属", "权属必须是自有或租赁。", ownership));
+                if (!TryParseOwnership(ownership, out var ownershipType)) errors.Add(new ImportErrorDto(excelRow, "权属", "权属必须是自有、租赁或其他。", ownership));
                 var companyCode = values.GetValueOrDefault("owner_company_code");
                 var lessorNumber = values.GetValueOrDefault("lessor_number");
                 if (ownershipType == EquipmentOwnershipType.SelfOwned && (string.IsNullOrWhiteSpace(companyCode) || !await db.LegalEntities.AnyAsync(item => item.Code == companyCode, cancellationToken))) errors.Add(new ImportErrorDto(excelRow, "所属公司编码", "自有设备必须填写存在的所属公司编码。", companyCode));
@@ -678,7 +678,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         return db.EquipmentProjectUsages.Include(item => item.Equipment).Include(item => item.Project).Single(item => item.Equipment.EquipmentNumber == equipmentNumber && item.Project.ProjectNumber == projectNumber && item.EntryDate == entryDate);
     }
 
-    private static bool TryParseOwnership(string? value, out EquipmentOwnershipType type) { if (value is "自有" or "SelfOwned") { type = EquipmentOwnershipType.SelfOwned; return true; } if (value is "租赁" or "Rented") { type = EquipmentOwnershipType.Rented; return true; } type = default; return false; }
+    private static bool TryParseOwnership(string? value, out EquipmentOwnershipType type) { if (value is "自有" or "SelfOwned") { type = EquipmentOwnershipType.SelfOwned; return true; } if (value is "租赁" or "Rented") { type = EquipmentOwnershipType.Rented; return true; } if (value is "其他" or "Other") { type = EquipmentOwnershipType.Other; return true; } type = default; return false; }
     private static bool TryParseRentMode(string? value, out RentMode mode) { if (value is "日租" or "Daily") { mode = RentMode.Daily; return true; } if (value is "月租" or "Monthly") { mode = RentMode.Monthly; return true; } if (value is "阶段包干" or "StagePackage") { mode = RentMode.StagePackage; return true; } mode = default; return false; }
     private static bool TryParsePeriodType(string? value, out EquipmentPeriodType type) { if (value is "施工" or "Work") { type = EquipmentPeriodType.Work; return true; } if (value is "停工" or "Stop") { type = EquipmentPeriodType.Stop; return true; } type = default; return false; }
     private static decimal? ParseDecimal(string? value) => decimal.TryParse(value, out var number) ? number : null;

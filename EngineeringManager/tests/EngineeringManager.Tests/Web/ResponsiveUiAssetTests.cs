@@ -98,9 +98,15 @@ public sealed class ResponsiveUiAssetTests
     {
         var pageCss = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
 
-        pageCss.Should().Contain(".equipment-workspace-layout { display: grid; grid-template-columns: minmax(230px, .32fr) minmax(0, 1fr);")
-            .And.Contain(".equipment-table-wrap { overflow-x: hidden; }")
+        pageCss.Should().Contain(".equipment-workspace-layout { display: grid; grid-template-columns: minmax(260px, .32fr) minmax(0, 1fr);")
+            .And.Contain(".equipment-table-wrap { overflow-x: auto; }")
             .And.Contain(".equipment-table { width: 100%; table-layout: fixed;")
+            .And.Contain("min-width: 76rem;")
+            .And.Contain("-webkit-line-clamp: 2;")
+            .And.Contain(".equipment-table td > span:not(.pill)")
+            .And.Contain(".equipment-table td[data-column-key=\"status\"] .pill")
+            .And.Contain(".equipment-table th:nth-child(9) { width: 16%; }")
+            .And.Contain(".equipment-row-actions { flex-wrap: nowrap;")
             .And.Contain("@media (max-width: 900px)")
             .And.Contain(".equipment-workspace-layout { grid-template-columns: 1fr; }")
             .And.Contain(".equipment-table-wrap { overflow-x: auto; }");
@@ -119,12 +125,60 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("field(\"OwnershipType\")?.addEventListener(\"change\", syncOwnership)")
             .And.Contain("selfOwned.hidden = ownership !== \"SelfOwned\"")
             .And.Contain("rented.hidden = ownership !== \"Rented\"")
-            .And.Contain("if (ownership === \"SelfOwned\" && lessor) lessor.value = \"\"")
-            .And.Contain("if (ownership === \"Rented\" && owner) owner.value = \"\"")
+            .And.Contain("if (ownership !== \"SelfOwned\" && owner) owner.value = \"\"")
+            .And.Contain("if (ownership !== \"Rented\" && lessor) lessor.value = \"\"")
             .And.Contain("page.querySelector(\".workbench-inline-filters\")")
             .And.Contain("[\"CompanyId\", page.dataset.companyId]")
-            .And.Contain("[\"Unassigned\", page.dataset.unassigned === \"true\" ? \"true\" : \"\"]")
+            .And.Contain("[data-equipment-delete-open]")
+            .And.Contain("initAttachmentPreview()")
             .And.Contain("page.querySelector(\".workbench-inline-clear\")");
+    }
+
+    [Fact]
+    public void EquipmentAndCompanyDialogsUseUnifiedMacStyleAndSemanticActions()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var equipment = ReadFile("src", "EngineeringManager.Web", "Pages", "Equipment", "Index.cshtml");
+        var companies = ReadFile("src", "EngineeringManager.Web", "Pages", "Companies", "Index.cshtml");
+
+        css.Should().Contain(".mac-window-dialog")
+            .And.Contain(".mac-window-controls")
+            .And.Contain(".action-button--view")
+            .And.Contain(".action-button--edit")
+            .And.Contain(".action-button--copy")
+            .And.Contain(".action-button--usage")
+            .And.Contain(".action-button--certificate")
+            .And.Contain(".action-button--delete");
+        equipment.Should().Contain("mac-window-dialog").And.Contain("mac-window-controls");
+        companies.Should().Contain("mac-window-dialog").And.Contain("mac-window-controls");
+    }
+
+    [Fact]
+    public void CompanyDialogsUseTheEquipmentHorizontalLayoutAndStackOnMobile()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var index = ReadFile("src", "EngineeringManager.Web", "Pages", "Companies", "Index.cshtml");
+        var details = ReadFile("src", "EngineeringManager.Web", "Pages", "Companies", "Details.cshtml");
+        var dialogTags = System.Text.RegularExpressions.Regex.Matches(
+                string.Join('\n', index, details),
+                "<dialog\\b[^>]*>",
+                System.Text.RegularExpressions.RegexOptions.Singleline)
+            .Select(match => match.Value)
+            .ToArray();
+
+        dialogTags.Should().HaveCount(8)
+            .And.OnlyContain(tag => tag.Contains("mac-window-dialog", StringComparison.Ordinal));
+        dialogTags.Where(tag => !tag.Contains("attachment-preview-dialog", StringComparison.Ordinal))
+            .Should().OnlyContain(tag => tag.Contains("company-dialog", StringComparison.Ordinal));
+
+        css.Should().Contain(".company-dialog { width: min(68rem, calc(100vw - 2rem));")
+            .And.Contain(".company-dialog > form { display: grid; grid-template-rows: auto minmax(0, 1fr) auto;")
+            .And.Contain(".company-dialog-form-grid > .form-section { grid-column: auto;")
+            .And.Contain(".company-view-dialog-body { grid-template-columns: repeat(3, minmax(0, 1fr));")
+            .And.Contain(".mac-window-dialog .workbench-dialog-heading .mac-window-controls { display: inline-flex;")
+            .And.Contain(".mac-window-controls i { display: block;")
+            .And.Contain("@media (max-width: 680px)")
+            .And.Contain(".company-dialog-form-grid, .company-view-dialog-body { grid-template-columns: 1fr; }");
     }
 
     [Fact]

@@ -166,7 +166,7 @@ else if (Model.ActiveTab == "profile")
                     <div><dt>公司名称</dt><dd><span data-inline-edit-value>@Model.Company.Name</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Name" data-inline-edit-control hidden required /> }</dd></div>
                     <div><dt>简称</dt><dd><span data-inline-edit-value>@Model.Company.ShortName</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ShortName" data-inline-edit-control hidden required /> }</dd></div>
                     <div><dt>组合分类</dt><dd><span data-inline-edit-value>@(Model.Company.CompanyCategoryName ?? "未分类")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.CompanyCategoryId" data-inline-edit-control hidden><option value="">未分类</option>@foreach (var category in Model.Categories) { <option value="@category.Id">@category.Name</option> }</select> }</dd></div>
-                    <div><dt>状态</dt><dd>@(Model.Company.IsActive ? "启用" : "停用")</dd></div>
+                    <div><dt>状态</dt><dd><span data-inline-edit-value>@(Model.Company.IsActive ? "启用" : "停用")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.IsActive" data-inline-edit-control hidden><option value="true">启用</option><option value="false">停用</option></select> }</dd></div>
                     <div><dt>法人/经营者</dt><dd><span data-inline-edit-value>@(Model.Company.LegalRepresentative ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.LegalRepresentative" data-inline-edit-control hidden /> }</dd></div>
                     <div><dt>统一社会信用代码</dt><dd><span data-inline-edit-value>@(Model.Company.UnifiedSocialCreditCode ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.UnifiedSocialCreditCode" data-inline-edit-control hidden /> }</dd></div>
                     <div><dt>联系电话</dt><dd><span data-inline-edit-value>@(Model.Company.Phone ?? "未填写")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Phone" data-inline-edit-control hidden /> }</dd></div>
@@ -181,13 +181,14 @@ else if (Model.ActiveTab == "profile")
     </section>
     @if (Model.CanManage)
     {
-        <dialog class="workbench-dialog company-create-dialog company-detailed-edit-dialog" data-company-detailed-edit-dialog data-dialog-open="@Model.DetailedEditOpen.ToString().ToLowerInvariant()" aria-labelledby="company-detailed-edit-title">
+        <dialog class="workbench-dialog company-create-dialog company-dialog company-detailed-edit-dialog mac-window-dialog" data-company-detailed-edit-dialog data-dialog-open="@Model.DetailedEditOpen.ToString().ToLowerInvariant()" aria-labelledby="company-detailed-edit-title">
             <form method="post" asp-page-handler="DetailedEdit" asp-route-id="@Model.Company.Id">
                 <div class="workbench-dialog-heading">
+                    <span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
                     <div><strong id="company-detailed-edit-title">详细编辑公司</strong><span>维护主体、税务、地址与开票资料，修改历史由审计日志保留。</span></div>
                     <button class="dialog-close" type="button" data-company-detailed-edit-close aria-label="关闭详细编辑窗口">×</button>
                 </div>
-                <div class="company-create-dialog-body company-detailed-edit-body form-grid">
+                <div class="company-create-dialog-body company-dialog-body company-dialog-form-grid company-detailed-edit-body form-grid">
                     <div asp-validation-summary="All" class="form-span validation-summary"></div>
                     <section class="form-section">
                         <h2 class="section-heading">主体资料</h2>
@@ -195,6 +196,7 @@ else if (Model.ActiveTab == "profile")
                         <label>公司全称<input name="QuickEdit.Name" value="@Model.QuickEdit.Name" required /></label>
                         <label>公司简称<input name="QuickEdit.ShortName" value="@Model.QuickEdit.ShortName" required /></label>
                         <label>组合分类<select name="QuickEdit.CompanyCategoryId" required><option value="">请选择</option>@foreach (var category in Model.Categories.Where(x => x.IsActive)) { <option value="@category.Id" selected="@(Model.QuickEdit.CompanyCategoryId == category.Id ? "selected" : null)">@category.Name</option> }</select></label>
+                        <label>状态<select name="QuickEdit.IsActive"><option value="true" selected="@(Model.QuickEdit.IsActive ? "selected" : null)">启用</option><option value="false" selected="@(!Model.QuickEdit.IsActive ? "selected" : null)">停用</option></select></label>
                         <label>法人/经营者<input name="QuickEdit.LegalRepresentative" value="@Model.QuickEdit.LegalRepresentative" /></label>
                         <label>统一社会信用代码/税号<input name="QuickEdit.UnifiedSocialCreditCode" value="@Model.QuickEdit.UnifiedSocialCreditCode" /></label>
                     </section>
@@ -206,7 +208,7 @@ else if (Model.ActiveTab == "profile")
                         <label>开票抬头<input name="QuickEdit.InvoiceTitle" value="@Model.QuickEdit.InvoiceTitle" /></label>
                         <label class="form-span">备注<textarea name="QuickEdit.Notes">@Model.QuickEdit.Notes</textarea></label>
                     </section>
-                    <section class="form-section">
+                    <section class="form-section company-dialog-section--full">
                         <h2 class="section-heading">修改记录</h2>
                         <label class="form-span">修改原因<input name="QuickEdit.Reason" value="@Model.QuickEdit.Reason" required /></label>
                     </section>
@@ -322,13 +324,14 @@ else if (Model.ActiveTab == "certificates")
     </section>
     @if (Model.CanManage)
     {
-        <dialog class="workbench-dialog company-create-dialog" data-company-certificate-create-dialog data-dialog-open="@Model.CertificateCreateOpen.ToString().ToLowerInvariant()" aria-labelledby="company-certificate-create-title">
+        <dialog class="workbench-dialog company-create-dialog company-dialog mac-window-dialog" data-company-certificate-create-dialog data-dialog-open="@Model.CertificateCreateOpen.ToString().ToLowerInvariant()" aria-labelledby="company-certificate-create-title">
             <form method="post" enctype="multipart/form-data" asp-page-handler="Certificate" asp-route-id="@Model.Company.Id" asp-route-tab="certificates">
                 <div class="workbench-dialog-heading">
+                    <span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
                     <div><strong id="company-certificate-create-title">新增证照</strong><span>填写证照资料，可同时上传一份附件。</span></div>
                     <button class="dialog-close" type="button" data-company-create-dialog-close aria-label="关闭新增证照窗口">×</button>
                 </div>
-                <div class="company-create-dialog-body form-grid">
+                <div class="company-create-dialog-body company-dialog-body company-dialog-form-grid form-grid">
                     <div asp-validation-summary="All" class="panel-copy form-span"></div>
                 <label>证书类型<input asp-for="Certificate.Type" list="company-certificate-types" required /></label>
                 <label>证书编号<input asp-for="Certificate.Number" /></label>
@@ -347,9 +350,10 @@ else if (Model.ActiveTab == "certificates")
             </form>
         </dialog>
     }
-    <dialog class="attachment-preview-dialog" data-attachment-preview-dialog aria-labelledby="company-certificate-attachment-preview-title">
+    <dialog class="attachment-preview-dialog company-attachment-preview-dialog mac-window-dialog" data-attachment-preview-dialog aria-labelledby="company-certificate-attachment-preview-title">
         <div class="attachment-preview-shell">
             <header class="attachment-preview-toolbar">
+                <span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
                 <strong id="company-certificate-attachment-preview-title" data-attachment-preview-title>附件预览</strong>
                 <div class="attachment-preview-actions">
                     <button class="button button--secondary button--small" type="button" data-attachment-preview-replace hidden>替换</button>
@@ -449,13 +453,14 @@ else if (Model.ActiveTab == "accounts")
     </section>
     @if (Model.CanManage)
     {
-        <dialog class="workbench-dialog company-create-dialog" data-company-account-create-dialog data-dialog-open="@Model.AccountCreateOpen.ToString().ToLowerInvariant()" aria-labelledby="company-account-create-title">
+        <dialog class="workbench-dialog company-create-dialog company-dialog mac-window-dialog" data-company-account-create-dialog data-dialog-open="@Model.AccountCreateOpen.ToString().ToLowerInvariant()" aria-labelledby="company-account-create-title">
             <form method="post" asp-page-handler="Account" asp-route-id="@Model.Company.Id" asp-route-tab="accounts">
                 <div class="workbench-dialog-heading">
+                    <span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
                     <div><strong id="company-account-create-title">新增账户</strong><span>填写账户资料，新账户保存后默认启用。</span></div>
                     <button class="dialog-close" type="button" data-company-create-dialog-close aria-label="关闭新增账户窗口">×</button>
                 </div>
-                <div class="company-create-dialog-body form-grid">
+                <div class="company-create-dialog-body company-dialog-body company-dialog-form-grid form-grid">
                     <div asp-validation-summary="All" class="panel-copy form-span"></div>
                 <input asp-for="Account.IsActive" type="hidden" value="true" />
                 <label>账户名称<input asp-for="Account.Name" required /></label>

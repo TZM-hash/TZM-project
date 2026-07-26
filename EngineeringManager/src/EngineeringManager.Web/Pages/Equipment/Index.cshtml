@@ -6,8 +6,10 @@
 @model EngineeringManager.Web.Pages.Equipment.IndexModel
 @{
     ViewData["Title"] = "设备管理";
-    var selectedCompany = Model.Companies.FirstOrDefault(item => item.Id == Model.CompanyId);
-    var scopeName = Model.Unassigned ? "待分配设备" : selectedCompany?.ShortName ?? "全部公司";
+    var selectedCompany = Model.CompanyId.HasValue
+        ? Model.CompanySummaries.FirstOrDefault(item => item.CompanyId == Model.CompanyId)
+        : null;
+    var scopeName = Model.Unassigned ? "待分配设备" : selectedCompany?.CompanyName ?? "全部公司";
     var utilizationRate = Model.Dashboard.TotalCount == 0
         ? 0d
         : (double)Model.Dashboard.InUseCount / Model.Dashboard.TotalCount * 100d;
@@ -16,6 +18,8 @@
         RowDensity = EngineeringManager.Application.Settings.TableDensity.Compact,
         InlineFilters = new DataWorkbenchFilterField[]
         {
+            new("CompanyId", "公司", Model.CompanyId?.ToString(), DataWorkbenchFilterKind.Select,
+                Model.Companies.Select(company => new DataWorkbenchFilterOption(company.Id.ToString(), company.ShortName)).ToArray()),
             new("Keyword", "搜索", Model.Keyword, Placeholder: "搜索编号、名称、公司或证书"),
             new("Status", "状态", Model.Status?.ToString(), DataWorkbenchFilterKind.Select,
                 Enum.GetValues<EquipmentStatus>()
@@ -30,7 +34,8 @@
 }
 
 <div class="equipment-workspace-page" data-equipment-dashboard data-equipment-workspace data-active-dialog="@Model.ActiveDialog"
-     data-company-id="@Model.CompanyId" data-unassigned="@Model.Unassigned.ToString().ToLowerInvariant()">
+     data-company-id="@Model.CompanyId" data-unassigned="@Model.Unassigned.ToString().ToLowerInvariant()"
+     data-open-usage-equipment-id="@Model.OpenUsageEquipmentId">
     <section class="page-heading compact-page-heading equipment-workspace-heading">
         <div>
             <p class="eyebrow">设备与项目协同</p>
@@ -51,15 +56,6 @@
         <div class="alert alert--success" role="status">@successMessage</div>
     }
 
-    <nav class="equipment-company-filter" aria-label="设备公司筛选" data-equipment-company-filter>
-        <a class="@(Model.CompanyId is null && !Model.Unassigned ? "is-active" : null)" asp-page="Index" asp-route-keyword="@Model.Keyword" asp-route-status="@Model.Status">全部公司</a>
-        @foreach (var company in Model.Companies)
-        {
-            <a class="@(Model.CompanyId == company.Id && !Model.Unassigned ? "is-active" : null)" asp-page="Index" asp-route-companyId="@company.Id" asp-route-keyword="@Model.Keyword" asp-route-status="@Model.Status">@company.ShortName</a>
-        }
-        <a class="@(Model.Unassigned ? "is-active" : null)" asp-page="Index" asp-route-unassigned="true" asp-route-keyword="@Model.Keyword" asp-route-status="@Model.Status">待分配</a>
-    </nav>
-
     <section class="equipment-workspace-layout">
         <aside class="equipment-workspace-summary" data-equipment-workspace-summary>
             <div class="equipment-summary-heading">
@@ -71,8 +67,6 @@
                 <article><span>使用中</span><strong>@Model.Dashboard.InUseCount</strong></article>
                 <article><span>闲置</span><strong>@Model.Dashboard.IdleCount</strong></article>
                 <article><span>租赁设备</span><strong>@Model.Dashboard.RentedCount</strong></article>
-                <article><span>证书临期</span><strong>@Model.Dashboard.ExpiringQualificationCount</strong></article>
-                <article><span>证书过期</span><strong>@Model.Dashboard.ExpiredQualificationCount</strong></article>
             </div>
             <div class="equipment-utilization-chart" data-chart="equipment-utilization" data-chart-kind="progress-ring"
                  data-chart-value="@utilizationRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)" data-chart-label="设备使用率">
@@ -80,30 +74,51 @@
                 <div data-chart-canvas aria-label="当前范围设备使用率"></div>
             </div>
             <div class="equipment-summary-settlement"><span>累计结算</span><strong>¥ @Model.Dashboard.SettledAmount.ToString("N2")</strong></div>
-            <div class="equipment-status-list">
-                @foreach (var status in Model.Dashboard.StatusDistribution)
+            <section class="equipment-company-summary" data-equipment-company-summary>
+                <div class="equipment-company-summary-heading">
+                    <div><span>所有公司</span><strong>设备构成</strong></div>
+                    <small>共 @Model.PortfolioDashboard.TotalCount 台</small>
+                </div>
+                <div class="equipment-company-summary-legend" aria-label="设备归属图例"><span class="is-self-owned">自有</span><span class="is-rented">租赁</span><span class="is-other">其他</span></div>
+                <div class="equipment-company-summary-list">
+                @foreach (var company in Model.CompanySummaries)
                 {
-                    <div><span>@status.Key</span><strong>@status.Value 台</strong></div>
+                    var selfOwnedShare = company.TotalCount == 0 ? 0d : company.SelfOwnedCount * 100d / company.TotalCount;
+                    var rentedShare = company.TotalCount == 0 ? 0d : company.RentedCount * 100d / company.TotalCount;
+                    var otherShare = company.TotalCount == 0 ? 0d : company.OtherCount * 100d / company.TotalCount;
+                    <a class="equipment-company-summary-row @(Model.CompanyId == company.CompanyId ? "is-active" : null)"
+                       asp-page="Index" asp-route-companyId="@company.CompanyId" asp-route-keyword="@Model.Keyword" asp-route-status="@Model.Status">
+                        <div><strong>@company.CompanyName</strong><span>@company.TotalCount 台</span></div>
+                        <div class="equipment-company-composition" aria-hidden="true"><span class="is-self-owned" style="width:@selfOwnedShare.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span><span class="is-rented" style="width:@rentedShare.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span><span class="is-other" style="width:@otherShare.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></div>
+                        <small>自有 @company.SelfOwnedCount · 租赁 @company.RentedCount · 其他 @company.OtherCount</small>
+                    </a>
                 }
-            </div>
+                </div>
+            </section>
         </aside>
 
         <section class="equipment-workspace-list" data-equipment-workspace-list>
-            <div class="equipment-list-toolbar">
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated">
                 <div><p class="eyebrow">设备档案</p><h2>@scopeName</h2></div>
+                <partial name="_DataWorkbench" model="workbench" />
             </div>
-
-            <partial name="_DataWorkbench" model="workbench" />
             <div class="table-wrap equipment-table-wrap">
                 <table class="data-table equipment-table" id="equipment-table">
-                    <thead><tr><th data-column-key="equipment">设备</th><th data-column-key="model_category">型号 / 分类</th><th data-column-key="managing_company">管理公司</th><th data-column-key="ownership">权属</th><th data-column-key="status">状态</th><th data-column-key="qualification">合格证</th><th data-column-key="rate">参考价</th><th data-column-key="actions">操作</th></tr></thead>
+                    <thead><tr><th data-column-key="equipment">设备</th><th data-column-key="model_category">型号 / 分类</th><th data-column-key="managing_company">管理公司</th><th data-column-key="ownership_type">设备归属</th><th data-column-key="ownership_party">产权方 / 出租方</th><th data-column-key="status">状态</th><th data-column-key="qualification">合格证</th><th data-column-key="rate">参考价</th><th data-column-key="actions">操作</th></tr></thead>
                     <tbody>
                     @if (Model.Dashboard.Items.Count == 0)
                     {
-                        <tr><td colspan="8" class="empty-state">当前范围暂无设备。</td></tr>
+                        <tr><td colspan="9" class="empty-state">当前范围暂无设备。</td></tr>
                     }
                     @foreach (var item in Model.Dashboard.Items)
                     {
+                        var statusClass = item.Status switch
+                        {
+                            EquipmentStatus.InUse => "pill--success",
+                            EquipmentStatus.Idle or EquipmentStatus.Maintenance => "pill--warning",
+                            EquipmentStatus.Scrapped => "pill--danger",
+                            _ => string.Empty
+                        };
                         var payload = JsonSerializer.Serialize(new
                         {
                             id = item.Id,
@@ -139,20 +154,21 @@
                                 <span class="equipment-notes-summary" data-column-key="notes" title="@item.Notes">@(string.IsNullOrWhiteSpace(item.Notes) ? "无备注" : item.Notes.Length > 28 ? item.Notes[..28] + "…" : item.Notes)</span>
                             </td>
                             <td data-column-key="model_category"><strong>@(item.Model ?? "未填写")</strong><span>@(item.Category ?? "未分类")</span></td>
-                            <td data-column-key="managing_company"><strong>@(item.ManagingLegalEntityName ?? "待分配")</strong><span>@(item.ManagingLegalEntityId.HasValue ? "管理公司" : "需补充归属")</span></td>
-                            <td data-column-key="ownership"><span class="pill">@item.OwnershipType.ToChinese()</span><small>@(item.OwnershipType == EquipmentOwnershipType.SelfOwned ? item.OwnerLegalEntityName ?? "未选产权公司" : item.LessorBusinessPartnerName ?? "未选出租方")</small></td>
-                            <td data-column-key="status"><span class="pill @(item.Status == EquipmentStatus.InUse ? "pill--success" : null)">@item.Status.ToChinese()</span><small>@(item.IsActive ? "档案启用" : "档案停用")</small></td>
+                            <td data-column-key="managing_company"><strong title="@(item.ManagingLegalEntityName ?? "待分配")">@(item.ManagingLegalEntityName ?? "待分配")</strong><span>@(item.ManagingLegalEntityId.HasValue ? "管理公司" : "需补充归属")</span></td>
+                            <td data-column-key="ownership_type"><span class="pill">@item.OwnershipType.ToChinese()</span></td>
+                            <td data-column-key="ownership_party"><strong title="@(item.OwnershipType == EquipmentOwnershipType.SelfOwned ? item.OwnerLegalEntityName ?? "未选产权公司" : item.OwnershipType == EquipmentOwnershipType.Rented ? item.LessorBusinessPartnerName ?? "未选出租方" : "不适用")">@(item.OwnershipType == EquipmentOwnershipType.SelfOwned ? item.OwnerLegalEntityName ?? "未选产权公司" : item.OwnershipType == EquipmentOwnershipType.Rented ? item.LessorBusinessPartnerName ?? "未选出租方" : "不适用")</strong><span>@(item.OwnershipType == EquipmentOwnershipType.SelfOwned ? "产权公司" : item.OwnershipType == EquipmentOwnershipType.Rented ? "出租方" : "其他来源")</span></td>
+                            <td data-column-key="status"><span class="pill @statusClass">@item.Status.ToChinese()</span><small>@(item.IsActive ? "档案启用" : "档案停用")</small></td>
                             <td data-column-key="qualification"><strong>@(item.QualificationCertificateNumber ?? "未登记")</strong><span>@(item.QualificationExpiresOn?.ToString("yyyy-MM-dd") ?? "长期/未填写")</span></td>
                             <td data-column-key="rate"><strong>@(item.InternalDailyRate?.ToString("N2") ?? "-")</strong><span>元 / 日</span></td>
                             <td data-column-key="actions">
-                                <div class="equipment-row-actions">
-                                    <button type="button" title="查看设备" data-equipment-dialog-open="details" data-equipment-payload="@payload">查看</button>
+                                <div class="company-row-actions equipment-row-actions">
+                                    <button class="action-button action-button--view" type="button" title="查看设备" data-equipment-dialog-open="details" data-equipment-payload="@payload">查看</button>
                                     @if (Model.CanManage)
                                     {
-                                        <button type="button" title="编辑设备" data-equipment-dialog-open="edit" data-equipment-payload="@payload">编辑</button>
-                                        <button type="button" title="复制设备" data-equipment-dialog-open="copy" data-equipment-payload="@payload">复制</button>
+                                        <button class="action-button action-button--edit" type="button" title="编辑设备" data-equipment-dialog-open="edit" data-equipment-payload="@payload">编辑</button>
+                                        <button class="action-button action-button--copy" type="button" title="复制设备" data-equipment-dialog-open="copy" data-equipment-payload="@payload">复制</button>
+                                        <button class="action-button action-button--usage" type="button" title="登记进退场" data-equipment-dialog-open="usage" data-equipment-payload="@payload">进退场</button>
                                     }
-                                    <button type="button" title="登记进退场" data-equipment-dialog-open="usage" data-equipment-payload="@payload">进退场</button>
                                 </div>
                             </td>
                         </tr>
@@ -163,47 +179,148 @@
         </section>
     </section>
 
-    <dialog class="workspace-dialog equipment-dialog" data-equipment-editor-dialog data-dialog-open="@(Model.ActiveDialog == "editor" ? "true" : "false")">
+    <dialog class="workbench-dialog company-create-dialog equipment-dialog company-detailed-edit-dialog mac-window-dialog" data-equipment-editor-dialog data-dialog-open="@(Model.ActiveDialog == "editor" ? "true" : "false")">
         <form method="post" asp-page-handler="Save" enctype="multipart/form-data" class="equipment-editor-form" data-equipment-editor-form>
-            <div class="dialog-heading"><div><p class="eyebrow">设备档案</p><h2 data-equipment-editor-title>新增设备</h2></div><button type="button" class="dialog-close" aria-label="关闭" data-equipment-dialog-close>×</button></div>
-            <div asp-validation-summary="All" class="validation-summary"></div>
-            <input asp-for="Editor.Id" type="hidden" />
-            <input asp-for="Editor.ConcurrencyStamp" type="hidden" />
-            <input asp-for="Editor.QualificationAttachmentId" type="hidden" />
-            <input asp-for="Editor.QualificationAttachmentFileName" type="hidden" />
-            <input type="hidden" name="CompanyId" value="@Model.CompanyId" />
-            <input type="hidden" name="Unassigned" value="@Model.Unassigned.ToString().ToLowerInvariant()" />
-            <div class="equipment-editor-grid">
-                <section><h3>设备识别</h3><label>设备编号<input asp-for="Editor.EquipmentNumber" required /></label><label>设备名称<input asp-for="Editor.Name" required /></label><label>型号<input asp-for="Editor.Model" /></label><label>分类<input asp-for="Editor.Category" /></label></section>
-                <section><h3>公司与权属</h3><label>管理公司<select asp-for="Editor.ManagingLegalEntityId" required><option value="">请选择自有公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label><label>权属类型<select asp-for="Editor.OwnershipType" data-equipment-ownership><option value="SelfOwned">自有</option><option value="Rented">租赁</option></select></label><label data-equipment-self-owned>产权公司<select asp-for="Editor.OwnerLegalEntityId"><option value="">请选择产权公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label><label data-equipment-rented>出租方<select asp-for="Editor.LessorBusinessPartnerId"><option value="">请选择出租方</option>@foreach (var lessor in Model.Lessors) { <option value="@lessor.Id">@lessor.PartnerNumber · @lessor.ShortName</option> }</select></label></section>
-                <section><h3>采购与计价</h3><label>购买日期<input asp-for="Editor.PurchaseDate" type="date" /></label><label>购买金额<input asp-for="Editor.PurchaseAmount" type="number" min="0" step="0.01" /></label><label>内部日参考价<input asp-for="Editor.InternalDailyRate" type="number" min="0" step="0.01" /></label><label class="compact-check"><input asp-for="Editor.IsActive" type="checkbox" /> 档案启用</label></section>
-                <section><h3>当前合格证</h3><label>证书编号<input asp-for="Editor.QualificationCertificateNumber" /></label><label>发证日期<input asp-for="Editor.QualificationIssuedOn" type="date" /></label><label>有效期至<input asp-for="Editor.QualificationExpiresOn" type="date" /></label><label>合格证附件<input asp-for="QualificationAttachmentFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx" /></label><div class="equipment-current-attachment" data-equipment-current-attachment hidden><span data-equipment-attachment-name></span><label class="compact-check"><input asp-for="Editor.RemoveQualificationAttachment" type="checkbox" /> 删除当前附件</label></div></section>
+            <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-equipment-editor-title>新增设备</strong><span>维护设备识别、归属、计价与合格证资料。</span></div><button type="button" class="dialog-close" aria-label="关闭设备档案窗口" data-equipment-dialog-close>×</button></div>
+            <div class="company-create-dialog-body equipment-dialog-body">
+                <div asp-validation-summary="All" class="panel-copy"></div>
+                <input asp-for="Editor.Id" type="hidden" />
+                <input asp-for="Editor.ConcurrencyStamp" type="hidden" />
+                <input asp-for="Editor.QualificationAttachmentId" type="hidden" />
+                <input asp-for="Editor.QualificationAttachmentFileName" type="hidden" />
+                <input type="hidden" name="CompanyId" value="@Model.CompanyId" />
+                <input type="hidden" name="Unassigned" value="@Model.Unassigned.ToString().ToLowerInvariant()" />
+                <input type="hidden" name="BusinessYearId" value="@Model.BusinessYearId" />
+                <div class="equipment-editor-grid">
+                    <section><h3>设备识别</h3><label>设备编号<input asp-for="Editor.EquipmentNumber" required /></label><label>设备名称<input asp-for="Editor.Name" required /></label><label>型号<input asp-for="Editor.Model" /></label><label>分类<input asp-for="Editor.Category" /></label></section>
+                    <section><h3>公司与权属</h3><label>管理公司<select asp-for="Editor.ManagingLegalEntityId" required><option value="">请选择自有公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label><label>权属类型<select asp-for="Editor.OwnershipType" data-equipment-ownership><option value="SelfOwned">自有</option><option value="Rented">租赁</option><option value="Other">其他</option></select></label><label data-equipment-self-owned>产权公司<select asp-for="Editor.OwnerLegalEntityId"><option value="">请选择产权公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label><label data-equipment-rented>出租方<select asp-for="Editor.LessorBusinessPartnerId"><option value="">请选择出租方</option>@foreach (var lessor in Model.Lessors) { <option value="@lessor.Id">@lessor.PartnerNumber · @lessor.ShortName</option> }</select></label></section>
+                    <section><h3>采购与计价</h3><label>设备状态<select asp-for="Editor.Status">@foreach (var status in Enum.GetValues<EquipmentStatus>()) { <option value="@status">@status.ToChinese()</option> }</select></label><label>购买日期<input asp-for="Editor.PurchaseDate" type="date" /></label><label>购买金额<input asp-for="Editor.PurchaseAmount" type="number" min="0" step="0.01" /></label><label>内部日参考价<input asp-for="Editor.InternalDailyRate" type="number" min="0" step="0.01" /></label><label class="compact-check"><input asp-for="Editor.IsActive" type="checkbox" /> 档案启用</label></section>
+                    <section><h3>当前合格证</h3><label>证书编号<input asp-for="Editor.QualificationCertificateNumber" /></label><label>发证日期<input asp-for="Editor.QualificationIssuedOn" type="date" /></label><label>有效期至<input asp-for="Editor.QualificationExpiresOn" type="date" /></label><label>合格证附件<input asp-for="QualificationAttachmentFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx" /></label><div class="equipment-current-attachment" data-equipment-current-attachment hidden><span data-equipment-attachment-name></span><label class="compact-check"><input asp-for="Editor.RemoveQualificationAttachment" type="checkbox" /> 删除当前附件</label></div></section>
+                </div>
+                <label class="equipment-editor-notes">备注<textarea asp-for="Editor.Notes" rows="3"></textarea></label>
+                <label class="equipment-editor-reason">修改原因<input asp-for="Editor.Reason" required /></label>
             </div>
-            <label class="equipment-editor-notes">备注<textarea asp-for="Editor.Notes" rows="3"></textarea></label>
-            <label class="equipment-editor-reason">修改原因<input asp-for="Editor.Reason" required /></label>
-            <div class="dialog-actions"><button type="button" class="button button--secondary" data-equipment-dialog-close>取消</button><button type="submit" class="button button--primary">保存设备</button></div>
+            <div class="quick-edit-actions"><button type="button" class="button action-button--delete" data-equipment-delete-open hidden>删除设备</button><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-equipment-dialog-close>取消</button><button type="submit" class="button button--primary">保存设备</button></div>
         </form>
     </dialog>
 
-    <dialog class="workspace-dialog equipment-dialog equipment-details-dialog" data-equipment-details-dialog>
-        <div class="dialog-heading"><div><p class="eyebrow" data-equipment-detail-number>设备详情</p><h2 data-equipment-detail-name></h2></div><button type="button" class="dialog-close" aria-label="关闭" data-equipment-dialog-close>×</button></div>
-        <dl class="equipment-detail-grid">
-            <div><dt>型号 / 分类</dt><dd data-equipment-detail-model></dd></div><div><dt>管理公司</dt><dd data-equipment-detail-company></dd></div><div><dt>权属</dt><dd data-equipment-detail-ownership></dd></div><div><dt>状态</dt><dd data-equipment-detail-status></dd></div><div><dt>购买信息</dt><dd data-equipment-detail-purchase></dd></div><div><dt>内部日参考价</dt><dd data-equipment-detail-rate></dd></div><div><dt>合格证</dt><dd data-equipment-detail-certificate></dd></div><div><dt>备注</dt><dd data-equipment-detail-notes></dd></div>
-        </dl>
-        <a class="button button--secondary" data-equipment-detail-attachment hidden>下载合格证</a>
-        <div class="dialog-actions"><button type="button" class="button button--secondary" data-equipment-dialog-close>关闭</button></div>
+    <dialog class="workbench-dialog company-create-dialog equipment-dialog equipment-details-dialog mac-window-dialog" data-equipment-details-dialog>
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-equipment-detail-name>设备详情</strong><span data-equipment-detail-number>设备档案</span></div><button type="button" class="dialog-close" aria-label="关闭设备详情窗口" data-equipment-dialog-close>×</button></div>
+        <div class="company-create-dialog-body equipment-dialog-body">
+            <dl class="equipment-detail-grid">
+                <div><dt>型号 / 分类</dt><dd data-equipment-detail-model></dd></div><div><dt>管理公司</dt><dd data-equipment-detail-company></dd></div><div><dt>设备归属</dt><dd data-equipment-detail-ownership></dd></div><div><dt>状态</dt><dd data-equipment-detail-status></dd></div><div><dt>购买信息</dt><dd data-equipment-detail-purchase></dd></div><div><dt>内部日参考价</dt><dd data-equipment-detail-rate></dd></div><div><dt>合格证</dt><dd data-equipment-detail-certificate></dd></div><div><dt>备注</dt><dd data-equipment-detail-notes></dd></div>
+            </dl>
+            <a class="button button--secondary" data-equipment-detail-attachment data-attachment-preview-trigger hidden>预览合格证</a>
+        </div>
+        <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-equipment-dialog-close>关闭</button></div>
     </dialog>
 
-    <dialog class="workspace-dialog equipment-dialog" data-equipment-usage-dialog data-dialog-open="@(Model.ActiveDialog == "usage" ? "true" : "false")">
-        <form method="post" asp-page-handler="Usage" class="equipment-usage-form">
-            <div class="dialog-heading"><div><p class="eyebrow">项目使用</p><h2>登记设备进退场</h2></div><button type="button" class="dialog-close" aria-label="关闭" data-equipment-dialog-close>×</button></div>
-            <div asp-validation-summary="All" class="validation-summary"></div>
-            <input asp-for="UsageInput.EquipmentId" type="hidden" />
-            <input type="hidden" name="CompanyId" value="@Model.CompanyId" />
-            <input type="hidden" name="Unassigned" value="@Model.Unassigned.ToString().ToLowerInvariant()" />
-            <div class="equipment-usage-grid"><label>项目<select asp-for="UsageInput.ProjectId" required><option value="">请选择项目</option>@foreach (var project in Model.Projects) { <option value="@project.Project.Id">@project.Project.ProjectNumber · @project.Project.Name</option> }</select></label><label>签约公司<select asp-for="UsageInput.LegalEntityId" required><option value="">请选择公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label><label>进场日期<input asp-for="UsageInput.EntryDate" type="date" /></label><label>退场日期<input asp-for="UsageInput.ExitDate" type="date" /></label><label>计租方式<select asp-for="UsageInput.RentMode" asp-items="Html.GetEnumSelectList<RentMode>()"></select></label><label>基础单价<input asp-for="UsageInput.UnitRate" type="number" min="0" step="0.01" /></label></div>
-            <label>修改原因<input asp-for="UsageInput.Reason" required /></label>
-            <div class="dialog-actions"><button type="button" class="button button--secondary" data-equipment-dialog-close>取消</button><button type="submit" class="button button--primary">保存进退场</button></div>
+    <dialog class="workbench-dialog company-create-dialog equipment-dialog equipment-usage-dialog mac-window-dialog" data-equipment-usage-dialog data-dialog-open="@(Model.ActiveDialog == "usage" ? "true" : "false")" data-usage-editor-open="@Model.UsageEditorOpen.ToString().ToLowerInvariant()">
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>设备进退场</strong><span data-equipment-usage-equipment-name>先查看记录，再选择新增或编辑。</span></div><button type="button" class="dialog-close" aria-label="关闭设备进退场窗口" data-equipment-dialog-close>×</button></div>
+        <div class="company-create-dialog-body equipment-dialog-body equipment-usage-dialog-body">
+            <section data-equipment-usage-history hidden="@Model.UsageEditorOpen">
+                <div class="equipment-usage-history-toolbar">
+                    <form method="get" class="equipment-usage-year-filter" data-equipment-usage-year-filter>
+                        <input type="hidden" name="CompanyId" value="@Model.CompanyId" />
+                        <input type="hidden" name="Unassigned" value="@Model.Unassigned.ToString().ToLowerInvariant()" />
+                        <input type="hidden" name="Keyword" value="@Model.Keyword" />
+                        <input type="hidden" name="Status" value="@Model.Status" />
+                        <input type="hidden" name="OpenUsageEquipmentId" value="@Model.OpenUsageEquipmentId" data-equipment-open-usage-id />
+                        <label>业务年<select asp-for="BusinessYearId" data-equipment-usage-year>@foreach (var year in Model.BusinessYears) { <option value="@year.Id">@year.Name</option> }</select></label>
+                    </form>
+                    @if (Model.CanManage)
+                    {
+                        <button class="button button--primary button--small" type="button" data-equipment-usage-create>新增记录</button>
+                    }
+                </div>
+                <div class="table-wrap equipment-usage-history-table-wrap">
+                    <table class="data-table equipment-usage-history-table">
+                        <thead><tr><th>项目</th><th>签约公司</th><th>进场</th><th>退场</th><th>计租方式</th><th>基础单价</th><th>状态</th><th>操作</th></tr></thead>
+                        <tbody>
+                        @foreach (var usage in Model.UsageHistory)
+                        {
+                            var usagePayload = JsonSerializer.Serialize(new
+                            {
+                                id = usage.Id,
+                                equipmentId = usage.EquipmentId,
+                                equipmentNumber = usage.EquipmentNumber,
+                                equipmentName = usage.EquipmentName,
+                                projectId = usage.ProjectId,
+                                projectName = usage.ProjectName,
+                                legalEntityId = usage.LegalEntityId,
+                                legalEntityName = usage.LegalEntityName,
+                                entryDate = usage.EntryDate.ToString("yyyy-MM-dd"),
+                                exitDate = usage.ExitDate?.ToString("yyyy-MM-dd"),
+                                rentMode = usage.RentMode.ToString(),
+                                unitRate = usage.UnitRate,
+                                concurrencyStamp = usage.ConcurrencyStamp,
+                                periods = usage.Periods.Select(period => new { startDate = period.StartDate.ToString("yyyy-MM-dd"), endDate = period.EndDate.ToString("yyyy-MM-dd"), periodType = period.PeriodType.ToString(), isChargeable = period.IsChargeable, notes = period.Notes })
+                            });
+                            <tr data-equipment-usage-row data-equipment-id="@usage.EquipmentId" hidden>
+                                <td><strong>@usage.ProjectName</strong><span>@usage.ProjectNumber</span></td>
+                                <td>@usage.LegalEntityName</td>
+                                <td>@usage.EntryDate.ToString("yyyy-MM-dd")</td>
+                                <td>@(usage.ExitDate?.ToString("yyyy-MM-dd") ?? "在场")</td>
+                                <td>@usage.RentMode</td>
+                                <td>@usage.UnitRate.ToString("N2")</td>
+                                <td><span class="pill @(usage.ExitDate.HasValue ? null : "pill--success")">@(usage.ExitDate.HasValue ? "已退场" : "使用中")</span></td>
+                                <td>
+                                    @if (Model.CanManage)
+                                    {
+                                        <button class="equipment-text-action" type="button" data-equipment-usage-edit data-equipment-usage-payload="@usagePayload">编辑</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="equipment-usage-empty" data-equipment-usage-empty>当前业务年暂无进退场记录。</p>
+            </section>
+
+            <form method="post" asp-page-handler="Usage" class="equipment-usage-form" data-equipment-usage-form data-equipment-usage-editor hidden="@(!Model.UsageEditorOpen)">
+                <div class="equipment-usage-editor-heading"><div><span>进退场资料</span><strong data-equipment-usage-editor-title>新增记录</strong></div><button class="button button--secondary button--small" type="button" data-equipment-usage-cancel-edit>返回记录</button></div>
+                <div asp-validation-summary="All" class="panel-copy"></div>
+                <input asp-for="UsageInput.Id" type="hidden" />
+                <input asp-for="UsageInput.ConcurrencyStamp" type="hidden" />
+                <input asp-for="UsageInput.EquipmentId" type="hidden" />
+                <input type="hidden" name="CompanyId" value="@Model.CompanyId" />
+                <input type="hidden" name="Unassigned" value="@Model.Unassigned.ToString().ToLowerInvariant()" />
+                <input type="hidden" name="BusinessYearId" value="@Model.BusinessYearId" />
+                <div data-equipment-usage-periods>
+                    @for (var periodIndex = 0; periodIndex < Model.UsageInput.Periods.Count; periodIndex++)
+                    {
+                        <input type="hidden" name="UsageInput.Periods[@periodIndex].StartDate" value="@Model.UsageInput.Periods[periodIndex].StartDate.ToString("yyyy-MM-dd")" />
+                        <input type="hidden" name="UsageInput.Periods[@periodIndex].EndDate" value="@Model.UsageInput.Periods[periodIndex].EndDate.ToString("yyyy-MM-dd")" />
+                        <input type="hidden" name="UsageInput.Periods[@periodIndex].PeriodType" value="@Model.UsageInput.Periods[periodIndex].PeriodType" />
+                        <input type="hidden" name="UsageInput.Periods[@periodIndex].IsChargeable" value="@Model.UsageInput.Periods[periodIndex].IsChargeable.ToString().ToLowerInvariant()" />
+                        <input type="hidden" name="UsageInput.Periods[@periodIndex].Notes" value="@Model.UsageInput.Periods[periodIndex].Notes" />
+                    }
+                </div>
+                <div class="equipment-usage-grid"><label>项目<select asp-for="UsageInput.ProjectId" required><option value="">请选择项目</option>@foreach (var project in Model.Projects) { <option value="@project.Project.Id">@project.Project.ProjectNumber · @project.Project.Name</option> }</select></label><label>签约公司<select asp-for="UsageInput.LegalEntityId" required><option value="">请选择公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.ShortName</option> }</select></label><label>进场日期<input asp-for="UsageInput.EntryDate" type="date" /></label><label>退场日期<input asp-for="UsageInput.ExitDate" type="date" /></label><label>计租方式<select asp-for="UsageInput.RentMode"><option value="Daily">按日</option><option value="Monthly">按月</option><option value="StagePackage">阶段包干</option></select></label><label>基础单价<input asp-for="UsageInput.UnitRate" type="number" min="0" step="0.01" /></label></div>
+                <label>修改原因<input asp-for="UsageInput.Reason" required /></label>
+                <div class="quick-edit-actions equipment-usage-editor-actions"><button type="button" class="button button--secondary" data-equipment-usage-cancel-edit>取消编辑</button><button type="submit" class="button button--primary">保存进退场</button></div>
+            </form>
+        </div>
+    </dialog>
+
+    <dialog class="workbench-dialog equipment-delete-dialog mac-window-dialog" data-equipment-delete-dialog data-dialog-open="@(Model.ActiveDialog == "delete" ? "true" : "false")" data-expected-number="@Model.DeleteInput.EquipmentNumber">
+        <form method="post" asp-page-handler="Delete" data-equipment-delete-form>
+            <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>确认删除设备</strong><span>删除后无法恢复，有业务记录的设备不能删除。</span></div><button type="button" class="dialog-close" aria-label="关闭删除确认窗口" data-equipment-delete-close>×</button></div>
+            <div class="company-create-dialog-body equipment-delete-body">
+                <div asp-validation-summary="All" class="panel-copy"></div>
+                <input asp-for="DeleteInput.Id" type="hidden" />
+                <input asp-for="DeleteInput.ConcurrencyStamp" type="hidden" />
+                <input asp-for="DeleteInput.EquipmentNumber" type="hidden" />
+                <input type="hidden" name="CompanyId" value="@Model.CompanyId" />
+                <input type="hidden" name="BusinessYearId" value="@Model.BusinessYearId" />
+                <p>请输入设备编号 <strong data-equipment-delete-number>@Model.DeleteInput.EquipmentNumber</strong> 完成二次确认。</p>
+                <label>设备编号<input asp-for="DeleteInput.ConfirmationNumber" autocomplete="off" data-equipment-delete-confirmation /></label>
+                <label>删除原因<input asp-for="DeleteInput.Reason" required /></label>
+            </div>
+            <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-equipment-delete-close>取消</button><button type="submit" class="button action-button--delete" data-equipment-delete-submit disabled>永久删除</button></div>
         </form>
     </dialog>
+
+    <dialog class="attachment-preview-dialog mac-window-dialog" data-attachment-preview-dialog aria-labelledby="equipment-attachment-title"><div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><strong id="equipment-attachment-title" data-attachment-preview-title>合格证预览</strong><button class="dialog-close" type="button" data-attachment-preview-close>×</button></div><div class="attachment-preview-body"><img data-attachment-preview-image alt="合格证附件预览" hidden /><iframe data-attachment-preview-frame title="合格证附件预览" hidden></iframe><p data-attachment-preview-fallback hidden></p></div><div class="workbench-dialog-actions"><a class="button button--primary" data-attachment-preview-download>下载</a><button class="button button--secondary" type="button" data-attachment-preview-close>关闭</button></div></dialog>
 </div>

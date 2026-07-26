@@ -37,7 +37,8 @@ public sealed record SaveEquipmentRequest(
     DateOnly? QualificationExpiresOn = null,
     CertificateAttachmentUpload? NewQualificationAttachment = null,
     bool RemoveQualificationAttachment = false,
-    bool IsActive = true);
+    bool IsActive = true,
+    EquipmentStatus Status = EquipmentStatus.Idle);
 
 public sealed record EquipmentDetailsDto(
     Guid Id,
@@ -102,6 +103,25 @@ public sealed record EquipmentUsageDto(
     int StopDays,
     int UnclassifiedDays,
     Guid ConcurrencyStamp);
+
+public sealed record EquipmentUsageFilter(Guid? EquipmentId, DateOnly StartDate, DateOnly EndDate);
+
+public sealed record EquipmentUsageHistoryDto(
+    Guid Id,
+    Guid EquipmentId,
+    string EquipmentNumber,
+    string EquipmentName,
+    Guid ProjectId,
+    string ProjectNumber,
+    string ProjectName,
+    Guid LegalEntityId,
+    string LegalEntityName,
+    DateOnly EntryDate,
+    DateOnly? ExitDate,
+    RentMode RentMode,
+    decimal UnitRate,
+    Guid ConcurrencyStamp,
+    IReadOnlyList<EquipmentPeriodRequest> Periods);
 
 public sealed record EquipmentFilter(Guid? CompanyId, Guid? ProjectId, EquipmentStatus? Status, string? Keyword, bool UnassignedOnly = false);
 

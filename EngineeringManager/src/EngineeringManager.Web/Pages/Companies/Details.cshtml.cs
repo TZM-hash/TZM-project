@@ -11,7 +11,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace EngineeringManager.Web.Pages.Companies;
 
-[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly)]
+[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly + "," + SystemRoles.EquipmentManager)]
 public sealed class DetailsModel(
     ICompanyManagementService companyService,
     ICompanyCertificateService certificateService,

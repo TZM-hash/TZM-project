@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Companies;
+using EngineeringManager.Application.Certificates;
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -8,20 +9,24 @@ using System.ComponentModel.DataAnnotations;
 
 namespace EngineeringManager.Web.Pages.Companies;
 
-[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly)]
-public sealed class IndexModel(ICompanyManagementService companyService, ICompanyActorService actorService, IEmployeeService employeeService)
+[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly + "," + SystemRoles.EquipmentManager)]
+public sealed class IndexModel(ICompanyManagementService companyService, ICompanyCertificateService certificateService, ICompanyActorService actorService, IEmployeeService employeeService)
     : CompanyPageModel(actorService)
 {
     public IReadOnlyList<CompanyListItemDto> Companies { get; private set; } = [];
     public CompanyDashboardDto Dashboard { get; private set; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DateTimeOffset.UtcNow);
     public IReadOnlyList<CompanyCategoryDto> Categories { get; private set; } = [];
+    public IReadOnlyDictionary<Guid, CompanyDetailsDto> CompanyDetails { get; private set; } = new Dictionary<Guid, CompanyDetailsDto>();
+    public IReadOnlyList<CompanyCertificateItemDto> CompanyCertificates { get; private set; } = [];
     public int EmployeeCount { get; private set; }
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
     public bool CategoryEditOpen { get; private set; }
+    public bool CompanyDialogOpen { get; private set; }
     [BindProperty(SupportsGet = true)] public Guid? CompanyId { get; set; }
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty] public CategoryInput Category { get; set; } = new();
     [BindProperty] public List<CategoryRowInput> CategoryRows { get; set; } = [];
+    [BindProperty] public EditModel.InputModel CompanyInput { get; set; } = new();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -47,6 +52,30 @@ public sealed class IndexModel(ICompanyManagementService companyService, ICompan
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
         {
             ModelState.AddModelError(string.Empty, exception.Message);
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostCompanyAsync(CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        RemoveUnrelatedModelState($"{nameof(CompanyInput)}.");
+        if (!TryValidateModel(CompanyInput, nameof(CompanyInput)))
+        {
+            CompanyDialogOpen = true;
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+        try
+        {
+            await companyService.SaveCompanyAsync(await ResolveActorAsync(cancellationToken), CompanyInput.ToRequest(), cancellationToken);
+            return RedirectToPage();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException or DbUpdateConcurrencyException)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            CompanyDialogOpen = true;
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -107,6 +136,13 @@ public sealed class IndexModel(ICompanyManagementService companyService, ICompan
         EmployeeCount = CountActiveEmployees(employees, Companies.Select(company => company.Id));
         Dashboard = await companyService.GetDashboardAsync(actor, CompanyId, cancellationToken);
         Categories = await companyService.ListCategoriesAsync(cancellationToken);
+        var details = new Dictionary<Guid, CompanyDetailsDto>();
+        foreach (var company in Companies)
+        {
+            details[company.Id] = await companyService.GetAsync(actor, company.Id, cancellationToken);
+        }
+        CompanyDetails = details;
+        CompanyCertificates = await certificateService.ListAsync(actor, new CertificateFilter(), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
         if (CategoryRows.Count == 0)
         {
             CategoryRows = Categories.Select(CategoryRowInput.From).ToList();

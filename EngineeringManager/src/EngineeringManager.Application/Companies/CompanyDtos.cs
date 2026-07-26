@@ -78,6 +78,7 @@ public sealed record SaveCompanyRequest(
     string? Phone,
     string? InvoiceTitle,
     string? Notes,
+    bool IsActive,
     Guid? ConcurrencyStamp,
     string Reason);
 

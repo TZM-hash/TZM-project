@@ -1,18 +1,23 @@
+import { initAttachmentPreview } from "../components/attachment-preview.js";
+
 const page = document.querySelector("[data-equipment-workspace]");
 
 if (page) {
     const editorDialog = page.querySelector("[data-equipment-editor-dialog]");
     const detailsDialog = page.querySelector("[data-equipment-details-dialog]");
     const usageDialog = page.querySelector("[data-equipment-usage-dialog]");
-    const editorForm = editorDialog?.querySelector("[data-equipment-editor-form]")
-        ?? page.querySelector("[data-equipment-editor-form]");
+    const deleteDialog = page.querySelector("[data-equipment-delete-dialog]");
+    const editorForm = editorDialog?.querySelector("[data-equipment-editor-form]");
+    const usageForm = usageDialog?.querySelector("[data-equipment-usage-form]");
+    const usageHistory = usageDialog?.querySelector("[data-equipment-usage-history]");
+    const usageEditor = usageDialog?.querySelector("[data-equipment-usage-editor]");
+    let currentUsageEquipment = null;
 
     const preserveWorkspaceScope = () => {
         const form = page.querySelector(".workbench-inline-filters");
         if (!form) return;
         const scope = [
-            ["CompanyId", page.dataset.companyId],
-            ["Unassigned", page.dataset.unassigned === "true" ? "true" : ""]
+            ["CompanyId", page.dataset.companyId]
         ];
         scope.forEach(([name, value]) => {
             if (!value || form.querySelector(`input[name="${name}"]`)) return;
@@ -38,6 +43,11 @@ if (page) {
         if (input.type === "checkbox") input.checked = Boolean(value);
         else input.value = value ?? "";
     };
+    const usageField = (name) => usageForm?.querySelector(`[name="UsageInput.${name}"]`);
+    const setUsageField = (name, value) => {
+        const input = usageField(name);
+        if (input) input.value = value ?? "";
+    };
     const text = (selector, value) => {
         const target = detailsDialog?.querySelector(selector);
         if (target) target.textContent = value || "未填写";
@@ -57,8 +67,8 @@ if (page) {
         if (rented) rented.hidden = ownership !== "Rented";
         const owner = field("OwnerLegalEntityId");
         const lessor = field("LessorBusinessPartnerId");
-        if (ownership === "SelfOwned" && lessor) lessor.value = "";
-        if (ownership === "Rented" && owner) owner.value = "";
+        if (ownership !== "SelfOwned" && owner) owner.value = "";
+        if (ownership !== "Rented" && lessor) lessor.value = "";
     };
 
     const showCurrentAttachment = (payload) => {
@@ -80,6 +90,7 @@ if (page) {
         setField("Model", payload.model);
         setField("Category", payload.category);
         setField("OwnershipType", payload.ownershipType || "SelfOwned");
+        setField("Status", copy ? "Idle" : payload.status || "Idle");
         setField("ManagingLegalEntityId", payload.managingLegalEntityId);
         setField("OwnerLegalEntityId", payload.ownerLegalEntityId);
         setField("LessorBusinessPartnerId", payload.lessorBusinessPartnerId);
@@ -97,17 +108,26 @@ if (page) {
         setField("Reason", copy ? "复制设备档案" : mode === "edit" ? "维护设备档案" : "新增设备档案");
         const title = editorDialog?.querySelector("[data-equipment-editor-title]");
         if (title) title.textContent = copy ? "复制设备" : mode === "edit" ? "编辑设备" : "新增设备";
+        const deleteButton = editorDialog?.querySelector("[data-equipment-delete-open]");
+        if (deleteButton) {
+            deleteButton.hidden = mode !== "edit";
+            deleteButton.dataset.equipmentPayload = mode === "edit" ? JSON.stringify(payload) : "";
+        }
         showCurrentAttachment(copy ? {} : payload);
         syncOwnership();
         show(editorDialog);
     };
 
     const openDetails = (payload) => {
-        text("[data-equipment-detail-number]", `${payload.equipmentNumber || ""} · 设备详情`);
+        text("[data-equipment-detail-number]", `${payload.equipmentNumber || ""} · 设备档案`);
         text("[data-equipment-detail-name]", payload.name);
         text("[data-equipment-detail-model]", `${payload.model || "未填写型号"} / ${payload.category || "未分类"}`);
         text("[data-equipment-detail-company]", payload.managingLegalEntityName || "待分配");
-        const owner = payload.ownershipType === "SelfOwned" ? payload.ownerLegalEntityName : payload.lessorBusinessPartnerName;
+        const owner = payload.ownershipType === "SelfOwned"
+            ? payload.ownerLegalEntityName
+            : payload.ownershipType === "Rented"
+                ? payload.lessorBusinessPartnerName
+                : "不适用";
         text("[data-equipment-detail-ownership]", `${payload.ownershipLabel || ""} · ${owner || "未填写"}`);
         text("[data-equipment-detail-status]", `${payload.statusLabel || ""} · ${payload.isActive ? "档案启用" : "档案停用"}`);
         text("[data-equipment-detail-purchase]", `${payload.purchaseDate || "未填写日期"} · ${payload.purchaseAmount == null ? "未填写金额" : `${payload.purchaseAmount} 元`}`);
@@ -120,21 +140,107 @@ if (page) {
             attachment.href = payload.qualificationAttachmentId
                 ? `?handler=QualificationAttachment&equipmentId=${encodeURIComponent(payload.id)}`
                 : "";
+            attachment.dataset.attachmentName = payload.qualificationAttachmentFileName || "设备合格证";
+            const extension = (payload.qualificationAttachmentFileName || "").split(".").pop()?.toLowerCase();
+            attachment.dataset.attachmentContentType = extension === "pdf"
+                ? "application/pdf"
+                : ["jpg", "jpeg", "png"].includes(extension) ? `image/${extension === "jpg" ? "jpeg" : extension}` : "";
         }
         show(detailsDialog);
     };
 
+    const setUsagePeriods = (periods = []) => {
+        const container = usageForm?.querySelector("[data-equipment-usage-periods]");
+        if (!container) return;
+        container.replaceChildren();
+        periods.forEach((period, index) => {
+            [
+                ["StartDate", period.startDate],
+                ["EndDate", period.endDate],
+                ["PeriodType", period.periodType],
+                ["IsChargeable", String(Boolean(period.isChargeable))],
+                ["Notes", period.notes || ""]
+            ].forEach(([name, value]) => {
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = `UsageInput.Periods[${index}].${name}`;
+                input.value = value;
+                container.appendChild(input);
+            });
+        });
+    };
+
+    const showUsageHistory = () => {
+        if (usageHistory) usageHistory.hidden = false;
+        if (usageEditor) usageEditor.hidden = true;
+    };
+
+    const showUsageEditor = (payload = null) => {
+        usageForm?.reset();
+        const editing = Boolean(payload?.id);
+        setUsageField("Id", editing ? payload.id : "");
+        setUsageField("ConcurrencyStamp", editing ? payload.concurrencyStamp : "");
+        setUsageField("EquipmentId", payload?.equipmentId || currentUsageEquipment?.id);
+        setUsageField("ProjectId", payload?.projectId || "");
+        setUsageField("LegalEntityId", payload?.legalEntityId || currentUsageEquipment?.managingLegalEntityId);
+        setUsageField("EntryDate", payload?.entryDate || new Date().toISOString().slice(0, 10));
+        setUsageField("ExitDate", payload?.exitDate || "");
+        setUsageField("RentMode", payload?.rentMode || "Daily");
+        setUsageField("UnitRate", payload?.unitRate ?? currentUsageEquipment?.internalDailyRate ?? 0);
+        setUsageField("Reason", editing ? "编辑设备进退场" : "登记设备进退场");
+        setUsagePeriods(payload?.periods || []);
+        const title = usageForm?.querySelector("[data-equipment-usage-editor-title]");
+        if (title) title.textContent = editing ? "编辑记录" : "新增记录";
+        if (usageHistory) usageHistory.hidden = true;
+        if (usageEditor) usageEditor.hidden = false;
+    };
+
+    const filterUsageRows = (equipmentId) => {
+        let visibleCount = 0;
+        usageDialog?.querySelectorAll("[data-equipment-usage-row]").forEach((row) => {
+            const matches = row.dataset.equipmentId?.toLowerCase() === equipmentId?.toLowerCase();
+            row.hidden = !matches;
+            if (matches) visibleCount += 1;
+        });
+        const empty = usageDialog?.querySelector("[data-equipment-usage-empty]");
+        if (empty) empty.hidden = visibleCount > 0;
+    };
+
     const openUsage = (payload) => {
-        const form = usageDialog?.querySelector("form");
-        form?.reset();
-        const setUsage = (name, value) => {
-            const input = form?.querySelector(`[name="UsageInput.${name}"]`);
-            if (input) input.value = value ?? "";
-        };
-        setUsage("EquipmentId", payload.id);
-        setUsage("LegalEntityId", payload.managingLegalEntityId);
-        setUsage("UnitRate", payload.internalDailyRate);
+        if (page.dataset.openUsageEquipmentId?.toLowerCase() !== payload.id?.toLowerCase()) {
+            const url = new URL(window.location.href);
+            url.searchParams.set("OpenUsageEquipmentId", payload.id || "");
+            window.location.assign(url);
+            return;
+        }
+        currentUsageEquipment = payload;
+        const name = usageDialog?.querySelector("[data-equipment-usage-equipment-name]");
+        if (name) name.textContent = `${payload.equipmentNumber || ""} · ${payload.name || ""}`;
+        const openId = usageDialog?.querySelector("[data-equipment-open-usage-id]");
+        if (openId) openId.value = payload.id || "";
+        filterUsageRows(payload.id);
+        showUsageHistory();
         show(usageDialog);
+    };
+
+    const openDelete = (payload) => {
+        if (!deleteDialog || !payload?.id) return;
+        const id = deleteDialog.querySelector('[name="DeleteInput.Id"]');
+        const concurrency = deleteDialog.querySelector('[name="DeleteInput.ConcurrencyStamp"]');
+        const equipmentNumber = deleteDialog.querySelector('[name="DeleteInput.EquipmentNumber"]');
+        const confirmation = deleteDialog.querySelector("[data-equipment-delete-confirmation]");
+        const expected = deleteDialog.querySelector("[data-equipment-delete-number]");
+        const submit = deleteDialog.querySelector("[data-equipment-delete-submit]");
+        if (id) id.value = payload.id;
+        if (concurrency) concurrency.value = payload.concurrencyStamp || "";
+        if (equipmentNumber) equipmentNumber.value = payload.equipmentNumber || "";
+        if (confirmation) confirmation.value = "";
+        if (expected) expected.textContent = payload.equipmentNumber || "";
+        if (submit) submit.disabled = true;
+        deleteDialog.dataset.expectedNumber = payload.equipmentNumber || "";
+        editorDialog?.close();
+        show(deleteDialog);
+        confirmation?.focus();
     };
 
     page.querySelectorAll("[data-equipment-dialog-open]").forEach((button) => {
@@ -145,6 +251,31 @@ if (page) {
             else if (mode === "details") openDetails(payload);
             else if (mode === "usage") openUsage(payload);
         });
+    });
+
+    editorDialog?.querySelector("[data-equipment-delete-open]")?.addEventListener("click", (event) => {
+        openDelete(JSON.parse(event.currentTarget.dataset.equipmentPayload || "{}"));
+    });
+    deleteDialog?.querySelector("[data-equipment-delete-confirmation]")?.addEventListener("input", (event) => {
+        const submit = deleteDialog.querySelector("[data-equipment-delete-submit]");
+        if (submit) submit.disabled = event.currentTarget.value.trim() !== deleteDialog.dataset.expectedNumber;
+    });
+    deleteDialog?.querySelectorAll("[data-equipment-delete-close]").forEach((button) => {
+        button.addEventListener("click", () => {
+            deleteDialog.close();
+            show(editorDialog);
+        });
+    });
+
+    usageDialog?.querySelector("[data-equipment-usage-create]")?.addEventListener("click", () => showUsageEditor());
+    usageDialog?.querySelectorAll("[data-equipment-usage-edit]").forEach((button) => {
+        button.addEventListener("click", () => showUsageEditor(JSON.parse(button.dataset.equipmentUsagePayload || "{}")));
+    });
+    usageDialog?.querySelectorAll("[data-equipment-usage-cancel-edit]").forEach((button) => {
+        button.addEventListener("click", showUsageHistory);
+    });
+    usageDialog?.querySelector("[data-equipment-usage-year]")?.addEventListener("change", () => {
+        usageDialog.querySelector("[data-equipment-usage-year-filter]")?.requestSubmit();
     });
 
     page.querySelectorAll("[data-equipment-dialog-close]").forEach((button) => {
@@ -162,7 +293,26 @@ if (page) {
             setField("OwnerLegalEntityId", field("ManagingLegalEntityId")?.value);
     });
     syncOwnership();
+    initAttachmentPreview();
 
     if (editorDialog?.dataset.dialogOpen === "true") show(editorDialog);
-    if (usageDialog?.dataset.dialogOpen === "true") show(usageDialog);
+    if (deleteDialog?.dataset.dialogOpen === "true") show(deleteDialog);
+    const openUsageEquipmentId = page.dataset.openUsageEquipmentId;
+    if (openUsageEquipmentId) {
+        const trigger = Array.from(page.querySelectorAll('[data-equipment-dialog-open="usage"]'))
+            .find((button) => payloadFrom(button).id?.toLowerCase() === openUsageEquipmentId.toLowerCase());
+        currentUsageEquipment = trigger ? payloadFrom(trigger) : { id: openUsageEquipmentId };
+        const name = usageDialog?.querySelector("[data-equipment-usage-equipment-name]");
+        if (name && trigger) name.textContent = `${currentUsageEquipment.equipmentNumber || ""} · ${currentUsageEquipment.name || ""}`;
+        filterUsageRows(openUsageEquipmentId);
+        if (usageDialog?.dataset.usageEditorOpen === "true") {
+            if (usageHistory) usageHistory.hidden = true;
+            if (usageEditor) usageEditor.hidden = false;
+        } else {
+            showUsageHistory();
+        }
+        show(usageDialog);
+    } else if (usageDialog?.dataset.dialogOpen === "true") {
+        show(usageDialog);
+    }
 }

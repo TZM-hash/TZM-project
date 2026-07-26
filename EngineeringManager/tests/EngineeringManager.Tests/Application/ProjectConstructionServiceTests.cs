@@ -43,13 +43,22 @@ public sealed class ProjectConstructionServiceTests
             ManagingLegalEntity = company,
             OwnerLegalEntity = company
         };
-        db.AddRange(company, inaccessibleCompany, project, equipment);
+        var otherEquipment = new Equipment
+        {
+            EquipmentNumber = "CONS-OTHER-EQ",
+            Name = "其他来源设备",
+            OwnershipType = EquipmentOwnershipType.Other,
+            ManagingLegalEntity = company
+        };
+        db.AddRange(company, inaccessibleCompany, project, equipment, otherEquipment);
         await db.SaveChangesAsync();
         var service = new ProjectConstructionService(db, new EquipmentService(db), new BusinessPartnerService(db));
 
         var workspace = await service.GetWorkspaceAsync(project.Id, new DateOnly(2026, 7, 26), default);
         workspace.Equipment.Should().ContainSingle(item => item.Id == equipment.Id)
             .Which.Label.Should().Be("CONS-EQ · 项目读取设备 · 设备公司 · 自有");
+        workspace.Equipment.Should().ContainSingle(item => item.Id == otherEquipment.Id)
+            .Which.Label.Should().Be("CONS-OTHER-EQ · 其他来源设备 · 设备公司 · 其他");
 
         var created = await service.CreateEquipmentAsync(
             new EquipmentActor("project-manager", true, false, false, false, [company.Id], []),

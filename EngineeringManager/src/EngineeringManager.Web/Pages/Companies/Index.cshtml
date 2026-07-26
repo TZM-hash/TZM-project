@@ -1,6 +1,7 @@
 @page
 @model EngineeringManager.Web.Pages.Companies.IndexModel
 @using EngineeringManager.Web.Workbenches
+@using System.Text.Json
 @{
     ViewData["Title"] = "自有公司";
     var dashboard = Model.Dashboard;
@@ -27,6 +28,10 @@
             new("CompanyId", "范围", Model.CompanyId?.ToString(), DataWorkbenchFilterKind.Select,
                 Model.Companies.Select(company => new DataWorkbenchFilterOption(company.Id.ToString(), company.Name)).ToArray())
         }
+    };
+    string AttachmentContentType(string? fileName) => System.IO.Path.GetExtension(fileName)?.ToLowerInvariant() switch
+    {
+        ".pdf" => "application/pdf", ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", _ => "application/octet-stream"
     };
 }
 
@@ -215,13 +220,14 @@
                                 </td>
                                 <td data-column-key="actions">
                                     <div class="company-row-actions">
-                                        <a asp-page="Details" asp-route-id="@company.Id" asp-route-tab="overview">查看</a>
+                                        @{ var details = Model.CompanyDetails[company.Id]; var payload = JsonSerializer.Serialize(new { details.Id, details.Code, details.Name, details.ShortName, details.CompanyCategoryId, details.CompanyCategoryName, details.LegalRepresentative, details.UnifiedSocialCreditCode, details.RegisteredAddress, details.BusinessAddress, details.Phone, details.InvoiceTitle, details.Notes, details.IsActive, details.ConcurrencyStamp }); }
+                                        <button class="action-button action-button--view" type="button" data-company-view-open data-company-payload="@payload">查看</button>
                                         @if (Model.CanManage)
                                         {
-                                            <a asp-page="Edit" asp-route-id="@company.Id">编辑</a>
-                                            <a asp-page="Edit" asp-route-copyFrom="@company.Id">复制</a>
+                                            <button class="action-button action-button--edit" type="button" data-company-edit-open data-company-payload="@payload">编辑</button>
+                                            <button class="action-button action-button--copy" type="button" data-company-copy-open data-company-payload="@payload">复制</button>
                                         }
-                                        <a asp-page="/Companies/Certificates/Index" asp-route-CompanyId="@company.Id">证书</a>
+                                        <button class="action-button action-button--certificate" type="button" data-company-certificates-open data-company-id="@company.Id">证书</button>
                                     </div>
                                 </td>
                             </tr>
@@ -233,3 +239,46 @@
         </article>
     </section>
 </div>
+
+<dialog class="workbench-dialog company-dialog mac-window-dialog" data-company-workspace-dialog data-dialog-open="@Model.CompanyDialogOpen.ToString().ToLowerInvariant()" aria-labelledby="company-dialog-title">
+    <form method="post" asp-page-handler="Company">
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong id="company-dialog-title" data-company-dialog-title>编辑公司</strong><span>公司资料修改将保留审计记录。</span></div><button class="dialog-close" type="button" data-company-dialog-close aria-label="关闭">×</button></div>
+        <div class="company-create-dialog-body company-dialog-body company-dialog-form-grid form-grid">
+            <div asp-validation-summary="All" class="form-span validation-summary"></div>
+            <section class="form-section">
+                <h2 class="section-heading">主体资料</h2>
+                <label>公司编码<input asp-for="CompanyInput.Code" required /></label>
+                <label>公司全称<input asp-for="CompanyInput.Name" required /></label>
+                <label>公司简称<input asp-for="CompanyInput.ShortName" required /></label>
+                <label>组合分类<select asp-for="CompanyInput.CompanyCategoryId" required><option value="">请选择</option>@foreach (var category in Model.Categories.Where(x => x.IsActive)) { <option value="@category.Id">@category.Name</option> }</select></label>
+                <label>状态<select asp-for="CompanyInput.IsActive"><option value="true">启用</option><option value="false">停用</option></select></label>
+                <label>法人/经营者<input asp-for="CompanyInput.LegalRepresentative" /></label>
+                <label>统一社会信用代码/税号<input asp-for="CompanyInput.UnifiedSocialCreditCode" /></label>
+            </section>
+            <section class="form-section"><h2 class="section-heading">地址与开票</h2><label>注册地址<input asp-for="CompanyInput.RegisteredAddress" /></label><label>经营地址<input asp-for="CompanyInput.BusinessAddress" /></label><label>电话<input asp-for="CompanyInput.Phone" /></label><label>开票抬头<input asp-for="CompanyInput.InvoiceTitle" /></label><label class="form-span">备注<textarea asp-for="CompanyInput.Notes"></textarea></label></section>
+            <label class="form-span">修改原因<input asp-for="CompanyInput.Reason" required /></label>
+            <input asp-for="CompanyInput.Id" type="hidden" /><input asp-for="CompanyInput.ConcurrencyStamp" type="hidden" />
+        </div>
+        <div class="workbench-dialog-actions"><button class="button button--secondary" type="button" data-company-dialog-close>取消</button><button class="button button--primary" type="submit">保存</button></div>
+    </form>
+</dialog>
+
+<dialog class="workbench-dialog company-dialog company-dialog--content mac-window-dialog" data-company-view-dialog aria-labelledby="company-view-title"><div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><strong id="company-view-title">查看公司</strong><button class="dialog-close" type="button" data-company-view-close>×</button></div><dl class="company-dialog-body company-view-dialog-body detail-grid" data-company-view-content></dl><div class="workbench-dialog-actions"><button class="button button--secondary" type="button" data-company-view-close>关闭</button></div></dialog>
+
+@foreach (var company in Model.Companies)
+{
+    <dialog class="workbench-dialog company-dialog company-dialog--content mac-window-dialog" data-company-certificates-dialog="@company.Id" aria-labelledby="company-certificates-title-@company.Id">
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong id="company-certificates-title-@company.Id">@company.Name · 证书</strong><span>点击附件可预览或下载。</span></div><button class="dialog-close" type="button" data-company-certificates-close>×</button></div>
+        <div class="company-dialog-body company-certificate-dialog-body table-wrap"><table class="data-table"><thead><tr><th>类型</th><th>编号</th><th>到期日期</th><th>附件</th></tr></thead><tbody>
+        @foreach (var certificate in Model.CompanyCertificates.Where(item => item.LegalEntityId == company.Id))
+        {
+            <tr><td>@certificate.CertificateType</td><td>@(certificate.CertificateNumber ?? "—")</td><td>@(certificate.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</td><td>@if (certificate.AttachmentId.HasValue) { <a data-attachment-preview-trigger asp-page="/Companies/Certificates/Index" asp-page-handler="Attachment" asp-route-id="@certificate.Id" data-attachment-name="@certificate.AttachmentFileName" data-attachment-content-type="@AttachmentContentType(certificate.AttachmentFileName)">@certificate.AttachmentFileName</a> } else { <span>—</span> }</td></tr>
+        }
+        </tbody></table></div>
+        <div class="workbench-dialog-actions">@if (Model.CanManage) { <a class="button button--secondary" asp-page="/Companies/Certificates/Index" asp-route-CompanyId="@company.Id">维护证书</a> }<button class="button button--secondary" type="button" data-company-certificates-close>关闭</button></div>
+    </dialog>
+}
+
+<dialog class="attachment-preview-dialog mac-window-dialog" data-attachment-preview-dialog aria-labelledby="company-attachment-title"><div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><strong id="company-attachment-title" data-attachment-preview-title>附件预览</strong><button class="dialog-close" type="button" data-attachment-preview-close>×</button></div><div class="attachment-preview-body"><img data-attachment-preview-image alt="证书附件预览" hidden /><iframe data-attachment-preview-frame title="证书附件预览" hidden></iframe><p data-attachment-preview-fallback hidden></p></div><div class="workbench-dialog-actions"><a class="button button--primary" data-attachment-preview-download>下载</a><button class="button button--secondary" type="button" data-attachment-preview-close>关闭</button></div></dialog>
+
+@section Scripts { <script type="module" src="~/js/pages/company-workspace.js" asp-append-version="true"></script> }

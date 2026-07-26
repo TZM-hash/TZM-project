@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EngineeringManager.Web.Pages.Equipment;
 
-[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.EquipmentManager + "," + SystemRoles.SiteStaff)]
+[Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.EquipmentManager)]
 public sealed class UsageModel(IEquipmentService service) : EquipmentPageModel
 {
     [BindProperty] public InputModel Input { get; set; } = new();
@@ -20,6 +20,7 @@ public sealed class UsageModel(IEquipmentService service) : EquipmentPageModel
     }
     public sealed class InputModel
     {
+        public Guid? Id { get; set; }
         public Guid EquipmentId { get; set; }
         public Guid ProjectId { get; set; }
         public Guid LegalEntityId { get; set; }
@@ -27,7 +28,27 @@ public sealed class UsageModel(IEquipmentService service) : EquipmentPageModel
         public DateOnly? ExitDate { get; set; }
         public RentMode RentMode { get; set; } = RentMode.Daily;
         public decimal UnitRate { get; set; }
+        public Guid? ConcurrencyStamp { get; set; }
+        public List<PeriodInputModel> Periods { get; set; } = [];
         public string Reason { get; set; } = "登记设备进退场";
-        public SaveEquipmentUsageRequest ToRequest() => new(null, EquipmentId, ProjectId, LegalEntityId, null, EntryDate, ExitDate, RentMode, MonthlyProrationMode.ThirtyDay, UnitRate, false, null, ExitDate.HasValue ? [new EquipmentPeriodRequest(EntryDate, ExitDate.Value, EquipmentPeriodType.Work, true, null)] : [], null, Reason);
+        public SaveEquipmentUsageRequest ToRequest()
+        {
+            IReadOnlyCollection<EquipmentPeriodRequest> periods = Periods.Count > 0
+                ? Periods.Select(item => item.ToRequest()).ToArray()
+                : ExitDate.HasValue
+                    ? [new EquipmentPeriodRequest(EntryDate, ExitDate.Value, EquipmentPeriodType.Work, true, null)]
+                    : [];
+            return new SaveEquipmentUsageRequest(Id, EquipmentId, ProjectId, LegalEntityId, null, EntryDate, ExitDate, RentMode, MonthlyProrationMode.ThirtyDay, UnitRate, false, null, periods, ConcurrencyStamp, Reason);
+        }
+    }
+
+    public sealed class PeriodInputModel
+    {
+        public DateOnly StartDate { get; set; }
+        public DateOnly EndDate { get; set; }
+        public EquipmentPeriodType PeriodType { get; set; }
+        public bool IsChargeable { get; set; }
+        public string? Notes { get; set; }
+        public EquipmentPeriodRequest ToRequest() => new(StartDate, EndDate, PeriodType, IsChargeable, Notes);
     }
 }

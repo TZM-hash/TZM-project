@@ -24,6 +24,20 @@ namespace EngineeringManager.Tests.Web;
 public sealed class CompanyPageTests
 {
     [Fact]
+    public void CompanyIndexDoesNotFanOutQueriesOnTheScopedDbContext()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "EngineeringManager.Web",
+            "Pages",
+            "Companies",
+            "Index.cshtml.cs"));
+
+        source.Should().NotContain("Task.WhenAll(Companies.Select");
+    }
+
+    [Fact]
     public async Task AnonymousUserIsRedirectedFromCompanies()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -166,6 +180,23 @@ public sealed class CompanyPageTests
         using var edit = await client.GetAsync("/Companies/Edit");
 
         list.StatusCode.Should().Be(HttpStatusCode.OK);
+        edit.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task EquipmentManagerCanOpenCompanyReadPagesButCannotManageCompanies()
+    {
+        await using var factory = CreateFactory("EquipmentManager");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        using var list = await client.GetAsync("/Companies");
+        using var details = await client.GetAsync($"/Companies/Details/{FakeCompanyService.CompanyId}?tab=overview");
+        using var certificates = await client.GetAsync("/Companies/Certificates");
+        using var edit = await client.GetAsync("/Companies/Edit");
+
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+        details.StatusCode.Should().Be(HttpStatusCode.OK);
+        certificates.StatusCode.Should().Be(HttpStatusCode.OK);
         edit.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -343,6 +374,23 @@ public sealed class CompanyPageTests
         var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies"));
 
         html.Should().Contain($"class=\"company-name-link\" href=\"/Companies/Details/{FakeCompanyService.CompanyId}?tab=overview\"");
+    }
+
+    [Fact]
+    public async Task CompanyListOperationsUseDialogsAndCompanyEditorIncludesStatus()
+    {
+        using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies"));
+
+        html.Should().Contain("data-company-view-open")
+            .And.Contain("data-company-edit-open")
+            .And.Contain("data-company-copy-open")
+            .And.Contain("data-company-certificates-open")
+            .And.Contain("data-company-workspace-dialog")
+            .And.Contain("name=\"CompanyInput.IsActive\"")
+            .And.Contain("/js/pages/company-workspace.");
     }
 
     [Fact]

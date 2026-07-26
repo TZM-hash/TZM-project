@@ -133,6 +133,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         entity.Phone = Optional(request.Phone);
         entity.InvoiceTitle = Optional(request.InvoiceTitle) ?? name;
         entity.Notes = Optional(request.Notes);
+        entity.IsActive = request.IsActive;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.ConcurrencyStamp = Guid.NewGuid();
         db.AuditLogs.Add(new AuditLog
@@ -154,7 +155,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         var source = await GetAsync(actor, sourceId, cancellationToken);
         return new SaveCompanyRequest(null, string.Empty, $"{source.Name} - 副本", $"{source.ShortName}副本",
             source.CompanyCategoryId, source.LegalRepresentative, null, source.RegisteredAddress,
-            source.BusinessAddress, source.Phone, $"{source.Name} - 副本", source.Notes, null, "复制公司档案");
+            source.BusinessAddress, source.Phone, $"{source.Name} - 副本", source.Notes, true, null, "复制公司档案");
     }
 
     public async Task<IReadOnlyList<CompanyCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken) =>
