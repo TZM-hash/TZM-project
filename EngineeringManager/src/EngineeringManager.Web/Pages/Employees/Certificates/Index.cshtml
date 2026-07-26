@@ -6,7 +6,7 @@
     ViewData["Title"] = "员工证书管理";
     var statusOptions = new DataWorkbenchFilterOption[]
     {
-        new("Info", "轻度提醒"), new("Warning", "中度提醒"), new("Critical", "重度提醒"),
+        new("Info", "轻度提醒"), new("Warning", "中度提醒"), new("Critical", "高度提醒"),
         new("Expired", "已过期"), new("LongTerm", "长期有效"), new("Normal", "有效")
     };
     var workbench = DataWorkbenchPresets.EmployeeCertificates with
@@ -30,7 +30,7 @@
 
 <section class="metric-grid" aria-label="员工证书统计">
     <article class="metric-card"><span class="metric-label">证书总数</span><strong class="metric-value">@Model.Certificates.Count</strong><span class="metric-hint">当前筛选范围</span></article>
-    <article class="metric-card"><span class="metric-label">三个月内到期</span><strong class="metric-value">@Model.Certificates.Count(item => item.State is CertificateExpiryState.Info or CertificateExpiryState.Warning or CertificateExpiryState.Critical)</strong><span class="metric-hint">轻度至重度提醒</span></article>
+    <article class="metric-card"><span class="metric-label">三个月内到期</span><strong class="metric-value">@Model.Certificates.Count(item => item.State is CertificateExpiryState.Info or CertificateExpiryState.Warning or CertificateExpiryState.Critical)</strong><span class="metric-hint">轻度至高度提醒</span></article>
     <article class="metric-card"><span class="metric-label">已过期</span><strong class="metric-value metric-value--risk">@Model.Certificates.Count(item => item.State == CertificateExpiryState.Expired)</strong><span class="metric-hint">需优先处理</span></article>
     <article class="metric-card"><span class="metric-label">长期有效</span><strong class="metric-value metric-value--good">@Model.Certificates.Count(item => item.State == CertificateExpiryState.LongTerm)</strong><span class="metric-hint">不进入提醒</span></article>
 </section>

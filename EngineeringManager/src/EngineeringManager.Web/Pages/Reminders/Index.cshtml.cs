@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Reminders;
+using EngineeringManager.Domain.Reminders;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,4 +20,12 @@ public sealed class IndexModel(IReminderService reminderService) : PageModel
 
     public async Task<IActionResult> OnPostReadAsync(Guid id, CancellationToken cancellationToken) { await reminderService.MarkReadAsync(id, cancellationToken); return RedirectToPage(); }
     public async Task<IActionResult> OnPostResolveAsync(Guid id, CancellationToken cancellationToken) { await reminderService.ResolveAsync(id, cancellationToken); return RedirectToPage(); }
+    public static string SeverityLabel(ReminderSeverity severity) => severity switch
+    {
+        ReminderSeverity.Info => "轻度提醒",
+        ReminderSeverity.Warning => "中度提醒",
+        ReminderSeverity.Critical => "高度提醒",
+        _ => severity.ToString()
+    };
+    public static string SeverityClass(ReminderSeverity severity) => severity.ToString().ToLowerInvariant();
 }

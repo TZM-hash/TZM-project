@@ -39,7 +39,27 @@ public sealed class CertificatePageTests
         var employeeHtml = WebUtility.HtmlDecode(await client.GetStringAsync("/Employees/Certificates"));
         var companyHtml = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies/Certificates"));
         employeeHtml.Should().Contain("employee-certificates-table").And.Contain("新增员工证书").And.Contain("建造师证");
-        companyHtml.Should().Contain("company-certificates-table").And.Contain("新增公司证书").And.Contain("安全生产许可证");
+        companyHtml.Should().Contain("company-certificates-table")
+            .And.Contain("新增公司证书")
+            .And.Contain("安全生产许可证")
+            .And.Contain("data-company-certificate-workspace")
+            .And.Contain("data-company-certificate-workspace-summary")
+            .And.Contain("data-company-certificate-workspace-list")
+            .And.Contain("data-company-certificate-editor-dialog")
+            .And.Contain("data-company-certificate-details-dialog")
+            .And.Contain("data-company-certificate-delete-dialog")
+            .And.Contain("data-company-certificate-dialog-open=\"details\"")
+            .And.Contain("data-company-certificate-dialog-open=\"edit\"")
+            .And.Contain("data-company-certificate-dialog-open=\"copy\"")
+            .And.Contain("action-button--view")
+            .And.Contain("action-button--edit")
+            .And.Contain("action-button--copy")
+            .And.Contain("action-button--certificate")
+            .And.Contain("name=\"Editor.CertificateType\"")
+            .And.Contain("data-attachment-preview-dialog")
+            .And.Contain("js/pages/company-certificate-workspace.")
+            .And.NotContain("href=\"/Companies/Certificates/Edit")
+            .And.NotContain("jquery.validate");
     }
 
     [Fact]
@@ -49,6 +69,22 @@ public sealed class CertificatePageTests
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         (await client.GetAsync("/Employees/Certificates")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await client.GetAsync("/Employees/Certificates/Edit")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task QueryOnlySeesCompanyCertificateDetailsWithoutMutationControls()
+    {
+        await using var factory = CreateFactory("QueryOnly");
+        using var client = factory.CreateClient();
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies/Certificates"));
+
+        html.Should().Contain("data-company-certificate-dialog-open=\"details\"")
+            .And.Contain("action-button--certificate")
+            .And.NotContain("data-company-certificate-dialog-open=\"edit\"")
+            .And.NotContain("data-company-certificate-dialog-open=\"copy\"")
+            .And.NotContain("data-company-certificate-editor-dialog")
+            .And.NotContain("data-company-certificate-delete-dialog");
     }
 
     private static WebApplicationFactory<Program> CreateFactory(string role) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -75,7 +111,7 @@ public sealed class CertificatePageTests
     }
     private sealed class FakeCompanyCertificateService : ICompanyCertificateService
     {
-        public Task<IReadOnlyList<CompanyCertificateItemDto>> ListAsync(CompanyActor actor, CertificateFilter filter, DateOnly today, CancellationToken token) => Task.FromResult<IReadOnlyList<CompanyCertificateItemDto>>([new(Guid.NewGuid(), FakeCompanyService.Id, "C-001", "测试公司", "安全生产许可证", "AQ-01", null, "住建部门", null, today.AddMonths(1), null, null, null, CertificateExpiryState.Critical, Guid.NewGuid())]);
+        public Task<IReadOnlyList<CompanyCertificateItemDto>> ListAsync(CompanyActor actor, CertificateFilter filter, DateOnly today, CancellationToken token) => Task.FromResult<IReadOnlyList<CompanyCertificateItemDto>>([new(Guid.NewGuid(), FakeCompanyService.Id, "C-001", "测试公司", "安全生产许可证", "AQ-01", null, "住建部门", null, today.AddMonths(1), Guid.NewGuid(), "安全生产许可证.pdf", null, CertificateExpiryState.Critical, Guid.NewGuid())]);
         public Task<CompanyCertificateItemDto> GetAsync(CompanyActor actor, Guid id, DateOnly today, CancellationToken token) => throw new NotSupportedException();
         public Task<CompanyCertificateItemDto> SaveAsync(CompanyActor actor, SaveCompanyCertificateItemRequest request, DateOnly today, CancellationToken token) => throw new NotSupportedException();
         public Task DeleteAsync(CompanyActor actor, Guid id, Guid concurrencyStamp, string reason, CancellationToken token) => throw new NotSupportedException();

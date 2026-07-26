@@ -16,6 +16,8 @@ if (page) {
     const preserveWorkspaceScope = () => {
         const form = page.querySelector(".workbench-inline-filters");
         if (!form) return;
+        const companySelect = form.querySelector('[name="CompanyId"]');
+        companySelect?.addEventListener("change", () => form.requestSubmit());
         const scope = [
             ["CompanyId", page.dataset.companyId]
         ];

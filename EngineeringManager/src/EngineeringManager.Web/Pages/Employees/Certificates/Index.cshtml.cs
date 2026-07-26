@@ -45,7 +45,7 @@ public sealed class IndexModel(IEmployeeCertificateService certificateService, I
         CertificateExpiryState.Normal => "有效",
         CertificateExpiryState.Info => "轻度提醒",
         CertificateExpiryState.Warning => "中度提醒",
-        CertificateExpiryState.Critical => "重度提醒",
+        CertificateExpiryState.Critical => "高度提醒",
         CertificateExpiryState.Expired => "已过期",
         _ => state.ToString()
     };

@@ -1,28 +1,173 @@
 @page
 @model EngineeringManager.Web.Pages.Companies.Certificates.IndexModel
+@using System.Text.Json
 @using EngineeringManager.Domain.Certificates
 @using EngineeringManager.Web.Workbenches
 @{
     ViewData["Title"] = "公司证书管理";
     var statusOptions = new DataWorkbenchFilterOption[]
     {
-        new("Info", "轻度提醒"), new("Warning", "中度提醒"), new("Critical", "重度提醒"),
+        new("Info", "轻度提醒"), new("Warning", "中度提醒"), new("Critical", "高度提醒"),
         new("Expired", "已过期"), new("LongTerm", "长期有效"), new("Normal", "有效")
     };
-    var workbench = DataWorkbenchPresets.CompanyCertificates with
+    var inlineFilters = new DataWorkbenchFilterField[]
     {
-        InlineFilters = new DataWorkbenchFilterField[] { new("Search", "搜索", Model.Search, Placeholder: "搜索证书全部信息") },
-        Filters = new DataWorkbenchFilterField[]
-        {
-            new("CompanyId", "自有公司", Model.CompanyId?.ToString(), DataWorkbenchFilterKind.Select,
-                Model.Companies.Select(company => new DataWorkbenchFilterOption(company.Id.ToString(), $"{company.Code} · {company.ShortName}")).ToArray()),
-            new("CertificateType", "证书类型", Model.CertificateType, DataWorkbenchFilterKind.Select,
-                Model.CertificateTypes.Select(type => new DataWorkbenchFilterOption(type, type)).ToArray()),
-            new("State", "状态", Model.State?.ToString(), DataWorkbenchFilterKind.Select, statusOptions)
-        }
+        new("CompanyId", "公司", Model.CompanyId?.ToString(), DataWorkbenchFilterKind.Select,
+            Model.Companies.Select(company => new DataWorkbenchFilterOption(company.Id.ToString(), company.ShortName)).ToArray()),
+        new("Search", "搜索", Model.Search, Placeholder: "搜索公司、类型、编号或机关"),
+        new("CertificateType", "类型", Model.CertificateType, DataWorkbenchFilterKind.Select,
+            Model.CertificateTypes.Select(type => new DataWorkbenchFilterOption(type, type)).ToArray()),
+        new("State", "提醒", Model.State?.ToString(), DataWorkbenchFilterKind.Select, statusOptions)
     };
+    var workbench = DataWorkbenchPresets.CompanyCertificates with { InlineFilters = inlineFilters, Filters = inlineFilters };
+    var reminderCount = Model.Certificates.Count(item => item.State is CertificateExpiryState.Info or CertificateExpiryState.Warning or CertificateExpiryState.Critical);
 }
-<section class="page-heading"><div><p class="eyebrow">企业证照台账</p><h1>公司证书管理</h1><p class="page-lead">集中管理营业执照、安全生产许可证和多项资质证书，并按公司权限范围统计到期风险。</p></div>@if (Model.CanManage) { <a class="button button--primary" asp-page="Edit">新增公司证书</a> }</section>
-<section class="metric-grid" aria-label="公司证书统计"><article class="metric-card"><span class="metric-label">证书总数</span><strong class="metric-value">@Model.Certificates.Count</strong><span class="metric-hint">当前筛选范围</span></article><article class="metric-card"><span class="metric-label">三个月内到期</span><strong class="metric-value">@Model.Certificates.Count(item => item.State is CertificateExpiryState.Info or CertificateExpiryState.Warning or CertificateExpiryState.Critical)</strong><span class="metric-hint">轻度至重度提醒</span></article><article class="metric-card"><span class="metric-label">已过期</span><strong class="metric-value metric-value--risk">@Model.Certificates.Count(item => item.State == CertificateExpiryState.Expired)</strong><span class="metric-hint">需优先处理</span></article><article class="metric-card"><span class="metric-label">长期有效</span><strong class="metric-value metric-value--good">@Model.Certificates.Count(item => item.State == CertificateExpiryState.LongTerm)</strong><span class="metric-hint">不进入提醒</span></article></section>
-<section class="panel"><div class="panel-heading"><div><p class="eyebrow">证书清单</p><h2>公司持证情况</h2></div></div><partial name="_DataWorkbench" model="workbench" />
-@if (Model.Certificates.Count == 0) { <p class="panel-copy">当前筛选范围内没有公司证书。</p> } else { <div class="table-wrap"><table class="data-table" id="company-certificates-table"><thead><tr><th data-column-key="company">公司</th><th data-column-key="certificate_type">证书类型</th><th data-column-key="certificate_number">证书编号</th><th data-column-key="scope">专业/等级/范围</th><th data-column-key="authority">发证机关</th><th data-column-key="issued_on">签发日期</th><th data-column-key="expires_on">到期日期</th><th data-column-key="status">状态</th><th data-column-key="attachment">附件</th><th data-column-key="actions">操作</th></tr></thead><tbody>@foreach (var item in Model.Certificates) { <tr><td data-column-key="company"><strong>@item.CompanyName</strong><small class="table-secondary">@item.CompanyCode</small></td><td data-column-key="certificate_type">@item.CertificateType</td><td data-column-key="certificate_number">@(item.CertificateNumber ?? "—")</td><td data-column-key="scope">@(item.SpecialtyLevelScope ?? "—")</td><td data-column-key="authority">@(item.IssuingAuthority ?? "—")</td><td data-column-key="issued_on">@(item.IssuedOn?.ToString("yyyy-MM-dd") ?? "—")</td><td data-column-key="expires_on">@(item.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</td><td data-column-key="status"><span class="certificate-status certificate-status--@IndexModel.StatusClass(item.State)">@IndexModel.StatusLabel(item.State)</span></td><td data-column-key="attachment">@if (item.AttachmentId.HasValue) { <a asp-page-handler="Attachment" asp-route-id="@item.Id">@item.AttachmentFileName</a> } else { <span>—</span> }</td><td data-column-key="actions"><div class="table-actions">@if (Model.CanManage) { <a class="button button--secondary" asp-page="Edit" asp-route-id="@item.Id">编辑</a><form method="post" asp-page-handler="Delete" onsubmit="return confirm('确认删除这本公司证书？');"><input type="hidden" name="id" value="@item.Id" /><input type="hidden" name="concurrencyStamp" value="@item.ConcurrencyStamp" /><button class="button button--ghost" type="submit">删除</button></form> }</div></td></tr> }</tbody></table></div> }</section>
+@section Scripts { <script type="module" src="~/js/pages/company-certificate-workspace.js" asp-append-version="true"></script> }
+
+<datalist id="company-certificate-types"><option value="营业执照"></option><option value="安全生产许可证"></option><option value="资质证书"></option><option value="开户许可证"></option><option value="行业许可证"></option></datalist>
+
+<div class="company-certificate-workspace-page" data-company-certificate-workspace data-active-dialog="@Model.ActiveDialog" data-company-id="@Model.CompanyId">
+    <section class="page-heading compact-page-heading company-certificate-workspace-heading">
+        <div><p class="eyebrow">企业证照台账</p><h1>公司证书管理</h1><p class="page-lead">@Model.ScopeName · 统一维护公司证照、有效期和到期提醒</p></div>
+        @if (Model.CanManage) { <button class="button button--primary" type="button" data-company-certificate-dialog-open="create">新增公司证书</button> }
+    </section>
+
+    <section class="company-certificate-workspace-layout">
+        <aside class="company-certificate-workspace-summary" data-company-certificate-workspace-summary>
+            <div class="equipment-summary-heading"><span>当前范围</span><strong>@Model.ScopeName</strong></div>
+            <div class="company-certificate-summary-metrics">
+                <article><span>证书总数</span><strong>@Model.Certificates.Count</strong></article>
+                <article><span>有效</span><strong>@Model.Certificates.Count(item => item.State == CertificateExpiryState.Normal)</strong></article>
+                <article><span>提醒中</span><strong>@reminderCount</strong></article>
+                <article><span>已过期</span><strong>@Model.Certificates.Count(item => item.State == CertificateExpiryState.Expired)</strong></article>
+                <article><span>长期有效</span><strong>@Model.Certificates.Count(item => item.State == CertificateExpiryState.LongTerm)</strong></article>
+            </div>
+            <section class="company-certificate-reminder-scale" aria-label="证书提醒等级">
+                <div><span class="certificate-status certificate-status--info">轻度提醒</span><small>三个月内</small></div>
+                <div><span class="certificate-status certificate-status--warning">中度提醒</span><small>两个月内</small></div>
+                <div><span class="certificate-status certificate-status--critical">高度提醒</span><small>一个月内</small></div>
+                <div><span class="certificate-status certificate-status--expired">已过期</span><small>超过到期日</small></div>
+            </section>
+            <section class="equipment-company-summary company-certificate-company-summary">
+                <div class="equipment-company-summary-heading"><div><span>所有公司</span><strong>证书构成</strong></div><small>共 @Model.PortfolioCertificates.Count 本</small></div>
+                <div class="equipment-company-summary-list">
+                @foreach (var company in Model.CompanySummaries)
+                {
+                    var total = Math.Max(company.TotalCount, 1);
+                    var activeShare = company.ActiveCount * 100d / total;
+                    var reminderShare = company.ReminderCount * 100d / total;
+                    var expiredShare = company.ExpiredCount * 100d / total;
+                    <a class="equipment-company-summary-row @(Model.CompanyId == company.CompanyId ? "is-active" : string.Empty)" asp-page="Index" asp-route-companyId="@company.CompanyId">
+                        <div><strong>@company.CompanyName</strong><span>@company.TotalCount 本</span></div>
+                        <div class="company-certificate-composition" aria-hidden="true"><span class="is-active" style="width:@activeShare.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span><span class="is-reminder" style="width:@reminderShare.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span><span class="is-expired" style="width:@expiredShare.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></div>
+                        <small>有效 @company.ActiveCount · 提醒 @company.ReminderCount · 过期 @company.ExpiredCount</small>
+                    </a>
+                }
+                </div>
+            </section>
+        </aside>
+
+        <section class="company-certificate-workspace-list" data-company-certificate-workspace-list>
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated company-certificate-list-toolbar">
+                <div><p class="eyebrow">证书档案</p><h2>@Model.ScopeName</h2></div>
+                <partial name="_DataWorkbench" model="workbench" />
+            </div>
+            <div class="table-wrap company-certificate-table-wrap">
+                <table class="data-table company-certificate-workspace-table" id="company-certificates-table">
+                    <thead><tr><th data-column-key="company">公司</th><th data-column-key="certificate">证书 / 编号</th><th data-column-key="scope">专业 / 等级 / 范围</th><th data-column-key="authority">发证机关</th><th data-column-key="validity">签发 / 到期</th><th data-column-key="status">提醒等级</th><th data-column-key="actions">操作</th></tr></thead>
+                    <tbody>
+                    @if (Model.Certificates.Count == 0) { <tr><td colspan="7" class="empty-state">当前范围暂无公司证书。</td></tr> }
+                    @foreach (var item in Model.Certificates)
+                    {
+                        var attachmentUrl = item.AttachmentId.HasValue ? Url.Page("Index", "Attachment", new { id = item.Id }) : string.Empty;
+                        var payload = JsonSerializer.Serialize(new
+                        {
+                            id = item.Id,
+                            legalEntityId = item.LegalEntityId,
+                            companyCode = item.CompanyCode,
+                            companyName = item.CompanyName,
+                            certificateType = item.CertificateType,
+                            certificateNumber = item.CertificateNumber,
+                            specialtyLevelScope = item.SpecialtyLevelScope,
+                            issuingAuthority = item.IssuingAuthority,
+                            issuedOn = item.IssuedOn?.ToString("yyyy-MM-dd"),
+                            expiresOn = item.ExpiresOn?.ToString("yyyy-MM-dd"),
+                            attachmentFileName = item.AttachmentFileName,
+                            attachmentUrl,
+                            attachmentContentType = IndexModel.AttachmentContentType(item.AttachmentFileName),
+                            notes = item.Notes,
+                            statusLabel = IndexModel.StatusLabel(item.State),
+                            statusClass = IndexModel.StatusClass(item.State),
+                            concurrencyStamp = item.ConcurrencyStamp,
+                            confirmationText = string.IsNullOrWhiteSpace(item.CertificateNumber) ? item.CertificateType : item.CertificateNumber
+                        });
+                        <tr>
+                            <td data-column-key="company"><strong class="company-certificate-clamp" title="@item.CompanyName">@item.CompanyName</strong><small class="table-secondary">@item.CompanyCode</small></td>
+                            <td data-column-key="certificate"><strong class="company-certificate-clamp" title="@item.CertificateType">@item.CertificateType</strong><small class="table-secondary" title="@item.CertificateNumber">@(item.CertificateNumber ?? "未填写编号")</small></td>
+                            <td data-column-key="scope"><span class="company-certificate-clamp" title="@item.SpecialtyLevelScope">@(item.SpecialtyLevelScope ?? "—")</span></td>
+                            <td data-column-key="authority"><span class="company-certificate-clamp" title="@item.IssuingAuthority">@(item.IssuingAuthority ?? "—")</span></td>
+                            <td data-column-key="validity"><strong>@(item.IssuedOn?.ToString("yyyy-MM-dd") ?? "未填写")</strong><small class="table-secondary">@(item.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</small></td>
+                            <td data-column-key="status"><span class="certificate-status certificate-status--@IndexModel.StatusClass(item.State)">@IndexModel.StatusLabel(item.State)</span></td>
+                            <td data-column-key="actions">
+                                <div class="company-row-actions company-certificate-row-actions">
+                                    <button class="action-button action-button--view" type="button" title="查看证书" data-company-certificate-dialog-open="details" data-company-certificate-payload="@payload">查看</button>
+                                    @if (Model.CanManage)
+                                    {
+                                        <button class="action-button action-button--edit" type="button" title="编辑证书" data-company-certificate-dialog-open="edit" data-company-certificate-payload="@payload">编辑</button>
+                                        <button class="action-button action-button--copy" type="button" title="复制证书" data-company-certificate-dialog-open="copy" data-company-certificate-payload="@payload">复制</button>
+                                    }
+                                    @if (item.AttachmentId.HasValue)
+                                    {
+                                        <a class="action-button action-button--certificate" href="@attachmentUrl" title="预览附件" data-attachment-preview-trigger data-attachment-name="@item.AttachmentFileName" data-attachment-content-type="@IndexModel.AttachmentContentType(item.AttachmentFileName)">附件</a>
+                                    }
+                                    else
+                                    {
+                                        <button class="action-button action-button--certificate" type="button" title="暂无附件" disabled>附件</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+
+    @if (Model.CanManage)
+    {
+        <dialog class="workbench-dialog company-create-dialog company-certificate-editor-dialog mac-window-dialog" data-company-certificate-editor-dialog data-dialog-open="@(Model.ActiveDialog == "editor" ? "true" : "false")">
+            <form method="post" asp-page-handler="Save" enctype="multipart/form-data" data-company-certificate-editor-form>
+                <input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="CompanyId" value="@Model.CompanyId" /><input type="hidden" name="CertificateType" value="@Model.CertificateType" /><input type="hidden" name="State" value="@Model.State" />
+                <input type="hidden" asp-for="Editor.Id" /><input type="hidden" asp-for="Editor.ConcurrencyStamp" /><input type="hidden" asp-for="Editor.ExistingAttachmentFileName" />
+                <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-company-certificate-editor-title>新增公司证书</strong><span>公司证照档案</span></div><button type="button" class="dialog-close" aria-label="关闭证书编辑窗口" data-company-certificate-dialog-close>×</button></div>
+                <div class="company-detailed-edit-grid company-certificate-editor-grid">
+                    <section><h3>证书归属</h3><label>所属公司<select asp-for="Editor.LegalEntityId" required><option value="">请选择公司</option>@foreach (var company in Model.Companies) { <option value="@company.Id">@company.Code · @company.Name</option> }</select><span asp-validation-for="Editor.LegalEntityId"></span></label><label>证书类型<input asp-for="Editor.CertificateType" list="company-certificate-types" required /><span asp-validation-for="Editor.CertificateType"></span></label><label>证书编号<input asp-for="Editor.CertificateNumber" /></label></section>
+                    <section><h3>资质内容</h3><label>专业 / 等级 / 资质范围<textarea asp-for="Editor.SpecialtyLevelScope" rows="3"></textarea></label><label>发证机关<input asp-for="Editor.IssuingAuthority" /></label><label>备注<textarea asp-for="Editor.Notes" rows="3"></textarea></label></section>
+                    <section><h3>有效期限</h3><label>签发日期<input asp-for="Editor.IssuedOn" type="date" /></label><label>到期日期<input asp-for="Editor.ExpiresOn" type="date" /></label><label>修改原因<input asp-for="Editor.Reason" required /><span asp-validation-for="Editor.Reason"></span></label></section>
+                    <section><h3>证书附件</h3><label>上传附件<input asp-for="AttachmentFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx" /></label><div class="company-certificate-current-attachment" data-company-certificate-current-attachment hidden><span data-company-certificate-attachment-name></span><label class="compact-check"><input asp-for="Editor.RemoveAttachment" type="checkbox" /> 删除当前附件</label></div></section>
+                </div>
+                <div asp-validation-summary="ModelOnly" class="validation-summary company-certificate-dialog-validation"></div>
+                <div class="quick-edit-actions"><button type="button" class="button action-button--delete" data-company-certificate-delete-open hidden>删除证书</button><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-company-certificate-dialog-close>取消</button><button type="submit" class="button button--primary">保存证书</button></div>
+            </form>
+        </dialog>
+
+        <dialog class="workbench-dialog equipment-delete-dialog company-certificate-delete-dialog mac-window-dialog" data-company-certificate-delete-dialog data-dialog-open="@(Model.ActiveDialog == "delete" ? "true" : "false")" data-expected-text="@Model.DeleteInput.ExpectedText">
+            <form method="post" asp-page-handler="Delete" data-company-certificate-delete-form>
+                <input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="CompanyId" value="@Model.CompanyId" /><input type="hidden" name="CertificateType" value="@Model.CertificateType" /><input type="hidden" name="State" value="@Model.State" />
+                <input type="hidden" asp-for="DeleteInput.Id" /><input type="hidden" asp-for="DeleteInput.ConcurrencyStamp" /><input type="hidden" asp-for="DeleteInput.ExpectedText" />
+                <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>确认删除公司证书</strong><span>删除后无法恢复</span></div><button type="button" class="dialog-close" aria-label="关闭删除确认窗口" data-company-certificate-delete-close>×</button></div>
+                <div class="equipment-delete-body"><p>请输入 <strong data-company-certificate-delete-expected>@Model.DeleteInput.ExpectedText</strong> 完成二次确认。</p><label>确认内容<input asp-for="DeleteInput.ConfirmationText" autocomplete="off" data-company-certificate-delete-confirmation /></label><label>删除原因<input asp-for="DeleteInput.Reason" required /></label><div asp-validation-summary="ModelOnly" class="validation-summary"></div></div>
+                <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-company-certificate-delete-close>取消</button><button type="submit" class="button action-button--delete" data-company-certificate-delete-submit disabled>永久删除</button></div>
+            </form>
+        </dialog>
+    }
+
+    <dialog class="workbench-dialog company-create-dialog company-certificate-details-dialog mac-window-dialog" data-company-certificate-details-dialog>
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-company-certificate-detail-title>证书详情</strong><span data-company-certificate-detail-company>公司证照档案</span></div><button type="button" class="dialog-close" aria-label="关闭证书详情窗口" data-company-certificate-dialog-close>×</button></div>
+        <div class="equipment-detail-grid company-certificate-detail-grid"><div><dt>证书编号</dt><dd data-company-certificate-detail-number></dd></div><div><dt>提醒等级</dt><dd data-company-certificate-detail-status></dd></div><div><dt>专业 / 等级 / 范围</dt><dd data-company-certificate-detail-scope></dd></div><div><dt>发证机关</dt><dd data-company-certificate-detail-authority></dd></div><div><dt>签发日期</dt><dd data-company-certificate-detail-issued></dd></div><div><dt>到期日期</dt><dd data-company-certificate-detail-expires></dd></div><div class="company-certificate-detail-wide"><dt>备注</dt><dd data-company-certificate-detail-notes></dd></div></div>
+        <div class="quick-edit-actions"><a class="button action-button--certificate" data-company-certificate-detail-attachment data-attachment-preview-trigger hidden>预览附件</a><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-company-certificate-dialog-close>关闭</button></div>
+    </dialog>
+
+    <dialog class="attachment-preview-dialog mac-window-dialog" data-attachment-preview-dialog aria-labelledby="company-certificate-attachment-title"><div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><strong id="company-certificate-attachment-title" data-attachment-preview-title>证书附件预览</strong><button class="dialog-close" type="button" data-attachment-preview-close>×</button></div><div class="attachment-preview-body"><img data-attachment-preview-image alt="证书附件图片预览" hidden /><iframe data-attachment-preview-frame title="证书附件预览" hidden></iframe><p data-attachment-preview-fallback hidden></p></div><div class="workbench-dialog-actions"><a class="button button--primary" data-attachment-preview-download>下载</a><button class="button button--secondary" type="button" data-attachment-preview-close>关闭</button></div></dialog>
+</div>

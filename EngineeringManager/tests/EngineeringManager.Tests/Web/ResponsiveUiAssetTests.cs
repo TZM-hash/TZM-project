@@ -66,7 +66,9 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("company-dashboard-stack")
             .And.Contain("company-list-panel");
         css.Should().Contain(".company-workspace--overview")
-            .And.Contain(".company-portfolio-grid")
+            .And.Contain(".company-portfolio-grid { grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr); align-items: stretch; }")
+            .And.Contain(".company-dashboard-stack { display: grid; min-width: 0; grid-template-rows: auto minmax(0, 1fr); align-content: stretch;")
+            .And.Contain(".company-dashboard-stack--single { align-self: stretch; grid-template-rows: minmax(0, 1fr); }")
             .And.Contain("grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr)")
             .And.Contain(".company-category-table-wrap { max-height: none; overflow: visible; }")
             .And.Contain(".company-list-panel { display: flex; min-width: 0; align-self: stretch;");
@@ -98,7 +100,8 @@ public sealed class ResponsiveUiAssetTests
     {
         var pageCss = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
 
-        pageCss.Should().Contain(".equipment-workspace-layout { display: grid; grid-template-columns: minmax(260px, .32fr) minmax(0, 1fr);")
+        pageCss.Should().Contain(".equipment-workspace-layout { display: grid; grid-template-columns: minmax(260px, .32fr) minmax(0, 1fr); gap: .85rem; align-items: stretch;")
+            .And.Contain(".equipment-workspace-summary { position: sticky; top: 5rem; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); gap: .72rem; min-height: 0; max-height: none;")
             .And.Contain(".equipment-table-wrap { overflow-x: auto; }")
             .And.Contain(".equipment-table { width: 100%; table-layout: fixed;")
             .And.Contain("min-width: 76rem;")
@@ -110,6 +113,8 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("@media (max-width: 900px)")
             .And.Contain(".equipment-workspace-layout { grid-template-columns: 1fr; }")
             .And.Contain(".equipment-table-wrap { overflow-x: auto; }");
+
+        pageCss.Should().NotContain(".equipment-workspace-summary { position: sticky; top: 5rem; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); gap: .72rem; min-height: calc(100vh - 5.5rem);");
 
         pageCss.Should().Contain("var(--app-border)")
             .And.Contain("var(--app-surface)")
@@ -129,9 +134,49 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("if (ownership !== \"Rented\" && lessor) lessor.value = \"\"")
             .And.Contain("page.querySelector(\".workbench-inline-filters\")")
             .And.Contain("[\"CompanyId\", page.dataset.companyId]")
+            .And.Contain("const companySelect = form.querySelector('[name=\"CompanyId\"]')")
+            .And.Contain("companySelect?.addEventListener(\"change\", () => form.requestSubmit())")
             .And.Contain("[data-equipment-delete-open]")
             .And.Contain("initAttachmentPreview()")
             .And.Contain("page.querySelector(\".workbench-inline-clear\")");
+    }
+
+    [Fact]
+    public void CompanyCertificateWorkspaceUsesAutomaticFilteringCopyRulesAndUnifiedReminderColors()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "company-certificate-workspace.js");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        script.Should().Contain("form.querySelector('[name=\"CompanyId\"]')")
+            .And.Contain("addEventListener(\"change\", () => form.requestSubmit())")
+            .And.Contain("setField(\"CertificateNumber\", copy ? \"\" : payload.certificateNumber)")
+            .And.Contain("setField(\"IssuedOn\", copy ? \"\" : payload.issuedOn)")
+            .And.Contain("setField(\"ExpiresOn\", copy ? \"\" : payload.expiresOn)")
+            .And.Contain("initAttachmentPreview()");
+
+        css.Should().Contain(".company-certificate-workspace-layout")
+            .And.Contain("align-items: stretch")
+            .And.Contain(".company-certificate-list-toolbar .data-workbench-toolbar { min-width: 0; flex-wrap: wrap;")
+            .And.Contain(".company-certificate-list-toolbar .workbench-inline-filters { flex-wrap: wrap;")
+            .And.Contain(".company-certificate-workspace-table { width: 100%; min-width: 68rem;")
+            .And.Contain(".company-certificate-workspace-table th:nth-child(7) { width: 28%; }")
+            .And.Contain(".certificate-status--info { background: #fef9c3; color: #a16207;")
+            .And.Contain(".certificate-status--warning { background: #ffedd5; color: #c2410c;")
+            .And.Contain(".certificate-status--critical { background: #fee2e2; color: #b91c1c;")
+            .And.Contain(".certificate-status--expired { background: #7f1d1d; color: #fff;");
+    }
+
+    [Fact]
+    public void ReminderCenterUsesTheSameLocalizedSeverityPresentationAsCertificates()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Reminders", "Index.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Reminders", "Index.cshtml.cs");
+
+        page.Should().Contain("IndexModel.SeverityLabel(item.Severity)")
+            .And.Contain("certificate-status--@IndexModel.SeverityClass(item.Severity)");
+        model.Should().Contain("ReminderSeverity.Info => \"轻度提醒\"")
+            .And.Contain("ReminderSeverity.Warning => \"中度提醒\"")
+            .And.Contain("ReminderSeverity.Critical => \"高度提醒\"");
     }
 
     [Fact]
