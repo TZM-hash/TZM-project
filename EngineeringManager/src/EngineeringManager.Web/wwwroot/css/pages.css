@@ -868,18 +868,31 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .company-workspace--details .inline-edit-shell [data-inline-edit-control].inline-cell-control:not([hidden]),
 .company-category-panel [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static; z-index: auto; inset: auto; width: 100%; }
 .company-workspace--details .inline-edit-shell textarea.inline-cell-control:not([hidden]) { min-height: 3.5rem; resize: vertical; }
-.company-certificate-table { min-width: 58rem; table-layout: fixed; }
-.company-certificate-table th:nth-child(1), .company-certificate-table td:nth-child(1) { width: 14%; }
-.company-certificate-table th:nth-child(2), .company-certificate-table td:nth-child(2) { width: 14%; }
+.company-certificate-table { width: 100%; min-width: 0; table-layout: fixed; }
+.company-certificate-table th, .company-certificate-table td { padding-inline: .42rem; overflow: hidden; text-overflow: ellipsis; }
+.company-certificate-table th:nth-child(1), .company-certificate-table td:nth-child(1) { width: 10%; }
+.company-certificate-table th:nth-child(2), .company-certificate-table td:nth-child(2) { width: 10%; }
+.company-certificate-table th:nth-child(3), .company-certificate-table td:nth-child(3) { width: 17%; }
+.company-certificate-table th:nth-child(4), .company-certificate-table td:nth-child(4) { width: 13%; }
+.company-certificate-table th:nth-child(5), .company-certificate-table td:nth-child(5),
+.company-certificate-table th:nth-child(6), .company-certificate-table td:nth-child(6) { width: 9%; }
+.company-certificate-table th:nth-child(7), .company-certificate-table td:nth-child(7) { width: 7%; }
+.company-certificate-table th:nth-child(8), .company-certificate-table td:nth-child(8) { width: 15%; }
+.company-certificate-table th:nth-child(9), .company-certificate-table td:nth-child(9) { width: 10%; }
 .company-certificate-table th:nth-child(3), .company-certificate-table td:nth-child(3),
-.company-certificate-table th:nth-child(4), .company-certificate-table td:nth-child(4) { width: 12%; }
-.company-certificate-table th:nth-child(5), .company-certificate-table td:nth-child(5) { width: 10%; }
-.company-certificate-table th:nth-child(6), .company-certificate-table td:nth-child(6) { width: 22%; }
-.company-certificate-table th:nth-child(7), .company-certificate-table td:nth-child(7) { width: 16%; }
+.company-certificate-table th:nth-child(4), .company-certificate-table td:nth-child(4),
+.company-certificate-table th:nth-child(8), .company-certificate-table td:nth-child(8) { line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
+.company-certificate-table .inline-cell-control { width: 100%; min-width: 0; }
+.company-certificate-table .record-attachment-column { min-width: 0; }
+.company-certificate-table .attachment-file-link { max-width: 100%; }
+.company-certificate-table .status-badge { margin-left: 0; }
 .company-create-dialog { width: min(46rem, calc(100vw - 2rem)); max-width: 46rem; padding: 0; overflow: hidden; }
 .company-create-dialog::backdrop { background: rgba(15, 23, 42, .48); }
 .company-create-dialog > form { display: grid; max-height: min(46rem, calc(100vh - 2rem)); overflow: hidden; }
 .company-create-dialog-body { padding: 1rem; overflow-y: auto; }
+.company-detailed-edit-dialog { width: min(62rem, calc(100vw - 2rem)); max-width: 62rem; }
+.company-detailed-edit-dialog > form { max-height: min(52rem, calc(100vh - 2rem)); }
+.company-detailed-edit-body { gap: .85rem; }
 .company-create-dialog-body input[type="file"] { min-height: 2.7rem; padding: .45rem; border: 1px dashed var(--app-border-strong); border-radius: 6px; background: var(--app-surface-raised); }
 .company-workspace--details > .panel, .company-workspace--details .dashboard-grid > .panel, .company-workspace--details .content-grid > .panel { border-color: rgba(203, 213, 225, .78); box-shadow: 0 7px 24px rgba(15, 23, 42, .045); }
 .company-workspace--details .panel-heading { align-items: center; }
@@ -930,6 +943,7 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
   .company-chart-ring [data-chart-canvas] { width: 3.8rem; height: 3.8rem; }
   .company-workspace--details .project-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .company-account-table { min-width: 72rem; table-layout: auto; }
+  .company-certificate-table { min-width: 68rem; }
 }
 
 @media (max-width: 760px) {

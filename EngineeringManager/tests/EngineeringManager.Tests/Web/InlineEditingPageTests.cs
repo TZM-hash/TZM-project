@@ -26,8 +26,9 @@ public sealed class InlineEditingPageTests
         (projectDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(2);
         companyDetails.Should().Contain("data-attachment-preview-dialog")
             .And.Contain("data-company-certificate-create-dialog")
-            .And.Contain("data-company-account-create-dialog");
-        (companyDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(3);
+            .And.Contain("data-company-account-create-dialog")
+            .And.Contain("data-company-detailed-edit-dialog");
+        (companyDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(4);
         pages.Should().OnlyContain(page => !page.Contains("data-quick-edit-dialog", StringComparison.Ordinal));
     }
 

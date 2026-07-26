@@ -110,6 +110,23 @@ public sealed class CompanyPageTests
     }
 
     [Fact]
+    public void CompanyCertificateTableUsesCompactNineColumnDesktopLayout()
+    {
+        var css = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "EngineeringManager.Web",
+            "wwwroot",
+            "css",
+            "pages.css"));
+
+        css.Should().Contain(".company-certificate-table { width: 100%; min-width: 0; table-layout: fixed; }")
+            .And.Contain(".company-certificate-table th:nth-child(9), .company-certificate-table td:nth-child(9) { width: 10%; }")
+            .And.Contain(".company-certificate-table .record-attachment-column { min-width: 0; }")
+            .And.Contain("overflow-wrap: anywhere;");
+    }
+
+    [Fact]
     public async Task AdministratorCanSaveCategoryBatchAndDeleteUnusedCategory()
     {
         await using var factory = CreateFactory("ApplicationAdministrator");
@@ -162,11 +179,43 @@ public sealed class CompanyPageTests
 
         html.Should().Contain("快捷编辑公司");
         html.Should().Contain("进入详细编辑");
+        html.Should().Contain("data-company-detailed-edit-open");
+        html.Should().Contain("data-company-detailed-edit-dialog");
+        html.Should().Contain("handler=DetailedEdit");
         html.Should().Contain("class=\"content-grid company-detail-full-grid\"");
         html.Should().Contain("data-inline-edit=\"company-details\"");
         html.Should().Contain("data-inline-cell-edit");
         html.Should().Contain("data-inline-edit-control");
-        html.Should().NotContain("data-quick-edit-dialog");
+        html.Should().NotContain("href=\"/Companies/Edit/");
+    }
+
+    [Fact]
+    public async Task AdministratorCanSaveCompanyFromDetailedEditDialog()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var companyService = (FakeCompanyService)factory.Services.GetRequiredService<ICompanyManagementService>();
+        var path = $"/Companies/Details/{FakeCompanyService.CompanyId}?tab=profile";
+        var token = await GetAntiforgeryTokenAsync(client, path);
+
+        using var response = await client.PostAsync(
+            $"/Companies/Details/{FakeCompanyService.CompanyId}?handler=DetailedEdit",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["QuickEdit.Id"] = FakeCompanyService.CompanyId.ToString(),
+                ["QuickEdit.ConcurrencyStamp"] = Guid.NewGuid().ToString(),
+                ["QuickEdit.Code"] = "TEST-UPDATED",
+                ["QuickEdit.Name"] = "更新后的公司",
+                ["QuickEdit.ShortName"] = "更新公司",
+                ["QuickEdit.CompanyCategoryId"] = FakeCompanyService.CategoryId.ToString(),
+                ["QuickEdit.Reason"] = "弹窗详细编辑",
+                ["__RequestVerificationToken"] = token
+            }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location!.ToString().Should().Contain("tab=profile");
+        companyService.SavedCompanies.Should().ContainSingle(request =>
+            request.Code == "TEST-UPDATED" && request.Reason == "弹窗详细编辑");
     }
 
     [Fact]
@@ -308,6 +357,10 @@ public sealed class CompanyPageTests
         html.Should().Contain("data-inline-edit=\"company-certificates\"");
         html.Should().Contain("name=\"CertificateRows[0].Id\"");
         html.Should().Contain("name=\"CertificateRows[0].ConcurrencyStamp\"");
+        html.Should().Contain("name=\"CertificateRows[0].SpecialtyLevelScope\"");
+        html.Should().Contain("name=\"CertificateRows[0].IssuingAuthority\"");
+        html.Should().Contain(">专业/等级/资质范围</th>");
+        html.Should().Contain(">发证机关</th>");
         html.Should().Contain("handler=Certificates");
     }
 
@@ -325,6 +378,8 @@ public sealed class CompanyPageTests
             .And.Contain("id=\"certificate-batch-form\"")
             .And.Contain("name=\"CertificateRows[0].Id\"")
             .And.Contain("name=\"CertificateAttachmentFile\"")
+            .And.Contain("name=\"Certificate.SpecialtyLevelScope\"")
+            .And.Contain("name=\"Certificate.IssuingAuthority\"")
             .And.NotContain(">操作</th>")
             .And.NotContain("data-inline-edit=\"company-certificate-");
         accounts.Should().Contain("data-company-account-create-open")
@@ -361,6 +416,8 @@ public sealed class CompanyPageTests
         content.Add(new StringContent(token), "__RequestVerificationToken");
         content.Add(new StringContent("安全生产许可证"), "Certificate.Type");
         content.Add(new StringContent("SAFE-001"), "Certificate.Number");
+        content.Add(new StringContent("施工总承包二级"), "Certificate.SpecialtyLevelScope");
+        content.Add(new StringContent("省住房和城乡建设厅"), "Certificate.IssuingAuthority");
         content.Add(new StringContent("2026-01-01"), "Certificate.IssuedOn");
         content.Add(new StringContent("2030-01-01"), "Certificate.ExpiresOn");
         content.Add(new StringContent("弹窗新增证照"), "Certificate.Notes");
@@ -372,6 +429,8 @@ public sealed class CompanyPageTests
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         certificateService.LastSavedRequest.Should().NotBeNull();
         certificateService.LastSavedRequest!.Id.Should().BeNull();
+        certificateService.LastSavedRequest.SpecialtyLevelScope.Should().Be("施工总承包二级");
+        certificateService.LastSavedRequest.IssuingAuthority.Should().Be("省住房和城乡建设厅");
         certificateService.LastSavedRequest.NewAttachment.Should().NotBeNull();
         certificateService.LastSavedRequest.NewAttachment!.OriginalFileName.Should().Be("安全生产许可证.pdf");
         certificateService.LastSavedRequest.NewAttachment.Content.Should().Equal(9, 8, 7);
@@ -391,6 +450,8 @@ public sealed class CompanyPageTests
             ["CertificateRows[0].ConcurrencyStamp"] = FakeCompanyCertificateService.InitialConcurrencyStamp.ToString(),
             ["CertificateRows[0].Type"] = "批量更新营业执照",
             ["CertificateRows[0].Number"] = "CERT-BATCH",
+            ["CertificateRows[0].SpecialtyLevelScope"] = "市政公用工程一级",
+            ["CertificateRows[0].IssuingAuthority"] = "市建设主管部门",
             ["CertificateRows[0].IssuedOn"] = "2026-04-01",
             ["CertificateRows[0].ExpiresOn"] = "2031-04-01",
             ["CertificateRows[0].Notes"] = "批量更新备注",
@@ -400,6 +461,8 @@ public sealed class CompanyPageTests
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         certificateService.LastSavedRequests.Should().ContainSingle();
         certificateService.LastSavedRequests[0].CertificateType.Should().Be("批量更新营业执照");
+        certificateService.LastSavedRequests[0].SpecialtyLevelScope.Should().Be("市政公用工程一级");
+        certificateService.LastSavedRequests[0].IssuingAuthority.Should().Be("市建设主管部门");
         certificateService.LastSavedRequests[0].Reason.Should().Be("批量修改公司证照");
     }
 
@@ -688,6 +751,7 @@ public sealed class CompanyPageTests
         public List<SaveCompanyCategoryRequest> SavedCategories { get; } = [];
         public List<Guid> DeletedCategoryIds { get; } = [];
         public List<SaveCompanyAccountRequest> SavedAccounts { get; } = [];
+        public List<SaveCompanyRequest> SavedCompanies { get; } = [];
 
         public Task<IReadOnlyList<CompanyListItemDto>> ListAsync(CompanyActor actor, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanyListItemDto>>([new(CompanyId, "TEST", "测试自有公司", "测试公司", "一般纳税人有限公司", "测试法人", true, null, 1, 1)]);
@@ -711,7 +775,11 @@ public sealed class CompanyPageTests
             Task.FromResult<IReadOnlyList<CompanyPaymentRowDto>>([new(Guid.NewGuid(), new DateOnly(2026, 7, 21), CompanyId, "P-01", "测试项目", "付款摘要", Guid.NewGuid(), "基本户", true, 100m)]);
         public Task<IReadOnlyList<CompanyInvoiceRowDto>> ListCompanyInvoicesAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CompanyInvoiceRowDto>>([new(Guid.NewGuid(), "销项", "INV-01", new DateOnly(2026, 7, 22), CompanyId, "P-01", "测试项目", "测试自有公司", 200m)]);
-        public Task<CompanyDetailsDto> SaveCompanyAsync(CompanyActor actor, SaveCompanyRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public async Task<CompanyDetailsDto> SaveCompanyAsync(CompanyActor actor, SaveCompanyRequest request, CancellationToken cancellationToken)
+        {
+            SavedCompanies.Add(request);
+            return await GetAsync(actor, request.Id ?? CompanyId, cancellationToken);
+        }
         public Task<SaveCompanyRequest> PrepareCopyAsync(CompanyActor actor, Guid sourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CompanyCategoryDto> SaveCategoryAsync(CompanyActor actor, SaveCompanyCategoryRequest request, CancellationToken cancellationToken)
         {

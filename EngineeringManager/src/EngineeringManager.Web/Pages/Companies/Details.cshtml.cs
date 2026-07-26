@@ -33,6 +33,7 @@ public sealed class DetailsModel(
     public int EmployeeCount { get; private set; }
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
     public bool QuickEditOpen { get; private set; }
+    public bool DetailedEditOpen { get; private set; }
     public bool AccountCreateOpen { get; private set; }
     public bool AccountEditOpen { get; private set; }
     public bool CertificateCreateOpen { get; private set; }
@@ -174,8 +175,8 @@ public sealed class DetailsModel(
                 id,
                 Certificate.Type,
                 Certificate.Number,
-                existing?.SpecialtyLevelScope,
-                existing?.IssuingAuthority,
+                Certificate.SpecialtyLevelScope,
+                Certificate.IssuingAuthority,
                 Certificate.IssuedOn,
                 Certificate.ExpiresOn,
                 attachment,
@@ -193,6 +194,34 @@ public sealed class DetailsModel(
             CertificateCreateOpen = !Certificate.Id.HasValue;
             CertificateEditOpen = Certificate.Id.HasValue;
             await LoadAsync(id, true, cancellationToken);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostDetailedEditAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanManage) return Forbid();
+        Tab = "profile";
+        QuickEdit.Id = id;
+        RemoveUnrelatedModelState($"{nameof(QuickEdit)}.");
+        if (!TryValidateModel(QuickEdit, nameof(QuickEdit)))
+        {
+            DetailedEditOpen = true;
+            await LoadAsync(id, false, cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            var actor = await ResolveActorAsync(cancellationToken);
+            await companyService.SaveCompanyAsync(actor, QuickEdit.ToRequest(), cancellationToken);
+            return RedirectToPage(new { id, tab = "profile" });
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            DetailedEditOpen = true;
+            await LoadAsync(id, false, cancellationToken);
             return Page();
         }
     }
@@ -216,11 +245,17 @@ public sealed class DetailsModel(
             var today = DateOnly.FromDateTime(DateTime.Today);
             var existing = await certificateService.ListAsync(actor, new CertificateFilter(OwnerId: id), today, cancellationToken);
             var existingById = existing.ToDictionary(item => item.Id);
-            var requests = CertificateRows.Select(row =>
+            var requests = CertificateRows.Select((row, index) =>
             {
                 if (!existingById.TryGetValue(row.Id, out var certificate)) throw new KeyNotFoundException("公司证照不存在或无权访问。");
+                var specialtyLevelScope = ModelState.ContainsKey($"{nameof(CertificateRows)}[{index}].{nameof(CertificateRowInput.SpecialtyLevelScope)}")
+                    ? row.SpecialtyLevelScope
+                    : certificate.SpecialtyLevelScope;
+                var issuingAuthority = ModelState.ContainsKey($"{nameof(CertificateRows)}[{index}].{nameof(CertificateRowInput.IssuingAuthority)}")
+                    ? row.IssuingAuthority
+                    : certificate.IssuingAuthority;
                 return new SaveCompanyCertificateItemRequest(row.Id, id, row.Type, row.Number,
-                    certificate.SpecialtyLevelScope, certificate.IssuingAuthority, row.IssuedOn, row.ExpiresOn,
+                    specialtyLevelScope, issuingAuthority, row.IssuedOn, row.ExpiresOn,
                     null, false, row.Notes, row.ConcurrencyStamp, "批量修改公司证照");
             }).ToList();
             await certificateService.SaveManyAsync(actor, requests, today, cancellationToken);
@@ -505,6 +540,8 @@ public sealed class DetailsModel(
         [Required, StringLength(100)] public string Type { get; set; } = string.Empty;
         [StringLength(100)]
         public string? Number { get; set; }
+        [StringLength(500)] public string? SpecialtyLevelScope { get; set; }
+        [StringLength(200)] public string? IssuingAuthority { get; set; }
         public DateOnly? IssuedOn { get; set; }
         public DateOnly? ExpiresOn { get; set; }
         [StringLength(1000)]
@@ -518,6 +555,8 @@ public sealed class DetailsModel(
         public Guid ConcurrencyStamp { get; set; }
         [Required, StringLength(100)] public string Type { get; set; } = string.Empty;
         [StringLength(100)] public string? Number { get; set; }
+        [StringLength(500)] public string? SpecialtyLevelScope { get; set; }
+        [StringLength(200)] public string? IssuingAuthority { get; set; }
         public DateOnly? IssuedOn { get; set; }
         public DateOnly? ExpiresOn { get; set; }
         [StringLength(1000)] public string? Notes { get; set; }
@@ -528,6 +567,8 @@ public sealed class DetailsModel(
             ConcurrencyStamp = certificate.ConcurrencyStamp,
             Type = certificate.CertificateType,
             Number = certificate.CertificateNumber,
+            SpecialtyLevelScope = certificate.SpecialtyLevelScope,
+            IssuingAuthority = certificate.IssuingAuthority,
             IssuedOn = certificate.IssuedOn,
             ExpiresOn = certificate.ExpiresOn,
             Notes = certificate.Notes

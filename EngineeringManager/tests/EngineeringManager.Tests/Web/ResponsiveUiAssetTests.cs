@@ -67,7 +67,7 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("company-list-panel");
         css.Should().Contain(".company-workspace--overview")
             .And.Contain(".company-portfolio-grid")
-            .And.Contain("grid-template-columns: minmax(18rem, .4fr) minmax(0, 1.6fr)")
+            .And.Contain("grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr)")
             .And.Contain(".company-category-table-wrap { max-height: none; overflow: visible; }")
             .And.Contain(".company-list-panel { display: flex; min-width: 0; align-self: stretch;");
     }
