@@ -111,20 +111,20 @@ public sealed class PartnerStageResultAuthorizationTests
         using var client = factory.CreateClient();
 
         var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync("/Partners"));
+        var overview = html[..html.IndexOf("<dialog", StringComparison.Ordinal)];
 
-        html.Should().Contain("data-partner-financial-summary")
-            .And.Contain("应收")
-            .And.Contain("已收")
-            .And.Contain("未收")
+        overview.Should().Contain("data-partner-financial-summary")
             .And.Contain("应付")
             .And.Contain("已付")
             .And.Contain("未付")
+            .And.Contain("销项票")
             .And.Contain("应开票")
             .And.Contain("已开票")
             .And.Contain("未开票")
             .And.Contain("role=\"progressbar\"")
             .And.Contain("data-progress-state=\"no-target\"")
-            .And.Contain("aria-valuetext=\"—");
+            .And.Contain("aria-valuetext=\"—")
+            .And.NotContain("data-column-key=\"receipts\"");
         factory.Services.GetRequiredService<RecordingCentralLedgerQueryService>().SummaryCallCount.Should().Be(1);
     }
 
@@ -137,7 +137,7 @@ public sealed class PartnerStageResultAuthorizationTests
         var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync("/Partners"));
 
         html.Should().Contain("data-progress-state=\"over\"")
-            .And.Contain("aria-valuetext=\"超额，已收 125.00，应收 0.00\" value=\"1\" max=\"1\"");
+            .And.Contain("aria-valuetext=\"超额，已付 125.00，应付 0.00\" value=\"1\" max=\"1\"");
     }
 
     private static WebApplicationFactory<Program> CreateFactory(string role, bool zeroTargetOverage = false) =>
@@ -210,7 +210,7 @@ public sealed class PartnerStageResultAuthorizationTests
                 businessPartnerIds.Distinct().ToDictionary(
                     id => id,
                     id => _zeroTargetOverage
-                        ? new PartnerLedgerSummaryDto(id, CentralLedgerMetrics.Zero with { CashAmount = 125m }, CentralLedgerMetrics.Zero)
+                        ? new PartnerLedgerSummaryDto(id, CentralLedgerMetrics.Zero, CentralLedgerMetrics.Zero with { CashAmount = 125m })
                         : PartnerLedgerSummaryDto.Empty(id)));
         }
 

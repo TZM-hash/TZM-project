@@ -35,7 +35,7 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain("role=\"progressbar\"")
             .And.Contain("aria-label=\"应收完成进度\"")
             .And.Contain("aria-label=\"应付完成进度\"")
-            .And.Contain("aria-label=\"开票完成进度\"")
+            .And.Contain("invoiceColumnLabel + \"完成进度\"")
             .And.Contain("var receivableProgressState = FinancialProgressState")
             .And.Contain("var payableProgressState = FinancialProgressState")
             .And.Contain("var invoiceProgressState = FinancialProgressState")
@@ -44,7 +44,7 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain("@receivableProgressLabel")
             .And.Contain("@payableProgressLabel")
             .And.Contain("@invoiceProgressLabel")
-            .And.Contain("var financialColumnCount = Model.CanViewFinance ? 3 : 0")
+            .And.Contain("var financialColumnCount = Model.CanViewFinance ? 2 : 0")
             .And.Contain("colspan=\"@(6 + financialColumnCount)\"")
             .And.Contain("<small>应收</small>")
             .And.Contain("<small>已收</small>")
@@ -52,9 +52,9 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain("<small>应付</small>")
             .And.Contain("<small>已付</small>")
             .And.Contain("<small>未付</small>")
-            .And.Contain("<small>应开票</small>")
-            .And.Contain("<small>已开票</small>")
-            .And.Contain("<small>未开票</small>")
+            .And.Contain("<small>@invoiceTargetLabel</small>")
+            .And.Contain("<small>@invoiceCompletedLabel</small>")
+            .And.Contain("<small>@invoicePendingLabel</small>")
             .And.Contain("data-partner-dialog-open=\"details\"")
             .And.Contain("data-partner-dialog-open=\"edit\"")
             .And.Contain("data-partner-dialog-open=\"copy\"")
@@ -117,11 +117,12 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain(".partner-finance-dialog { width: min(76rem, calc(100vw - 2rem));")
             .And.Contain(".partner-finance-chart")
             .And.Contain(".partner-finance-detail-grid")
-            .And.Contain("th[data-column-key=\"partner\"] { width: 11.5rem; }")
-            .And.Contain("th[data-column-key=\"role_trade\"] { width: 6.25rem; }")
-            .And.Contain("th[data-column-key=\"contact\"] { width: 6.25rem; }")
-            .And.Contain("th[data-column-key=\"projects\"] { width: 4.25rem; }")
-            .And.Contain("th[data-column-key=\"payments\"] { width: 9.6667rem; }")
+            .And.Contain(".partner-workspace-table--financial { min-width: 71rem; }")
+            .And.Contain("th[data-column-key=\"partner\"] { width: 13.5rem; }")
+            .And.Contain("th[data-column-key=\"role_trade\"] { width: 7.5rem; }")
+            .And.Contain("th[data-column-key=\"contact\"] { width: 8rem; }")
+            .And.Contain("th[data-column-key=\"projects\"] { width: 4.5rem; }")
+            .And.Contain("th[data-column-key=\"payments\"] { width: 9rem; }")
             .And.Contain("font-variant-numeric: tabular-nums")
             .And.Contain(".partner-row-actions { display: flex; flex-wrap: nowrap;")
             .And.Contain(".partner-editor-dialog { width: min(68rem, calc(100vw - 2rem));")
@@ -129,6 +130,33 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain(".partner-workspace-layout { grid-template-columns: 1fr; }")
             .And.NotContain(".partner-list-toolbar .data-workbench-toolbar")
             .And.NotContain(".partner-list-toolbar .workbench-inline-filters");
+    }
+
+    [Fact]
+    public void PartnerOverviewUsesScopeSpecificCashAndInvoiceColumnsWithoutReducingFinanceDialogs()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
+
+        page.Should().Contain("var visibleFinancialColumnKeys = Model.IsCustomerScope")
+            .And.Contain("new HashSet<string>(StringComparer.Ordinal) { \"receipts\", \"invoices\" }")
+            .And.Contain("new HashSet<string>(StringComparer.Ordinal) { \"payments\", \"invoices\" }")
+            .And.Contain("var invoiceColumnLabel = Model.IsCustomerScope ? \"进项票\" : \"销项票\"")
+            .And.Contain("column with { Label = invoiceColumnLabel }")
+            .And.Contain("@if (Model.IsCustomerScope)")
+            .And.Contain("<th data-column-key=\"receipts\">应收</th>")
+            .And.Contain("<th data-column-key=\"payments\">应付</th>")
+            .And.Contain("<th data-column-key=\"invoices\">@invoiceColumnLabel</th>")
+            .And.Contain("var invoiceSummary = Model.IsCustomerScope ? financialSummary.Payable : financialSummary.Receivable")
+            .And.Contain("var invoiceTargetLabel = Model.IsCustomerScope ? \"应收票\" : \"应开票\"")
+            .And.Contain("invoiceSummary.ShouldInvoiceAmount")
+            .And.Contain("invoiceSummary.InvoicedAmount")
+            .And.Contain("invoiceSummary.Uninvoiced")
+            .And.Contain("新增@(Model.EntityLabel)")
+            .And.NotContain("新增@Model.EntityLabel")
+            .And.Contain("data-partner-finance-chart=\"receivable\"")
+            .And.Contain("data-partner-finance-chart=\"payable\"")
+            .And.Contain("data-partner-finance-chart=\"salesInvoice\"")
+            .And.Contain("data-partner-finance-chart=\"purchaseInvoice\"");
     }
 
     [Fact]
@@ -203,7 +231,7 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain(".partner-financial-progress-value { position: absolute; inset: 0; display: grid; place-items: center; color: #111827;")
             .And.Contain(".partner-finance-chart-heading > strong { color: #111827;")
             .And.NotContain("--partner-progress-state-color")
-            .And.Contain("box-shadow: inset 0 2px 0 var(--partner-financial-accent)")
+            .And.NotContain("box-shadow: inset 0 2px 0 var(--partner-financial-accent)")
             .And.Contain("[data-partner-finance-tone].is-zero:not([data-partner-finance-state-source])");
     }
 
@@ -238,6 +266,54 @@ public sealed class PartnerWorkspacePageTests
 
         css.Should().Contain(".partner-financial-lines > span { display: grid !important; grid-template-columns: max-content max-content; align-items: baseline; justify-content: start; gap: .4rem;")
             .And.NotContain(".partner-financial-lines > span { display: flex !important; align-items: baseline; justify-content: space-between;");
+    }
+
+    [Fact]
+    public void CustomerGeneralContractorUsesDedicatedScopedWorkspace()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml.cs");
+        var details = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Details.cshtml");
+        var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
+        var script = ReadFileIfExists("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "partner-workspace.js");
+
+        page.Should().Contain("@page \"{scope?}\"")
+            .And.Contain("Model.IsCustomerScope")
+            .And.Contain("Model.AvailableRoles")
+            .And.Contain("Model.IsCustomerScope ? \"customers-table\"")
+            .And.Contain("id=\"@tableId\"")
+            .And.Contain("data-default-role")
+            .And.Contain("data-entity-label")
+            .And.Contain("asp-route-scope=\"@Model.Scope\"");
+
+        model.Should().Contain("public const string CustomerScope = \"customers\";")
+            .And.Contain("public bool IsCustomerScope")
+            .And.Contain("public IReadOnlyList<BusinessPartnerRoleType> AvailableRoles")
+            .And.Contain("BusinessPartnerRoleType.CustomerOrGeneralContractor")
+            .And.Contain("ApplyScope(")
+            .And.Contain("Editor.RoleType = BusinessPartnerRoleType.CustomerOrGeneralContractor")
+            .And.Contain("await EnsureEditorTargetMatchesScopeAsync(cancellationToken)")
+            .And.Contain("partnerService.ListForManagementAsync(null, null, cancellationToken)")
+            .And.Contain("Scope = IsCustomerScope ? CustomerScope : null");
+
+        script.Should().Contain("const defaultRole = Number.parseInt(page.dataset.defaultRole")
+            .And.Contain("const entityLabel = page.dataset.entityLabel")
+            .And.Contain("payload.roleType ?? defaultRole");
+
+        details.Should().Contain("Request.Query[\"ReturnUrl\"]")
+            .And.Contain("Url.IsLocalUrl(requestedReturnUrl)")
+            .And.Contain("isCustomerReturn")
+            .And.Contain("href=\"@returnUrl\"")
+            .And.Contain("@if (!isCustomerReturn)");
+
+        var customerNav = layout.IndexOf(">甲方/总包</span>", StringComparison.Ordinal);
+        var crewNav = layout.IndexOf(">施工班组</span>", StringComparison.Ordinal);
+        var partnerNav = layout.IndexOf(">合作单位</span>", StringComparison.Ordinal);
+        customerNav.Should().BeGreaterThan(-1).And.BeLessThan(crewNav);
+        crewNav.Should().BeLessThan(partnerNav);
+        layout.Should().Contain("asp-route-scope=\"customers\"")
+            .And.Contain("NavExact(\"/Partners\")")
+            .And.Contain("string.Equals(currentPage.TrimEnd('/'), \"/Partners/customers\"");
     }
 
     [Fact]

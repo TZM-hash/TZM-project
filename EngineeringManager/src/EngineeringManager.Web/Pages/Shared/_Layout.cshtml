@@ -16,6 +16,8 @@
         if (currentPage.StartsWith("/Employees/", StringComparison.OrdinalIgnoreCase)) return "/Employees";
         if (currentPage.StartsWith("/Payroll/", StringComparison.OrdinalIgnoreCase)) return "/Payroll";
         if (currentPage.StartsWith("/Crews/", StringComparison.OrdinalIgnoreCase)) return "/Crews";
+        if (string.Equals(currentPage.TrimEnd('/'), "/Partners/customers", StringComparison.OrdinalIgnoreCase)) return null;
+        if (currentPage.StartsWith("/Partners/customers", StringComparison.OrdinalIgnoreCase)) return "/Partners/customers";
         if (currentPage.StartsWith("/Partners/", StringComparison.OrdinalIgnoreCase)) return "/Partners";
         if (currentPage.StartsWith("/Companies/Certificates/Edit", StringComparison.OrdinalIgnoreCase)) return "/Companies/Certificates";
         if (currentPage.StartsWith("/Companies/", StringComparison.OrdinalIgnoreCase)) return "/Companies";
@@ -58,8 +60,9 @@
             <div class="nav-group"><span class="nav-group-label">人员与合作方</span>
                 <a class='@NavExact("/Employees")' asp-page="/Employees/Index"><svg><use href="/img/icons.svg#people"></use></svg><span>员工管理</span></a>
                 <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>工资台账</span></a>
+                <a class='@Nav("/Partners/customers")' asp-page="/Partners/Index" asp-route-scope="customers"><svg><use href="/img/icons.svg#partners"></use></svg><span>甲方/总包</span></a>
                 <a class='@Nav("/Crews")' asp-page="/Crews/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>施工班组</span></a>
-                <a class='@Nav("/Partners")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
+                <a class='@NavExact("/Partners")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">公司与设备</span>
                 <a class='@NavExact("/Companies")' asp-page="/Companies/Index"><svg><use href="/img/icons.svg#company"></use></svg><span>自有公司</span></a>

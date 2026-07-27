@@ -6,6 +6,8 @@ if (page) {
     const financeDialog = page.querySelector("[data-partner-finance-dialog]");
     const editorForm = editorDialog?.querySelector("[data-partner-editor-form]");
     const statusSection = editorDialog?.querySelector("[data-partner-status-section]");
+    const defaultRole = Number.parseInt(page.dataset.defaultRole ?? "2", 10);
+    const entityLabel = page.dataset.entityLabel || "合作单位";
     const money = new Intl.NumberFormat("zh-CN", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
@@ -59,16 +61,17 @@ if (page) {
         setField("Name", copy ? `${payload.name}（复制）` : payload.name);
         setField("ShortName", copy ? `${payload.shortName}副本` : payload.shortName);
         setField("UnifiedSocialCreditCode", copy ? "" : payload.unifiedSocialCreditCode);
-        setField("RoleType", payload.roleType ?? 2);
+        setField("RoleType", payload.roleType ?? defaultRole);
         setField("TradeCategory", payload.tradeCategory);
         setField("ContactName", copy ? "" : payload.contactName);
         setField("ContactPhone", copy ? "" : payload.contactPhone);
         setField("ContactNotes", copy ? "" : payload.contactNotes);
         setField("Notes", payload.notes);
         setField("IsActive", editing ? payload.isActive : true);
-        setField("Reason", copy ? "复制合作单位" : editing ? "修改合作单位" : "新增合作单位");
+        const action = copy ? "复制" : editing ? "编辑" : "新增";
+        setField("Reason", `${action}${entityLabel}`);
         const title = editorDialog?.querySelector("[data-partner-editor-title]");
-        if (title) title.textContent = copy ? "复制合作单位" : editing ? "编辑合作单位" : "新增合作单位";
+        if (title) title.textContent = `${action}${entityLabel}`;
         show(editorDialog);
     };
 
@@ -171,7 +174,7 @@ if (page) {
 
     if (editorDialog?.dataset.dialogOpen === "true") {
         const title = editorDialog.querySelector("[data-partner-editor-title]");
-        if (title) title.textContent = field("Id")?.value ? "编辑合作单位" : "新增合作单位";
+        if (title) title.textContent = `${field("Id")?.value ? "编辑" : "新增"}${entityLabel}`;
         if (statusSection) statusSection.hidden = !field("Id")?.value;
         show(editorDialog);
     }

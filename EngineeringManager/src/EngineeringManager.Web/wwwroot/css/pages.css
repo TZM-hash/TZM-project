@@ -1199,20 +1199,20 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .partner-role-clear { width: 100%; margin-top: .55rem; }
 .partner-table-wrap { overflow-x: auto; }
 .partner-workspace-table { width: 100%; min-width: 64rem; table-layout: fixed; font-size: .78rem; }
-.partner-workspace-table--financial { min-width: 76rem; }
+.partner-workspace-table--financial { min-width: 71rem; }
 .partner-workspace-table th, .partner-workspace-table td { min-width: 0; padding: .52rem .42rem; vertical-align: middle; overflow-wrap: anywhere; }
-.partner-workspace-table th[data-column-key="partner"] { width: 11.5rem; }
-.partner-workspace-table th[data-column-key="role_trade"] { width: 6.25rem; }
-.partner-workspace-table th[data-column-key="contact"] { width: 6.25rem; }
-.partner-workspace-table th[data-column-key="projects"] { width: 4.25rem; }
-.partner-workspace-table th[data-column-key="receipts"], .partner-workspace-table th[data-column-key="invoices"], .partner-workspace-table th[data-column-key="payments"] { width: 9.6667rem; }
+.partner-workspace-table th[data-column-key="partner"] { width: 13.5rem; }
+.partner-workspace-table th[data-column-key="role_trade"] { width: 7.5rem; }
+.partner-workspace-table th[data-column-key="contact"] { width: 8rem; }
+.partner-workspace-table th[data-column-key="projects"] { width: 4.5rem; }
+.partner-workspace-table th[data-column-key="receipts"], .partner-workspace-table th[data-column-key="invoices"], .partner-workspace-table th[data-column-key="payments"] { width: 9rem; }
 .partner-workspace-table th[data-column-key="status"] { width: 5rem; }
 .partner-workspace-table th[data-column-key="actions"] { width: 13.5rem; }
 .partner-workspace-table td > strong, .partner-workspace-table td > span { display: block; }
 .partner-notes-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .partner-name-clamp { display: -webkit-box !important; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; }
 .partner-project-count { font-size: 1rem; font-variant-numeric: tabular-nums; text-align: center; }
-.partner-financial-cell { --partner-financial-accent: #15803d; --partner-progress-fill: #86efac; display: table-cell; box-shadow: inset 0 2px 0 var(--partner-financial-accent); font-variant-numeric: tabular-nums; }
+.partner-financial-cell { --partner-financial-accent: #15803d; --partner-progress-fill: #86efac; display: table-cell; font-variant-numeric: tabular-nums; }
 .partner-financial-cell--receivable { --partner-financial-accent: #15803d; --partner-progress-fill: #86efac; }
 .partner-financial-cell--payable { --partner-financial-accent: #2563eb; --partner-progress-fill: #93c5fd; }
 .partner-financial-cell--invoice { --partner-financial-accent: #b45309; --partner-progress-fill: #fde68a; }
@@ -1318,13 +1318,13 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .crew-trade-clear { width: 100%; margin-top: .55rem; }
 .crew-table-wrap { overflow-x: auto; }
 .crew-workspace-table { width: 100%; min-width: 67rem; table-layout: fixed; font-size: .78rem; }
-.crew-workspace-table.partner-workspace-table--financial { min-width: 79rem; }
+.crew-workspace-table.partner-workspace-table--financial { min-width: 73rem; }
 .crew-workspace-table th, .crew-workspace-table td { min-width: 0; padding: .52rem .42rem; vertical-align: middle; overflow-wrap: anywhere; }
-.crew-workspace-table th[data-column-key="crew"] { width: 13rem; }
-.crew-workspace-table th[data-column-key="role_trade"] { width: 6.25rem; }
-.crew-workspace-table th[data-column-key="contact"] { width: 6.25rem; }
-.crew-workspace-table th[data-column-key="projects"] { width: 4.25rem; }
-.crew-workspace-table th[data-column-key="receipts"], .crew-workspace-table th[data-column-key="invoices"], .crew-workspace-table th[data-column-key="payments"] { width: 9.6667rem; }
+.crew-workspace-table th[data-column-key="crew"] { width: 14.5rem; }
+.crew-workspace-table th[data-column-key="role_trade"] { width: 8rem; }
+.crew-workspace-table th[data-column-key="contact"] { width: 8rem; }
+.crew-workspace-table th[data-column-key="projects"] { width: 4.5rem; }
+.crew-workspace-table th[data-column-key="receipts"], .crew-workspace-table th[data-column-key="invoices"], .crew-workspace-table th[data-column-key="payments"] { width: 9rem; }
 .crew-workspace-table th[data-column-key="status"] { width: 5rem; }
 .crew-workspace-table th[data-column-key="actions"] { width: 15rem; }
 .crew-workspace-table td > strong, .crew-workspace-table td > span { display: block; }

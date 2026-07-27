@@ -19,6 +19,8 @@ public sealed class IndexModel(
     ICentralLedgerQueryService ledgerQueryService,
     ApplicationDbContext db) : PageModel
 {
+    public const string CustomerScope = "customers";
+
     public IReadOnlyList<BusinessPartnerDto> AllPartners { get; private set; } = [];
     public IReadOnlyList<BusinessPartnerDto> Partners { get; private set; } = [];
     public IReadOnlyList<PartnerRoleSummary> RoleSummaries { get; private set; } = [];
@@ -28,17 +30,43 @@ public sealed class IndexModel(
     public bool CanManageFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
     public bool CanViewFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance) || User.IsInRole(SystemRoles.QueryOnly);
     public string? ActiveDialog { get; private set; }
+    public bool IsCustomerScope => string.Equals(Scope, CustomerScope, StringComparison.OrdinalIgnoreCase);
+    public string EntityLabel => IsCustomerScope ? "甲方/总包" : "合作单位";
+    public BusinessPartnerRoleType DefaultRole => IsCustomerScope
+        ? BusinessPartnerRoleType.CustomerOrGeneralContractor
+        : BusinessPartnerRoleType.ConstructionCrew;
+    public IReadOnlyList<BusinessPartnerRoleType> AvailableRoles => IsCustomerScope
+        ? [BusinessPartnerRoleType.CustomerOrGeneralContractor]
+        : Enum.GetValues<BusinessPartnerRoleType>()
+            .Where(role => role != BusinessPartnerRoleType.CustomerOrGeneralContractor)
+            .ToArray();
 
+    [BindProperty(SupportsGet = true)] public string? Scope { get; set; }
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public BusinessPartnerRoleType? Role { get; set; }
     [BindProperty(SupportsGet = true)] public bool? IsActive { get; set; }
     [BindProperty] public PartnerEditorInput Editor { get; set; } = new();
 
-    public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken);
+    public async Task OnGetAsync(CancellationToken cancellationToken)
+    {
+        NormalizeRoleFilter();
+        await LoadAsync(cancellationToken);
+    }
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken cancellationToken)
     {
         if (!CanManage) return Forbid();
+        NormalizeRoleFilter();
+        if (IsCustomerScope)
+        {
+            Editor.RoleType = BusinessPartnerRoleType.CustomerOrGeneralContractor;
+        }
+        else if (Editor.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor)
+        {
+            ModelState.AddModelError(string.Empty, "甲方/总包请在独立页面中维护。");
+        }
+        await EnsureEditorTargetMatchesScopeAsync(cancellationToken);
+
         if (!ModelState.IsValid)
         {
             ActiveDialog = "editor";
@@ -70,7 +98,7 @@ public sealed class IndexModel(
                         Editor.ConcurrencyStamp,
                         Editor.Reason),
                     cancellationToken);
-                TempData["SuccessMessage"] = "合作单位已更新。";
+                TempData["SuccessMessage"] = $"{EntityLabel}已更新。";
             }
             else
             {
@@ -84,10 +112,16 @@ public sealed class IndexModel(
                         [role],
                         contact is null ? [] : [contact]),
                     cancellationToken);
-                TempData["SuccessMessage"] = "合作单位已新增。";
+                TempData["SuccessMessage"] = $"{EntityLabel}已新增。";
             }
 
-            return RedirectToPage(new { Search, Role, IsActive });
+            return RedirectToPage(new
+            {
+                Scope = IsCustomerScope ? CustomerScope : null,
+                Search,
+                Role = IsCustomerScope ? null : Role,
+                IsActive
+            });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
         {
@@ -100,10 +134,15 @@ public sealed class IndexModel(
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
-        AllPartners = await partnerService.ListForManagementAsync(null, null, cancellationToken);
-        var filtered = await partnerService.ListForManagementAsync(Search, Role, cancellationToken);
-        Partners = (IsActive.HasValue ? filtered.Where(item => item.IsActive == IsActive.Value) : filtered).ToArray();
-        RoleSummaries = Enum.GetValues<BusinessPartnerRoleType>()
+        var allPartners = await partnerService.ListForManagementAsync(null, null, cancellationToken);
+        AllPartners = ApplyScope(allPartners).ToArray();
+        var filtered = await partnerService.ListForManagementAsync(
+            Search,
+            IsCustomerScope ? BusinessPartnerRoleType.CustomerOrGeneralContractor : Role,
+            cancellationToken);
+        var scoped = ApplyScope(filtered);
+        Partners = (IsActive.HasValue ? scoped.Where(item => item.IsActive == IsActive.Value) : scoped).ToArray();
+        RoleSummaries = AvailableRoles
             .Select(role => new PartnerRoleSummary(role, AllPartners.Count(item => item.Roles.Any(value => value.RoleType == role))))
             .ToArray();
         if (CanViewFinance && Partners.Count > 0)
@@ -115,6 +154,41 @@ public sealed class IndexModel(
                 cancellationToken);
         }
     }
+
+    private IEnumerable<BusinessPartnerDto> ApplyScope(IEnumerable<BusinessPartnerDto> partners) =>
+        IsCustomerScope
+            ? partners.Where(item => HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor))
+            : partners.Where(item => !HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor));
+
+    private void NormalizeRoleFilter()
+    {
+        if (IsCustomerScope || Role == BusinessPartnerRoleType.CustomerOrGeneralContractor)
+        {
+            Role = null;
+        }
+    }
+
+    private async Task EnsureEditorTargetMatchesScopeAsync(CancellationToken cancellationToken)
+    {
+        if (!Editor.Id.HasValue) return;
+
+        var partners = await partnerService.ListForManagementAsync(null, null, cancellationToken);
+        var existing = partners.SingleOrDefault(item => item.Id == Editor.Id.Value);
+        if (existing is null)
+        {
+            ModelState.AddModelError(string.Empty, "单位不存在或已删除，请刷新后重试。");
+            return;
+        }
+
+        var belongsToCustomerScope = HasRole(existing, BusinessPartnerRoleType.CustomerOrGeneralContractor);
+        if (belongsToCustomerScope != IsCustomerScope)
+        {
+            ModelState.AddModelError(string.Empty, "当前单位不属于此维护页面，请刷新后重试。");
+        }
+    }
+
+    private static bool HasRole(BusinessPartnerDto partner, BusinessPartnerRoleType role) =>
+        partner.Roles.Any(item => item.RoleType == role);
 
     public sealed record PartnerRoleSummary(BusinessPartnerRoleType Role, int Count);
 

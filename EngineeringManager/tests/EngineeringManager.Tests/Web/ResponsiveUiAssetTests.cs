@@ -21,6 +21,19 @@ public sealed class ResponsiveUiAssetTests
     }
 
     [Fact]
+    public void MajorOverviewTablesUseSubtleRowAndColumnSeparators()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
+
+        css.Should().Contain("table.data-table[id$=\"-table\"]")
+            .And.Contain(".data-work-surface[id$=\"-table\"] > .table-wrap > table.data-table")
+            .And.Contain("border-inline-end: 1px solid rgba(148, 163, 184, .24)")
+            .And.Contain("border-bottom-color: rgba(148, 163, 184, .26)")
+            .And.Contain("box-shadow: inset 0 1px 0 rgba(255, 255, 255, .62), inset 0 -1px 0 rgba(148, 163, 184, .06)")
+            .And.Contain("box-shadow: 0 2px 5px rgba(15, 23, 42, .055)");
+    }
+
+    [Fact]
     public void PrimaryFormsExposeResponsiveSectionsAndStickyActions()
     {
         var formPages = new[]

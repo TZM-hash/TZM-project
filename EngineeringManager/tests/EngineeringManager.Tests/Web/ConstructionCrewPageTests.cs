@@ -12,9 +12,8 @@ public sealed class ConstructionCrewPageTests
 
         index.Should().Contain("施工班组管理");
         index.Should().Contain("当前人员");
-        index.Should().Contain("应收");
         index.Should().Contain("应付");
-        index.Should().Contain("开票");
+        index.Should().Contain("销项票");
         details.Should().Contain("人员名册");
         details.Should().Contain("民工工资发放记录");
         details.Should().Contain("查看来源批次");
@@ -32,16 +31,17 @@ public sealed class ConstructionCrewPageTests
 
         index.Should().Contain("data-column-key=\"role_trade\"")
             .And.Contain("data-column-key=\"contact\"")
-            .And.Contain("data-column-key=\"receipts\"")
             .And.Contain("data-column-key=\"payments\"")
             .And.Contain("data-column-key=\"invoices\"")
             .And.Contain("partner-workspace-table--financial")
-            .And.Contain("partner-financial-cell--receivable")
             .And.Contain("partner-financial-cell--payable")
             .And.Contain("partner-financial-cell--invoice")
-            .And.Contain("aria-label=\"应收完成进度\"")
             .And.Contain("aria-label=\"应付完成进度\"")
-            .And.Contain("aria-label=\"开票完成进度\"")
+            .And.Contain("aria-label=\"销项票完成进度\"")
+            .And.Contain("var financialColumnCount = Model.CanViewFinance ? 2 : 0")
+            .And.NotContain("data-column-key=\"receipts\"")
+            .And.NotContain("partner-financial-cell--receivable")
+            .And.NotContain("aria-label=\"应收完成进度\"")
             .And.Contain("data-crew-dialog-open=\"finance\"")
             .And.Contain("data-crew-finance-dialog")
             .And.Contain("data-crew-finance-jump")
@@ -64,7 +64,6 @@ public sealed class ConstructionCrewPageTests
 
         presets.Should().Contain("(\"role_trade\", \"角色 / 专业\")")
             .And.Contain("(\"contact\", \"主要联系人\")")
-            .And.Contain("(\"receipts\", \"应收\")")
             .And.Contain("(\"payments\", \"应付\")")
             .And.Contain("(\"invoices\", \"开票\")");
 
@@ -74,6 +73,36 @@ public sealed class ConstructionCrewPageTests
             .And.Contain("data-crew-finance-chart")
             .And.Contain("mode === \"finance\"")
             .And.Contain("jump.href = payload.financeUrl");
+    }
+
+    [Fact]
+    public void CrewOverviewUsesPayableAndSalesInvoiceColumnsWithoutReducingFinanceDialog()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Crews", "Index.cshtml");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var overview = page[..page.IndexOf("<dialog", StringComparison.Ordinal)];
+
+        overview.Should().Contain("column.Key is \"payments\" or \"invoices\"")
+            .And.Contain("column with { Label = \"销项票\" }")
+            .And.Contain("<th data-column-key=\"payments\">应付</th>")
+            .And.Contain("<th data-column-key=\"invoices\">销项票</th>")
+            .And.Contain("financialSummary.Receivable.ShouldInvoiceAmount")
+            .And.NotContain("data-column-key=\"receipts\"")
+            .And.NotContain("partner-financial-cell--receivable");
+        System.Text.RegularExpressions.Regex.Matches(overview, "data-column-key=\"invoices\"")
+            .Should().HaveCount(2, "the overview needs one invoice header and one invoice cell per row template");
+
+        page.Should().Contain("data-crew-finance-chart=\"receivable\"")
+            .And.Contain("data-crew-finance-chart=\"payable\"")
+            .And.Contain("data-crew-finance-chart=\"salesInvoice\"")
+            .And.Contain("data-crew-finance-chart=\"purchaseInvoice\"");
+
+        css.Should().Contain(".crew-workspace-table.partner-workspace-table--financial { min-width: 73rem; }")
+            .And.Contain("th[data-column-key=\"crew\"] { width: 14.5rem; }")
+            .And.Contain("th[data-column-key=\"role_trade\"] { width: 8rem; }")
+            .And.Contain("th[data-column-key=\"contact\"] { width: 8rem; }")
+            .And.Contain("th[data-column-key=\"projects\"] { width: 4.5rem; }")
+            .And.Contain("th[data-column-key=\"payments\"] { width: 9rem; }");
     }
 
     [Fact]

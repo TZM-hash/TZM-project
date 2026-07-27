@@ -7,7 +7,7 @@ public sealed class ModuleDataWorkbenchTests
     [Theory]
     [InlineData("Employees", "employees-table")]
     [InlineData("Employees/Ledger", "employee-annual-ledger-table")]
-    [InlineData("Partners", "partners-table")]
+    [InlineData("Partners", "@tableId")]
     [InlineData("StageResults", "stage-results-table")]
     [InlineData("Companies", "companies-table")]
     [InlineData("Equipment", "equipment-table")]
