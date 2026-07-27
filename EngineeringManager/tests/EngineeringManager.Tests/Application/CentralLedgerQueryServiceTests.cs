@@ -142,6 +142,148 @@ public sealed class CentralLedgerQueryServiceTests
     }
 
     [Fact]
+    public async Task PartnerSummariesSeparateReceivablesPayablesAndReturnEmptyRequestedPartners()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var command = new CentralLedgerCommandService(fixture.Db);
+        var query = new CentralLedgerQueryService(fixture.Db);
+        var actor = fixture.ExternalActor();
+        var emptyPartnerId = Guid.NewGuid();
+
+        var receivableId = await command.CreateSettlementAsync(
+            actor,
+            new CreateSettlementRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSettlementState.Final,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.Project.Id,
+                fixture.Contract.Id,
+                null,
+                new DateOnly(2026, 7, 1),
+                1_000m,
+                1_000m,
+                "客户应收"),
+            CancellationToken.None);
+        var payableId = await command.CreateSettlementAsync(
+            actor,
+            new CreateSettlementRequest(
+                LedgerScope.External,
+                LedgerDirection.Payable,
+                LedgerSettlementState.Final,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Supplier.Id,
+                null,
+                fixture.Project.Id,
+                null,
+                null,
+                new DateOnly(2026, 7, 2),
+                750m,
+                750m,
+                "供应商应付"),
+            CancellationToken.None);
+
+        await command.CreateInvoiceAsync(
+            actor,
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "PARTNER-OUT-001",
+                new DateOnly(2026, 7, 3),
+                800m,
+                null,
+                null,
+                null,
+                "客户销项",
+                [new FinanceAllocationRequest(receivableId, 800m, 1)]),
+            CancellationToken.None);
+        await command.CreateInvoiceAsync(
+            actor,
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Payable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Supplier.Id,
+                null,
+                "PARTNER-IN-001",
+                new DateOnly(2026, 7, 4),
+                600m,
+                null,
+                null,
+                null,
+                "供应商进项",
+                [new FinanceAllocationRequest(payableId, 600m, 1)]),
+            CancellationToken.None);
+        await command.CreateCashAsync(
+            actor,
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.CollectionAccount.Id,
+                null,
+                new DateOnly(2026, 7, 5),
+                650m,
+                "银行转账",
+                "客户收款",
+                [new FinanceAllocationRequest(receivableId, 650m, 1)]),
+            CancellationToken.None);
+        await command.CreateCashAsync(
+            actor,
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Payable,
+                LedgerCashType.Payment,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Supplier.Id,
+                null,
+                fixture.PaymentAccount.Id,
+                null,
+                new DateOnly(2026, 7, 6),
+                500m,
+                "银行转账",
+                "供应商付款",
+                [new FinanceAllocationRequest(payableId, 500m, 1)]),
+            CancellationToken.None);
+
+        var summaries = await query.GetPartnerSummariesAsync(
+            actor,
+            [fixture.Client.Id, fixture.Supplier.Id, emptyPartnerId, fixture.Client.Id],
+            CancellationToken.None);
+
+        summaries.Should().HaveCount(3);
+        summaries[fixture.Client.Id].Receivable.CashAmount.Should().Be(650m);
+        summaries[fixture.Client.Id].Receivable.UncollectedOrUnpaid.Should().Be(350m);
+        summaries[fixture.Client.Id].Receivable.InvoicedAmount.Should().Be(800m);
+        summaries[fixture.Client.Id].Payable.Should().Be(CentralLedgerMetrics.Zero);
+        summaries[fixture.Supplier.Id].Payable.CashAmount.Should().Be(500m);
+        summaries[fixture.Supplier.Id].Payable.UncollectedOrUnpaid.Should().Be(250m);
+        summaries[fixture.Supplier.Id].Payable.InvoicedAmount.Should().Be(600m);
+        summaries[fixture.Supplier.Id].Receivable.Should().Be(CentralLedgerMetrics.Zero);
+        summaries[emptyPartnerId].Should().Be(PartnerLedgerSummaryDto.Empty(emptyPartnerId));
+    }
+
+    [Fact]
     public async Task ReadOnlyActorCanQueryAuthorizedRowsButNotUnauthorizedCompanyRows()
     {
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();

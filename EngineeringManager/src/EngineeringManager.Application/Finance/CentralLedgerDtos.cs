@@ -170,6 +170,15 @@ public sealed record CentralLedgerOverviewPageDto(
     IReadOnlyList<Guid> MatchingSettlementIds,
     IReadOnlyList<CentralLedgerUnallocatedCashDto>? UnallocatedCash = null);
 
+public sealed record PartnerLedgerSummaryDto(
+    Guid BusinessPartnerId,
+    CentralLedgerMetrics Receivable,
+    CentralLedgerMetrics Payable)
+{
+    public static PartnerLedgerSummaryDto Empty(Guid businessPartnerId) =>
+        new(businessPartnerId, CentralLedgerMetrics.Zero, CentralLedgerMetrics.Zero);
+}
+
 public sealed record CentralLedgerUnallocatedCashDto(
     Guid CashEntryId,
     LedgerDirection Direction,

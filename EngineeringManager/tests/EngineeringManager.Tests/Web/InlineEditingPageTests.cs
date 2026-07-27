@@ -5,7 +5,7 @@ namespace EngineeringManager.Tests.Web;
 public sealed class InlineEditingPageTests
 {
     [Fact]
-    public void ExistingQuickEditPagesKeepEditorsInlineAndUseDialogsForFocusedCreateOrPreviewFlows()
+    public void ExistingQuickEditPagesKeepEditorsInlineWhilePartnerUsesFocusedDialogs()
     {
         var projectDetails = ReadPage("Projects", "Details.cshtml");
         var companyDetails = ReadPage("Companies", "Details.cshtml");
@@ -15,12 +15,11 @@ public sealed class InlineEditingPageTests
         {
             projectDetails,
             companyDetails,
-            equipmentDetails,
-            partnerIndex
+            equipmentDetails
         };
 
         pages.Should().OnlyContain(page => page.Contains("data-inline-cell-edit", StringComparison.Ordinal));
-        new[] { equipmentDetails, partnerIndex }.Should().OnlyContain(page => !page.Contains("<dialog", StringComparison.OrdinalIgnoreCase));
+        equipmentDetails.Should().NotContain("<dialog");
         projectDetails.Should().Contain("<dialog class=\"workbench-dialog quantity-notes-dialog\"");
         projectDetails.Should().Contain("data-attachment-preview-dialog");
         (projectDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(2);
@@ -29,6 +28,10 @@ public sealed class InlineEditingPageTests
             .And.Contain("data-company-account-create-dialog")
             .And.Contain("data-company-detailed-edit-dialog");
         (companyDetails.Split("<dialog", StringSplitOptions.None).Length - 1).Should().Be(4);
+        partnerIndex.Should().Contain("data-partner-editor-dialog")
+            .And.Contain("data-partner-details-dialog")
+            .And.NotContain("data-inline-cell-edit")
+            .And.NotContain("data-quick-edit-dialog");
         pages.Should().OnlyContain(page => !page.Contains("data-quick-edit-dialog", StringComparison.Ordinal));
     }
 
@@ -56,7 +59,7 @@ public sealed class InlineEditingPageTests
     }
 
     [Fact]
-    public void EmployeeAndPartnerActionsUseCompactButtonsAndEmployeeTabsAreButtonShaped()
+    public void EmployeeActionsStayCompactPartnerActionsUseSemanticColorsAndEmployeeTabsAreButtonShaped()
     {
         var employee = ReadPage("Employees", "Index.cshtml");
         var partner = ReadPage("Partners", "Index.cshtml");
@@ -64,7 +67,11 @@ public sealed class InlineEditingPageTests
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
 
         employee.Should().Contain("table-action-buttons--compact");
-        partner.Should().Contain("table-action-buttons--compact");
+        partner.Should().Contain("partner-row-actions")
+            .And.Contain("action-button--view")
+            .And.Contain("action-button--edit")
+            .And.Contain("action-button--copy")
+            .And.Contain("action-button--usage");
         subNavigation.Should().Contain("page-tabs--buttons")
             .And.Contain("button--secondary")
             .And.Contain("is-active");
@@ -88,8 +95,9 @@ public sealed class InlineEditingPageTests
 
         employees.Should().NotContain("data-inline-cell-edit")
             .And.NotContain("data-inline-edit=\"employee-list\"");
-        partners.Should().Contain("data-inline-edit=\"partner-@partner.Id\"")
-            .And.NotContain("data-inline-edit=\"partner-list\"");
+        partners.Should().NotContain("data-inline-edit=\"partner-@partner.Id\"")
+            .And.NotContain("data-inline-edit=\"partner-list\"")
+            .And.NotContain("data-inline-cell-edit");
     }
 
     [Fact]

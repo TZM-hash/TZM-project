@@ -182,13 +182,31 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
     public async Task<IReadOnlyList<BusinessPartnerDto>> ListAsync(
         string? search,
         BusinessPartnerRoleType? role,
+        CancellationToken cancellationToken) =>
+        await ListCoreAsync(search, role, includeInactive: false, cancellationToken);
+
+    public async Task<IReadOnlyList<BusinessPartnerDto>> ListForManagementAsync(
+        string? search,
+        BusinessPartnerRoleType? role,
+        CancellationToken cancellationToken) =>
+        await ListCoreAsync(search, role, includeInactive: true, cancellationToken);
+
+    private async Task<IReadOnlyList<BusinessPartnerDto>> ListCoreAsync(
+        string? search,
+        BusinessPartnerRoleType? role,
+        bool includeInactive,
         CancellationToken cancellationToken)
     {
         var query = db.BusinessPartners.AsNoTracking()
             .Include(item => item.Roles)
             .Include(item => item.Contacts)
             .Include(item => item.ProjectLinks)
-            .Where(item => item.IsActive);
+            .AsQueryable();
+        if (!includeInactive)
+        {
+            query = query.Where(item => item.IsActive);
+        }
+
         foreach (var term in SearchTerms.Parse(search))
         {
             var parsedRoleFilter = ParseRole(term);

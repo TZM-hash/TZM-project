@@ -265,6 +265,44 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
         return result.Totals;
     }
 
+    public async Task<IReadOnlyDictionary<Guid, PartnerLedgerSummaryDto>> GetPartnerSummariesAsync(
+        CentralLedgerActor actor,
+        IReadOnlyCollection<Guid> businessPartnerIds,
+        CancellationToken token)
+    {
+        var partnerIds = businessPartnerIds.Distinct().ToArray();
+        if (partnerIds.Length == 0) return new Dictionary<Guid, PartnerLedgerSummaryDto>();
+
+        var legalEntityIds = actor.LegalEntityIds.ToArray();
+        var projectIds = actor.ProjectIds.ToArray();
+        var settlements = await db.FinanceSettlements.AsNoTracking().AsSplitQuery()
+            .Where(item => item.Scope == LedgerScope.External && item.Status == LedgerRecordStatus.Active)
+            .Where(item => item.BusinessPartnerId.HasValue && partnerIds.Contains(item.BusinessPartnerId.Value))
+            .Where(item => legalEntityIds.Contains(item.LegalEntityId))
+            .Where(item => !item.ProjectId.HasValue || projectIds.Contains(item.ProjectId.Value))
+            .Include(item => item.LegalEntity)
+            .Include(item => item.BusinessPartner)
+            .Include(item => item.Project)
+            .Include(item => item.Contract)
+            .Include(item => item.Adjustments)
+            .Include(item => item.Deductions)
+            .Include(item => item.InvoiceAllocations).ThenInclude(item => item.Invoice)
+            .Include(item => item.CashAllocations).ThenInclude(item => item.CashEntry)
+            .ToListAsync(token);
+
+        var summaries = partnerIds.ToDictionary(id => id, PartnerLedgerSummaryDto.Empty);
+        foreach (var row in settlements.Select(ToRow))
+        {
+            var partnerId = row.BusinessPartnerId!.Value;
+            var summary = summaries[partnerId];
+            summaries[partnerId] = row.Direction == LedgerDirection.Receivable
+                ? summary with { Receivable = CentralLedgerCalculator.Add(summary.Receivable, row.Metrics) }
+                : summary with { Payable = CentralLedgerCalculator.Add(summary.Payable, row.Metrics) };
+        }
+
+        return summaries;
+    }
+
     private async Task<CentralLedgerDetailsDto?> GetHeaderDetailsAsync(
         CentralLedgerActor actor,
         FinanceRecordType type,

@@ -24,9 +24,9 @@
         RowDensity = EngineeringManager.Application.Settings.TableDensity.Compact,
         InlineFilters = new DataWorkbenchFilterField[]
         {
-            new("Search", "搜索", Model.Search, Placeholder: "搜索公司全部信息"),
             new("CompanyId", "范围", Model.CompanyId?.ToString(), DataWorkbenchFilterKind.Select,
-                Model.Companies.Select(company => new DataWorkbenchFilterOption(company.Id.ToString(), company.Name)).ToArray())
+                Model.Companies.Select(company => new DataWorkbenchFilterOption(company.Id.ToString(), company.Name)).ToArray()),
+            new("Search", "搜索", Model.Search, Placeholder: "搜索公司全部信息")
         }
     };
     string AttachmentContentType(string? fileName) => System.IO.Path.GetExtension(fileName)?.ToLowerInvariant() switch
@@ -170,13 +170,10 @@
         }
         </div>
         <article class="panel company-panel company-list-panel">
-            <div class="panel-heading">
-                <div>
-                    <p class="eyebrow">公司档案</p>
-                    <h2>公司列表</h2>
-                </div>
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated company-list-toolbar">
+                <div><p class="eyebrow">公司档案</p><h2>公司列表</h2></div>
+                <partial name="_DataWorkbench" model="workbench" />
             </div>
-            <partial name="_DataWorkbench" model="workbench" />
             @if (Model.Companies.Count == 0)
             {
                 <p class="panel-copy company-empty-copy">当前权限范围内没有自有公司。</p>

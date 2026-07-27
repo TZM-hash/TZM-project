@@ -118,9 +118,26 @@ public sealed class CompanyPageTests
             "css",
             "pages.css"));
 
-        css.Should().Contain(".company-portfolio-grid { grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr);");
-        css.Should().Contain("@media (max-width: 1380px)")
+        css.Should().Contain(".company-portfolio-grid { grid-template-columns: minmax(210px, 220px) minmax(0, 1fr);");
+        css.Should().Contain("@media (max-width: 900px)")
             .And.Contain(".company-portfolio-grid { grid-template-columns: 1fr; }");
+    }
+
+    [Fact]
+    public void CompanyWorkbenchPlacesScopeBeforeFlexibleSearchLikeEquipment()
+    {
+        var page = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "EngineeringManager.Web",
+            "Pages",
+            "Companies",
+            "Index.cshtml"));
+
+        var scopeFilterPosition = page.IndexOf("new(\"CompanyId\", \"范围\"", StringComparison.Ordinal);
+        var searchFilterPosition = page.IndexOf("new(\"Search\", \"搜索\"", StringComparison.Ordinal);
+
+        scopeFilterPosition.Should().BeLessThan(searchFilterPosition);
     }
 
     [Fact]

@@ -121,6 +121,24 @@ public sealed class BusinessPartnerServiceTests
         (await fixture.Service.ListAsync("联系人甲 不存在", null, CancellationToken.None)).Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task ManagementListIncludesInactivePartnersWithoutChangingActiveOnlyList()
+    {
+        await using var fixture = await PartnerFixture.CreateAsync();
+        var partner = await fixture.Service.CreateAsync(
+            new CreateBusinessPartnerRequest("BP-INACTIVE", "停用合作单位", "停用单位", null, null, [new PartnerRoleRequest(BusinessPartnerRoleType.MaterialSupplier, "钢材", null, null)], []),
+            CancellationToken.None);
+        var role = partner.Roles.Single();
+        await fixture.Service.UpdateAsync(
+            "admin",
+            new UpdateBusinessPartnerRequest(partner.Id, partner.PartnerNumber, partner.Name, partner.ShortName, null, null, new PartnerRoleRequest(role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms), null, false, partner.ConcurrencyStamp, "停用合作单位"),
+            CancellationToken.None);
+
+        (await fixture.Service.ListAsync(null, null, CancellationToken.None)).Should().BeEmpty();
+        (await fixture.Service.ListForManagementAsync(null, null, CancellationToken.None))
+            .Should().ContainSingle(item => item.Id == partner.Id && !item.IsActive);
+    }
+
     private sealed class PartnerFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

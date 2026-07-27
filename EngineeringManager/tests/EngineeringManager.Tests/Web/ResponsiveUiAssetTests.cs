@@ -64,14 +64,16 @@ public sealed class ResponsiveUiAssetTests
 
         markup.Should().Contain("company-workspace--overview")
             .And.Contain("company-dashboard-stack")
-            .And.Contain("company-list-panel");
+            .And.Contain("company-list-panel")
+            .And.Contain("equipment-list-toolbar equipment-list-toolbar--integrated company-list-toolbar");
         css.Should().Contain(".company-workspace--overview")
-            .And.Contain(".company-portfolio-grid { grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr); align-items: stretch; }")
+            .And.Contain(".company-portfolio-grid { grid-template-columns: minmax(210px, 220px) minmax(0, 1fr); align-items: stretch; }")
             .And.Contain(".company-dashboard-stack { display: grid; min-width: 0; grid-template-rows: auto minmax(0, 1fr); align-content: stretch;")
             .And.Contain(".company-dashboard-stack--single { align-self: stretch; grid-template-rows: minmax(0, 1fr); }")
-            .And.Contain("grid-template-columns: minmax(22rem, .5fr) minmax(0, 1.5fr)")
+            .And.Contain("grid-template-columns: minmax(210px, 220px) minmax(0, 1fr)")
             .And.Contain(".company-category-table-wrap { max-height: none; overflow: visible; }")
-            .And.Contain(".company-list-panel { display: flex; min-width: 0; align-self: stretch;");
+            .And.Contain(".company-list-panel { display: flex; min-width: 0; align-self: stretch; flex-direction: column; padding: 0;")
+            .And.Contain(".company-list-panel .company-table-wrap { flex: 0 0 auto; margin-top: 0;");
     }
 
     [Fact]
@@ -100,7 +102,7 @@ public sealed class ResponsiveUiAssetTests
     {
         var pageCss = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
 
-        pageCss.Should().Contain(".equipment-workspace-layout { display: grid; grid-template-columns: minmax(260px, .32fr) minmax(0, 1fr); gap: .85rem; align-items: stretch;")
+        pageCss.Should().Contain(".equipment-workspace-layout { display: grid; grid-template-columns: minmax(210px, 220px) minmax(0, 1fr); gap: .85rem; align-items: stretch;")
             .And.Contain(".equipment-workspace-summary { position: sticky; top: 5rem; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); gap: .72rem; min-height: 0; max-height: none;")
             .And.Contain(".equipment-table-wrap { overflow-x: auto; }")
             .And.Contain(".equipment-table { width: 100%; table-layout: fixed;")
@@ -154,7 +156,7 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("setField(\"ExpiresOn\", copy ? \"\" : payload.expiresOn)")
             .And.Contain("initAttachmentPreview()");
 
-        css.Should().Contain(".company-certificate-workspace-layout")
+        css.Should().Contain(".company-certificate-workspace-layout { display: grid; grid-template-columns: minmax(210px, 220px) minmax(0, 1fr);")
             .And.Contain("align-items: stretch")
             .And.Contain(".company-certificate-list-toolbar .data-workbench-toolbar { min-width: 0; flex-wrap: wrap;")
             .And.Contain(".company-certificate-list-toolbar .workbench-inline-filters { flex-wrap: wrap;")

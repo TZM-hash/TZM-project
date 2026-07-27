@@ -9,4 +9,8 @@ public interface ICentralLedgerQueryService
     Task<CentralLedgerOptionsDto> GetOptionsAsync(CentralLedgerActor actor, LedgerScope scope, CancellationToken token);
     Task<CentralLedgerMetrics> GetProjectMetricsAsync(CentralLedgerActor actor, Guid projectId, CancellationToken token);
     Task<CentralLedgerMetrics> GetPartnerMetricsAsync(CentralLedgerActor actor, Guid businessPartnerId, CancellationToken token);
+    Task<IReadOnlyDictionary<Guid, PartnerLedgerSummaryDto>> GetPartnerSummariesAsync(
+        CentralLedgerActor actor,
+        IReadOnlyCollection<Guid> businessPartnerIds,
+        CancellationToken token);
 }
