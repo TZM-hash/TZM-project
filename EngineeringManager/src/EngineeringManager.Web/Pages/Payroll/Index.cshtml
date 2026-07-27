@@ -1,19 +1,162 @@
 @page
 @model EngineeringManager.Web.Pages.Payroll.IndexModel
+@using System.Text.Json
+@using EngineeringManager.Domain.Employees
 @using EngineeringManager.Web.Workbenches
 @{
     ViewData["Title"] = "工资台账";
-    var workbench = DataWorkbenchPresets.Payroll with
+    var statusOptions = new DataWorkbenchFilterOption[]
     {
-        InlineFilters = new DataWorkbenchFilterField[] { new("Search", "搜索", Model.Search, Placeholder: "搜索工资台账全部信息") }
+        new(nameof(PayrollBatchStatus.Draft), "草稿"),
+        new(nameof(PayrollBatchStatus.Confirmed), "已核对"),
+        new(nameof(PayrollBatchStatus.Closed), "已关闭"),
+        new(nameof(PayrollBatchStatus.ModifiedPendingReview), "修改待复核")
+    };
+    var inlineFilters = new DataWorkbenchFilterField[]
+    {
+        new("Search", "搜索", Model.Search, Placeholder: "搜索批次、项目、公司、账户或人员"),
+        new("DisbursementScope", "发放主体", Model.DisbursementScope, DataWorkbenchFilterKind.Select, Model.DisbursementScopeOptions),
+        new("Status", "状态", Model.Status?.ToString(), DataWorkbenchFilterKind.Select, statusOptions)
+    };
+    var workbench = DataWorkbenchPresets.Payroll with { InlineFilters = inlineFilters, Filters = inlineFilters };
+    var scopeName = Model.Status.HasValue
+        ? $"{Model.DisbursementScopeLabel} · {StatusLabel(Model.Status.Value)}"
+        : Model.DisbursementScopeLabel;
+
+    static string StatusLabel(PayrollBatchStatus status) => status switch
+    {
+        PayrollBatchStatus.Draft => "草稿",
+        PayrollBatchStatus.Confirmed => "已核对",
+        PayrollBatchStatus.Closed => "已关闭",
+        PayrollBatchStatus.Voided => "已作废",
+        PayrollBatchStatus.ModifiedPendingReview => "修改待复核",
+        _ => status.ToString()
+    };
+
+    static string StatusClass(PayrollBatchStatus status) => status switch
+    {
+        PayrollBatchStatus.Confirmed or PayrollBatchStatus.Closed => "active",
+        PayrollBatchStatus.ModifiedPendingReview => "warning",
+        PayrollBatchStatus.Voided => "inactive",
+        _ => "draft"
     };
 }
+@section Scripts { <script type="module" src="~/js/pages/payroll-workspace.js" asp-append-version="true"></script> }
 
-<section class="page-heading"><div><p class="eyebrow">真实付款批次</p><h1>工资台账</h1><p class="page-lead">员工和施工班组人员共用一套发放明细；一个批次对应一次真实账户支出。</p></div><a class="button button--primary button--action" asp-page="/Payroll/Edit">新建工资批次</a></section>
-<section class="overview-strip" aria-label="工资发放汇总"><article><span>实际发放总额</span><strong>@Model.Overview.ActualAmount.ToString("N2")</strong></article><article><span>员工发放</span><strong>@Model.Overview.EmployeeAmount.ToString("N2")</strong></article><article><span>班组工程款</span><strong>@Model.Overview.CrewAmount.ToString("N2")</strong></article><article><span>待核对差额</span><strong>@Model.Overview.Difference.ToString("N2")</strong></article></section>
-<section class="panel" style="margin-top: var(--space-3)"><div class="panel-heading"><div><p class="eyebrow">批次记录</p><h2>真实工资发放</h2></div></div><partial name="_DataWorkbench" model="workbench" /><div class="table-wrap"><table class="data-table" id="payroll-disbursement-table"><thead><tr><th data-column-key="batch">批次</th><th data-column-key="payment_date">发放日期</th><th data-column-key="recipients">人数</th><th data-column-key="actual">实际总额</th><th data-column-key="employee">员工</th><th data-column-key="crew">班组</th><th data-column-key="difference">差额</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead><tbody>
-@foreach (var item in Model.Overview.Batches)
-{
-    <tr><td data-column-key="batch">@item.Batch.BatchNumber · @item.Batch.Name</td><td data-column-key="payment_date">@(item.Batch.PaymentDate?.ToString() ?? "暂未填写")</td><td data-column-key="recipients">@item.RecipientCount</td><td data-column-key="actual">@item.Batch.ActualAmount.ToString("N2")</td><td data-column-key="employee">@item.Summary.EmployeeAmount.ToString("N2")</td><td data-column-key="crew">@item.Summary.CrewAmount.ToString("N2")</td><td data-column-key="difference">@item.Summary.Difference.ToString("N2")</td><td data-column-key="status">@item.Batch.Status</td><td data-column-key="actions"><a class="button button--secondary button--small" asp-page="/Payroll/Edit" asp-route-id="@item.Batch.Id">查看并修改</a></td></tr>
-}
-</tbody></table></div></section>
+<div class="payroll-workspace-page" data-payroll-workspace data-active-dialog="@Model.Dialog" data-active-id="@Model.Id">
+    <section class="page-heading compact-page-heading payroll-workspace-heading">
+        <div><p class="eyebrow">真实付款批次</p><h1>工资台账</h1><p class="page-lead">集中维护工资批次、人员明细和实际账户支出</p></div>
+        @if (Model.CanManage) { <a class="button button--primary" asp-page="/Payroll/Index" asp-route-dialog="editor" asp-route-search="@Model.Search" asp-route-status="@Model.Status" asp-route-disbursementScope="@Model.DisbursementScope" data-payroll-dialog-open="create">新建工资批次</a> }
+    </section>
+
+    <section class="payroll-workspace-layout">
+        <aside class="payroll-workspace-summary">
+            <div class="equipment-summary-heading"><span>发放概览</span><strong>@scopeName</strong></div>
+            <div class="payroll-summary-metrics">
+                <article><span>批次数</span><strong>@Model.Overview.Batches.Count</strong></article>
+                <article><span>实际发放</span><strong>@Model.Overview.ActualAmount.ToString("N2")</strong></article>
+                <article><span>员工发放</span><strong>@Model.Overview.EmployeeAmount.ToString("N2")</strong></article>
+                <article><span>班组发放</span><strong>@Model.Overview.CrewAmount.ToString("N2")</strong></article>
+            </div>
+            <section class="payroll-status-summary" aria-label="工资批次状态筛选">
+                <div class="equipment-company-summary-heading"><div><span>批次状态</span><strong>按状态筛选</strong></div><small>@Model.Overview.Batches.Count 条</small></div>
+                @foreach (var status in new[] { PayrollBatchStatus.Draft, PayrollBatchStatus.Confirmed, PayrollBatchStatus.Closed, PayrollBatchStatus.ModifiedPendingReview })
+                {
+                    <a class="payroll-status-summary-row @(Model.Status == status ? "is-active" : string.Empty)" asp-page="/Payroll/Index" asp-route-search="@Model.Search" asp-route-status="@status" asp-route-disbursementScope="@Model.DisbursementScope"><span>@StatusLabel(status)</span><strong>@Model.Overview.Batches.Count(item => item.Batch.Status == status)</strong></a>
+                }
+                @if (Model.Status.HasValue) { <a class="button button--secondary payroll-status-clear" asp-page="/Payroll/Index" asp-route-search="@Model.Search" asp-route-disbursementScope="@Model.DisbursementScope">显示全部状态</a> }
+            </section>
+        </aside>
+
+        <section class="payroll-workspace-list">
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated payroll-list-toolbar">
+                <div><p class="eyebrow">批次记录</p><h2>@scopeName</h2></div>
+                <partial name="_DataWorkbench" model="workbench" />
+            </div>
+            <div class="table-wrap payroll-table-wrap">
+                <table class="data-table payroll-workspace-table" id="payroll-disbursement-table">
+                    <thead><tr><th data-column-key="batch">批次</th><th data-column-key="payment_date">发放日期</th><th data-column-key="recipients">人数</th><th data-column-key="actual">实际总额</th><th data-column-key="employee">员工</th><th data-column-key="crew">班组</th><th data-column-key="difference">差额</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead>
+                    <tbody>
+                    @if (Model.Batches.Count == 0) { <tr><td colspan="9" class="empty-state">当前筛选范围暂无工资批次。</td></tr> }
+                    @foreach (var item in Model.Batches)
+                    {
+                        var batch = item.Batch;
+                        var projectLabel = batch.ProjectId.HasValue ? Model.ProjectLabels.GetValueOrDefault(batch.ProjectId.Value) : null;
+                        var companyLabel = batch.LegalEntityId.HasValue ? Model.CompanyLabels.GetValueOrDefault(batch.LegalEntityId.Value) : null;
+                        var accountLabel = batch.AccountId.HasValue ? Model.AccountLabels.GetValueOrDefault(batch.AccountId.Value) : null;
+                        var recipientBreakdown = Model.RecipientBreakdowns.GetValueOrDefault(batch.Id) ?? PayrollRecipientBreakdownViewModel.Empty;
+                        var payload = JsonSerializer.Serialize(new
+                        {
+                            id = batch.Id,
+                            batchNumber = batch.BatchNumber,
+                            name = batch.Name,
+                            paymentDate = batch.PaymentDate?.ToString("yyyy-MM-dd"),
+                            recipientCount = item.RecipientCount,
+                            actualAmount = batch.ActualAmount,
+                            employeeAmount = item.Summary.EmployeeAmount,
+                            crewAmount = item.Summary.CrewAmount,
+                            difference = item.Summary.Difference,
+                            project = projectLabel,
+                            company = companyLabel,
+                            account = accountLabel,
+                            voucherNumber = batch.VoucherNumber,
+                            notes = batch.Notes,
+                            statusLabel = StatusLabel(batch.Status),
+                            recipientBreakdown = new
+                            {
+                                totalCount = recipientBreakdown.TotalCount,
+                                employeeCount = recipientBreakdown.EmployeeCount,
+                                crewCount = recipientBreakdown.CrewCount,
+                                employees = recipientBreakdown.Employees.Select(recipient => new { name = recipient.Name, amount = recipient.Amount }),
+                                crewWorkers = recipientBreakdown.CrewWorkers.Select(recipient => new { name = recipient.Name, groupName = recipient.GroupName, amount = recipient.Amount })
+                            }
+                        });
+                        <tr>
+                            <td data-column-key="batch"><strong class="payroll-batch-name" title="@batch.Name">@batch.Name</strong><span class="table-secondary">@batch.BatchNumber</span><span class="table-secondary payroll-batch-context">@(projectLabel ?? "未指定项目") · @(companyLabel ?? "未指定公司")</span></td>
+                            <td class="payroll-payment-cell" data-column-key="payment_date"><strong>@(batch.PaymentDate?.ToString() ?? "暂未填写")</strong><span class="table-secondary" title="@(accountLabel ?? "未填写账户")">@(accountLabel ?? "未填写账户")</span></td>
+                            <td class="payroll-recipient-cell" data-column-key="recipients"><strong class="payroll-recipient-count">@recipientBreakdown.TotalCount</strong><span class="table-secondary payroll-recipient-breakdown">员工 @recipientBreakdown.EmployeeCount · 班组 @recipientBreakdown.CrewCount</span></td>
+                            <td class="numeric-cell" data-column-key="actual"><strong>@batch.ActualAmount.ToString("N2")</strong></td>
+                            <td class="numeric-cell" data-column-key="employee">@item.Summary.EmployeeAmount.ToString("N2")</td>
+                            <td class="numeric-cell" data-column-key="crew">@item.Summary.CrewAmount.ToString("N2")</td>
+                            <td class="numeric-cell" data-column-key="difference"><strong class="@(item.Summary.Difference == 0m ? "payroll-difference-zero" : "payroll-difference-warning")">@item.Summary.Difference.ToString("N2")</strong></td>
+                            <td data-column-key="status"><span class="payroll-status payroll-status--@StatusClass(batch.Status)">@StatusLabel(batch.Status)</span></td>
+                            <td data-column-key="actions"><div class="partner-row-actions payroll-row-actions"><button class="action-button action-button--view" type="button" title="查看工资批次" data-payroll-dialog-open="details" data-payroll-id="@batch.Id" data-payroll-payload="@payload">查看</button>@if (Model.CanManage) { <a class="action-button action-button--edit" asp-page="/Payroll/Index" asp-route-id="@batch.Id" asp-route-dialog="editor" asp-route-search="@Model.Search" asp-route-status="@Model.Status" asp-route-disbursementScope="@Model.DisbursementScope" data-payroll-dialog-open="edit">编辑</a> }</div></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+
+    <dialog class="workbench-dialog payroll-details-dialog mac-window-dialog" data-payroll-details-dialog>
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-payroll-detail-title>工资批次详情</strong><span data-payroll-detail-number>批次记录</span></div><button type="button" class="dialog-close" aria-label="关闭工资批次详情窗口" data-payroll-dialog-close>×</button></div>
+        <div class="payroll-details-body">
+            <div class="payroll-details-grid">
+                <section><h3>批次资料</h3><dl><div><dt>发放日期</dt><dd data-payroll-detail-date></dd></div><div><dt>状态</dt><dd data-payroll-detail-status></dd></div><div><dt>项目</dt><dd data-payroll-detail-project></dd></div><div><dt>发放公司</dt><dd data-payroll-detail-company></dd></div><div><dt>付款账户</dt><dd data-payroll-detail-account></dd></div><div><dt>凭证号</dt><dd data-payroll-detail-voucher></dd></div></dl></section>
+                <section><h3>金额构成</h3><div class="payroll-details-metrics"><article class="payroll-details-recipient-metric"><span>发放人数</span><strong data-payroll-detail-recipients></strong><small data-payroll-detail-recipient-breakdown></small><button type="button" class="button button--text button--small" data-payroll-roster-open>查看详细名单</button></article><article><span>实际总额</span><strong data-payroll-detail-actual></strong></article><article><span>员工发放</span><strong data-payroll-detail-employee></strong></article><article><span>班组发放</span><strong data-payroll-detail-crew></strong></article><article><span>批次差额</span><strong data-payroll-detail-difference></strong></article></div></section>
+                <section class="payroll-details-notes"><h3>备注</h3><p data-payroll-detail-notes></p></section>
+            </div>
+        </div>
+        <div class="quick-edit-actions"><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-payroll-dialog-close>关闭</button>@if (Model.CanManage) { <a class="button button--primary" data-payroll-detail-edit>编辑工资批次</a> }</div>
+    </dialog>
+
+    <dialog class="workbench-dialog payroll-roster-dialog mac-window-dialog" data-payroll-roster-dialog>
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>发放详细名单</strong><span data-payroll-roster-batch>工资批次</span></div><button type="button" class="dialog-close" aria-label="关闭发放详细名单窗口" data-payroll-dialog-close>×</button></div>
+        <div class="payroll-roster-body">
+            <section><div class="payroll-roster-section-heading"><div><span>自有员工</span><strong data-payroll-roster-employee-count>0 人</strong></div></div><div class="payroll-roster-list" data-payroll-roster-employees></div></section>
+            <section><div class="payroll-roster-section-heading"><div><span>施工班组人员</span><strong data-payroll-roster-crew-count>0 人</strong></div></div><div class="payroll-roster-list" data-payroll-roster-crews></div></section>
+        </div>
+        <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-payroll-dialog-close>返回批次详情</button></div>
+    </dialog>
+
+    @if (Model.CanManage)
+    {
+        <dialog class="workbench-dialog payroll-editor-dialog mac-window-dialog" data-payroll-editor-dialog data-dialog-open="@(Model.EditorViewModel is not null ? "true" : "false")">
+            <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-payroll-editor-title>@(Model.Id.HasValue ? "编辑工资批次" : "新建工资批次")</strong><span>工资发放与人员明细</span></div><button type="button" class="dialog-close" aria-label="关闭工资批次编辑窗口" data-payroll-dialog-close>×</button></div>
+            <div class="payroll-editor-dialog-body" data-payroll-editor-content>
+                @if (Model.EditorViewModel is not null) { <partial name="_PayrollEditor" model="Model.EditorViewModel" /> }
+            </div>
+        </dialog>
+    }
+</div>

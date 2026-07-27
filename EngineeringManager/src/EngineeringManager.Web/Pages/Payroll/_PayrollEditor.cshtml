@@ -1,0 +1,100 @@
+@model EngineeringManager.Web.Pages.Payroll.PayrollEditorViewModel
+@using EngineeringManager.Domain.Employees
+@using EngineeringManager.Domain.Finance
+
+<form method="post" asp-page-handler="Save" class="payroll-editor" data-payroll-editor data-payroll-dependent-fields>
+    <div asp-validation-summary="All" class="validation-summary payroll-dialog-validation"></div>
+    <input type="hidden" name="Id" value="@Model.EditorId" />
+    <input type="hidden" name="LineId" value="@Model.LineId" />
+    <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+    <input type="hidden" asp-for="Input.ConcurrencyStamp" />
+
+    <div class="payroll-editor-sections">
+        <section>
+            <h3>批次资料</h3>
+            <label>批次编号<input asp-for="Input.BatchNumber" required /><span asp-validation-for="Input.BatchNumber"></span></label>
+            <label>批次名称<input asp-for="Input.Name" required /><span asp-validation-for="Input.Name"></span></label>
+            <label>发放类型<select asp-for="Input.DisbursementType" data-payroll-disbursement-type><option value="1">工资</option><option value="2">其他</option></select></label>
+            <label>发放日期<input asp-for="Input.PaymentDate" type="date" /></label>
+            <label>状态<select asp-for="Input.Status"><option value="1">草稿</option><option value="2">已核对</option><option value="3">已关闭</option><option value="4">已作废</option><option value="5">修改待复核</option></select></label>
+        </section>
+        <section>
+            <h3>付款信息</h3>
+            <label>发放项目<select asp-for="Input.ProjectId"><option value="">暂未填写</option>@foreach (var item in Model.Projects) { <option value="@item.Id">@item.Label</option> }</select></label>
+            <label>发放公司<select asp-for="Input.LegalEntityId" data-company-account-company><option value="">暂未填写</option>@foreach (var item in Model.Companies) { <option value="@item.Id">@item.Label</option> }</select></label>
+            <label>资金来源<select asp-for="Input.FundingSource" data-payroll-funding-source><option value="1">公司账户</option><option value="2">私人转账</option></select></label>
+            <label data-company-account-field>公司付款账户<select asp-for="Input.AccountId" data-company-account-select><option value="">暂未填写</option>@foreach (var item in Model.CompanyAccounts) { <option value="@item.Id" data-company-id="@item.LegalEntityId" data-legal-entity-id="@item.LegalEntityId">@item.Label</option> }</select></label>
+            <label data-personal-advance-account-field hidden>个人垫付账户<select asp-for="Input.PersonalAdvanceAccountId"><option value="">请选择</option>@foreach (var item in Model.PersonalAdvanceAccounts) { <option value="@item.Id">@item.Label · @item.OwnerName</option> }</select></label>
+            <label data-personal-advance-repayment-field hidden>垫付归还目标<select asp-for="Input.RepaysPersonalAdvanceAccountId"><option value="">不归还个人垫付</option>@foreach (var item in Model.PersonalAdvanceAccounts) { <option value="@item.Id">@item.Label · @item.OwnerName</option> }</select></label>
+            <label>实际发放总金额<input asp-for="Input.ActualAmount" type="number" step="0.01" data-payroll-actual /></label>
+            <label>支付方式<select asp-for="Input.PaymentMethod" asp-items="Html.GetEnumSelectList<PaymentMethod>()"></select></label>
+            <label>付款凭证号<input asp-for="Input.VoucherNumber" /></label>
+        </section>
+        <section class="payroll-editor-notes">
+            <h3>记录说明</h3>
+            <label>备注<textarea asp-for="Input.Notes" rows="3"></textarea></label>
+            <label>修改原因<input asp-for="Input.Reason" required /><span asp-validation-for="Input.Reason"></span></label>
+        </section>
+    </div>
+
+    <div class="payroll-editor-tabs" role="tablist" aria-label="工资人员类别">
+        <button class="is-active" type="button" role="tab" aria-selected="true" data-payroll-editor-tab="employees">自有员工</button>
+        <button type="button" role="tab" aria-selected="false" data-payroll-editor-tab="crews">施工班组人员</button>
+    </div>
+
+    <section class="payroll-editor-panel" data-payroll-editor-panel="employees">
+        <div class="table-wrap payroll-editor-table-wrap">
+            <table class="data-table payroll-line-table">
+                <thead><tr><th>选择</th><th>员工</th><th>付款类别</th><th>工资性质</th><th>劳务公司</th><th>项目</th><th>实际金额</th><th>说明</th></tr></thead>
+                <tbody>
+                @for (var i = 0; i < Model.Input.EmployeeLines.Count; i++)
+                {
+                    var line = Model.Input.EmployeeLines[i];
+                    <tr data-payroll-line data-payroll-line-id="@line.PaymentId" class="@(Model.LineId == line.PaymentId ? "is-highlighted" : null)">
+                        <td><input asp-for="Input.EmployeeLines[i].Selected" /><input type="hidden" asp-for="Input.EmployeeLines[i].PaymentId" /><input type="hidden" asp-for="Input.EmployeeLines[i].PersonId" /><input type="hidden" asp-for="Input.EmployeeLines[i].Label" /></td>
+                        <td><strong>@line.Label</strong></td>
+                        <td><select asp-for="Input.EmployeeLines[i].PaymentCategory" data-line-payment-category><option value="1">工资</option><option value="2">其他</option></select></td>
+                        <td><select asp-for="Input.EmployeeLines[i].WageCategory" data-line-wage-category><option value="1">社保工资</option><option value="2">民工工资</option><option value="3">其他工资</option></select></td>
+                        <td><select asp-for="Input.EmployeeLines[i].LaborBusinessPartnerId" data-line-labor-company><option value="">不关联</option>@foreach (var item in Model.LaborPartners) { <option value="@item.Id">@item.Label</option> }</select></td>
+                        <td><select asp-for="Input.EmployeeLines[i].ProjectId" data-line-project><option value="">未归属项目</option>@foreach (var item in Model.Projects) { <option value="@item.Id">@item.Label</option> }</select></td>
+                        <td><input asp-for="Input.EmployeeLines[i].Amount" type="number" step="0.01" data-payroll-amount /></td>
+                        <td><input asp-for="Input.EmployeeLines[i].Notes" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="payroll-editor-panel" data-payroll-editor-panel="crews" hidden>
+        <div class="payroll-editor-panel-heading"><span>施工班组人员</span><a class="button button--secondary button--small" asp-page="/Crews/Index">管理班组名册</a></div>
+        <div class="table-wrap payroll-editor-table-wrap">
+            <table class="data-table payroll-line-table">
+                <thead><tr><th>选择</th><th>劳务公司</th><th>人员</th><th>付款类别</th><th>工资性质</th><th>项目</th><th>实际金额</th><th>说明</th></tr></thead>
+                <tbody>
+                @for (var i = 0; i < Model.Input.CrewLines.Count; i++)
+                {
+                    var line = Model.Input.CrewLines[i];
+                    <tr data-payroll-line data-payroll-line-id="@line.PaymentId" class="@(Model.LineId == line.PaymentId ? "is-highlighted" : null)">
+                        <td><input asp-for="Input.CrewLines[i].Selected" /><input type="hidden" asp-for="Input.CrewLines[i].PaymentId" /><input type="hidden" asp-for="Input.CrewLines[i].PersonId" /><input type="hidden" asp-for="Input.CrewLines[i].CrewBusinessPartnerId" /><input type="hidden" asp-for="Input.CrewLines[i].LaborBusinessPartnerId" value="@line.CrewBusinessPartnerId" /><input type="hidden" asp-for="Input.CrewLines[i].CrewName" /><input type="hidden" asp-for="Input.CrewLines[i].Label" /></td>
+                        <td><strong>@line.CrewName</strong></td>
+                        <td>@line.Label</td>
+                        <td><select asp-for="Input.CrewLines[i].PaymentCategory" data-line-payment-category><option value="1">工资</option><option value="2">其他</option></select></td>
+                        <td><select asp-for="Input.CrewLines[i].WageCategory" data-line-wage-category><option value="2">民工工资</option><option value="3">其他工资</option></select></td>
+                        <td><select asp-for="Input.CrewLines[i].ProjectId" data-line-project><option value="">未归属项目</option>@foreach (var item in Model.Projects) { <option value="@item.Id">@item.Label</option> }</select></td>
+                        <td><input asp-for="Input.CrewLines[i].Amount" type="number" step="0.01" data-payroll-amount /></td>
+                        <td><input asp-for="Input.CrewLines[i].Notes" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="payroll-reconciliation">
+        <div><span>人员明细合计</span><strong data-payroll-detail-total>0.00</strong></div>
+        <div><span>实际发放总额</span><strong data-payroll-actual-total>@Model.Input.ActualAmount.ToString("N2")</strong></div>
+        <div><span>批次差额</span><strong data-payroll-difference>0.00</strong></div>
+    </section>
+    <div class="quick-edit-actions payroll-editor-actions"><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-payroll-dialog-close>取消</button><button type="submit" class="button button--primary">保存工资批次</button></div>
+</form>

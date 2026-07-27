@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "工资台账 Razor 页面与前端层入口规范"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "筛选控件与工作台结构约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "URL 筛选状态与派生汇总口径"}
+{"file": ".trellis/spec/backend/index.md", "reason": "页面模型后端层入口规范"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "公司选项与工资批次标签查询约定"}

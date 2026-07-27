@@ -1,3 +1,4 @@
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 
 namespace EngineeringManager.Application.Finance;
@@ -168,7 +169,9 @@ public sealed record CentralLedgerOverviewPageDto(
     int TotalCount,
     int TotalPages,
     IReadOnlyList<Guid> MatchingSettlementIds,
-    IReadOnlyList<CentralLedgerUnallocatedCashDto>? UnallocatedCash = null);
+    IReadOnlyList<CentralLedgerUnallocatedCashDto>? UnallocatedCash = null,
+    IReadOnlyList<CentralLedgerPayrollPaymentDto>? PayrollPayments = null,
+    decimal PayrollPaymentTotal = 0m);
 
 public sealed record PartnerLedgerSummaryDto(
     Guid BusinessPartnerId,
@@ -198,6 +201,22 @@ public sealed record CentralLedgerUnallocatedCashDto(
     decimal UnallocatedAmount,
     string? PaymentMethod,
     Guid ConcurrencyStamp);
+
+public sealed record CentralLedgerPayrollPaymentDto(
+    Guid BatchId,
+    string BatchNumber,
+    string BatchName,
+    DateOnly PaymentDate,
+    Guid LegalEntityId,
+    string LegalEntityName,
+    Guid? ProjectId,
+    string? ProjectName,
+    Guid AccountId,
+    string AccountName,
+    decimal EmployeeAmount,
+    decimal CrewAmount,
+    decimal ActualAmount,
+    PayrollBatchStatus Status);
 
 public sealed record CentralLedgerDetailsDto(
     FinanceRecordType RecordType,

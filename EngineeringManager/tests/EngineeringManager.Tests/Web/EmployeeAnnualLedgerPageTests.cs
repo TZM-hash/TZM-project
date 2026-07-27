@@ -71,7 +71,7 @@ public sealed class EmployeeAnnualLedgerPageTests
     [Fact]
     public void PayrollEditorExposesDisbursementFundingAndLineClassificationFields()
     {
-        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Edit.cshtml");
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "_PayrollEditor.cshtml");
 
         page.Should().Contain("asp-for=\"Input.DisbursementType\"");
         page.Should().Contain("asp-for=\"Input.FundingSource\"");

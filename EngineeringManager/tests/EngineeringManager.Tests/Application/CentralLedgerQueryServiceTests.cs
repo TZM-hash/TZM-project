@@ -1,12 +1,45 @@
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Finance;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Tests.Application;
 
 public sealed class CentralLedgerQueryServiceTests
 {
+    [Fact]
+    public async Task ExternalLedgerReadsEffectivePayrollPaymentsWithoutCreatingFinanceCopies()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        AddPayrollBatch(fixture, "PAY-DRAFT", PayrollBatchStatus.Draft, 100m);
+        var confirmed = AddPayrollBatch(fixture, "PAY-CONFIRMED", PayrollBatchStatus.Confirmed, 1_000m);
+        var closed = AddPayrollBatch(fixture, "PAY-CLOSED", PayrollBatchStatus.Closed, 2_000m);
+        AddPayrollBatch(fixture, "PAY-VOIDED", PayrollBatchStatus.Voided, 4_000m);
+        await fixture.Db.SaveChangesAsync();
+        var transactionCount = await fixture.Db.AccountTransactions.CountAsync();
+        var cashCount = await fixture.Db.FinanceCashEntries.CountAsync();
+
+        var result = await new CentralLedgerQueryService(fixture.Db).SearchAsync(
+            fixture.ExternalActor(),
+            new CentralLedgerQuery(LedgerScope.External),
+            CancellationToken.None);
+
+        var paymentsProperty = result.GetType().GetProperty("PayrollPayments");
+        paymentsProperty.Should().NotBeNull("the central ledger result needs a first-class payroll payment projection");
+        var payments = ((System.Collections.IEnumerable)paymentsProperty!.GetValue(result)!).Cast<object>().ToArray();
+        payments.Should().HaveCount(2);
+        payments.Select(item => (Guid)item.GetType().GetProperty("BatchId")!.GetValue(item)!)
+            .Should().BeEquivalentTo([confirmed.Id, closed.Id]);
+        var totalProperty = result.GetType().GetProperty("PayrollPaymentTotal");
+        totalProperty.Should().NotBeNull();
+        ((decimal)totalProperty!.GetValue(result)!).Should().Be(3_000m);
+        (await fixture.Db.AccountTransactions.CountAsync()).Should().Be(transactionCount);
+        (await fixture.Db.FinanceCashEntries.CountAsync()).Should().Be(cashCount);
+    }
+
     [Fact]
     public async Task SearchFiltersByScopeCompanyProjectPartnerDateAndSettlementState()
     {
@@ -390,5 +423,65 @@ public sealed class CentralLedgerQueryServiceTests
             "银行转账",
             null,
             [new FinanceAllocationRequest(settlementId, amount, order)]);
+    }
+
+    private static PayrollBatch AddPayrollBatch(
+        CentralLedgerTestFixture fixture,
+        string number,
+        PayrollBatchStatus status,
+        decimal amount)
+    {
+        var employee = new Employee { EmployeeNumber = number + "-E", Name = number + " 员工" };
+        var worker = new ConstructionWorker { Name = number + " 班组人员" };
+        var batch = new PayrollBatch
+        {
+            BatchNumber = number,
+            Name = number + " 工资",
+            BatchType = PayrollBatchType.Temporary,
+            StartDate = new DateOnly(2026, 7, 18),
+            EndDate = new DateOnly(2026, 7, 18),
+            PaymentDate = new DateOnly(2026, 7, 18),
+            Project = fixture.Project,
+            LegalEntity = fixture.LegalEntity,
+            Account = fixture.PaymentAccount,
+            ActualAmount = amount,
+            IsUnifiedDisbursement = true,
+            Status = status
+        };
+        batch.Payments.Add(new PayrollPayment
+        {
+            Batch = batch,
+            RecipientType = PayrollRecipientType.Employee,
+            RecipientKey = $"employee:{batch.Id:N}",
+            Employee = employee,
+            Amount = amount * 0.6m,
+            PayeeName = "工资员工",
+            RecipientNameSnapshot = "工资员工"
+        });
+        batch.Payments.Add(new PayrollPayment
+        {
+            Batch = batch,
+            RecipientType = PayrollRecipientType.CrewWorker,
+            RecipientKey = $"crew-worker:{batch.Id:N}",
+            ConstructionWorker = worker,
+            CrewBusinessPartner = fixture.Crew,
+            Amount = amount * 0.4m,
+            PayeeName = "班组人员",
+            RecipientNameSnapshot = "班组人员",
+            CrewNameSnapshot = fixture.Crew.Name
+        });
+        var transaction = new AccountTransaction
+        {
+            Account = fixture.PaymentAccount,
+            Direction = AccountTransactionDirection.Outflow,
+            SourceType = AccountTransactionSourceType.PayrollPayment,
+            SourceId = batch.Id,
+            TransactionDate = batch.PaymentDate.Value,
+            Amount = amount,
+            Description = number + " 工资付款"
+        };
+        batch.AccountTransactionId = transaction.Id;
+        fixture.Db.AddRange(employee, worker, batch, transaction);
+        return batch;
     }
 }

@@ -33,6 +33,20 @@ public sealed class CentralLedgerPageTests
     }
 
     [Fact]
+    public void ExternalLedgerShowsReadOnlyPayrollPaymentsWithSourceLinks()
+    {
+        var external = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml");
+
+        external.Should().Contain("id=\"payroll-payments\"")
+            .And.Contain("工资付款")
+            .And.Contain("Model.Result.PayrollPaymentTotal")
+            .And.Contain("Model.Result.PayrollPayments")
+            .And.Contain("asp-page=\"/Payroll/Index\"")
+            .And.Contain("asp-route-dialog=\"details\"")
+            .And.NotContain("asp-page-handler=\"EditPayroll\"");
+    }
+
+    [Fact]
     public void ExternalAnomalyCheckboxesUseNonNullablePagePropertiesAndPreserveNoFilterSemantics()
     {
         var pageModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml.cs");

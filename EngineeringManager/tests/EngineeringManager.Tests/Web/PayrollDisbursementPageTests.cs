@@ -5,31 +5,84 @@ namespace EngineeringManager.Tests.Web;
 public sealed class PayrollDisbursementPageTests
 {
     [Fact]
+    public void PayrollIndexUsesCrewStyleSinglePageWorkspace()
+    {
+        var index = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml");
+        var indexModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml.cs");
+        var editor = ReadFileIfExists("src", "EngineeringManager.Web", "Pages", "Payroll", "_PayrollEditor.cshtml");
+        var legacyModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Edit.cshtml.cs");
+        var script = ReadFileIfExists("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "payroll-workspace.js");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        index.Should().Contain("data-payroll-workspace")
+            .And.Contain("payroll-workspace-layout")
+            .And.Contain("\"DisbursementScope\", \"发放主体\"")
+            .And.Contain("asp-route-disbursementScope=\"@Model.DisbursementScope\"")
+            .And.Contain("data-payroll-dialog-open=\"create\"")
+            .And.Contain("data-payroll-dialog-open=\"details\"")
+            .And.Contain("data-payroll-dialog-open=\"edit\"")
+            .And.Contain("data-payroll-details-dialog")
+            .And.Contain("data-payroll-roster-open")
+            .And.Contain("data-payroll-roster-dialog")
+            .And.Contain("recipientBreakdown")
+            .And.Contain("data-payroll-editor-dialog")
+            .And.Contain("~/js/pages/payroll-workspace.js")
+            .And.NotContain("asp-page=\"/Payroll/Edit\">新建工资批次");
+
+        editor.Should().Contain("data-payroll-editor-tab=\"employees\"")
+            .And.Contain("data-payroll-editor-tab=\"crews\"")
+            .And.Contain("data-payroll-detail-total")
+            .And.Contain("data-payroll-difference")
+            .And.Contain("保存工资批次");
+
+        indexModel.Should().Contain("OnPostSaveAsync")
+            .And.Contain("LoadEditorAsync")
+            .And.Contain("PayrollEditorInput")
+            .And.Contain("FilterByDisbursementScope")
+            .And.Contain("BuildOverview(Batches)");
+        legacyModel.Should().Contain("RedirectToPage(\"/Payroll/Index\"");
+        script.Should().Contain("[data-payroll-workspace]")
+            .And.Contain("[data-payroll-dialog-open]")
+            .And.Contain("[data-payroll-roster-dialog]")
+            .And.Contain("renderRoster")
+            .And.Contain("textContent");
+        css.Should().Contain(".payroll-workspace-layout")
+            .And.Contain(".payroll-workspace-summary")
+            .And.Contain(".payroll-workspace-table")
+            .And.Contain(".payroll-workspace-summary, .payroll-workspace-list")
+            .And.Contain(".payroll-list-toolbar.equipment-list-toolbar--integrated > .data-workbench")
+            .And.Contain(".payroll-recipient-breakdown")
+            .And.Contain(".payroll-roster-dialog")
+            .And.Contain(".payroll-editor-dialog")
+            .And.Contain(".payroll-editor-tabs");
+    }
+
+    [Fact]
     public void PayrollPagesExposeOnlyEditableEmployeeAndCrewLines()
     {
         var index = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml");
-        var edit = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Edit.cshtml");
-        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Edit.cshtml.cs");
+        var editor = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "_PayrollEditor.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml.cs");
 
         index.Should().Contain("工资台账");
-        index.Should().Contain("/Payroll/Edit");
-        edit.Should().Contain("实际发放总金额");
-        edit.Should().Contain("自有员工");
-        edit.Should().Contain("施工班组人员");
-        edit.Should().NotContain("Input.TemporaryLines");
+        index.Should().Contain("data-payroll-editor-dialog");
+        editor.Should().Contain("实际发放总金额");
+        editor.Should().Contain("自有员工");
+        editor.Should().Contain("施工班组人员");
+        editor.Should().NotContain("Input.TemporaryLines");
         model.Should().NotContain("TemporaryLines");
         model.Should().NotContain("LegacyLines");
         model.Should().Contain("item.RecipientType is PayrollRecipientType.Employee or PayrollRecipientType.CrewWorker");
-        edit.Should().NotContain("历史临时人员明细");
-        edit.Should().NotContain("Model.LegacyLines");
-        edit.Should().NotContain("data-payroll-legacy-total");
+        editor.Should().NotContain("历史临时人员明细");
+        editor.Should().NotContain("Model.LegacyLines");
+        editor.Should().NotContain("data-payroll-legacy-total");
         model.Should().Contain("item.EmployeeType.ToChinese()");
         index.Should().NotContain("TemporaryAmount");
         index.Should().NotContain("<th>临时人员</th>");
-        edit.Should().Contain("批次差额");
-        edit.Should().Contain("修改原因");
+        editor.Should().Contain("批次差额");
+        editor.Should().Contain("修改原因");
         model.Should().Contain("LineId");
-        edit.Should().Contain("data-payroll-line-id");
+        editor.Should().Contain("data-payroll-line-id");
     }
 
     [Fact]
@@ -56,6 +109,11 @@ public sealed class PayrollDisbursementPageTests
     }
 
     private static string ReadFile(params string[] parts) => File.ReadAllText(Path.Combine(RepositoryRoot(), Path.Combine(parts)));
+    private static string ReadFileIfExists(params string[] parts)
+    {
+        var path = Path.Combine(RepositoryRoot(), Path.Combine(parts));
+        return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+    }
 
     private static string RepositoryRoot()
     {

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -95,6 +96,7 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
         var totalPages = matching.Length == 0 ? 0 : (int)Math.Ceiling(matching.Length / (decimal)pageSize);
         var pageRows = matching.Skip((page - 1) * pageSize).Take(pageSize).ToArray();
         var unallocatedCash = await SearchUnallocatedCashAsync(actor, query, startDate, endDate, token);
+        var payrollPayments = await SearchPayrollPaymentsAsync(actor, query, startDate, endDate, token);
         return new CentralLedgerOverviewPageDto(
             pageRows,
             totals,
@@ -103,7 +105,111 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
             matching.Length,
             totalPages,
             matching.Select(item => item.SettlementId).ToArray(),
-            unallocatedCash);
+            unallocatedCash,
+            payrollPayments,
+            payrollPayments.Sum(item => item.ActualAmount));
+    }
+
+    private async Task<IReadOnlyList<CentralLedgerPayrollPaymentDto>> SearchPayrollPaymentsAsync(
+        CentralLedgerActor actor,
+        CentralLedgerQuery query,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        CancellationToken token)
+    {
+        if (query.Scope != LedgerScope.External || query.Direction == LedgerDirection.Receivable || query.ContractLineItemId.HasValue)
+        {
+            return [];
+        }
+
+        var legalEntityIds = actor.LegalEntityIds.ToArray();
+        var projectIds = actor.ProjectIds.ToArray();
+        var payroll = db.PayrollBatches.AsNoTracking()
+            .Where(item => item.IsUnifiedDisbursement
+                && item.PaymentDate.HasValue
+                && item.LegalEntityId.HasValue
+                && item.AccountId.HasValue
+                && item.AccountTransactionId.HasValue
+                && (item.Status == PayrollBatchStatus.Confirmed
+                    || item.Status == PayrollBatchStatus.Closed
+                    || item.Status == PayrollBatchStatus.ModifiedPendingReview))
+            .Where(item => item.LegalEntityId.HasValue && legalEntityIds.Contains(item.LegalEntityId.Value))
+            .Where(item => !item.ProjectId.HasValue || projectIds.Contains(item.ProjectId.Value))
+            .Where(item => db.AccountTransactions.Any(transaction =>
+                item.AccountTransactionId.HasValue
+                && transaction.Id == item.AccountTransactionId.Value
+                && transaction.SourceType == AccountTransactionSourceType.PayrollPayment
+                && transaction.SourceId == item.Id
+                && transaction.Direction == AccountTransactionDirection.Outflow));
+
+        if (startDate.HasValue) payroll = payroll.Where(item => item.PaymentDate >= startDate);
+        if (endDate.HasValue) payroll = payroll.Where(item => item.PaymentDate <= endDate);
+        if (query.LegalEntityId.HasValue) payroll = payroll.Where(item => item.LegalEntityId == query.LegalEntityId);
+        if (query.ProjectId.HasValue) payroll = payroll.Where(item => item.ProjectId == query.ProjectId);
+        if (query.BusinessPartnerId.HasValue)
+        {
+            payroll = payroll.Where(item => item.CrewAllocations.Any(allocation => allocation.CrewBusinessPartnerId == query.BusinessPartnerId)
+                || item.Payments.Any(payment => payment.CrewBusinessPartnerId == query.BusinessPartnerId || payment.LaborBusinessPartnerId == query.BusinessPartnerId));
+        }
+        if (query.ContractId.HasValue)
+        {
+            payroll = payroll.Where(item => item.CrewAllocations.Any(allocation => allocation.ContractId == query.ContractId));
+        }
+
+        foreach (var term in SplitSearchTerms(query.Search))
+        {
+            var pattern = $"%{term}%";
+            payroll = payroll.Where(item =>
+                EF.Functions.Like(item.BatchNumber, pattern)
+                || EF.Functions.Like(item.Name, pattern)
+                || (item.VoucherNumber != null && EF.Functions.Like(item.VoucherNumber, pattern))
+                || (item.Notes != null && EF.Functions.Like(item.Notes, pattern))
+                || (item.Project != null && (EF.Functions.Like(item.Project.Name, pattern) || EF.Functions.Like(item.Project.ProjectNumber, pattern)))
+                || (item.LegalEntity != null && (EF.Functions.Like(item.LegalEntity.Name, pattern) || EF.Functions.Like(item.LegalEntity.ShortName, pattern)))
+                || (item.Account != null && EF.Functions.Like(item.Account.AccountName, pattern))
+                || item.Payments.Any(payment =>
+                    (payment.RecipientNameSnapshot != null && EF.Functions.Like(payment.RecipientNameSnapshot, pattern))
+                    || (payment.CrewNameSnapshot != null && EF.Functions.Like(payment.CrewNameSnapshot, pattern))
+                    || (payment.Notes != null && EF.Functions.Like(payment.Notes, pattern))));
+        }
+
+        var rows = await payroll
+            .OrderByDescending(item => item.PaymentDate)
+            .ThenBy(item => item.BatchNumber)
+            .Select(item => new
+            {
+                item.Id,
+                item.BatchNumber,
+                item.Name,
+                PaymentDate = item.PaymentDate!.Value,
+                LegalEntityId = item.LegalEntityId!.Value,
+                LegalEntityName = item.LegalEntity!.Name,
+                item.ProjectId,
+                ProjectName = item.Project != null ? item.Project.Name : null,
+                AccountId = item.AccountId!.Value,
+                AccountName = item.Account!.AccountName,
+                EmployeeAmount = item.Payments.Where(payment => payment.RecipientType == PayrollRecipientType.Employee).Sum(payment => (decimal?)payment.Amount) ?? 0m,
+                CrewAmount = item.Payments.Where(payment => payment.RecipientType == PayrollRecipientType.CrewWorker).Sum(payment => (decimal?)payment.Amount) ?? 0m,
+                item.ActualAmount,
+                item.Status
+            })
+            .ToListAsync(token);
+
+        return rows.Select(item => new CentralLedgerPayrollPaymentDto(
+            item.Id,
+            item.BatchNumber,
+            item.Name,
+            item.PaymentDate,
+            item.LegalEntityId,
+            item.LegalEntityName,
+            item.ProjectId,
+            item.ProjectName,
+            item.AccountId,
+            item.AccountName,
+            item.EmployeeAmount,
+            item.CrewAmount,
+            item.ActualAmount,
+            item.Status)).ToArray();
     }
 
     private async Task<IReadOnlyList<CentralLedgerUnallocatedCashDto>> SearchUnallocatedCashAsync(

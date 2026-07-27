@@ -1,4 +1,5 @@
 @page
+@using EngineeringManager.Domain.Employees
 @using EngineeringManager.Domain.Finance
 @model EngineeringManager.Web.Pages.Ledger.External.IndexModel
 @{
@@ -11,6 +12,30 @@
         <a class="button button--secondary" asp-page="/Admin/FinanceYears/Index">财务年度设置</a>
         @if (Model.CanManage) { <a class="button button--primary" asp-page="/Ledger/Entries/Edit" asp-route-scope="External">新增财务记录</a> }
     </div>
+</section>
+
+<section class="panel" id="payroll-payments">
+    <div class="panel-heading"><div><p class="eyebrow">工资台账自动并入</p><h2>工资付款</h2><p>只读展示已形成真实账户流出的工资批次，修改请返回工资台账。</p></div><div class="ledger-payroll-total"><span>工资付款总额</span><strong>@Model.Result.PayrollPaymentTotal.ToString("N2")</strong></div></div>
+    @if (Model.Result.PayrollPayments is not { Count: > 0 })
+    {
+        <p class="panel-copy">当前筛选范围没有有效工资付款。</p>
+    }
+    else
+    {
+        <div class="table-wrap"><table class="data-table ledger-payroll-table"><thead><tr><th>发放日期</th><th>工资批次</th><th>自有公司</th><th>项目</th><th>付款账户</th><th>员工</th><th>班组</th><th>实际总额</th><th>状态</th><th>操作</th></tr></thead><tbody>
+        @foreach (var payment in Model.Result.PayrollPayments)
+        {
+            var statusLabel = payment.Status switch
+            {
+                PayrollBatchStatus.Confirmed => "已核对",
+                PayrollBatchStatus.Closed => "已关闭",
+                PayrollBatchStatus.ModifiedPendingReview => "修改待复核",
+                _ => payment.Status.ToString()
+            };
+            <tr><td>@payment.PaymentDate</td><td><strong>@payment.BatchName</strong><span class="table-secondary">@payment.BatchNumber</span></td><td>@payment.LegalEntityName</td><td>@(payment.ProjectName ?? "未指定项目")</td><td>@payment.AccountName</td><td class="numeric-cell">@payment.EmployeeAmount.ToString("N2")</td><td class="numeric-cell">@payment.CrewAmount.ToString("N2")</td><td class="numeric-cell"><strong>@payment.ActualAmount.ToString("N2")</strong></td><td><span class="payroll-status payroll-status--@(payment.Status == PayrollBatchStatus.ModifiedPendingReview ? "warning" : "active")">@statusLabel</span></td><td><a class="button button--secondary button--small" asp-page="/Payroll/Index" asp-route-id="@payment.BatchId" asp-route-dialog="details">查看工资批次</a></td></tr>
+        }
+        </tbody></table></div>
+    }
 </section>
 
 <section class="panel" id="unallocated-cash">
@@ -48,6 +73,7 @@
 </section>
 
 <nav class="ledger-tabs" aria-label="外部账本分类">
+    <a href="#payroll-payments">工资付款</a>
     @foreach (var tab in new[] { "总览", "应收款", "应付款", "收款", "付款", "销项发票", "进项发票", "扣款", "待分摊", "异常", "年度账", "对账", "修改日志" }) { <a href="#ledger-table">@tab</a> }
 </nav>
 

@@ -3,6 +3,7 @@ using EngineeringManager.Application.Payroll;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Web.Pages.Payroll;
 using FluentAssertions;
@@ -45,12 +46,12 @@ public sealed class PayrollEditPageModelTests
             [new PayrollCrewAllocationDto(Guid.NewGuid(), crew.Id, contractId, payableEntryId, "保留工程款关联", Guid.NewGuid())]);
         var model = CreateModel(fixture);
 
-        await model.OnGetAsync(CancellationToken.None);
+        await model.LoadEditorAsync(CancellationToken.None);
 
         model.Input.EmployeeLines.Should().ContainSingle(item => item.PaymentId == employeePaymentId && item.Selected && item.Amount == 3_000m);
         model.Input.CrewLines.Should().ContainSingle(item => item.PaymentId == crewPaymentId && item.Selected && item.Amount == 4_000m && item.CrewBusinessPartnerId == crew.Id);
 
-        await model.OnPostAsync(CancellationToken.None);
+        await model.OnPostSaveAsync(CancellationToken.None);
 
         fixture.Service.SavedRequest.Should().NotBeNull();
         fixture.Service.SavedRequest!.Lines.Should().Contain(item => item.Id == employeePaymentId && item.EmployeeId == employee.Id);
@@ -77,19 +78,20 @@ public sealed class PayrollEditPageModelTests
             []);
         var model = CreateModel(fixture);
 
-        await model.OnGetAsync(CancellationToken.None);
+        await model.LoadEditorAsync(CancellationToken.None);
 
         model.Input.CrewLines.Should().HaveCount(2);
-        model.Input.CrewLines.Should().ContainSingle(item => item.Selected).Which.Should().Match<EditModel.PersonLineInput>(item =>
+        model.Input.CrewLines.Should().ContainSingle(item => item.Selected).Which.Should().Match<PayrollPersonLineInput>(item =>
             item.PaymentId == paymentId && item.CrewBusinessPartnerId == secondCrew.Id && item.Amount == 4_000m);
         model.Input.CrewLines.Single(item => item.CrewBusinessPartnerId == firstCrew.Id).PaymentId.Should().BeNull();
     }
 
-    private static EditModel CreateModel(PageFixture fixture)
+    private static IndexModel CreateModel(PageFixture fixture)
     {
         var identity = new ClaimsIdentity("PayrollEditTest", ClaimTypes.Name, ClaimTypes.Role);
         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, "payroll-edit-user"));
-        return new EditModel(fixture.Service, fixture.Db)
+        identity.AddClaim(new Claim(ClaimTypes.Role, SystemRoles.Finance));
+        return new IndexModel(fixture.Service, fixture.Db)
         {
             Id = fixture.Service.Details.Batch.Id,
             PageContext = new PageContext
