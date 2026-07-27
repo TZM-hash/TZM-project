@@ -1,12 +1,230 @@
 @page
 @model EngineeringManager.Web.Pages.Crews.IndexModel
+@using System.Text.Json
+@using EngineeringManager.Application.Finance
 @using EngineeringManager.Web.Workbenches
 @{
     ViewData["Title"] = "施工班组管理";
-    var workbench = DataWorkbenchPresets.Crews with
+    var tradeOptions = Model.TradeSummaries
+        .Select(item => new DataWorkbenchFilterOption(item.Trade, item.Trade))
+        .ToArray();
+    var statusOptions = new DataWorkbenchFilterOption[]
     {
-        InlineFilters = new DataWorkbenchFilterField[] { new("Search", "搜索", Model.Search, Placeholder: "搜索班组全部信息") }
+        new("true", "启用"), new("false", "停用")
     };
+    var inlineFilters = new DataWorkbenchFilterField[]
+    {
+        new("Trade", "专业", Model.Trade, DataWorkbenchFilterKind.Select, tradeOptions),
+        new("Search", "搜索", Model.Search, Placeholder: "搜索班组、负责人、项目或人员"),
+        new("IsActive", "状态", Model.IsActive?.ToString().ToLowerInvariant(), DataWorkbenchFilterKind.Select, statusOptions)
+    };
+    var financialColumnKeys = new HashSet<string>(StringComparer.Ordinal) { "receipts", "payments", "invoices" };
+    var crewPreset = DataWorkbenchPresets.Crews;
+    var workbench = crewPreset with
+    {
+        Columns = Model.CanViewFinance ? crewPreset.Columns : crewPreset.Columns.Where(column => !financialColumnKeys.Contains(column.Key)).ToArray(),
+        InlineFilters = inlineFilters,
+        Filters = inlineFilters
+    };
+    var scopeName = Model.Trade ?? (Model.IsActive.HasValue ? (Model.IsActive.Value ? "启用班组" : "停用班组") : "全部施工班组");
+    var financialColumnCount = Model.CanViewFinance ? 3 : 0;
+    var financeJsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    static string FinancialProgressState(decimal target, decimal completed)
+    {
+        if (target <= 0m) return completed > 0m ? "over" : "no-target";
+        var percentage = Math.Max(completed / target * 100m, 0m);
+        if (percentage < 30m) return "critical";
+        if (percentage < 60m) return "low";
+        if (percentage < 85m) return "medium";
+        if (percentage < 100m) return "near";
+        return percentage == 100m ? "complete" : "over";
+    }
+
+    static string FinancialProgressLabel(decimal target, decimal completed)
+    {
+        if (target <= 0m) return completed > 0m ? "超额" : "—";
+        var percentage = Math.Max(completed / target * 100m, 0m);
+        return percentage > 100m ? $"{percentage:0.#}% · 超额" : $"{percentage:0.#}%";
+    }
+
+    static decimal FinancialProgressValue(decimal target, decimal completed)
+    {
+        if (target <= 0m) return completed > 0m ? 1m : 0m;
+        return Math.Min(Math.Max(completed, 0m), target);
+    }
 }
-<section class="page-heading"><div><p class="eyebrow">合作单位专属视图</p><h1>施工班组管理</h1><p class="page-lead">施工班组继续共用合作单位主档，人员名册和工资代发工程款在此集中管理。</p></div><a class="button button--secondary" asp-page="/Partners/Create">新增施工班组单位</a></section>
-<section class="panel"><partial name="_DataWorkbench" model="workbench" /><div class="table-wrap"><table class="data-table" id="crews-table"><thead><tr><th data-column-key="crew">班组</th><th data-column-key="trade">专业</th><th data-column-key="contact">负责人</th><th data-column-key="workers">当前人员</th><th data-column-key="projects">参与项目</th><th data-column-key="paid">累计代发工程款</th><th data-column-key="last_payment">最近发放</th><th data-column-key="actions">操作</th></tr></thead><tbody>@foreach (var item in Model.Crews) { <tr><td data-column-key="crew">@item.PartnerNumber · @item.Name</td><td data-column-key="trade">@(item.TradeCategory ?? "未填写")</td><td data-column-key="contact">@(item.PrimaryContact ?? "未设置") @item.PrimaryPhone</td><td data-column-key="workers">@item.CurrentWorkerCount</td><td data-column-key="projects">@item.ProjectCount</td><td data-column-key="paid">@item.TotalPaidAmount.ToString("N2")</td><td data-column-key="last_payment">@(item.LastPaymentDate?.ToString() ?? "暂无")</td><td data-column-key="actions"><a asp-page="/Crews/Details" asp-route-id="@item.Id">人员名册与工程款</a></td></tr> }</tbody></table></div></section>
+@section Scripts { <script type="module" src="~/js/pages/crew-workspace.js" asp-append-version="true"></script> }
+
+<div class="crew-workspace-page" data-crew-workspace data-active-dialog="@Model.ActiveDialog">
+    <section class="page-heading compact-page-heading crew-workspace-heading">
+        <div><p class="eyebrow">合作单位专属视图</p><h1>施工班组</h1><p class="page-lead">集中维护班组角色、主要联系人、项目参与及财务状态</p></div>
+        @if (Model.CanManage) { <button class="button button--primary" type="button" data-crew-dialog-open="create">新增施工班组</button> }
+    </section>
+
+    <section class="crew-workspace-layout">
+        <aside class="crew-workspace-summary" data-crew-workspace-summary>
+            <div class="equipment-summary-heading"><span>班组概览</span><strong>全部施工班组</strong></div>
+            <div class="crew-summary-metrics">
+                <article><span>班组总数</span><strong>@Model.AllCrews.Count</strong></article>
+                <article><span>启用</span><strong>@Model.AllCrews.Count(item => item.Metrics.IsActive)</strong></article>
+                <article><span>停用</span><strong>@Model.AllCrews.Count(item => !item.Metrics.IsActive)</strong></article>
+                <article><span>当前人员</span><strong>@Model.AllCrews.Sum(item => item.Metrics.CurrentWorkerCount)</strong></article>
+            </div>
+            <section class="crew-trade-summary" aria-label="施工班组专业筛选">
+                <div class="equipment-company-summary-heading"><div><span>班组专业</span><strong>按专业筛选</strong></div><small>@Model.TradeSummaries.Count 类</small></div>
+                <div class="crew-trade-summary-list">
+                    @foreach (var item in Model.TradeSummaries)
+                    {
+                        <a class="crew-trade-summary-row @(Model.Trade == item.Trade ? "is-active" : string.Empty)" asp-page="Index" asp-route-search="@Model.Search" asp-route-trade="@item.Trade" asp-route-isActive="@Model.IsActive">
+                            <span title="@item.Trade">@item.Trade</span><strong>@item.Count</strong>
+                        </a>
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.Trade))
+                {
+                    <a class="button button--secondary crew-trade-clear" asp-page="Index" asp-route-search="@Model.Search" asp-route-isActive="@Model.IsActive">显示全部专业</a>
+                }
+            </section>
+        </aside>
+
+        <section class="crew-workspace-list" data-crew-workspace-list>
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated crew-list-toolbar">
+                <div><p class="eyebrow">班组主档</p><h2>@scopeName</h2></div>
+                <partial name="_DataWorkbench" model="workbench" />
+            </div>
+            <div class="table-wrap partner-table-wrap crew-table-wrap">
+                <table class="data-table partner-workspace-table crew-workspace-table @(Model.CanViewFinance ? "partner-workspace-table--financial" : string.Empty)" id="crews-table">
+                    <thead><tr><th data-column-key="crew">班组</th><th data-column-key="role_trade">角色 / 专业</th><th data-column-key="contact">主要联系人</th><th data-column-key="projects">参与项目</th>@if (Model.CanViewFinance) { <th data-column-key="receipts">应收</th><th data-column-key="payments">应付</th><th data-column-key="invoices">开票</th> }<th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead>
+                    <tbody>
+                    @if (Model.Crews.Count == 0) { <tr><td colspan="@(6 + financialColumnCount)" class="empty-state">当前筛选范围暂无施工班组。</td></tr> }
+                    @foreach (var item in Model.Crews)
+                    {
+                        var partner = item.Partner;
+                        var contact = item.PrimaryContact;
+                        var rosterUrl = $"/Crews/Details?id={partner.Id}#crew-roster";
+                        var financeUrl = $"/Crews/Details?id={partner.Id}#crew-finance";
+                        var financialSummary = Model.PartnerFinancialSummaries.GetValueOrDefault(partner.Id) ?? PartnerLedgerSummaryDto.Empty(partner.Id);
+                        var receivableTotal = financialSummary.Receivable.ActualAmount;
+                        var payableTotal = financialSummary.Payable.ActualAmount;
+                        var invoiceTotal = financialSummary.Receivable.ShouldInvoiceAmount;
+                        var receivableProgressState = FinancialProgressState(receivableTotal, financialSummary.Receivable.CashAmount);
+                        var payableProgressState = FinancialProgressState(payableTotal, financialSummary.Payable.CashAmount);
+                        var invoiceProgressState = FinancialProgressState(invoiceTotal, financialSummary.Receivable.InvoicedAmount);
+                        var receivableProgressLabel = FinancialProgressLabel(receivableTotal, financialSummary.Receivable.CashAmount);
+                        var payableProgressLabel = FinancialProgressLabel(payableTotal, financialSummary.Payable.CashAmount);
+                        var invoiceProgressLabel = FinancialProgressLabel(invoiceTotal, financialSummary.Receivable.InvoicedAmount);
+                        var payload = JsonSerializer.Serialize(new
+                        {
+                            id = partner.Id,
+                            partnerNumber = partner.PartnerNumber,
+                            name = partner.Name,
+                            shortName = partner.ShortName,
+                            unifiedSocialCreditCode = partner.UnifiedSocialCreditCode,
+                            roleLabel = "施工班组",
+                            tradeCategory = item.TradeCategory,
+                            contactName = contact?.Name,
+                            contactPhone = contact?.Phone,
+                            contactNotes = contact?.Notes,
+                            notes = partner.Notes,
+                            currentWorkerCount = item.Metrics.CurrentWorkerCount,
+                            projectCount = partner.ProjectCount,
+                            isActive = partner.IsActive,
+                            statusLabel = partner.IsActive ? "启用" : "停用",
+                            concurrencyStamp = partner.ConcurrencyStamp,
+                            rosterUrl,
+                            financeUrl
+                        });
+                        var financePayload = JsonSerializer.Serialize(new
+                        {
+                            name = partner.Name,
+                            partnerNumber = partner.PartnerNumber,
+                            financeUrl,
+                            receivable = financialSummary.Receivable,
+                            payable = financialSummary.Payable
+                        }, financeJsonOptions);
+                        <tr>
+                            <td data-column-key="crew"><strong class="partner-name-clamp crew-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary crew-notes-summary" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
+                            <td data-column-key="role_trade"><strong>施工班组</strong><span class="table-secondary partner-name-clamp" title="@item.TradeCategory">@item.TradeCategory</span></td>
+                            <td data-column-key="contact"><strong>@(contact?.Name ?? "未设置")</strong><span class="table-secondary">@(contact?.Phone ?? "未设置电话")</span></td>
+                            <td data-column-key="projects"><strong class="partner-project-count">@partner.ProjectCount</strong></td>
+                            @if (Model.CanViewFinance)
+                            {
+                                <td class="partner-financial-cell partner-financial-cell--receivable partner-financial-cell--state-@receivableProgressState" data-column-key="receipts" data-partner-financial-summary data-progress-state="@receivableProgressState"><div class="partner-financial-lines"><span class="partner-financial-line partner-financial-line--target @(receivableTotal == 0m ? "is-zero" : string.Empty)"><small>应收</small><strong>@receivableTotal.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--completed @(financialSummary.Receivable.CashAmount == 0m ? "is-zero" : string.Empty)"><small>已收</small><strong>@financialSummary.Receivable.CashAmount.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--pending @(financialSummary.Receivable.UncollectedOrUnpaid == 0m ? "is-zero" : string.Empty)"><small>未收</small><strong>@financialSummary.Receivable.UncollectedOrUnpaid.ToString("N2")</strong></span></div><div class="partner-financial-progress-shell"><progress class="partner-financial-progress partner-financial-progress--receivable" role="progressbar" aria-label="应收完成进度" aria-valuetext="@receivableProgressLabel，已收 @financialSummary.Receivable.CashAmount.ToString("N2")，应收 @receivableTotal.ToString("N2")" value="@FinancialProgressValue(receivableTotal, financialSummary.Receivable.CashAmount)" max="@(receivableTotal > 0m ? receivableTotal : 1m)"></progress><span class="partner-financial-progress-value" aria-hidden="true">@receivableProgressLabel</span></div></td>
+                                <td class="partner-financial-cell partner-financial-cell--payable partner-financial-cell--state-@payableProgressState" data-column-key="payments" data-progress-state="@payableProgressState"><div class="partner-financial-lines"><span class="partner-financial-line partner-financial-line--target @(payableTotal == 0m ? "is-zero" : string.Empty)"><small>应付</small><strong>@payableTotal.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--completed @(financialSummary.Payable.CashAmount == 0m ? "is-zero" : string.Empty)"><small>已付</small><strong>@financialSummary.Payable.CashAmount.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--pending @(financialSummary.Payable.UncollectedOrUnpaid == 0m ? "is-zero" : string.Empty)"><small>未付</small><strong>@financialSummary.Payable.UncollectedOrUnpaid.ToString("N2")</strong></span></div><div class="partner-financial-progress-shell"><progress class="partner-financial-progress partner-financial-progress--payable" role="progressbar" aria-label="应付完成进度" aria-valuetext="@payableProgressLabel，已付 @financialSummary.Payable.CashAmount.ToString("N2")，应付 @payableTotal.ToString("N2")" value="@FinancialProgressValue(payableTotal, financialSummary.Payable.CashAmount)" max="@(payableTotal > 0m ? payableTotal : 1m)"></progress><span class="partner-financial-progress-value" aria-hidden="true">@payableProgressLabel</span></div></td>
+                                <td class="partner-financial-cell partner-financial-cell--invoice partner-financial-cell--state-@invoiceProgressState" data-column-key="invoices" data-progress-state="@invoiceProgressState"><div class="partner-financial-lines"><span class="partner-financial-line partner-financial-line--target @(invoiceTotal == 0m ? "is-zero" : string.Empty)"><small>应开票</small><strong>@invoiceTotal.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--completed @(financialSummary.Receivable.InvoicedAmount == 0m ? "is-zero" : string.Empty)"><small>已开票</small><strong>@financialSummary.Receivable.InvoicedAmount.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--pending @(financialSummary.Receivable.Uninvoiced == 0m ? "is-zero" : string.Empty)"><small>未开票</small><strong>@financialSummary.Receivable.Uninvoiced.ToString("N2")</strong></span></div><div class="partner-financial-progress-shell"><progress class="partner-financial-progress partner-financial-progress--invoice" role="progressbar" aria-label="开票完成进度" aria-valuetext="@invoiceProgressLabel，已开票 @financialSummary.Receivable.InvoicedAmount.ToString("N2")，应开票 @invoiceTotal.ToString("N2")" value="@FinancialProgressValue(invoiceTotal, financialSummary.Receivable.InvoicedAmount)" max="@(invoiceTotal > 0m ? invoiceTotal : 1m)"></progress><span class="partner-financial-progress-value" aria-hidden="true">@invoiceProgressLabel</span></div></td>
+                            }
+                            <td data-column-key="status"><span class="partner-status partner-status--@(partner.IsActive ? "active" : "inactive")">@(partner.IsActive ? "启用" : "停用")</span></td>
+                            <td data-column-key="actions"><div class="partner-row-actions crew-row-actions"><button class="action-button action-button--view" type="button" title="查看施工班组" data-crew-dialog-open="details" data-crew-payload="@payload">查看</button>@if (Model.CanManage) { <button class="action-button action-button--edit" type="button" title="编辑施工班组" data-crew-dialog-open="edit" data-crew-payload="@payload">编辑</button><button class="action-button action-button--copy" type="button" title="复制施工班组" data-crew-dialog-open="copy" data-crew-payload="@payload">复制</button> }<button class="action-button action-button--roster" type="button" title="查看人员名册" data-crew-dialog-open="roster" data-crew-payload="@payload">人员</button>@if (Model.CanManageFinance) { <button class="action-button action-button--usage" type="button" title="查看财务汇总" data-crew-dialog-open="finance" data-crew-payload="@financePayload">财务</button> }</div></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+
+    @if (Model.CanManage)
+    {
+        <dialog class="workbench-dialog partner-editor-dialog crew-editor-dialog mac-window-dialog" data-crew-editor-dialog data-dialog-open="@(Model.ActiveDialog == "editor" ? "true" : "false")">
+            <form method="post" asp-page-handler="Save" data-crew-editor-form>
+                <input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="Trade" value="@Model.Trade" /><input type="hidden" name="IsActive" value="@Model.IsActive" />
+                <input type="hidden" asp-for="Editor.Id" /><input type="hidden" asp-for="Editor.ConcurrencyStamp" />
+                <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-crew-editor-title>新增施工班组</strong><span>施工班组主档</span></div><button type="button" class="dialog-close" aria-label="关闭施工班组编辑窗口" data-crew-dialog-close>×</button></div>
+                <div class="partner-editor-grid crew-editor-grid">
+                    <section><h3>班组资料</h3><label>班组编号<input asp-for="Editor.PartnerNumber" required /><span asp-validation-for="Editor.PartnerNumber"></span></label><label>班组全称<input asp-for="Editor.Name" required /><span asp-validation-for="Editor.Name"></span></label><label>班组简称<input asp-for="Editor.ShortName" required /><span asp-validation-for="Editor.ShortName"></span></label><label>统一社会信用代码<input asp-for="Editor.UnifiedSocialCreditCode" /></label></section>
+                    <section><h3>业务角色</h3><label>角色<input value="施工班组" readonly /></label><label>专业 / 类别<input asp-for="Editor.TradeCategory" /></label><label class="partner-editor-wide crew-editor-wide">班组备注<textarea asp-for="Editor.Notes" rows="4"></textarea></label></section>
+                    <section><h3>主要联系人</h3><label>联系人<input asp-for="Editor.ContactName" /></label><label>联系电话<input asp-for="Editor.ContactPhone" /></label><label class="partner-editor-wide crew-editor-wide">联系人备注<textarea asp-for="Editor.ContactNotes" rows="3"></textarea></label></section>
+                    <section data-crew-status-section hidden><h3>档案状态</h3><label>状态<select asp-for="Editor.IsActive"><option value="true">启用</option><option value="false">停用</option></select></label><label>修改原因<input asp-for="Editor.Reason" required /><span asp-validation-for="Editor.Reason"></span></label><p class="partner-status-note partner-editor-wide crew-status-note crew-editor-wide">施工班组与项目、人员或账务记录关联时使用停用状态，不提供物理删除。</p></section>
+                </div>
+                <div asp-validation-summary="ModelOnly" class="validation-summary partner-dialog-validation crew-dialog-validation"></div>
+                <div class="quick-edit-actions"><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-crew-dialog-close>取消</button><button type="submit" class="button button--primary">保存施工班组</button></div>
+            </form>
+        </dialog>
+    }
+
+    <dialog class="workbench-dialog partner-details-dialog crew-details-dialog mac-window-dialog" data-crew-details-dialog>
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-crew-detail-title>施工班组详情</strong><span data-crew-detail-number>班组主档</span></div><button type="button" class="dialog-close" aria-label="关闭施工班组详情窗口" data-crew-dialog-close>×</button></div>
+        <dl class="equipment-detail-grid partner-detail-grid crew-detail-grid"><div><dt>班组简称</dt><dd data-crew-detail-short-name></dd></div><div><dt>统一社会信用代码</dt><dd data-crew-detail-credit-code></dd></div><div><dt>业务角色</dt><dd data-crew-detail-role></dd></div><div><dt>专业 / 类别</dt><dd data-crew-detail-trade></dd></div><div><dt>主要联系人</dt><dd data-crew-detail-contact></dd></div><div><dt>联系电话</dt><dd data-crew-detail-phone></dd></div><div><dt>参与项目</dt><dd data-crew-detail-projects></dd></div><div><dt>档案状态</dt><dd data-crew-detail-status></dd></div><div class="partner-detail-wide crew-detail-wide"><dt>班组备注</dt><dd data-crew-detail-notes></dd></div><div class="partner-detail-wide crew-detail-wide"><dt>联系人备注</dt><dd data-crew-detail-contact-notes></dd></div></dl>
+        <div class="quick-edit-actions partner-dialog-navigation-actions crew-dialog-navigation-actions"><button type="button" class="button button--secondary" data-crew-dialog-close>关闭</button><span class="equipment-dialog-action-spacer"></span><a class="button button--secondary" data-crew-detail-roster>进入人员名册</a>@if (Model.CanManageFinance) { <a class="button button--primary" data-crew-detail-finance data-crew-finance-link>进入财务区域</a> }</div>
+    </dialog>
+
+    <dialog class="workbench-dialog crew-roster-dialog mac-window-dialog" data-crew-roster-dialog>
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-crew-roster-title>施工班组人员</strong><span data-crew-roster-number>人员名册</span></div><button type="button" class="dialog-close" aria-label="关闭施工班组人员窗口" data-crew-dialog-close>×</button></div>
+        <div class="crew-roster-dialog-body">
+            <section class="crew-roster-summary" aria-label="班组人员概览"><div><span>当前人员</span><strong data-crew-roster-current>0</strong></div><div><span>历史人员</span><strong data-crew-roster-history>0</strong></div><div><span>参与项目</span><strong data-crew-roster-projects>0</strong></div></section>
+            <div class="table-wrap crew-roster-table-wrap"><table class="data-table crew-roster-table"><thead><tr><th>姓名</th><th>电话</th><th>工种</th><th>加入日期</th><th>状态</th></tr></thead><tbody data-crew-roster-table-body><tr><td colspan="5" class="empty-state">请选择施工班组查看人员。</td></tr></tbody></table></div>
+        </div>
+        <div class="quick-edit-actions partner-dialog-navigation-actions"><button type="button" class="button button--secondary" data-crew-dialog-close>关闭</button><span class="equipment-dialog-action-spacer"></span><a class="button button--primary" href="/Crews/Details" data-crew-roster-manage>进入人员管理</a></div>
+    </dialog>
+
+    @if (Model.CanManageFinance)
+    {
+        <dialog class="workbench-dialog partner-finance-dialog crew-finance-dialog mac-window-dialog" data-crew-finance-dialog>
+            <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-crew-finance-title>施工班组财务汇总</strong><span data-crew-finance-number>班组财务总览</span></div><button type="button" class="dialog-close" aria-label="关闭财务汇总窗口" data-crew-dialog-close>×</button></div>
+            <div class="partner-finance-dialog-body">
+                <section class="partner-finance-kpis" aria-label="关键财务指标">
+                    <div class="partner-finance-kpi partner-finance-kpi--receivable"><span>净应收</span><strong data-crew-finance-metric="receivable.actualAmount" data-partner-finance-tone="target">0.00</strong><small>当前应收总额</small></div>
+                    <div class="partner-finance-kpi partner-finance-kpi--receivable"><span>已收款</span><strong data-crew-finance-metric="receivable.cashAmount" data-partner-finance-tone="completed" data-crew-finance-state-source="receivable">0.00</strong><small>累计到账金额</small></div>
+                    <div class="partner-finance-kpi partner-finance-kpi--payable"><span>净应付</span><strong data-crew-finance-metric="payable.actualAmount" data-partner-finance-tone="target">0.00</strong><small>当前应付总额</small></div>
+                    <div class="partner-finance-kpi partner-finance-kpi--payable"><span>已付款</span><strong data-crew-finance-metric="payable.cashAmount" data-partner-finance-tone="completed" data-crew-finance-state-source="payable">0.00</strong><small>累计支付金额</small></div>
+                </section>
+                <section class="partner-finance-chart-grid" aria-label="财务完成进度">
+                    <article class="partner-finance-chart partner-finance-chart--receivable" data-crew-finance-chart="receivable" data-target-path="receivable.actualAmount" data-completed-path="receivable.cashAmount" data-remaining-path="receivable.uncollectedOrUnpaid"><div class="partner-finance-chart-heading"><div><span>收款进度</span><small>已收 / 应收</small></div><strong data-crew-finance-chart-percent>0%</strong></div><div class="partner-finance-chart-track" role="progressbar" aria-label="收款完成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-crew-finance-chart-fill></span></div><div class="partner-finance-chart-values"><span>应收 <strong data-crew-finance-chart-target data-partner-finance-tone="target">0.00</strong></span><span>已收 <strong data-crew-finance-chart-completed data-partner-finance-tone="completed" data-crew-finance-state-source="receivable">0.00</strong></span><span>未收 <strong data-crew-finance-chart-remaining data-partner-finance-tone="pending">0.00</strong></span></div></article>
+                    <article class="partner-finance-chart partner-finance-chart--payable" data-crew-finance-chart="payable" data-target-path="payable.actualAmount" data-completed-path="payable.cashAmount" data-remaining-path="payable.uncollectedOrUnpaid"><div class="partner-finance-chart-heading"><div><span>付款进度</span><small>已付 / 应付</small></div><strong data-crew-finance-chart-percent>0%</strong></div><div class="partner-finance-chart-track" role="progressbar" aria-label="付款完成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-crew-finance-chart-fill></span></div><div class="partner-finance-chart-values"><span>应付 <strong data-crew-finance-chart-target data-partner-finance-tone="target">0.00</strong></span><span>已付 <strong data-crew-finance-chart-completed data-partner-finance-tone="completed" data-crew-finance-state-source="payable">0.00</strong></span><span>未付 <strong data-crew-finance-chart-remaining data-partner-finance-tone="pending">0.00</strong></span></div></article>
+                    <article class="partner-finance-chart partner-finance-chart--sales-invoice" data-crew-finance-chart="salesInvoice" data-target-path="receivable.shouldInvoiceAmount" data-completed-path="receivable.invoicedAmount" data-remaining-path="receivable.uninvoiced"><div class="partner-finance-chart-heading"><div><span>销项开票进度</span><small>已开票 / 应开票</small></div><strong data-crew-finance-chart-percent>0%</strong></div><div class="partner-finance-chart-track" role="progressbar" aria-label="销项开票完成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-crew-finance-chart-fill></span></div><div class="partner-finance-chart-values"><span>应开票 <strong data-crew-finance-chart-target data-partner-finance-tone="target">0.00</strong></span><span>已开票 <strong data-crew-finance-chart-completed data-partner-finance-tone="completed" data-crew-finance-state-source="salesInvoice">0.00</strong></span><span>未开票 <strong data-crew-finance-chart-remaining data-partner-finance-tone="pending">0.00</strong></span></div></article>
+                    <article class="partner-finance-chart partner-finance-chart--purchase-invoice" data-crew-finance-chart="purchaseInvoice" data-target-path="payable.shouldInvoiceAmount" data-completed-path="payable.invoicedAmount" data-remaining-path="payable.uninvoiced"><div class="partner-finance-chart-heading"><div><span>进项收票进度</span><small>已收票 / 应收票</small></div><strong data-crew-finance-chart-percent>0%</strong></div><div class="partner-finance-chart-track" role="progressbar" aria-label="进项收票完成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-crew-finance-chart-fill></span></div><div class="partner-finance-chart-values"><span>应收票 <strong data-crew-finance-chart-target data-partner-finance-tone="target">0.00</strong></span><span>已收票 <strong data-crew-finance-chart-completed data-partner-finance-tone="completed" data-crew-finance-state-source="purchaseInvoice">0.00</strong></span><span>未收票 <strong data-crew-finance-chart-remaining data-partner-finance-tone="pending">0.00</strong></span></div></article>
+                </section>
+                <section class="partner-finance-detail-sections" aria-label="完整财务指标">
+                    <article class="partner-finance-detail-section partner-finance-detail-section--receivable"><h3>应收明细</h3><dl class="partner-finance-detail-grid">
+                        <div><dt>结算原额</dt><dd data-crew-finance-metric="receivable.grossSettlementAmount" data-partner-finance-tone="target">0.00</dd></div><div><dt>扣款</dt><dd data-crew-finance-metric="receivable.deductions">0.00</dd></div><div><dt>净应收</dt><dd data-crew-finance-metric="receivable.actualAmount" data-partner-finance-tone="target">0.00</dd></div><div><dt>应开票</dt><dd data-crew-finance-metric="receivable.shouldInvoiceAmount" data-partner-finance-tone="target">0.00</dd></div><div><dt>已开票</dt><dd data-crew-finance-metric="receivable.invoicedAmount" data-partner-finance-tone="completed" data-crew-finance-state-source="salesInvoice">0.00</dd></div><div><dt>已收</dt><dd data-crew-finance-metric="receivable.cashAmount" data-partner-finance-tone="completed" data-crew-finance-state-source="receivable">0.00</dd></div><div><dt>未收</dt><dd data-crew-finance-metric="receivable.uncollectedOrUnpaid" data-partner-finance-tone="pending">0.00</dd></div><div><dt>未开票</dt><dd data-crew-finance-metric="receivable.uninvoiced" data-partner-finance-tone="pending">0.00</dd></div><div><dt>已开票且已收</dt><dd data-crew-finance-metric="receivable.invoicedAndCollectedOrPaid" data-partner-finance-tone="completed">0.00</dd></div><div><dt>已开票未收</dt><dd data-crew-finance-metric="receivable.invoicedAndUncollectedOrUnpaid" data-partner-finance-tone="pending">0.00</dd></div><div><dt>已收未开票</dt><dd data-crew-finance-metric="receivable.advanceInvoiceCash" data-partner-finance-tone="pending">0.00</dd></div><div><dt>未开票未收</dt><dd data-crew-finance-metric="receivable.uninvoicedAndUncollectedOrUnpaid" data-partner-finance-tone="pending">0.00</dd></div><div><dt>已开票免收款</dt><dd data-crew-finance-metric="receivable.invoicedWithoutCashRequirement" data-partner-finance-tone="exception">0.00</dd></div><div><dt>超结算收款</dt><dd data-crew-finance-metric="receivable.overSettlementCash" data-partner-finance-tone="exception">0.00</dd></div><div><dt>超额开票</dt><dd data-crew-finance-metric="receivable.overInvoiced" data-partner-finance-tone="exception">0.00</dd></div>
+                    </dl></article>
+                    <article class="partner-finance-detail-section partner-finance-detail-section--payable"><h3>应付明细</h3><dl class="partner-finance-detail-grid">
+                        <div><dt>结算原额</dt><dd data-crew-finance-metric="payable.grossSettlementAmount" data-partner-finance-tone="target">0.00</dd></div><div><dt>扣款</dt><dd data-crew-finance-metric="payable.deductions">0.00</dd></div><div><dt>净应付</dt><dd data-crew-finance-metric="payable.actualAmount" data-partner-finance-tone="target">0.00</dd></div><div><dt>应收票</dt><dd data-crew-finance-metric="payable.shouldInvoiceAmount" data-partner-finance-tone="target">0.00</dd></div><div><dt>已收票</dt><dd data-crew-finance-metric="payable.invoicedAmount" data-partner-finance-tone="completed" data-crew-finance-state-source="purchaseInvoice">0.00</dd></div><div><dt>已付</dt><dd data-crew-finance-metric="payable.cashAmount" data-partner-finance-tone="completed" data-crew-finance-state-source="payable">0.00</dd></div><div><dt>未付</dt><dd data-crew-finance-metric="payable.uncollectedOrUnpaid" data-partner-finance-tone="pending">0.00</dd></div><div><dt>未收票</dt><dd data-crew-finance-metric="payable.uninvoiced" data-partner-finance-tone="pending">0.00</dd></div><div><dt>已收票且已付</dt><dd data-crew-finance-metric="payable.invoicedAndCollectedOrPaid" data-partner-finance-tone="completed">0.00</dd></div><div><dt>已收票未付</dt><dd data-crew-finance-metric="payable.invoicedAndUncollectedOrUnpaid" data-partner-finance-tone="pending">0.00</dd></div><div><dt>已付未收票</dt><dd data-crew-finance-metric="payable.advanceInvoiceCash" data-partner-finance-tone="pending">0.00</dd></div><div><dt>未收票未付</dt><dd data-crew-finance-metric="payable.uninvoicedAndUncollectedOrUnpaid" data-partner-finance-tone="pending">0.00</dd></div><div><dt>已收票免付款</dt><dd data-crew-finance-metric="payable.invoicedWithoutCashRequirement" data-partner-finance-tone="exception">0.00</dd></div><div><dt>超结算付款</dt><dd data-crew-finance-metric="payable.overSettlementCash" data-partner-finance-tone="exception">0.00</dd></div><div><dt>超额收票</dt><dd data-crew-finance-metric="payable.overInvoiced" data-partner-finance-tone="exception">0.00</dd></div>
+                    </dl></article>
+                </section>
+            </div>
+            <div class="quick-edit-actions partner-dialog-navigation-actions"><button type="button" class="button button--secondary" data-crew-dialog-close>关闭</button><span class="equipment-dialog-action-spacer"></span><a class="button button--primary" href="/Crews/Details" data-crew-finance-jump data-crew-finance-link>进入财务区域</a></div>
+        </dialog>
+    }
+</div>

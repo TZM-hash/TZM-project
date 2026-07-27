@@ -113,13 +113,15 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain(".partner-financial-cell")
             .And.Contain(".partner-financial-progress")
             .And.Contain(".partner-financial-progress-shell { position: relative;")
-            .And.Contain(".partner-financial-progress-value { position: absolute; inset: 0; display: grid; place-items: center; color: #fff;")
+            .And.Contain(".partner-financial-progress-value { position: absolute; inset: 0; display: grid; place-items: center; color: #111827;")
             .And.Contain(".partner-finance-dialog { width: min(76rem, calc(100vw - 2rem));")
             .And.Contain(".partner-finance-chart")
             .And.Contain(".partner-finance-detail-grid")
-            .And.Contain("th[data-column-key=\"role_trade\"] { width: 7rem; }")
-            .And.Contain("th[data-column-key=\"contact\"] { width: 7rem; }")
-            .And.Contain("th[data-column-key=\"projects\"] { width: 4.75rem; }")
+            .And.Contain("th[data-column-key=\"partner\"] { width: 11.5rem; }")
+            .And.Contain("th[data-column-key=\"role_trade\"] { width: 6.25rem; }")
+            .And.Contain("th[data-column-key=\"contact\"] { width: 6.25rem; }")
+            .And.Contain("th[data-column-key=\"projects\"] { width: 4.25rem; }")
+            .And.Contain("th[data-column-key=\"payments\"] { width: 9.6667rem; }")
             .And.Contain("font-variant-numeric: tabular-nums")
             .And.Contain(".partner-row-actions { display: flex; flex-wrap: nowrap;")
             .And.Contain(".partner-editor-dialog { width: min(68rem, calc(100vw - 2rem));")
@@ -130,7 +132,7 @@ public sealed class PartnerWorkspacePageTests
     }
 
     [Fact]
-    public void PartnerFinanceNumbersUseCategoryColorsStateHierarchyAndZeroValueDeemphasis()
+    public void PartnerFinanceNumbersUseBusinessCategoryColorsAndZeroValueDeemphasis()
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
         var script = ReadFileIfExists("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "partner-workspace.js");
@@ -142,7 +144,7 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain("partner-financial-line--target")
             .And.Contain("partner-financial-line--completed")
             .And.Contain("partner-financial-line--pending")
-            .And.Contain("data-partner-finance-legend")
+            .And.NotContain("data-partner-finance-legend")
             .And.Contain("data-partner-finance-tone=\"target\"")
             .And.Contain("data-partner-finance-tone=\"completed\"")
             .And.Contain("data-partner-finance-tone=\"pending\"")
@@ -158,11 +160,11 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain(".partner-financial-line--pending:not(.is-zero) strong")
             .And.Contain("[data-partner-finance-tone=\"exception\"]:not(.is-zero)")
             .And.Contain("[data-partner-finance-tone].is-zero")
-            .And.Contain(".partner-finance-legend");
+            .And.NotContain(".partner-finance-legend");
     }
 
     [Fact]
-    public void PartnerFinancialProgressUsesRatioStatesAndKeepsActualOveragePercentages()
+    public void PartnerFinancialProgressUsesBusinessColorsAndKeepsActualOveragePercentages()
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
         var script = ReadFileIfExists("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "partner-workspace.js");
@@ -171,11 +173,11 @@ public sealed class PartnerWorkspacePageTests
         page.Should().Contain("FinancialProgressState(decimal target, decimal completed)")
             .And.Contain("FinancialProgressLabel(decimal target, decimal completed)")
             .And.Contain("FinancialProgressValue(decimal target, decimal completed)")
-            .And.Contain("< 30m => \"critical\"")
-            .And.Contain("< 60m => \"low\"")
-            .And.Contain("< 85m => \"medium\"")
-            .And.Contain("< 100m => \"near\"")
-            .And.Contain("100m => \"complete\"")
+            .And.Contain("if (percentage < 30m) return \"critical\";")
+            .And.Contain("if (percentage < 60m) return \"low\";")
+            .And.Contain("if (percentage < 85m) return \"medium\";")
+            .And.Contain("if (percentage < 100m) return \"near\";")
+            .And.Contain("return percentage == 100m ? \"complete\" : \"over\";")
             .And.Contain("partner-financial-cell--state-@receivableProgressState")
             .And.Contain("partner-financial-cell--state-@payableProgressState")
             .And.Contain("partner-financial-cell--state-@invoiceProgressState")
@@ -192,19 +194,50 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain("target.dataset.partnerFinanceStateSource === source")
             .And.Contain("target.dataset.progressState = progressState");
 
-        css.Should().Contain("[data-progress-state=\"no-target\"]")
-            .And.Contain("[data-progress-state=\"critical\"]")
-            .And.Contain("[data-progress-state=\"low\"]")
-            .And.Contain("[data-progress-state=\"medium\"]")
-            .And.Contain("[data-progress-state=\"near\"]")
-            .And.Contain("[data-progress-state=\"complete\"]")
-            .And.Contain("[data-progress-state=\"over\"]")
-            .And.Contain("--partner-progress-state-color")
-            .And.Contain("var(--partner-progress-state-color)")
-            .And.Contain("[data-progress-state=\"low\"] { --partner-progress-state-color: #c2410c; }")
-            .And.Contain("[data-progress-state=\"medium\"] { --partner-progress-state-color: #a16207; }")
+        css.Should().Contain(".partner-financial-cell--receivable { --partner-financial-accent: #15803d; --partner-progress-fill: #86efac; }")
+            .And.Contain(".partner-financial-cell--payable { --partner-financial-accent: #2563eb; --partner-progress-fill: #93c5fd; }")
+            .And.Contain(".partner-financial-cell--invoice { --partner-financial-accent: #b45309; --partner-progress-fill: #fde68a; }")
+            .And.Contain("[data-progress-state=\"no-target\"] { --partner-progress-fill: #cbd5e1; }")
+            .And.Contain("[data-progress-state=\"over\"] { --partner-progress-fill: #fecaca; }")
+            .And.Contain("background: var(--partner-progress-fill)")
+            .And.Contain(".partner-financial-progress-value { position: absolute; inset: 0; display: grid; place-items: center; color: #111827;")
+            .And.Contain(".partner-finance-chart-heading > strong { color: #111827;")
+            .And.NotContain("--partner-progress-state-color")
             .And.Contain("box-shadow: inset 0 2px 0 var(--partner-financial-accent)")
             .And.Contain("[data-partner-finance-tone].is-zero:not([data-partner-finance-state-source])");
+    }
+
+    [Fact]
+    public void FinanceDialogsKeepEachLabelCloseToItsValueAndSeparateAdjacentGroups()
+    {
+        var partnerPage = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
+        var crewPage = ReadFile("src", "EngineeringManager.Web", "Pages", "Crews", "Index.cshtml");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        partnerPage.Should().Contain("partner-finance-chart-values")
+            .And.Contain("partner-finance-detail-grid");
+        crewPage.Should().Contain("partner-finance-chart-values")
+            .And.Contain("partner-finance-detail-grid");
+
+        css.Should().Contain(".partner-finance-chart-heading { display: flex; align-items: flex-start; justify-content: flex-start; gap: 1rem; }")
+            .And.Contain(".partner-finance-chart-values { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); gap: .45rem 1.25rem;")
+            .And.Contain(".partner-finance-chart-values span { display: inline-flex; min-width: 0; justify-content: flex-start; gap: .35rem; }")
+            .And.Contain(".partner-finance-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.25rem;")
+            .And.Contain(".partner-finance-detail-grid div { display: grid; grid-template-columns: 6.2rem max-content; min-width: 0; align-items: baseline; justify-content: start; gap: .5rem;");
+    }
+
+    [Fact]
+    public void FinancialTableRowsKeepLabelsBesideNumbersOnPartnerAndCrewPages()
+    {
+        var partnerPage = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
+        var crewPage = ReadFile("src", "EngineeringManager.Web", "Pages", "Crews", "Index.cshtml");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        partnerPage.Should().Contain("partner-financial-lines");
+        crewPage.Should().Contain("partner-financial-lines");
+
+        css.Should().Contain(".partner-financial-lines > span { display: grid !important; grid-template-columns: max-content max-content; align-items: baseline; justify-content: start; gap: .4rem;")
+            .And.NotContain(".partner-financial-lines > span { display: flex !important; align-items: baseline; justify-content: space-between;");
     }
 
     [Fact]

@@ -40,15 +40,11 @@
         }
 
         var percentage = Math.Max(completed / target * 100m, 0m);
-        return percentage switch
-        {
-            < 30m => "critical",
-            < 60m => "low",
-            < 85m => "medium",
-            < 100m => "near",
-            100m => "complete",
-            _ => "over"
-        };
+        if (percentage < 30m) return "critical";
+        if (percentage < 60m) return "low";
+        if (percentage < 85m) return "medium";
+        if (percentage < 100m) return "near";
+        return percentage == 100m ? "complete" : "over";
     }
 
     static string FinancialProgressLabel(decimal target, decimal completed)
@@ -242,8 +238,6 @@
                     <div class="partner-finance-kpi partner-finance-kpi--payable"><span>净应付</span><strong data-partner-finance-metric="payable.actualAmount" data-partner-finance-tone="target">0.00</strong><small>当前应付总额</small></div>
                     <div class="partner-finance-kpi partner-finance-kpi--payable"><span>已付款</span><strong data-partner-finance-metric="payable.cashAmount" data-partner-finance-tone="completed" data-partner-finance-state-source="payable">0.00</strong><small>累计支付金额</small></div>
                 </section>
-
-                <div class="partner-finance-legend" data-partner-finance-legend aria-label="财务进度颜色说明"><span><i class="is-no-target" aria-hidden="true"></i>无目标</span><span><i class="is-critical" aria-hidden="true"></i>低于30%</span><span><i class="is-low" aria-hidden="true"></i>30–59%</span><span><i class="is-medium" aria-hidden="true"></i>60–84%</span><span><i class="is-near" aria-hidden="true"></i>85–99%</span><span><i class="is-complete" aria-hidden="true"></i>完成</span><span><i class="is-over" aria-hidden="true"></i>超额</span></div>
 
                 <section class="partner-finance-chart-grid" aria-label="财务完成进度">
                     <article class="partner-finance-chart partner-finance-chart--receivable" data-partner-finance-chart="receivable" data-target-path="receivable.actualAmount" data-completed-path="receivable.cashAmount" data-remaining-path="receivable.uncollectedOrUnpaid">
