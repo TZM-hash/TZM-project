@@ -96,7 +96,17 @@ foreach ($processInfo in $projectWebProcesses) {
     Wait-Process -Id $processInfo.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
 }
 
+$listenerReleaseDeadline = [DateTime]::UtcNow.AddSeconds(10)
 $remainingListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+while ([DateTime]::UtcNow -lt $listenerReleaseDeadline) {
+    if (-not $remainingListener) {
+        break
+    }
+
+    Start-Sleep -Milliseconds 250
+    $remainingListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+}
+
 if ($remainingListener) {
     $remainingProcessIds = ($remainingListener | Select-Object -ExpandProperty OwningProcess -Unique) -join ', '
     throw "端口 $Port 仍被 PID $remainingProcessIds 占用，无法安全启动。"

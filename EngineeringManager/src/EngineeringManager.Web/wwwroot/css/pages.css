@@ -169,7 +169,7 @@
 }
 
 /* Detail workspaces: summary above, business tabs below, activity rail on the right. */
-.project-workspace-shell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: var(--space-4); align-items: start; }
+.project-workspace-shell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: var(--space-4); align-items: stretch; }
 .project-workspace-main { min-width: 0; display: grid; gap: .85rem; }
 .project-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metric-card--accent { border-color: rgba(37, 99, 235, .34); background: var(--app-primary-soft); }
@@ -283,11 +283,12 @@
 .record-value-editor label { min-width: 0; }
 .construction-detail-table tr.is-target-record > td { background: var(--app-primary-soft); }
 
-.project-activity-panel { position: sticky; top: calc(var(--header-height) + var(--space-3)); max-height: calc(100vh - 96px); overflow: hidden; border: 1px solid var(--app-border); border-radius: var(--app-radius-lg); background: var(--app-surface); box-shadow: var(--app-shadow-soft); }
+.project-activity-panel { position: sticky; top: calc(var(--header-height) + var(--space-3)); display: grid; grid-template-rows: auto minmax(0, 1fr); align-self: stretch; height: 100%; min-height: 0; max-height: none; overflow: hidden; border: 1px solid var(--app-border); border-radius: var(--app-radius-lg); background: var(--app-surface); box-shadow: var(--app-shadow-soft); }
 .activity-panel-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-4); border-bottom: 1px solid var(--app-border); }
 .activity-panel-heading h2, .activity-panel-heading p { margin: 0; }
 .activity-panel-heading > span { min-width: 2rem; min-height: 2rem; display: grid; place-items: center; border-radius: 999px; background: var(--app-surface-raised); color: var(--app-muted); font-weight: 700; }
 .activity-feed { max-height: calc(100vh - 190px); overflow-y: auto; padding: var(--space-2) var(--space-4) var(--space-5); }
+.project-activity-panel .activity-feed { min-height: 0; max-height: none; overflow-y: auto; }
 .activity-item { position: relative; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3) 0; }
 .activity-item:not(:last-child)::after { content: ""; position: absolute; left: 5px; top: 28px; bottom: -8px; width: 1px; background: var(--app-border); }
 .activity-dot { width: 11px; height: 11px; margin-top: 5px; border-radius: 50%; background: var(--app-primary); box-shadow: 0 0 0 3px var(--app-surface); z-index: 1; }
@@ -556,8 +557,8 @@
 
 @media (max-width: 1180px) {
     .project-workspace-shell { grid-template-columns: minmax(0, 1fr); }
-    .project-activity-panel { position: static; max-height: none; }
-    .activity-feed { max-height: 420px; }
+    .project-activity-panel { position: static; align-self: auto; height: auto; max-height: none; }
+    .project-activity-panel .activity-feed, .activity-feed { max-height: 420px; }
     .detail-grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .project-contract-editor { grid-column: auto; grid-row: auto; }
     .project-detail-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -645,7 +646,7 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 
 @media (max-width: 1180px) {
   .employee-detail-layout { grid-template-columns: minmax(0, 1fr); }
-  .employee-activity-rail { position: static; }
+  .employee-activity-rail { position: static; align-self: auto; height: auto; }
 }
 
 @media (max-width: 760px) {
@@ -1657,7 +1658,7 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-project-detail-page .employee-detail-layout > main { align-content: start; }
 .employee-project-detail-page .employee-main-tabs { border: 1px solid var(--app-border); border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0; }
 .employee-project-detail-page .employee-tab-panel { margin-top: calc(var(--space-3) * -1); border-radius: 0 0 var(--app-radius-lg) var(--app-radius-lg); }
-.employee-project-detail-page .employee-activity-rail { top: calc(var(--header-height) + var(--space-3)); align-self: start; max-height: calc(100vh - 96px); }
+.employee-project-detail-page .employee-activity-rail { top: calc(var(--header-height) + var(--space-3)); align-self: stretch; height: 100%; max-height: none; }
 .employee-project-detail-page .employee-activity-rail .activity-feed { min-height: 12rem; }
 .employee-dialog-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .employee-dialog-metrics article { display: grid; gap: .28rem; min-width: 0; min-height: 4.8rem; padding: .68rem .8rem; border-right: 1px solid #d8e2ee; border-bottom: 1px solid #d8e2ee; background: #fff; }
@@ -1670,7 +1671,7 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 @media (max-width: 1100px) {
   .employee-project-detail-page .employee-detail-metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .employee-project-detail-page .employee-detail-layout { grid-template-columns: minmax(0, 1fr); }
-  .employee-project-detail-page .employee-activity-rail { position: static; max-height: none; }
+  .employee-project-detail-page .employee-activity-rail { position: static; align-self: auto; height: auto; max-height: none; }
   .employee-project-detail-page .employee-activity-rail .activity-feed { max-height: 24rem; }
 }
 

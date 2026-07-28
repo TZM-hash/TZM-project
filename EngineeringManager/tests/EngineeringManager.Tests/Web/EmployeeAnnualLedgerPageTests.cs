@@ -110,6 +110,17 @@ public sealed class EmployeeAnnualLedgerPageTests
     }
 
     [Fact]
+    public void ActivityRailsStretchToTheWorkspaceBottomAndScrollTheirOwnRecords()
+    {
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        styles.Should().Contain(".project-workspace-shell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: var(--space-4); align-items: stretch; }")
+            .And.Contain(".project-activity-panel { position: sticky; top: calc(var(--header-height) + var(--space-3)); display: grid; grid-template-rows: auto minmax(0, 1fr); align-self: stretch; height: 100%; min-height: 0; max-height: none;")
+            .And.Contain(".project-activity-panel .activity-feed { min-height: 0; max-height: none; overflow-y: auto;")
+            .And.Contain(".employee-project-detail-page .employee-activity-rail { top: calc(var(--header-height) + var(--space-3)); align-self: stretch; height: 100%; max-height: none; }");
+    }
+
+    [Fact]
     public void EmployeeLedgerRedirectsButPayrollIsRestoredAsUnifiedDisbursementLedger()
     {
         var payroll = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml.cs");

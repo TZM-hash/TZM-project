@@ -16,6 +16,8 @@ public sealed class LocalWebStartupScriptTests
             .And.Contain("Get-NetTCPConnection")
             .And.Contain("EngineeringManager.Web")
             .And.Contain("Stop-Process")
+            .And.Contain("$listenerReleaseDeadline")
+            .And.Contain("while ([DateTime]::UtcNow -lt $listenerReleaseDeadline)")
             .And.Contain("--no-launch-profile")
             .And.Contain("--configuration")
             .And.Contain("/health/ready")
