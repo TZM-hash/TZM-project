@@ -222,6 +222,39 @@ public sealed class IndexModel(IPayrollService payrollService, ApplicationDbCont
                 GroupName = item.RecipientType == PayrollRecipientType.CrewWorker
                     ? item.CrewNameSnapshot ?? (item.CrewBusinessPartner != null ? item.CrewBusinessPartner.Name : null)
                     : null,
+                EmployeeType = item.Employee != null ? (EmployeeType?)item.Employee.EmployeeType : null,
+                PersonNumber = item.Employee != null ? item.Employee.EmployeeNumber : null,
+                Phone = item.Employee != null
+                    ? item.Employee.Phone ?? item.PhoneSnapshot
+                    : item.ConstructionWorker != null
+                        ? item.ConstructionWorker.Phone ?? item.PhoneSnapshot
+                        : item.PhoneSnapshot,
+                RoleName = item.Employee != null
+                    ? item.Employee.PositionTitle ?? item.TradeSnapshot
+                    : item.ConstructionWorker != null
+                        ? item.ConstructionWorker.Trade ?? item.TradeSnapshot
+                        : item.TradeSnapshot,
+                IdentityNumber = CanViewSensitive
+                    ? item.Employee != null
+                        ? item.Employee.IdentityNumber ?? item.IdentityNumberSnapshot
+                        : item.ConstructionWorker != null
+                            ? item.ConstructionWorker.IdentityNumber ?? item.IdentityNumberSnapshot
+                            : item.IdentityNumberSnapshot
+                    : null,
+                BankAccountNumber = CanViewSensitive
+                    ? item.Employee != null
+                        ? item.Employee.BankAccountNumber ?? item.BankAccountSnapshot
+                        : item.ConstructionWorker != null
+                            ? item.ConstructionWorker.BankAccountNumber ?? item.BankAccountSnapshot
+                            : item.BankAccountSnapshot
+                    : null,
+                BankName = CanViewSensitive
+                    ? item.Employee != null
+                        ? item.Employee.BankName
+                        : item.ConstructionWorker != null
+                            ? item.ConstructionWorker.BankName
+                            : null
+                    : null,
                 item.Amount
             })
             .ToListAsync(cancellationToken);
@@ -231,14 +264,50 @@ public sealed class IndexModel(IPayrollService payrollService, ApplicationDbCont
             .ToDictionary(
                 group => group.Key,
                 group => new PayrollRecipientBreakdownViewModel(
-                    group.Where(item => item.RecipientType == PayrollRecipientType.Employee)
+                    group.Where(item => item.RecipientType == PayrollRecipientType.Employee
+                            && item.EmployeeType != EmployeeType.Temporary)
                         .OrderBy(item => item.Name)
-                        .Select(item => new PayrollRecipientItemViewModel(item.Name, null, item.Amount))
+                        .Select(item => new PayrollRecipientItemViewModel(
+                            item.Name,
+                            null,
+                            item.Amount,
+                            item.PersonNumber,
+                            item.Phone,
+                            item.RoleName,
+                            item.EmployeeType?.ToChinese() ?? "员工",
+                            item.IdentityNumber,
+                            item.BankAccountNumber,
+                            item.BankName))
+                        .ToArray(),
+                    group.Where(item => item.RecipientType == PayrollRecipientType.Employee
+                            && item.EmployeeType == EmployeeType.Temporary)
+                        .OrderBy(item => item.Name)
+                        .Select(item => new PayrollRecipientItemViewModel(
+                            item.Name,
+                            null,
+                            item.Amount,
+                            item.PersonNumber,
+                            item.Phone,
+                            item.RoleName,
+                            "特殊临时人员",
+                            item.IdentityNumber,
+                            item.BankAccountNumber,
+                            item.BankName))
                         .ToArray(),
                     group.Where(item => item.RecipientType == PayrollRecipientType.CrewWorker)
                         .OrderBy(item => item.GroupName)
                         .ThenBy(item => item.Name)
-                        .Select(item => new PayrollRecipientItemViewModel(item.Name, item.GroupName, item.Amount))
+                        .Select(item => new PayrollRecipientItemViewModel(
+                            item.Name,
+                            item.GroupName,
+                            item.Amount,
+                            null,
+                            item.Phone,
+                            item.RoleName,
+                            "班组人员",
+                            item.IdentityNumber,
+                            item.BankAccountNumber,
+                            item.BankName))
                         .ToArray()));
     }
 

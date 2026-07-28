@@ -13,6 +13,7 @@ public sealed class PayrollDisbursementPageTests
         var legacyModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Edit.cshtml.cs");
         var script = ReadFileIfExists("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "payroll-workspace.js");
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var workbenchPresets = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "DataWorkbenchPresets.cs");
 
         index.Should().Contain("data-payroll-workspace")
             .And.Contain("payroll-workspace-layout")
@@ -23,8 +24,18 @@ public sealed class PayrollDisbursementPageTests
             .And.Contain("data-payroll-dialog-open=\"edit\"")
             .And.Contain("data-payroll-details-dialog")
             .And.Contain("data-payroll-roster-open")
+            .And.Contain("data-payroll-roster-category=\"employees\"")
+            .And.Contain("data-payroll-roster-category=\"temporaryWorkers\"")
+            .And.Contain("data-payroll-roster-category=\"crewWorkers\"")
             .And.Contain("data-payroll-roster-dialog")
+            .And.Contain("data-payroll-roster-table")
+            .And.Contain("data-payroll-roster-identity")
+            .And.Contain("data-payroll-roster-bank-account")
+            .And.Contain("data-payroll-roster-bank-name")
             .And.Contain("recipientBreakdown")
+            .And.Contain("data-payroll-detail-temporary")
+            .And.Contain("data-payroll-category-count")
+            .And.Contain("data-column-key=\"temporary\"")
             .And.Contain("data-payroll-editor-dialog")
             .And.Contain("~/js/pages/payroll-workspace.js")
             .And.NotContain("asp-page=\"/Payroll/Edit\">新建工资批次");
@@ -45,6 +56,9 @@ public sealed class PayrollDisbursementPageTests
             .And.Contain("[data-payroll-dialog-open]")
             .And.Contain("[data-payroll-roster-dialog]")
             .And.Contain("renderRoster")
+            .And.Contain("temporaryWorkers")
+            .And.Contain("temporaryCount")
+            .And.Contain("temporaryAmount")
             .And.Contain("textContent");
         css.Should().Contain(".payroll-workspace-layout")
             .And.Contain(".payroll-workspace-summary")
@@ -53,12 +67,15 @@ public sealed class PayrollDisbursementPageTests
             .And.Contain(".payroll-list-toolbar.equipment-list-toolbar--integrated > .data-workbench")
             .And.Contain(".payroll-recipient-breakdown")
             .And.Contain(".payroll-roster-dialog")
+            .And.Contain(".payroll-roster-table th, .payroll-roster-table td")
+            .And.Contain("border-right: 1px solid var(--app-border)")
             .And.Contain(".payroll-editor-dialog")
             .And.Contain(".payroll-editor-tabs");
+        workbenchPresets.Should().Contain("(\"employee\", \"员工\"), (\"temporary\", \"临时人员\"), (\"crew\", \"班组\")");
     }
 
     [Fact]
-    public void PayrollPagesExposeOnlyEditableEmployeeAndCrewLines()
+    public void PayrollEditorKeepsTwoEditableSourcesWhileWorkspaceShowsThreeRecipientCategories()
     {
         var index = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml");
         var editor = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "_PayrollEditor.cshtml");
@@ -77,8 +94,8 @@ public sealed class PayrollDisbursementPageTests
         editor.Should().NotContain("Model.LegacyLines");
         editor.Should().NotContain("data-payroll-legacy-total");
         model.Should().Contain("item.EmployeeType.ToChinese()");
-        index.Should().NotContain("TemporaryAmount");
-        index.Should().NotContain("<th>临时人员</th>");
+        index.Should().Contain("temporaryAmount");
+        index.Should().Contain("<th data-column-key=\"temporary\">临时人员</th>");
         editor.Should().Contain("批次差额");
         editor.Should().Contain("修改原因");
         model.Should().Contain("LineId");

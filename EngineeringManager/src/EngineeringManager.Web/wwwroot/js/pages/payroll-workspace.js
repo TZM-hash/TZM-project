@@ -5,7 +5,19 @@ if (page) {
     const rosterDialog = page.querySelector("[data-payroll-roster-dialog]");
     const editorDialog = page.querySelector("[data-payroll-editor-dialog]");
     const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    let activeRoster = { employees: [], crewWorkers: [], employeeCount: 0, crewCount: 0, totalCount: 0 };
+    let activeRoster = {
+        employees: [],
+        temporaryWorkers: [],
+        crewWorkers: [],
+        employeeCount: 0,
+        temporaryCount: 0,
+        crewCount: 0,
+        employeeAmount: 0,
+        temporaryAmount: 0,
+        crewAmount: 0,
+        canViewSensitive: false,
+        totalCount: 0
+    };
     let activeBatchName = "工资批次";
 
     const show = (dialog) => {
@@ -26,7 +38,12 @@ if (page) {
     };
 
     const openDetails = (payload) => {
-        activeRoster = payload.recipientBreakdown || { employees: [], crewWorkers: [], employeeCount: 0, crewCount: 0, totalCount: 0 };
+        activeRoster = payload.recipientBreakdown || {
+            employees: [], temporaryWorkers: [], crewWorkers: [],
+            employeeCount: 0, temporaryCount: 0, crewCount: 0,
+            employeeAmount: 0, temporaryAmount: 0, crewAmount: 0,
+            canViewSensitive: false, totalCount: 0
+        };
         activeBatchName = payload.name || payload.batchNumber || "工资批次";
         setText("[data-payroll-detail-title]", payload.name, "工资批次详情");
         setText("[data-payroll-detail-number]", payload.batchNumber, "批次记录");
@@ -37,10 +54,14 @@ if (page) {
         setText("[data-payroll-detail-account]", payload.account);
         setText("[data-payroll-detail-voucher]", payload.voucherNumber);
         setText("[data-payroll-detail-recipients]", activeRoster.totalCount ?? payload.recipientCount, "0");
-        setText("[data-payroll-detail-recipient-breakdown]", `员工 ${activeRoster.employeeCount || 0} · 班组 ${activeRoster.crewCount || 0}`, "员工 0 · 班组 0");
+        setText("[data-payroll-detail-recipient-breakdown]", `员工 ${activeRoster.employeeCount || 0} · 临时 ${activeRoster.temporaryCount || 0} · 班组 ${activeRoster.crewCount || 0}`, "员工 0 · 临时 0 · 班组 0");
         setText("[data-payroll-detail-actual]", money.format(Number(payload.actualAmount) || 0), "0.00");
-        setText("[data-payroll-detail-employee]", money.format(Number(payload.employeeAmount) || 0), "0.00");
-        setText("[data-payroll-detail-crew]", money.format(Number(payload.crewAmount) || 0), "0.00");
+        setText("[data-payroll-detail-employee-count]", `${activeRoster.employeeCount || 0} 人`, "0 人");
+        setText("[data-payroll-detail-temporary-count]", `${activeRoster.temporaryCount || 0} 人`, "0 人");
+        setText("[data-payroll-detail-crew-count]", `${activeRoster.crewCount || 0} 人`, "0 人");
+        setText("[data-payroll-detail-employee]", money.format(Number(activeRoster.employeeAmount) || 0), "0.00");
+        setText("[data-payroll-detail-temporary]", money.format(Number(activeRoster.temporaryAmount) || 0), "0.00");
+        setText("[data-payroll-detail-crew]", money.format(Number(activeRoster.crewAmount) || 0), "0.00");
         setText("[data-payroll-detail-difference]", money.format(Number(payload.difference) || 0), "0.00");
         setText("[data-payroll-detail-notes]", payload.notes, "暂无备注");
         const edit = detailsDialog?.querySelector("[data-payroll-detail-edit]");
@@ -57,41 +78,72 @@ if (page) {
         if (!target) return;
         target.replaceChildren();
         if (!items.length) {
-            const empty = document.createElement("p");
+            const row = document.createElement("tr");
+            const empty = document.createElement("td");
             empty.className = "payroll-roster-empty";
+            empty.colSpan = activeRoster.canViewSensitive ? 5 : 2;
             empty.textContent = emptyText;
-            target.appendChild(empty);
+            row.appendChild(empty);
+            target.appendChild(row);
             return;
         }
         items.forEach((item) => {
-            const row = document.createElement("article");
+            const row = document.createElement("tr");
             row.className = "payroll-roster-row";
-            const identity = document.createElement("div");
+            const identity = document.createElement("td");
+            identity.className = "payroll-roster-person";
             const name = document.createElement("strong");
             name.textContent = item.name || "未命名人员";
             identity.appendChild(name);
-            if (item.groupName) {
-                const group = document.createElement("span");
-                group.textContent = item.groupName;
-                identity.appendChild(group);
+            const details = [item.personNumber, item.typeName, item.groupName, item.roleName, item.phone].filter(Boolean);
+            if (details.length) {
+                const metadata = document.createElement("span");
+                metadata.textContent = details.join(" · ");
+                identity.appendChild(metadata);
             }
-            const amount = document.createElement("strong");
+            const sensitiveCell = (value) => {
+                const cell = document.createElement("td");
+                cell.setAttribute("data-payroll-sensitive-column", "");
+                cell.hidden = !activeRoster.canViewSensitive;
+                cell.textContent = value || "未填写";
+                return cell;
+            };
+            const amount = document.createElement("td");
             amount.className = "payroll-roster-amount";
             amount.textContent = money.format(Number(item.amount) || 0);
-            row.append(identity, amount);
+            row.append(
+                identity,
+                sensitiveCell(item.identityNumber),
+                sensitiveCell(item.bankAccountNumber),
+                sensitiveCell(item.bankName),
+                amount
+            );
             target.appendChild(row);
         });
     };
 
-    const renderRoster = () => {
+    const renderRoster = (category) => {
+        const categories = {
+            employees: { title: "员工详细名单", summary: "员工分类汇总", items: activeRoster.employees || [], count: activeRoster.employeeCount || 0, amount: activeRoster.employeeAmount || 0, empty: "本批次没有员工发放记录。" },
+            temporaryWorkers: { title: "临时人员详细名单", summary: "临时人员分类汇总", items: activeRoster.temporaryWorkers || [], count: activeRoster.temporaryCount || 0, amount: activeRoster.temporaryAmount || 0, empty: "本批次没有临时人员发放记录。" },
+            crewWorkers: { title: "班组详细名单", summary: "班组分类汇总", items: activeRoster.crewWorkers || [], count: activeRoster.crewCount || 0, amount: activeRoster.crewAmount || 0, empty: "本批次没有班组人员发放记录。" }
+        };
+        const selected = categories[category] || categories.employees;
         const batch = rosterDialog?.querySelector("[data-payroll-roster-batch]");
-        const employeeCount = rosterDialog?.querySelector("[data-payroll-roster-employee-count]");
-        const crewCount = rosterDialog?.querySelector("[data-payroll-roster-crew-count]");
+        const title = rosterDialog?.querySelector("[data-payroll-roster-title]");
+        const summary = rosterDialog?.querySelector("[data-payroll-roster-summary-label]");
+        const count = rosterDialog?.querySelector("[data-payroll-roster-count]");
+        const amount = rosterDialog?.querySelector("[data-payroll-roster-amount]");
         if (batch) batch.textContent = activeBatchName;
-        if (employeeCount) employeeCount.textContent = `${activeRoster.employeeCount || 0} 人`;
-        if (crewCount) crewCount.textContent = `${activeRoster.crewCount || 0} 人`;
-        renderRosterItems(rosterDialog?.querySelector("[data-payroll-roster-employees]"), activeRoster.employees || [], "本批次没有员工发放记录。");
-        renderRosterItems(rosterDialog?.querySelector("[data-payroll-roster-crews]"), activeRoster.crewWorkers || [], "本批次没有班组人员发放记录。");
+        if (title) title.textContent = selected.title;
+        if (summary) summary.textContent = selected.summary;
+        if (count) count.textContent = `${selected.count} 人`;
+        if (amount) amount.textContent = money.format(Number(selected.amount) || 0);
+        rosterDialog?.querySelector("[data-payroll-roster-table]")?.classList.toggle("is-sensitive-hidden", !activeRoster.canViewSensitive);
+        rosterDialog?.querySelectorAll("[data-payroll-sensitive-column]").forEach((cell) => {
+            cell.hidden = !activeRoster.canViewSensitive;
+        });
+        renderRosterItems(rosterDialog?.querySelector("[data-payroll-roster-items]"), selected.items, selected.empty);
         show(rosterDialog);
     };
 
@@ -153,7 +205,9 @@ if (page) {
             if (trigger.dataset.payrollDialogOpen === "details") openDetails(payloadFrom(trigger));
         });
     });
-    page.querySelector("[data-payroll-roster-open]")?.addEventListener("click", renderRoster);
+    page.querySelectorAll("[data-payroll-roster-open]").forEach((button) => {
+        button.addEventListener("click", () => renderRoster(button.dataset.payrollRosterCategory));
+    });
     page.querySelectorAll("[data-payroll-dialog-close]").forEach((button) => {
         button.addEventListener("click", () => button.closest("dialog")?.close());
     });

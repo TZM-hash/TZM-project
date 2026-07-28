@@ -81,22 +81,51 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Fact]
-    public void EmployeeListUsesProjectStyleWorkspaceWithoutRowQuickEdit()
+    public void EmployeeListUsesPartnerStyleWorkspaceDialogsAndSemanticActions()
     {
         var razor = ReadPage("Employees", "Index.cshtml");
 
-        razor.Should().Contain("人员经营台账")
+        razor.Should().Contain("data-employee-workspace")
+            .And.Contain("employee-workspace-layout")
+            .And.Contain("employee-workspace-summary")
+            .And.Contain("equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar")
+            .And.Contain("employee-workspace-table")
+            .And.Contain("data-employee-dialog-open=\"create\"")
+            .And.Contain("data-employee-dialog-open=\"details\"")
+            .And.Contain("data-employee-dialog-open=\"edit\"")
+            .And.Contain("data-employee-dialog-open=\"copy\"")
+            .And.Contain("action-button--view")
+            .And.Contain("action-button--edit")
+            .And.Contain("action-button--copy")
+            .And.Contain("mac-window-dialog")
+            .And.Contain("employee-workspace.js")
+            .And.Contain("人员经营台账")
             .And.Contain("年度总账")
             .And.Contain("证书总览")
             .And.Contain("当前业务年度应付总额")
-            .And.Contain("data-column-key=\"current_company\"")
+            .And.Contain("data-column-key=\"phone\"")
             .And.Contain("data-column-key=\"payable\"")
             .And.Contain("data-column-key=\"paid\"")
             .And.Contain("data-column-key=\"unpaid\"")
-            .And.Contain(">查看</a>")
-            .And.Contain("详细编辑")
             .And.NotContain("data-inline-cell-edit")
             .And.NotContain("QuickEdit");
+    }
+
+    [Fact]
+    public void EmployeeIndexModelExposesDialogEditorAndSaveHandler()
+    {
+        typeof(IndexModel).GetProperty("Editor").Should().NotBeNull();
+        typeof(IndexModel).GetProperty("ActiveDialog").Should().NotBeNull();
+        typeof(IndexModel).GetMethod("OnPostSaveAsync").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void EmployeeSubpagesUseTheSameCompactWorkspaceVocabulary()
+    {
+        ReadPage("Employees", "Details.cshtml").Should().Contain("employee-detail-workspace").And.Contain("compact-page-heading");
+        ReadPage("Employees", "Ledger.cshtml").Should().Contain("employee-ledger-workspace").And.Contain("employee-list-toolbar");
+        ReadPage("Employees", "Certificates", "Index.cshtml").Should().Contain("employee-certificate-workspace").And.Contain("employee-list-toolbar");
+        ReadPage("Employees", "_EmployeeSubNavigation.cshtml").Should().Contain("employee-sub-navigation");
     }
 
     private static void AssertOptionalGetBinding(string propertyName, Type propertyType)

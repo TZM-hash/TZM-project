@@ -15,7 +15,7 @@
     var otherRows = dividendType.HasValue ? Model.OtherPayables.Where(item => item.EntryType == dividendType.Value).ToArray() : Model.OtherPayables.ToArray();
 }
 
-<section class="page-heading employee-detail-heading">
+<section class="page-heading compact-page-heading employee-detail-heading employee-detail-workspace">
     <div><p class="eyebrow">@Model.Employee.EmployeeNumber</p><h1>@Model.Employee.Name</h1><p class="page-lead">@Model.Employee.EmployeeType.ToChinese() · @(Model.Employee.PositionTitle ?? affiliation?.PositionTitle ?? "未设置岗位") · @(affiliation?.LegalEntityName ?? "未归属公司") · @(affiliation?.DepartmentName ?? "未归属部门")</p></div>
     <div class="page-actions-inline"><span class="status-chip @(Model.Employee.IsActive ? "status-chip--success" : "status-chip--muted")">@(Model.Employee.IsActive ? "启用" : "停用")</span><a class="button button--secondary button--action" asp-page="/Employees/Create" asp-route-id="@Model.Id">详细编辑</a><a class="button button--secondary button--action" asp-page="/Employees/Create" asp-route-copyFrom="@Model.Id">复制员工</a></div>
 </section>

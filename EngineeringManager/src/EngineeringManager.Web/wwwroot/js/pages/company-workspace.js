@@ -39,17 +39,32 @@ if (editDialog?.dataset.dialogOpen === "true") editDialog.showModal();
 
 document.querySelectorAll("[data-company-view-open]").forEach((button) => button.addEventListener("click", () => {
   const item = parse(button);
-  const rows = [["公司编码", item.Code], ["公司名称", item.Name], ["简称", item.ShortName], ["组合分类", item.CompanyCategoryName], ["状态", item.IsActive ? "启用" : "停用"], ["法人/经营者", item.LegalRepresentative], ["统一社会信用代码", item.UnifiedSocialCreditCode], ["注册地址", item.RegisteredAddress], ["经营地址", item.BusinessAddress], ["电话", item.Phone], ["开票抬头", item.InvoiceTitle], ["备注", item.Notes]];
+  const sections = [
+    ["基本资料", [["公司编码", item.Code], ["公司名称", item.Name], ["简称", item.ShortName], ["组合分类", item.CompanyCategoryName], ["状态", item.IsActive ? "启用" : "停用"]]],
+    ["工商与联系资料", [["法人/经营者", item.LegalRepresentative], ["统一社会信用代码", item.UnifiedSocialCreditCode], ["注册地址", item.RegisteredAddress], ["经营地址", item.BusinessAddress], ["电话", item.Phone]]],
+    ["开票与备注", [["开票抬头", item.InvoiceTitle], ["备注", item.Notes]], true]
+  ];
   const content = viewDialog?.querySelector("[data-company-view-content]");
   if (content) {
-    content.replaceChildren(...rows.map(([label, text]) => {
-      const row = document.createElement("div");
-      const term = document.createElement("dt");
-      const description = document.createElement("dd");
-      term.textContent = label;
-      description.textContent = text || "—";
-      row.append(term, description);
-      return row;
+    content.replaceChildren(...sections.map(([title, rows, wide]) => {
+      const section = document.createElement("section");
+      section.className = `entity-detail-section${wide ? " entity-detail-section--wide" : ""}`;
+      const heading = document.createElement("h3");
+      heading.className = "entity-detail-section-heading";
+      heading.textContent = title;
+      const grid = document.createElement("dl");
+      grid.className = "entity-detail-field-grid";
+      grid.append(...rows.map(([label, text]) => {
+        const row = document.createElement("div");
+        const term = document.createElement("dt");
+        const description = document.createElement("dd");
+        term.textContent = label;
+        description.textContent = text || "未填写";
+        row.append(term, description);
+        return row;
+      }));
+      section.append(heading, grid);
+      return section;
     }));
   }
   viewDialog?.showModal();

@@ -214,6 +214,21 @@ public sealed class ResponsiveUiAssetTests
     }
 
     [Fact]
+    public void EmployeeWorkspaceMatchesPartnerDesktopShellAndStacksOnNarrowScreens()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        css.Should().Contain(".employee-workspace-layout { display: grid; grid-template-columns: minmax(210px, 220px) minmax(0, 1fr);")
+            .And.Contain(".employee-workspace-summary { position: sticky; top: 5rem;")
+            .And.Contain(".employee-workspace-table { width: 100%;")
+            .And.Contain(".employee-dialog { width: min(68rem, calc(100vw - 2rem));")
+            .And.Contain(".employee-workspace-layout { grid-template-columns: 1fr; }")
+            .And.Contain(".employee-dialog-form-grid, .employee-view-dialog-body { grid-template-columns: 1fr; }");
+
+        css.Should().NotContain(".employee-workspace-summary { position: sticky; top: 5rem; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: .72rem; min-height: 0; align-self: start;");
+    }
+
+    [Fact]
     public void CompanyDialogsUseTheEquipmentHorizontalLayoutAndStackOnMobile()
     {
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");

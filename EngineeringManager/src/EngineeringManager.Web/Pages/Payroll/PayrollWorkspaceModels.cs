@@ -13,16 +13,31 @@ public sealed record PayrollAccountOption(
     string? OwnerName,
     Guid? OwnerEmployeeId);
 
-public sealed record PayrollRecipientItemViewModel(string Name, string? GroupName, decimal Amount);
+public sealed record PayrollRecipientItemViewModel(
+    string Name,
+    string? GroupName,
+    decimal Amount,
+    string? PersonNumber = null,
+    string? Phone = null,
+    string? RoleName = null,
+    string? TypeName = null,
+    string? IdentityNumber = null,
+    string? BankAccountNumber = null,
+    string? BankName = null);
 
 public sealed record PayrollRecipientBreakdownViewModel(
     IReadOnlyList<PayrollRecipientItemViewModel> Employees,
+    IReadOnlyList<PayrollRecipientItemViewModel> TemporaryWorkers,
     IReadOnlyList<PayrollRecipientItemViewModel> CrewWorkers)
 {
-    public static PayrollRecipientBreakdownViewModel Empty { get; } = new([], []);
+    public static PayrollRecipientBreakdownViewModel Empty { get; } = new([], [], []);
     public int EmployeeCount => Employees.Count;
+    public int TemporaryCount => TemporaryWorkers.Count;
     public int CrewCount => CrewWorkers.Count;
-    public int TotalCount => EmployeeCount + CrewCount;
+    public int TotalCount => EmployeeCount + TemporaryCount + CrewCount;
+    public decimal EmployeeAmount => Employees.Sum(item => item.Amount);
+    public decimal TemporaryAmount => TemporaryWorkers.Sum(item => item.Amount);
+    public decimal CrewAmount => CrewWorkers.Sum(item => item.Amount);
 }
 
 public sealed class PayrollEditorInput

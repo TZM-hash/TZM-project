@@ -1,5 +1,6 @@
 @page
 @model EngineeringManager.Web.Pages.Employees.IndexModel
+@using System.Text.Json
 @using EngineeringManager.Domain.Employees
 @using EngineeringManager.Web.Presentation
 @using EngineeringManager.Web.Workbenches
@@ -14,64 +15,61 @@
                 [new("Formal", "正式员工"), new("Labor", "劳务员工"), new("Temporary", "特殊临时人员")])
         }
     };
+    var scopeName = Model.EmployeeType?.ToChinese() ?? "全部员工";
 }
+@section Scripts { <script type="module" src="~/js/pages/employee-workspace.js" asp-append-version="true"></script> }
 
 <partial name="_EmployeeSubNavigation" />
 
-<section class="page-heading employee-index-heading">
-    <div><p class="eyebrow">人员经营台账</p><h1>员工管理</h1><p class="page-lead">统一查看员工主档、当前归属、应付和付款数据。</p></div>
-    <div class="page-actions-inline">
-        <a class="button button--secondary button--action" asp-page="/Employees/Ledger">年度总账</a>
-        <a class="button button--secondary button--action" asp-page="/Employees/Certificates">证书总览</a>
-        @if (Model.CanManage) { <a class="button button--primary button--action" asp-page="/Employees/Create">新增员工</a> }
-    </div>
-</section>
+<div class="employee-workspace-page" data-employee-workspace>
+    <section class="page-heading compact-page-heading employee-workspace-heading">
+        <div><p class="eyebrow">人员经营台账</p><h1>员工管理</h1><p class="page-lead">集中维护员工主档、当前归属、应付和付款数据</p></div>
+        <div class="page-actions-inline"><a class="button button--secondary button--action" asp-page="/Employees/Ledger">年度总账</a><a class="button button--secondary button--action" asp-page="/Employees/Certificates">证书总览</a>@if (Model.CanManage) { <button class="button button--primary button--action" type="button" data-employee-dialog-open="create">新增员工</button> }</div>
+    </section>
 
-<section class="overview-strip employee-overview-strip" aria-label="员工经营汇总">
-    <article class="is-accent"><span>员工总数</span><strong>@Model.TotalCount</strong></article>
-    <article><span>正式员工</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Formal)</strong></article>
-    <article><span>劳务员工</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Labor)</strong></article>
-    <article><span>特殊临时人员</span><strong>@Model.Employees.Count(item => item.EmployeeType == EmployeeType.Temporary)</strong></article>
-    <article class="is-success"><span>在职人数</span><strong>@Model.Employees.Count(item => item.IsActive)</strong></article>
-    <article><span>当前业务年度应付总额</span><strong>@Model.CurrentYearPayableTotal.ToString("N2")</strong></article>
-    <article><span>当前业务年度已付款</span><strong>@Model.CurrentYearPaidTotal.ToString("N2")</strong></article>
-    <article class="is-warning"><span>当前业务年度未付款</span><strong>@Model.CurrentYearUnpaidTotal.ToString("N2")</strong></article>
-</section>
+    <section class="employee-workspace-layout">
+        <aside class="employee-workspace-summary">
+            <div class="equipment-summary-heading"><span>员工概览</span><strong>@scopeName</strong></div>
+            <div class="overview-strip employee-summary-metrics"><article><span>员工总数</span><strong>@Model.TotalCount</strong></article><article><span>在职人数</span><strong>@Model.ActiveCount</strong></article><article><span>当前业务年度应付总额</span><strong>@Model.CurrentYearPayableTotal.ToString("N2")</strong></article><article><span>当前业务年度未付款</span><strong>@Model.CurrentYearUnpaidTotal.ToString("N2")</strong></article></div>
+            <section class="employee-type-summary" aria-label="员工类型筛选">
+                <div class="equipment-company-summary-heading"><div><span>人员分类</span><strong>按类型筛选</strong></div><small>3 类</small></div>
+                <div class="employee-type-summary-list">
+                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Formal ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Formal" asp-route-pageSize="@Model.PageSize"><span>正式员工</span><strong>@Model.FormalCount</strong></a>
+                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Labor ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Labor" asp-route-pageSize="@Model.PageSize"><span>劳务员工</span><strong>@Model.LaborCount</strong></a>
+                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Temporary ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Temporary" asp-route-pageSize="@Model.PageSize"><span>特殊临时人员</span><strong>@Model.TemporaryCount</strong></a>
+                </div>
+                @if (Model.EmployeeType.HasValue) { <a class="button button--secondary employee-type-clear" asp-page="Index" asp-route-search="@Model.Search" asp-route-pageSize="@Model.PageSize">显示全部类型</a> }
+            </section>
+        </aside>
 
-<section class="panel employee-list-workspace">
-    <div class="panel-heading"><div><p class="eyebrow">员工清单</p><h2>基础资料与年度财务摘要</h2><small>操作统一进入员工档案，工资、报销、利息分红和付款记录在详情页集中处理。</small></div></div>
-    <partial name="_DataWorkbench" model="workbench" />
-    <div class="table-wrap"><table class="data-table" id="employees-table"><thead><tr>
-        <th data-column-key="employee_number">员工编号</th><th data-column-key="name">姓名</th><th data-column-key="employee_type">员工类型</th><th data-column-key="position">岗位</th><th data-column-key="phone">电话</th><th data-column-key="current_company">当前公司</th><th data-column-key="current_department">当前部门</th><th data-column-key="payable">应付合计</th><th data-column-key="paid">已付款</th><th data-column-key="unpaid">未付款</th><th data-column-key="notes">备注</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th>
-    </tr></thead><tbody>
-    @foreach (var item in Model.Employees)
+        <section class="employee-workspace-list">
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar"><div><p class="eyebrow">员工主档</p><h2>@scopeName</h2></div><partial name="_DataWorkbench" model="workbench" /></div>
+            <div class="table-wrap employee-table-wrap"><table class="data-table employee-workspace-table" id="employees-table"><thead><tr><th data-column-key="employee_number">员工</th><th data-column-key="employee_type">类型 / 岗位</th><th data-column-key="phone">联系与归属</th><th data-column-key="payable">应付</th><th data-column-key="paid">已付</th><th data-column-key="unpaid">未付</th><th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead><tbody>
+            @if (Model.Employees.Count == 0) { <tr><td colspan="8" class="empty-state">当前筛选范围暂无员工。</td></tr> }
+            @foreach (var item in Model.Employees)
+            {
+                var affiliation = item.Affiliations.FirstOrDefault(value => value.IsPrimary);
+                var summary = Model.AnnualSummaries.GetValueOrDefault(item.Id);
+                var payable = summary?.CurrentYearNewPayable ?? 0m;
+                var paid = summary?.ReceivedAmount ?? 0m;
+                var payload = JsonSerializer.Serialize(new
+                {
+                    id = item.Id, item.EmployeeNumber, item.Name, employeeType = item.EmployeeType.ToString(), employeeTypeLabel = item.EmployeeType.ToChinese(),
+                    item.Phone, item.PositionTitle, item.IdentityNumber, item.BankAccountNumber, item.BankName, item.HireDate, item.LeaveDate,
+                    item.DefaultLegalEntityId, item.DefaultMonthlySalary, item.DefaultDailyRate, item.DefaultHourlyRate, item.DefaultPieceworkRate,
+                    item.IsActive, item.ConcurrencyStamp, item.Notes, company = affiliation?.LegalEntityName, department = affiliation?.DepartmentName,
+                    statusLabel = item.IsActive ? "启用" : "停用", detailsUrl = Url.Page("/Employees/Details", new { id = item.Id, businessYearId = Model.CurrentBusinessYearId })
+                });
+                <tr><td data-column-key="employee_number"><strong>@item.Name</strong><span class="table-secondary">@item.EmployeeNumber</span><span class="table-secondary employee-notes-summary" data-column-key="notes">@(item.Notes ?? "暂无备注")</span></td><td data-column-key="employee_type"><strong>@item.EmployeeType.ToChinese()</strong><span class="table-secondary">@(item.PositionTitle ?? affiliation?.PositionTitle ?? "未填写岗位")</span></td><td data-column-key="phone"><strong>@(item.Phone ?? "未填写电话")</strong><span class="table-secondary">@(affiliation?.LegalEntityName ?? "未归属公司") · @(affiliation?.DepartmentName ?? "未归属部门")</span></td><td data-column-key="payable" class="numeric-cell">@payable.ToString("N2")</td><td data-column-key="paid" class="numeric-cell">@paid.ToString("N2")</td><td data-column-key="unpaid" class="numeric-cell">@((payable - paid).ToString("N2"))</td><td data-column-key="status"><span class="partner-status partner-status--@(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "启用" : "停用")</span></td><td data-column-key="actions"><div class="employee-row-actions"><button class="action-button action-button--view" type="button" data-employee-dialog-open="details" data-employee-payload="@payload">查看</button>@if (Model.CanManage) { <button class="action-button action-button--edit" type="button" data-employee-dialog-open="edit" data-employee-payload="@payload">编辑</button><button class="action-button action-button--copy" type="button" data-employee-dialog-open="copy" data-employee-payload="@payload">复制</button> }</div></td></tr>
+            }
+            </tbody></table></div>
+            <nav class="pagination" aria-label="员工分页"><span>共 @Model.TotalCount 条，第 @Model.PageNumber/@Model.TotalPages 页</span><div class="pagination__actions">@if (Model.PageNumber > 1) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber - 1)">上一页</a> }@if (Model.PageNumber < Model.TotalPages) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber + 1)">下一页</a> }</div></nav>
+        </section>
+    </section>
+
+    @if (Model.CanManage) { <partial name="_EmployeeEditor" model="Model" /> }
+    else
     {
-        var affiliation = item.Affiliations.FirstOrDefault(affiliation => affiliation.IsPrimary);
-        var summary = Model.AnnualSummaries.GetValueOrDefault(item.Id);
-        var payable = summary?.CurrentYearNewPayable ?? 0m;
-        var paid = summary?.ReceivedAmount ?? 0m;
-        <tr>
-            <td data-column-key="employee_number">@item.EmployeeNumber</td>
-            <td data-column-key="name"><a asp-page="/Employees/Details" asp-route-id="@item.Id" asp-route-businessYearId="@Model.CurrentBusinessYearId">@item.Name</a></td>
-            <td data-column-key="employee_type">@item.EmployeeType.ToChinese()</td>
-            <td data-column-key="position">@(item.PositionTitle ?? affiliation?.PositionTitle ?? "未填写")</td>
-            <td data-column-key="phone">@(item.Phone ?? "未填写")</td>
-            <td data-column-key="current_company">@(affiliation?.LegalEntityName ?? "未归属")</td>
-            <td data-column-key="current_department">@(affiliation?.DepartmentName ?? "未归属")</td>
-            <td data-column-key="payable" class="numeric-cell">@payable.ToString("N2")</td>
-            <td data-column-key="paid" class="numeric-cell">@paid.ToString("N2")</td>
-            <td data-column-key="unpaid" class="numeric-cell">@((payable - paid).ToString("N2"))</td>
-            <td data-column-key="notes">@(item.Notes ?? "")</td>
-            <td data-column-key="status"><span class="status-chip @(item.IsActive ? "status-chip--success" : "status-chip--muted")">@(item.IsActive ? "启用" : "停用")</span></td>
-            <td data-column-key="actions"><div class="table-action-buttons table-action-buttons--compact"><a class="button button--secondary button--small button--action" asp-page="/Employees/Details" asp-route-id="@item.Id" asp-route-businessYearId="@Model.CurrentBusinessYearId">查看</a><a class="button button--primary button--small button--action" asp-page="/Employees/Create" asp-route-id="@item.Id">详细编辑</a></div></td>
-        </tr>
+        <dialog class="workbench-dialog employee-dialog employee-details-dialog mac-window-dialog" data-employee-details-dialog><div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-employee-detail="name">员工详情</strong><span data-employee-detail="employeeNumber">员工主档</span></div><button type="button" class="dialog-close" data-employee-dialog-close>×</button></div><div class="employee-view-dialog-body entity-details-body"><div class="entity-detail-sections"><section class="entity-detail-section"><h3 class="entity-detail-section-heading">基本资料</h3><dl class="entity-detail-field-grid"><div><dt>员工类型</dt><dd data-employee-detail="employeeTypeLabel"></dd></div><div><dt>岗位</dt><dd data-employee-detail="positionTitle"></dd></div><div><dt>电话</dt><dd data-employee-detail="phone"></dd></div><div><dt>档案状态</dt><dd data-employee-detail="statusLabel"></dd></div></dl></section><section class="entity-detail-section"><h3 class="entity-detail-section-heading">任职信息</h3><dl class="entity-detail-field-grid"><div><dt>当前公司</dt><dd data-employee-detail="company"></dd></div><div><dt>当前部门</dt><dd data-employee-detail="department"></dd></div></dl></section><section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">备注</h3><dl class="entity-detail-field-grid"><div class="entity-detail-field--wide"><dt>主档备注</dt><dd data-employee-detail="notes"></dd></div></dl></section></div></div><div class="quick-edit-actions"><button type="button" class="button button--secondary" data-employee-dialog-close>关闭</button><span class="equipment-dialog-action-spacer"></span><a class="button button--primary" data-employee-detail-link>进入完整档案</a></div></dialog>
     }
-    </tbody></table></div>
-    <nav class="pagination" aria-label="员工分页">
-        <span>共 @Model.TotalCount 条，第 @Model.PageNumber/@Model.TotalPages 页</span>
-        <div class="pagination__actions">
-            @if (Model.PageNumber > 1) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber - 1)">上一页</a> }
-            @if (Model.PageNumber < Model.TotalPages) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber + 1)">下一页</a> }
-        </div>
-    </nav>
-</section>
+</div>

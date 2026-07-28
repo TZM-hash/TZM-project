@@ -206,10 +206,8 @@
 
     <dialog class="workbench-dialog company-create-dialog equipment-dialog equipment-details-dialog mac-window-dialog" data-equipment-details-dialog>
         <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-equipment-detail-name>设备详情</strong><span data-equipment-detail-number>设备档案</span></div><button type="button" class="dialog-close" aria-label="关闭设备详情窗口" data-equipment-dialog-close>×</button></div>
-        <div class="company-create-dialog-body equipment-dialog-body">
-            <dl class="equipment-detail-grid">
-                <div><dt>型号 / 分类</dt><dd data-equipment-detail-model></dd></div><div><dt>管理公司</dt><dd data-equipment-detail-company></dd></div><div><dt>设备归属</dt><dd data-equipment-detail-ownership></dd></div><div><dt>状态</dt><dd data-equipment-detail-status></dd></div><div><dt>购买信息</dt><dd data-equipment-detail-purchase></dd></div><div><dt>内部日参考价</dt><dd data-equipment-detail-rate></dd></div><div><dt>合格证</dt><dd data-equipment-detail-certificate></dd></div><div><dt>备注</dt><dd data-equipment-detail-notes></dd></div>
-            </dl>
+        <div class="company-create-dialog-body equipment-dialog-body entity-details-body">
+            <div class="entity-detail-sections"><section class="entity-detail-section"><h3 class="entity-detail-section-heading">设备资料</h3><dl class="equipment-detail-grid entity-detail-field-grid"><div><dt>型号 / 分类</dt><dd data-equipment-detail-model></dd></div><div><dt>状态</dt><dd data-equipment-detail-status></dd></div><div><dt>管理公司</dt><dd data-equipment-detail-company></dd></div><div><dt>设备归属</dt><dd data-equipment-detail-ownership></dd></div></dl></section><section class="entity-detail-section"><h3 class="entity-detail-section-heading">购置与计价</h3><dl class="equipment-detail-grid entity-detail-field-grid"><div><dt>购买信息</dt><dd data-equipment-detail-purchase></dd></div><div><dt>内部日参考价</dt><dd data-equipment-detail-rate></dd></div><div><dt>合格证</dt><dd data-equipment-detail-certificate></dd></div><div><dt>备注</dt><dd data-equipment-detail-notes></dd></div></dl></section></div>
             <a class="button button--secondary" data-equipment-detail-attachment data-attachment-preview-trigger hidden>预览合格证</a>
         </div>
         <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-equipment-dialog-close>关闭</button></div>

@@ -66,7 +66,10 @@ public sealed class InlineEditingPageTests
         var subNavigation = ReadPage("Employees", "_EmployeeSubNavigation.cshtml");
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
 
-        employee.Should().Contain("table-action-buttons--compact");
+        employee.Should().Contain("employee-row-actions")
+            .And.Contain("action-button--view")
+            .And.Contain("action-button--edit")
+            .And.Contain("action-button--copy");
         partner.Should().Contain("partner-row-actions")
             .And.Contain("action-button--view")
             .And.Contain("action-button--edit")

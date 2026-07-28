@@ -1,0 +1,29 @@
+@model EngineeringManager.Web.Pages.Employees.IndexModel
+@using EngineeringManager.Domain.Employees
+
+<dialog class="workbench-dialog employee-dialog employee-editor-dialog mac-window-dialog" data-employee-editor-dialog data-dialog-open="@(Model.ActiveDialog == "editor" ? "true" : "false")">
+    <form method="post" asp-page-handler="Save" data-employee-editor-form>
+        <input type="hidden" name="Search" value="@Model.Search" />
+        <input type="hidden" name="EmployeeType" value="@Model.EmployeeType" />
+        <input type="hidden" name="PageNumber" value="@Model.PageNumber" />
+        <input type="hidden" name="PageSize" value="@Model.PageSize" />
+        <input type="hidden" asp-for="Editor.Id" />
+        <input type="hidden" asp-for="Editor.ConcurrencyStamp" />
+        <input type="hidden" asp-for="Editor.DefaultLegalEntityId" />
+        <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-employee-editor-title>新增员工</strong><span>员工主档</span></div><button type="button" class="dialog-close" aria-label="关闭员工编辑窗口" data-employee-dialog-close>×</button></div>
+        <div class="employee-dialog-form-grid">
+            <section><h3>基础资料</h3><label>员工编号<input asp-for="Editor.EmployeeNumber" required /></label><label>姓名<input asp-for="Editor.Name" required /></label><label>员工类型<select asp-for="Editor.EmployeeType"><option value="Formal">正式员工</option><option value="Labor">劳务员工</option><option value="Temporary">特殊临时人员</option></select></label><label>岗位<input asp-for="Editor.PositionTitle" /></label><label>电话<input asp-for="Editor.Phone" /></label></section>
+            <section><h3>任职信息</h3><label>入职日期<input asp-for="Editor.HireDate" type="date" /></label><label>离职日期<input asp-for="Editor.LeaveDate" type="date" /></label><label>状态<select asp-for="Editor.IsActive"><option value="true">启用</option><option value="false">停用</option></select></label><label class="employee-dialog-wide">主档备注<textarea asp-for="Editor.Notes" rows="4"></textarea></label></section>
+            <section><h3>敏感资料</h3><label>身份证号<input asp-for="Editor.IdentityNumber" /></label><label>银行卡号<input asp-for="Editor.BankAccountNumber" /></label><label>开户行<input asp-for="Editor.BankName" /></label><p class="employee-dialog-note">敏感资料继续按员工管理权限由服务端控制。</p></section>
+            <section><h3>默认工资</h3><label>默认月薪<input asp-for="Editor.DefaultMonthlySalary" type="number" step="0.01" /></label><label>默认日薪<input asp-for="Editor.DefaultDailyRate" type="number" step="0.01" /></label><label>默认时薪<input asp-for="Editor.DefaultHourlyRate" type="number" step="0.01" /></label><label>默认计件单价<input asp-for="Editor.DefaultPieceworkRate" type="number" step="0.0001" /></label><label data-employee-reason hidden>修改原因<input asp-for="Editor.Reason" required /></label></section>
+        </div>
+        <div asp-validation-summary="All" class="validation-summary employee-dialog-validation"></div>
+        <div class="quick-edit-actions"><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-employee-dialog-close>取消</button><button type="submit" class="button button--primary">保存员工</button></div>
+    </form>
+</dialog>
+
+<dialog class="workbench-dialog employee-dialog employee-details-dialog mac-window-dialog" data-employee-details-dialog>
+    <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-employee-detail="name">员工详情</strong><span data-employee-detail="employeeNumber">员工主档</span></div><button type="button" class="dialog-close" aria-label="关闭员工详情窗口" data-employee-dialog-close>×</button></div>
+    <div class="employee-view-dialog-body entity-details-body"><div class="entity-detail-sections"><section class="entity-detail-section"><h3 class="entity-detail-section-heading">基本资料</h3><dl class="entity-detail-field-grid"><div><dt>员工类型</dt><dd data-employee-detail="employeeTypeLabel"></dd></div><div><dt>岗位</dt><dd data-employee-detail="positionTitle"></dd></div><div><dt>电话</dt><dd data-employee-detail="phone"></dd></div><div><dt>档案状态</dt><dd data-employee-detail="statusLabel"></dd></div></dl></section><section class="entity-detail-section"><h3 class="entity-detail-section-heading">任职信息</h3><dl class="entity-detail-field-grid"><div><dt>当前公司</dt><dd data-employee-detail="company"></dd></div><div><dt>当前部门</dt><dd data-employee-detail="department"></dd></div><div><dt>入职日期</dt><dd data-employee-detail="hireDate"></dd></div><div><dt>离职日期</dt><dd data-employee-detail="leaveDate"></dd></div></dl></section><section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">备注</h3><dl class="entity-detail-field-grid"><div class="entity-detail-field--wide"><dt>主档备注</dt><dd data-employee-detail="notes"></dd></div></dl></section></div></div>
+    <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-employee-dialog-close>关闭</button><span class="equipment-dialog-action-spacer"></span><a class="button button--primary" data-employee-detail-link>进入完整档案</a></div>
+</dialog>
