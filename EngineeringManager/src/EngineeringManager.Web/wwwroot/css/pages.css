@@ -1591,6 +1591,21 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-ledger-workspace > .table-wrap, .employee-certificate-workspace > .table-wrap { margin: 0; border: 0; border-radius: 0; }
 .employee-certificate-workspace > .panel-copy { margin: 1rem; }
 .employee-ledger-workspace .employee-list-toolbar, .employee-certificate-workspace .employee-list-toolbar { border-top: 0; }
+.employee-ledger-table { min-width: 64rem; }
+.employee-ledger-table th[data-column-key="employee"] { width: 12rem; }
+.employee-ledger-table th[data-column-key="carry_forward"], .employee-ledger-table th[data-column-key="new_payable"], .employee-ledger-table th[data-column-key="received"], .employee-ledger-table th[data-column-key="balance"] { width: 8.25rem; }
+.employee-ledger-table th[data-column-key="progress"] { width: 7rem; }
+.employee-ledger-table th[data-column-key="actions"] { width: 7rem; }
+.employee-certificate-table { min-width: 86rem; }
+.employee-certificate-table th[data-column-key="employee"] { width: 9rem; }
+.employee-certificate-table th[data-column-key="certificate_type"] { width: 9rem; }
+.employee-certificate-table th[data-column-key="certificate_number"] { width: 10rem; }
+.employee-certificate-table th[data-column-key="scope"], .employee-certificate-table th[data-column-key="authority"] { width: 11rem; }
+.employee-certificate-table th[data-column-key="issued_on"], .employee-certificate-table th[data-column-key="expires_on"] { width: 7.5rem; }
+.employee-certificate-table th[data-column-key="status"] { width: 7rem; }
+.employee-certificate-table th[data-column-key="attachment"] { width: 9rem; }
+.employee-certificate-table th[data-column-key="actions"] { width: 8rem; }
+.employee-certificate-table .employee-row-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* Shared read-only details dialogs */
 .entity-details-body, .employee-view-dialog-body.entity-details-body, .company-view-dialog-body.entity-details-body { display: block; min-height: 0; padding: 1rem; background: #f4f7fb; overflow-y: auto; }

@@ -121,6 +121,30 @@ public sealed class EmployeeAnnualLedgerPageTests
     }
 
     [Fact]
+    public void EmployeeLedgerAndCertificatesReuseTheEmployeeManagementWorkspaceWithoutDuplicateHeaderLinks()
+    {
+        var employeeIndex = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Index.cshtml");
+        var ledger = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Ledger.cshtml");
+        var certificates = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Certificates", "Index.cshtml");
+        var certificateModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Certificates", "Index.cshtml.cs");
+
+        employeeIndex.Should().NotContain("asp-page=\"/Employees/Ledger\"")
+            .And.NotContain("asp-page=\"/Employees/Certificates\"");
+        ledger.Should().Contain("employee-workspace-page")
+            .And.Contain("employee-workspace-layout")
+            .And.Contain("employee-workspace-summary")
+            .And.Contain("employee-workspace-list")
+            .And.Contain("employee-workspace-table");
+        certificates.Should().Contain("employee-workspace-page")
+            .And.Contain("employee-workspace-layout")
+            .And.Contain("employee-workspace-summary")
+            .And.Contain("employee-workspace-list")
+            .And.Contain("employee-type-summary-row")
+            .And.Contain("asp-route-state");
+        certificateModel.Should().Contain("StateSummaryCertificates");
+    }
+
+    [Fact]
     public void EmployeeLedgerRedirectsButPayrollIsRestoredAsUnifiedDisbursementLedger()
     {
         var payroll = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml.cs");

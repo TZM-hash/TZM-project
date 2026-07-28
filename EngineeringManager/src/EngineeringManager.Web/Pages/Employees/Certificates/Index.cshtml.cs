@@ -12,6 +12,7 @@ namespace EngineeringManager.Web.Pages.Employees.Certificates;
 public sealed class IndexModel(IEmployeeCertificateService certificateService, IEmployeeService employeeService) : PageModel
 {
     public IReadOnlyList<EmployeeCertificateDto> Certificates { get; private set; } = [];
+    public IReadOnlyList<EmployeeCertificateDto> StateSummaryCertificates { get; private set; } = [];
     public IReadOnlyList<EmployeeDto> Employees { get; private set; } = [];
     public IReadOnlyList<string> CertificateTypes { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
@@ -23,6 +24,7 @@ public sealed class IndexModel(IEmployeeCertificateService certificateService, I
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         Employees = await employeeService.ListAsync(null, cancellationToken);
+        StateSummaryCertificates = await certificateService.ListAsync(new CertificateFilter(Search, EmployeeId, CertificateType), Today(), cancellationToken);
         Certificates = await certificateService.ListAsync(new CertificateFilter(Search, EmployeeId, CertificateType, State), Today(), cancellationToken);
         CertificateTypes = (await certificateService.ListAsync(new CertificateFilter(), Today(), cancellationToken)).Select(item => item.CertificateType).Distinct().Order().ToArray();
     }

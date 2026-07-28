@@ -24,7 +24,7 @@
 <div class="employee-workspace-page" data-employee-workspace>
     <section class="page-heading compact-page-heading employee-workspace-heading">
         <div><p class="eyebrow">人员经营台账</p><h1>员工管理</h1><p class="page-lead">集中维护员工主档、当前归属、应付和付款数据</p></div>
-        <div class="page-actions-inline"><a class="button button--secondary button--action" asp-page="/Employees/Ledger">年度总账</a><a class="button button--secondary button--action" asp-page="/Employees/Certificates">证书总览</a>@if (Model.CanManage) { <button class="button button--primary button--action" type="button" data-employee-dialog-open="create">新增员工</button> }</div>
+        <div class="page-actions-inline">@if (Model.CanManage) { <button class="button button--primary button--action" type="button" data-employee-dialog-open="create">新增员工</button> }</div>
     </section>
 
     <section class="employee-workspace-layout">

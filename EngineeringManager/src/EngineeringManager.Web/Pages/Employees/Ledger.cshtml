@@ -1,19 +1,51 @@
 @page
 @model EngineeringManager.Web.Pages.Employees.LedgerModel
-@{ ViewData["Title"] = "员工年度总账"; }
+@{
+    ViewData["Title"] = "员工年度总账";
+    var selectedYearName = Model.SelectedYear?.Name ?? "未选择业务年度";
+    var carryForward = Model.Rows.Sum(item => item.Ledger.Summary.PriorYearCarryForward);
+    var currentYearPayable = Model.Rows.Sum(item => item.Ledger.Summary.CurrentYearNewPayable);
+    var currentBalance = Model.Rows.Sum(item => item.Ledger.Summary.CurrentBalance);
+    var positiveBalanceCount = Model.Rows.Count(item => item.Ledger.Summary.CurrentBalance > 0m);
+    var overpaidCount = Model.Rows.Count(item => item.Ledger.Summary.IsOverpaid);
+    var settledCount = Model.Rows.Count(item => item.Ledger.Summary.CurrentBalance == 0m);
+}
 
 <partial name="_EmployeeSubNavigation" />
-<section class="page-heading compact-page-heading"><div><p class="eyebrow">员工管理</p><h1>年度总账总览</h1><p class="page-lead">正余额表示公司欠员工，负余额表示员工多领或待抵扣；领款按最早欠款优先抵扣。</p></div></section>
-<form method="get" class="panel form-grid">
-    <label>业务年度<select asp-for="BusinessYearId" onchange="this.form.submit()">@foreach (var year in Model.BusinessYears) { <option value="@year.Id">@year.Name（@year.StartDate 至 @year.EndDate）</option> }</select></label>
-</form>
-<section class="overview-strip" aria-label="年度总账汇总"><article><span>员工数</span><strong>@Model.Rows.Count</strong></article><article><span>往年结转</span><strong>@Model.Rows.Sum(item => item.Ledger.Summary.PriorYearCarryForward).ToString("N2")</strong></article><article><span>本年新增应付</span><strong>@Model.Rows.Sum(item => item.Ledger.Summary.CurrentYearNewPayable).ToString("N2")</strong></article><article><span>当前余额</span><strong>@Model.Rows.Sum(item => item.Ledger.Summary.CurrentBalance).ToString("N2")</strong></article></section>
-<section class="panel employee-ledger-workspace">
-    <div class="equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar"><div><p class="eyebrow">年度账本</p><h2>员工结算明细</h2></div><partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.EmployeeAnnualLedger" /></div>
-    <div class="table-wrap"><table class="data-table" id="employee-annual-ledger-table"><thead><tr><th data-column-key="employee">员工</th><th data-column-key="carry_forward">往年结转</th><th data-column-key="new_payable">本年新增应付</th><th data-column-key="received">已领总额</th><th data-column-key="balance">当前余额</th><th data-column-key="progress">结算进度</th><th data-column-key="actions">操作</th></tr></thead><tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr><td data-column-key="employee">@row.Employee.EmployeeNumber · @row.Employee.Name</td><td data-column-key="carry_forward">@row.Ledger.Summary.PriorYearCarryForward.ToString("N2")</td><td data-column-key="new_payable">@row.Ledger.Summary.CurrentYearNewPayable.ToString("N2")</td><td data-column-key="received">@row.Ledger.Summary.ReceivedAmount.ToString("N2")</td><td data-column-key="balance">@row.Ledger.Summary.CurrentBalance.ToString("N2")</td><td data-column-key="progress">@row.Ledger.Summary.SettlementProgressPercent.ToString("N2")%</td><td data-column-key="actions"><a asp-page="/Employees/Details" asp-route-id="@row.Employee.Id" asp-route-businessYearId="@Model.BusinessYearId">查看详情</a></td></tr>
-    }
-    </tbody></table></div>
-</section>
+
+<div class="employee-workspace-page">
+    <section class="page-heading compact-page-heading employee-workspace-heading">
+        <div><p class="eyebrow">人员经营台账</p><h1>年度总账总览</h1><p class="page-lead">正余额表示公司欠员工，负余额表示员工多领或待抵扣；领款按最早欠款优先抵扣。</p></div>
+        <form method="get" class="employee-year-picker"><label>业务年度<select asp-for="BusinessYearId" onchange="this.form.submit()">@foreach (var year in Model.BusinessYears) { <option value="@year.Id">@year.Name（@year.StartDate 至 @year.EndDate）</option> }</select></label></form>
+    </section>
+
+    <section class="employee-workspace-layout">
+        <aside class="employee-workspace-summary">
+            <div class="equipment-summary-heading"><span>年度总账</span><strong>@selectedYearName</strong></div>
+            <div class="overview-strip employee-summary-metrics" aria-label="年度总账汇总">
+                <article class="employee-summary-metric--total"><span>员工数</span><strong>@Model.Rows.Count</strong></article>
+                <article class="employee-summary-metric--active"><span>正余额人数</span><strong>@positiveBalanceCount</strong></article>
+                <article class="employee-summary-metric--payable"><span>本年新增应付</span><strong>@currentYearPayable.ToString("N2")</strong></article>
+                <article class="employee-summary-metric--unpaid"><span>当前余额</span><strong>@currentBalance.ToString("N2")</strong></article>
+            </div>
+            <section class="employee-type-summary" aria-label="年度结算提示">
+                <div class="equipment-company-summary-heading"><div><span>结算提示</span><strong>当前年度</strong></div><small>@Model.Rows.Count 条</small></div>
+                <div class="employee-type-summary-list">
+                    <div class="employee-type-summary-row"><span>往年结转</span><strong>@carryForward.ToString("N2")</strong></div>
+                    <div class="employee-type-summary-row"><span>存在超付或负余额</span><strong>@overpaidCount</strong></div>
+                    <div class="employee-type-summary-row"><span>已结清</span><strong>@settledCount</strong></div>
+                </div>
+            </section>
+        </aside>
+
+        <section class="employee-workspace-list">
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar"><div><p class="eyebrow">年度账本</p><h2>员工结算明细</h2></div><partial name="_DataWorkbench" model="EngineeringManager.Web.Workbenches.DataWorkbenchPresets.EmployeeAnnualLedger" /></div>
+            <div class="table-wrap employee-table-wrap"><table class="data-table employee-workspace-table employee-ledger-table" id="employee-annual-ledger-table"><thead><tr><th data-column-key="employee">员工</th><th data-column-key="carry_forward">往年结转</th><th data-column-key="new_payable">本年新增应付</th><th data-column-key="received">已领总额</th><th data-column-key="balance">当前余额</th><th data-column-key="progress">结算进度</th><th data-column-key="actions">操作</th></tr></thead><tbody>
+            @foreach (var row in Model.Rows)
+            {
+                <tr><td data-column-key="employee"><strong>@row.Employee.Name</strong><span class="table-secondary">@row.Employee.EmployeeNumber</span></td><td data-column-key="carry_forward" class="numeric-cell">@row.Ledger.Summary.PriorYearCarryForward.ToString("N2")</td><td data-column-key="new_payable" class="numeric-cell">@row.Ledger.Summary.CurrentYearNewPayable.ToString("N2")</td><td data-column-key="received" class="numeric-cell">@row.Ledger.Summary.ReceivedAmount.ToString("N2")</td><td data-column-key="balance" class="numeric-cell">@row.Ledger.Summary.CurrentBalance.ToString("N2")</td><td data-column-key="progress" class="numeric-cell">@row.Ledger.Summary.SettlementProgressPercent.ToString("N2")%</td><td data-column-key="actions"><div class="employee-row-actions"><a class="action-button action-button--view" asp-page="/Employees/Details" asp-route-id="@row.Employee.Id" asp-route-businessYearId="@Model.BusinessYearId">查看详情</a></div></td></tr>
+            }
+            </tbody></table></div>
+        </section>
+    </section>
+</div>
