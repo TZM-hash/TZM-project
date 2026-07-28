@@ -15,7 +15,7 @@ public sealed class EmployeeAnnualLedgerPageTests
         page.Should().Contain("利息分红");
         page.Should().Contain("付款记录");
         page.Should().Contain("证书管理");
-        page.Should().Contain("历史记录");
+        page.Should().Contain("提示与记录");
         page.Should().Contain("employee-activity-rail");
         page.Should().Contain("证书摘要");
         page.Should().Contain("全部").And.Contain("考勤工资").And.Contain("加班工资").And.Contain("奖金").And.Contain("罚款").And.Contain("其他");
@@ -66,7 +66,8 @@ public sealed class EmployeeAnnualLedgerPageTests
         page.Should().NotContain("project-detail-back-row")
             .And.Contain("employee-detail-layout")
             .And.Contain("employee-profile-panel")
-            .And.Contain("project-activity-panel");
+            .And.Contain("project-activity-panel")
+            .And.NotContain("visually-hidden\">历史记录");
         page.IndexOf("employee-profile-panel", StringComparison.Ordinal)
             .Should().BeLessThan(page.IndexOf("employee-main-tabs", StringComparison.Ordinal));
 
@@ -92,6 +93,20 @@ public sealed class EmployeeAnnualLedgerPageTests
         styles.Should().Contain(".employee-summary-metric--total")
             .And.Contain(".employee-dialog-metric--wage")
             .And.Contain(".employee-detail-metric-grid .employee-metric--balance");
+    }
+
+    [Fact]
+    public void EmployeeListLedgerColumnsUseTheSameSemanticAmountColorsAsDetails()
+    {
+        var index = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Index.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        index.Should().Contain("data-column-key=\"payable\"")
+            .And.Contain("data-column-key=\"paid\"")
+            .And.Contain("data-column-key=\"unpaid\"");
+        styles.Should().Contain(".employee-workspace-table td[data-column-key=\"payable\"]")
+            .And.Contain(".employee-workspace-table td[data-column-key=\"paid\"]")
+            .And.Contain(".employee-workspace-table td[data-column-key=\"unpaid\"]");
     }
 
     [Fact]

@@ -1734,6 +1734,13 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-summary-metric--payable strong { color: #6d28d9; }
 .employee-summary-metric--unpaid strong { color: #b45309; }
 .employee-dialog-metric--progress { border-top-color: #64748b !important; background: #f8fafc !important; }
+.employee-workspace-table th[data-column-key="payable"], .employee-workspace-table td[data-column-key="payable"] { background: #f5f3ff; }
+.employee-workspace-table th[data-column-key="paid"], .employee-workspace-table td[data-column-key="paid"] { background: #ecfdf5; }
+.employee-workspace-table th[data-column-key="unpaid"], .employee-workspace-table td[data-column-key="unpaid"] { background: #fffbeb; }
+.employee-workspace-table td[data-column-key="payable"], .employee-workspace-table td[data-column-key="paid"], .employee-workspace-table td[data-column-key="unpaid"] { font-weight: 750; font-variant-numeric: tabular-nums; }
+.employee-workspace-table td[data-column-key="payable"] { color: #6d28d9; }
+.employee-workspace-table td[data-column-key="paid"] { color: #047857; }
+.employee-workspace-table td[data-column-key="unpaid"] { color: #b45309; }
 
 /* Authentication password visibility control. */
 .password-field { position: relative; display: grid; min-width: 0; }
