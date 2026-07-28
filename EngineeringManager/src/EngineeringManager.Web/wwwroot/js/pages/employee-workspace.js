@@ -17,6 +17,7 @@ if (page) {
         const target = detailsDialog?.querySelector(`[data-employee-detail="${name}"]`);
         if (target) target.textContent = value || "未填写";
     };
+    const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const filterForm = page.querySelector(".workbench-inline-filters");
     filterForm?.querySelectorAll("select").forEach((select) => {
@@ -56,10 +57,22 @@ if (page) {
     };
 
     const openDetails = (payload) => {
-        ["name", "employeeNumber", "employeeTypeLabel", "positionTitle", "phone", "company", "department", "hireDate", "leaveDate", "statusLabel", "notes"]
+        ["name", "employeeNumber", "employeeTypeLabel", "positionTitle", "phone", "company", "department", "project", "crew", "affiliationPosition", "identityNumber", "bankAccountNumber", "bankName", "hireDate", "leaveDate", "statusLabel", "notes"]
             .forEach((name) => setDetail(name, payload[name]));
+        detailsDialog?.querySelectorAll("[data-employee-money]").forEach((target) => {
+            const value = Number(payload[target.dataset.employeeMoney]);
+            target.textContent = Number.isFinite(value) ? money.format(value) : "0.00";
+        });
+        setDetail("settlementProgressLabel", `${Number(payload.settlementProgressPercent || 0).toFixed(2)}%`);
+        const missing = [];
+        if (!payload.phone) missing.push("联系电话未填写");
+        if (!payload.company) missing.push("当前公司未归属");
+        if (!payload.positionTitle && !payload.affiliationPosition) missing.push("岗位未填写");
+        setDetail("riskLabel", payload.isOverpaid ? "存在超付或负余额，请核对付款来源。" : missing.join("；") || "当前未发现需处理的风险。");
         const link = detailsDialog?.querySelector("[data-employee-detail-link]");
         if (link) link.href = payload.detailsUrl || "/Employees";
+        const edit = detailsDialog?.querySelector("[data-employee-detail-edit]");
+        if (edit) edit.href = payload.editUrl || payload.detailsUrl || "/Employees";
         show(detailsDialog);
     };
 

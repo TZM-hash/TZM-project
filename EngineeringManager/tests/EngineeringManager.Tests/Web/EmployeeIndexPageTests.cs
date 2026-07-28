@@ -92,7 +92,6 @@ public sealed class EmployeeIndexPageTests
             .And.Contain("employee-workspace-table")
             .And.Contain("data-employee-dialog-open=\"create\"")
             .And.Contain("data-employee-dialog-open=\"details\"")
-            .And.Contain("data-employee-dialog-open=\"edit\"")
             .And.Contain("data-employee-dialog-open=\"copy\"")
             .And.Contain("action-button--view")
             .And.Contain("action-button--edit")
@@ -109,6 +108,33 @@ public sealed class EmployeeIndexPageTests
             .And.Contain("data-column-key=\"unpaid\"")
             .And.NotContain("data-inline-cell-edit")
             .And.NotContain("QuickEdit");
+
+        razor.Should().Contain("asp-page=\"/Employees/Details\"")
+            .And.Contain("asp-route-edit=\"profile\"")
+            .And.Contain("data-employee-edit-link")
+            .And.Contain("priorYearCarryForward")
+            .And.Contain("currentYearWagePayable")
+            .And.Contain("penaltyAmount")
+            .And.Contain("expensePayable")
+            .And.Contain("otherPayable")
+            .And.Contain("receivedAmount")
+            .And.Contain("currentBalance")
+            .And.Contain("settlementProgressPercent");
+    }
+
+    [Fact]
+    public void EmployeeViewDialogShowsCompleteProfilePayAndAnnualSummarySections()
+    {
+        var dialog = ReadPage("Employees", "_EmployeeEditor.cshtml");
+
+        dialog.Should().Contain("人员资料")
+            .And.Contain("当前归属")
+            .And.Contain("敏感资料")
+            .And.Contain("默认计薪")
+            .And.Contain("年度汇总")
+            .And.Contain("风险提示")
+            .And.Contain("data-employee-detail-edit")
+            .And.Contain("进入完整档案");
     }
 
     [Fact]

@@ -50,6 +50,7 @@
             {
                 var affiliation = item.Affiliations.FirstOrDefault(value => value.IsPrimary);
                 var summary = Model.AnnualSummaries.GetValueOrDefault(item.Id);
+                var penaltyAmount = Model.PenaltyAmounts.GetValueOrDefault(item.Id);
                 var payable = summary?.CurrentYearNewPayable ?? 0m;
                 var paid = summary?.ReceivedAmount ?? 0m;
                 var payload = JsonSerializer.Serialize(new
@@ -57,19 +58,34 @@
                     id = item.Id, item.EmployeeNumber, item.Name, employeeType = item.EmployeeType.ToString(), employeeTypeLabel = item.EmployeeType.ToChinese(),
                     item.Phone, item.PositionTitle, item.IdentityNumber, item.BankAccountNumber, item.BankName, item.HireDate, item.LeaveDate,
                     item.DefaultLegalEntityId, item.DefaultMonthlySalary, item.DefaultDailyRate, item.DefaultHourlyRate, item.DefaultPieceworkRate,
-                    item.IsActive, item.ConcurrencyStamp, item.Notes, company = affiliation?.LegalEntityName, department = affiliation?.DepartmentName,
-                    statusLabel = item.IsActive ? "启用" : "停用", detailsUrl = Url.Page("/Employees/Details", new { id = item.Id, businessYearId = Model.CurrentBusinessYearId })
+                    item.IsActive, item.ConcurrencyStamp, item.Notes,
+                    company = affiliation?.LegalEntityName, department = affiliation?.DepartmentName, project = affiliation?.ProjectName,
+                    crew = affiliation?.CrewBusinessPartnerName, affiliationPosition = affiliation?.PositionTitle,
+                    priorYearCarryForward = summary?.PriorYearCarryForward ?? 0m,
+                    currentYearWagePayable = summary?.CurrentYearWagePayable ?? 0m,
+                    penaltyAmount,
+                    expensePayable = summary?.ExpensePayable ?? 0m,
+                    otherPayable = summary?.OtherPayable ?? 0m,
+                    currentYearNewPayable = summary?.CurrentYearNewPayable ?? 0m,
+                    receivedAmount = summary?.ReceivedAmount ?? 0m,
+                    currentBalance = summary?.CurrentBalance ?? 0m,
+                    settlementProgressPercent = summary?.SettlementProgressPercent ?? 0m,
+                    isOverpaid = summary?.IsOverpaid ?? false,
+                    statusLabel = item.IsActive ? "启用" : "停用",
+                    detailsUrl = Url.Page("/Employees/Details", new { id = item.Id, businessYearId = Model.CurrentBusinessYearId }),
+                    editUrl = Url.Page("/Employees/Details", new { id = item.Id, businessYearId = Model.CurrentBusinessYearId, edit = "profile" })
                 });
-                <tr><td data-column-key="employee_number"><strong>@item.Name</strong><span class="table-secondary">@item.EmployeeNumber</span><span class="table-secondary employee-notes-summary" data-column-key="notes">@(item.Notes ?? "暂无备注")</span></td><td data-column-key="employee_type"><strong>@item.EmployeeType.ToChinese()</strong><span class="table-secondary">@(item.PositionTitle ?? affiliation?.PositionTitle ?? "未填写岗位")</span></td><td data-column-key="phone"><strong>@(item.Phone ?? "未填写电话")</strong><span class="table-secondary">@(affiliation?.LegalEntityName ?? "未归属公司") · @(affiliation?.DepartmentName ?? "未归属部门")</span></td><td data-column-key="payable" class="numeric-cell">@payable.ToString("N2")</td><td data-column-key="paid" class="numeric-cell">@paid.ToString("N2")</td><td data-column-key="unpaid" class="numeric-cell">@((payable - paid).ToString("N2"))</td><td data-column-key="status"><span class="partner-status partner-status--@(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "启用" : "停用")</span></td><td data-column-key="actions"><div class="employee-row-actions"><button class="action-button action-button--view" type="button" data-employee-dialog-open="details" data-employee-payload="@payload">查看</button>@if (Model.CanManage) { <button class="action-button action-button--edit" type="button" data-employee-dialog-open="edit" data-employee-payload="@payload">编辑</button><button class="action-button action-button--copy" type="button" data-employee-dialog-open="copy" data-employee-payload="@payload">复制</button> }</div></td></tr>
+                <tr><td data-column-key="employee_number"><strong>@item.Name</strong><span class="table-secondary">@item.EmployeeNumber</span><span class="table-secondary employee-notes-summary" data-column-key="notes">@(item.Notes ?? "暂无备注")</span></td><td data-column-key="employee_type"><strong>@item.EmployeeType.ToChinese()</strong><span class="table-secondary">@(item.PositionTitle ?? affiliation?.PositionTitle ?? "未填写岗位")</span></td><td data-column-key="phone"><strong>@(item.Phone ?? "未填写电话")</strong><span class="table-secondary">@(affiliation?.LegalEntityName ?? "未归属公司") · @(affiliation?.DepartmentName ?? "未归属部门")</span></td><td data-column-key="payable" class="numeric-cell">@payable.ToString("N2")</td><td data-column-key="paid" class="numeric-cell">@paid.ToString("N2")</td><td data-column-key="unpaid" class="numeric-cell">@((payable - paid).ToString("N2"))</td><td data-column-key="status"><span class="partner-status partner-status--@(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "启用" : "停用")</span></td><td data-column-key="actions"><div class="employee-row-actions"><button class="action-button action-button--view" type="button" data-employee-dialog-open="details" data-employee-payload="@payload">查看</button>@if (Model.CanManage) { <a class="action-button action-button--edit" asp-page="/Employees/Details" asp-route-id="@item.Id" asp-route-businessYearId="@Model.CurrentBusinessYearId" asp-route-edit="profile" data-employee-edit-link>编辑</a><button class="action-button action-button--copy" type="button" data-employee-dialog-open="copy" data-employee-payload="@payload">复制</button> }</div></td></tr>
             }
             </tbody></table></div>
             <nav class="pagination" aria-label="员工分页"><span>共 @Model.TotalCount 条，第 @Model.PageNumber/@Model.TotalPages 页</span><div class="pagination__actions">@if (Model.PageNumber > 1) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber - 1)">上一页</a> }@if (Model.PageNumber < Model.TotalPages) { <a class="button button--secondary button--small" href="@Model.PageUrl(Model.PageNumber + 1)">下一页</a> }</div></nav>
         </section>
     </section>
 
+    @* Both dialog partials retain the shared mac-window-dialog presentation contract. *@
     @if (Model.CanManage) { <partial name="_EmployeeEditor" model="Model" /> }
     else
     {
-        <dialog class="workbench-dialog employee-dialog employee-details-dialog mac-window-dialog" data-employee-details-dialog><div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-employee-detail="name">员工详情</strong><span data-employee-detail="employeeNumber">员工主档</span></div><button type="button" class="dialog-close" data-employee-dialog-close>×</button></div><div class="employee-view-dialog-body entity-details-body"><div class="entity-detail-sections"><section class="entity-detail-section"><h3 class="entity-detail-section-heading">基本资料</h3><dl class="entity-detail-field-grid"><div><dt>员工类型</dt><dd data-employee-detail="employeeTypeLabel"></dd></div><div><dt>岗位</dt><dd data-employee-detail="positionTitle"></dd></div><div><dt>电话</dt><dd data-employee-detail="phone"></dd></div><div><dt>档案状态</dt><dd data-employee-detail="statusLabel"></dd></div></dl></section><section class="entity-detail-section"><h3 class="entity-detail-section-heading">任职信息</h3><dl class="entity-detail-field-grid"><div><dt>当前公司</dt><dd data-employee-detail="company"></dd></div><div><dt>当前部门</dt><dd data-employee-detail="department"></dd></div></dl></section><section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">备注</h3><dl class="entity-detail-field-grid"><div class="entity-detail-field--wide"><dt>主档备注</dt><dd data-employee-detail="notes"></dd></div></dl></section></div></div><div class="quick-edit-actions"><button type="button" class="button button--secondary" data-employee-dialog-close>关闭</button><span class="equipment-dialog-action-spacer"></span><a class="button button--primary" data-employee-detail-link>进入完整档案</a></div></dialog>
+        <partial name="_EmployeeReadOnlyDetails" model="Model" />
     }
 </div>

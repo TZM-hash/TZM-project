@@ -367,6 +367,8 @@ else
 
                     <dl class="detail-grid detail-grid--compact project-summary-grid">
 
+                        <div class="project-summary-section-heading"><dt>基础与业务资料</dt></div>
+
                         <div><dt>项目编号</dt><dd><span data-inline-edit-value>@item.Overview.ProjectNumber</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ProjectNumber" data-inline-edit-control hidden /> }</dd></div>
 
                         <div><dt>项目名称</dt><dd><span data-inline-edit-value>@item.Overview.Name</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.Name" data-inline-edit-control hidden /> }</dd></div>
@@ -483,6 +485,8 @@ else
 
                         <div><dt>实际完工日期</dt><dd><span data-inline-edit-value>@(item.Overview.ActualCompletionDate?.ToString("yyyy-MM-dd") ?? "未设置")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ActualCompletionDate" type="date" data-inline-edit-control hidden /> }</dd></div>
 
+                        <div class="project-summary-section-heading"><dt>税务、施工与合同</dt></div>
+
                         <div class="project-summary-half project-quick-selection-cell"><dt>税金</dt><dd><div class="project-tax-tags" data-inline-edit-value>@if (taxConfigurations.Length == 0) { <span>未配置</span> } else { @foreach (var configuration in taxConfigurations) { <span class="pill">@((configuration.TaxRate * 100m).ToString("0"))% @configuration.InvoiceType.ToChinese()</span> } }</div>@if (Model.CanManage) { <details class="selection-dropdown project-quick-selection project-tax-selector" data-check-selector data-check-selector-empty-label="未配置" data-project-tax-matrix data-inline-edit-control hidden><summary class="selection-dropdown-toggle"><span>税率与发票类型</span><strong data-check-selector-count></strong></summary><div class="selection-dropdown-menu"><div class="selection-dropdown-heading"><span>勾选需要启用的组合</span><div><button type="button" data-check-selector-all>全选</button><button type="button" data-check-selector-clear>清空</button></div></div><div class="project-tax-choice-grid">@foreach (var rate in ProjectTaxRules.AllowedRates) { var percent = decimal.ToInt32(rate * 100m); <fieldset><legend>@percent%</legend>@foreach (var invoiceType in Enum.GetValues<ProjectInvoiceType>()) { var token = $"{percent}|{(int)invoiceType}"; var selected = Model.QuickEdit.TaxConfigurationSelections.Contains(token); <label><input type="checkbox" name="QuickEdit.TaxConfigurationSelections" value="@token" checked="@(selected ? "checked" : null)" data-check-selector-option data-default="@selected.ToString().ToLowerInvariant()" /> <span>@invoiceType.ToChinese()</span></label> }</fieldset> }</div></div></details> }</dd></div>
 
                         <div class="project-summary-quarter project-overview-equipment"><dt>施工机械</dt><dd>@if (overviewEquipment.Count == 0) { <span>暂无标记为重要的施工机械</span> } else { <div class="project-equipment-list">@foreach (var equipment in overviewEquipment) { <a asp-page="Details" asp-route-id="@item.Overview.Id" asp-route-tab="construction" asp-route-recordId="@equipment.ConstructionRecordId"><strong>@equipment.EquipmentNumber · @equipment.EquipmentName</strong><span>@(equipment.EntryDate?.ToString("yyyy-MM-dd") ?? "未进场") 至 @(equipment.ExitDate?.ToString("yyyy-MM-dd") ?? "仍在场")</span></a> }</div> }</dd></div>
@@ -586,6 +590,8 @@ else
                             </dd>
 
                         </div>
+
+                        <div class="project-summary-section-heading"><dt>金额进度</dt></div>
 
                         <div class="project-summary-metrics"><dt>收款比例</dt><dd><div class="mini-progress mini-progress--success"><div class="mini-progress-head"><span>已收 / 应收</span><strong>@collectionRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @collectionBar.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span></div></dd></div>
 

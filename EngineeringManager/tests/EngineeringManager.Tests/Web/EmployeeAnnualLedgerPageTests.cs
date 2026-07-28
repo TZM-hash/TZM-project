@@ -34,6 +34,30 @@ public sealed class EmployeeAnnualLedgerPageTests
     }
 
     [Fact]
+    public void EmployeeDetailsMatchProjectWorkspaceHeaderMetricsAndAutomaticProfileEdit()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml.cs");
+
+        page.Should().Contain("employee-project-detail-page")
+            .And.Contain("data-smart-back")
+            .And.Contain("employee-detail-metric-grid")
+            .And.Contain("往年结转")
+            .And.Contain("工资应付")
+            .And.Contain("罚款扣减")
+            .And.Contain("报销应付")
+            .And.Contain("利息分红及其他应付")
+            .And.Contain("本年新增应付")
+            .And.Contain("已付款")
+            .And.Contain("当前余额")
+            .And.Contain("data-inline-edit-active")
+            .And.Contain("提示与记录");
+
+        model.Should().Contain("public string? Edit")
+            .And.Contain("Edit == \"profile\"");
+    }
+
+    [Fact]
     public void EmployeeLedgerRedirectsButPayrollIsRestoredAsUnifiedDisbursementLedger()
     {
         var payroll = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml.cs");

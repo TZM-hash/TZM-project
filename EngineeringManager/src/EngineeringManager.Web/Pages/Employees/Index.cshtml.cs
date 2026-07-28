@@ -17,6 +17,7 @@ public sealed class IndexModel(
 {
     public IReadOnlyList<EmployeeDto> Employees { get; private set; } = [];
     public IReadOnlyDictionary<Guid, EmployeeAnnualLedgerSummary> AnnualSummaries { get; private set; } = new Dictionary<Guid, EmployeeAnnualLedgerSummary>();
+    public IReadOnlyDictionary<Guid, decimal> PenaltyAmounts { get; private set; } = new Dictionary<Guid, decimal>();
     public IReadOnlyList<BusinessYearDto> BusinessYears { get; private set; } = [];
     public Guid? CurrentBusinessYearId { get; private set; }
     public decimal CurrentYearPayableTotal => AnnualSummaries.Values.Sum(item => item.CurrentYearNewPayable);
@@ -119,13 +120,19 @@ public sealed class IndexModel(
             {
                 CurrentBusinessYearId = current.Id;
                 var summaries = new Dictionary<Guid, EmployeeAnnualLedgerSummary>();
+                var penalties = new Dictionary<Guid, decimal>();
                 foreach (var employee in all)
                 {
                     var ledger = await annualLedgerService.GetAnnualLedgerAsync(employee.Id, current.Id, cancellationToken);
                     summaries[employee.Id] = ledger.Summary;
+                    var wageEntries = await annualLedgerService.GetWageEntriesAsync(employee.Id, current.Id, cancellationToken);
+                    penalties[employee.Id] = Math.Abs(wageEntries
+                        .Where(entry => entry.EntryType == EmployeeWageEntryType.Penalty)
+                        .Sum(entry => entry.FinalAmount));
                 }
 
                 AnnualSummaries = summaries;
+                PenaltyAmounts = penalties;
             }
         }
 

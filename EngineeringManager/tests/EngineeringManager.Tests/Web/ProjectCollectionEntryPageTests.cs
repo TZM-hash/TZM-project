@@ -110,6 +110,22 @@ public sealed class ProjectCollectionEntryPageTests
         page.Should().Contain("project-summary-metrics");
     }
 
+    [Fact]
+    public void ProjectOverviewUsesSectionHeadingsAndVisibleFieldSeparators()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        page.Should().Contain("project-summary-section-heading")
+            .And.Contain("基础与业务资料")
+            .And.Contain("税务、施工与合同")
+            .And.Contain("金额进度");
+        styles.Should().Contain(".project-summary-section-heading")
+            .And.Contain("border-right: 1px solid #d8e2ee")
+            .And.Contain("border-bottom: 1px solid #d8e2ee")
+            .And.Contain("background: #eef3f8");
+    }
+
 
     [Fact]
     public void InvoicePaymentConstructionQuickEditMatchQuantityCollectionPattern()

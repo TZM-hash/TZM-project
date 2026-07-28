@@ -43,6 +43,8 @@ public sealed class DetailsModel(
     public bool CanEditFinancial => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
     public bool CanManageEmployee => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
     public string PrimaryPayMethod => Employee.DefaultMonthlySalary.HasValue ? "月薪" : Employee.DefaultDailyRate.HasValue ? "计日" : Employee.DefaultHourlyRate.HasValue ? "计时" : Employee.DefaultPieceworkRate.HasValue ? "计件" : "未设置";
+    public decimal PenaltyAmount => Math.Abs(WageEntries.Where(item => item.EntryType == EmployeeWageEntryType.Penalty).Sum(item => item.FinalAmount));
+    public bool ProfileEditActive => CanManageEmployee && Edit == "profile";
 
     [BindProperty(SupportsGet = true)] public Guid Id { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? BusinessYearId { get; set; }
@@ -50,6 +52,7 @@ public sealed class DetailsModel(
     [BindProperty(SupportsGet = true)] public string WageSubtab { get; set; } = "all";
     [BindProperty(SupportsGet = true)] public string PaymentSubtab { get; set; } = "all";
     [BindProperty(SupportsGet = true)] public string DividendSubtab { get; set; } = "all";
+    [BindProperty(SupportsGet = true)] public string? Edit { get; set; }
     [BindProperty] public WageEntryInput WageInput { get; set; } = new();
     [BindProperty] public ExpenseEntryInput ExpenseInput { get; set; } = new();
     [BindProperty] public OtherPayableInput OtherInput { get; set; } = new();
@@ -58,7 +61,11 @@ public sealed class DetailsModel(
     [BindProperty] public ExpenseEditInput ExpenseEdit { get; set; } = new();
     [BindProperty] public OtherEditInput OtherEdit { get; set; } = new();
 
-    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken) ? Page() : NotFound();
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
+    {
+        Edit = Edit == "profile" && CanManageEmployee ? "profile" : null;
+        return await LoadAsync(cancellationToken) ? Page() : NotFound();
+    }
 
     public Task<IActionResult> OnPostUpdateEmployeeAsync(CancellationToken cancellationToken) => ExecuteAsync(async () =>
     {
@@ -88,7 +95,7 @@ public sealed class DetailsModel(
                 EmployeeInput.Reason,
                 current.Notes),
             cancellationToken);
-    }, Tab, cancellationToken);
+    }, Tab, cancellationToken, "profile");
 
     public Task<IActionResult> OnPostAddWageAsync(CancellationToken cancellationToken) => ExecuteAsync(async () =>
     {
@@ -239,7 +246,7 @@ public sealed class DetailsModel(
         return true;
     }
 
-    private async Task<IActionResult> ExecuteAsync(Func<Task> action, string targetTab, CancellationToken cancellationToken)
+    private async Task<IActionResult> ExecuteAsync(Func<Task> action, string targetTab, CancellationToken cancellationToken, string? edit = null)
     {
         try
         {
@@ -254,6 +261,7 @@ public sealed class DetailsModel(
         {
             ModelState.AddModelError(string.Empty, exception.Message);
             Tab = targetTab;
+            Edit = edit;
             return await LoadAsync(cancellationToken) ? Page() : NotFound();
         }
     }
