@@ -1702,3 +1702,41 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
   .employee-dialog-metrics article:nth-last-child(-n+3) { border-bottom: 1px solid #d8e2ee; }
   .employee-dialog-metrics article:nth-last-child(-n+2) { border-bottom: 0; }
 }
+
+/* Employee detail readability: information cells stay visible during inline editing. */
+.employee-project-detail-page .employee-detail-layout > main { min-width: 0; }
+.employee-project-detail-page .employee-profile-panel { border: 1px solid var(--app-border); box-shadow: var(--app-shadow-soft); }
+.employee-project-detail-page .employee-profile-grid { border-top: 1px solid var(--app-border); }
+.employee-project-detail-page .employee-profile-grid > div { position: relative; }
+.employee-project-detail-page .employee-profile-panel [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static; z-index: auto; inset: auto; width: 100%; min-width: 0; }
+.employee-project-detail-page .employee-profile-panel.is-editing .employee-profile-grid > div { min-height: 5.3rem; background: #f8fbff; }
+.employee-project-detail-page .employee-activity-rail { margin: 0; }
+.employee-detail-metric-grid article, .employee-summary-metrics article, .employee-dialog-metrics article { border-top: 3px solid transparent; }
+.employee-detail-metric-grid .employee-metric--carry, .employee-dialog-metric--carry { border-top-color: #64748b; background: #f8fafc; }
+.employee-detail-metric-grid .employee-metric--wage, .employee-dialog-metric--wage { border-top-color: #2563eb; background: #eff6ff; }
+.employee-detail-metric-grid .employee-metric--penalty, .employee-dialog-metric--penalty { border-top-color: #d97706; background: #fffbeb; }
+.employee-detail-metric-grid .employee-metric--expense, .employee-dialog-metric--expense { border-top-color: #0891b2; background: #ecfeff; }
+.employee-detail-metric-grid .employee-metric--other, .employee-dialog-metric--other { border-top-color: #7c3aed; background: #f5f3ff; }
+.employee-detail-metric-grid .employee-metric--payable, .employee-dialog-metric--payable { border-top-color: #4f46e5; background: #eef2ff; }
+.employee-detail-metric-grid .employee-metric--paid, .employee-dialog-metric--paid { border-top-color: #059669; background: #ecfdf5; }
+.employee-detail-metric-grid .employee-metric--balance, .employee-dialog-metric--balance { border-top-color: #0f766e; background: #f0fdfa; }
+.employee-detail-metric-grid .employee-metric--balance.is-danger { border-top-color: #dc2626; background: #fef2f2; }
+.employee-detail-metric-grid .employee-metric--wage strong, .employee-dialog-metric--wage strong { color: #1d4ed8; }
+.employee-detail-metric-grid .employee-metric--penalty strong, .employee-dialog-metric--penalty strong { color: #b45309; }
+.employee-detail-metric-grid .employee-metric--paid strong, .employee-dialog-metric--paid strong { color: #047857; }
+.employee-detail-metric-grid .employee-metric--balance strong, .employee-dialog-metric--balance strong { color: #0f766e; }
+.employee-summary-metric--total { border-top-color: #2563eb !important; background: #eff6ff !important; }
+.employee-summary-metric--active { border-top-color: #059669 !important; background: #ecfdf5 !important; }
+.employee-summary-metric--payable { border-top-color: #7c3aed !important; background: #f5f3ff !important; }
+.employee-summary-metric--unpaid { border-top-color: #d97706 !important; background: #fffbeb !important; }
+.employee-summary-metric--total strong { color: #1d4ed8; }
+.employee-summary-metric--active strong { color: #047857; }
+.employee-summary-metric--payable strong { color: #6d28d9; }
+.employee-summary-metric--unpaid strong { color: #b45309; }
+.employee-dialog-metric--progress { border-top-color: #64748b !important; background: #f8fafc !important; }
+
+/* Authentication password visibility control. */
+.password-field { position: relative; display: grid; min-width: 0; }
+.password-field [data-password-input] { width: 100%; padding-right: 5.9rem; }
+.password-visibility-toggle { position: absolute; right: .35rem; top: 50%; min-height: 1.85rem; padding: .2rem .42rem; transform: translateY(-50%); border: 0; border-radius: 5px; color: var(--app-primary); background: transparent; font: inherit; font-size: .76rem; font-weight: 700; cursor: pointer; }
+.password-visibility-toggle:hover, .password-visibility-toggle:focus-visible { color: #1d4ed8; background: var(--app-primary-soft); outline: 0; }

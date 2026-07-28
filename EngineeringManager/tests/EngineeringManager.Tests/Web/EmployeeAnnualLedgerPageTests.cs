@@ -40,7 +40,7 @@ public sealed class EmployeeAnnualLedgerPageTests
         var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml.cs");
 
         page.Should().Contain("employee-project-detail-page")
-            .And.Contain("data-smart-back")
+            .And.NotContain("project-detail-back-row")
             .And.Contain("employee-detail-metric-grid")
             .And.Contain("往年结转")
             .And.Contain("工资应付")
@@ -55,6 +55,43 @@ public sealed class EmployeeAnnualLedgerPageTests
 
         model.Should().Contain("public string? Edit")
             .And.Contain("Edit == \"profile\"");
+    }
+
+    [Fact]
+    public void EmployeeProfileEditUsesTheDetailGridWithoutDuplicateBackNavigation()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        page.Should().NotContain("project-detail-back-row")
+            .And.Contain("employee-detail-layout")
+            .And.Contain("employee-profile-panel")
+            .And.Contain("project-activity-panel");
+        page.IndexOf("employee-profile-panel", StringComparison.Ordinal)
+            .Should().BeLessThan(page.IndexOf("employee-main-tabs", StringComparison.Ordinal));
+
+        styles.Should().Contain(".employee-project-detail-page .employee-profile-panel [data-inline-edit-control].inline-cell-control:not([hidden])")
+            .And.Contain("position: static")
+            .And.Contain(".employee-project-detail-page .employee-profile-grid { gap: 0;");
+    }
+
+    [Fact]
+    public void EmployeeSummaryAndViewDialogUseSemanticMetricColors()
+    {
+        var index = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Index.cshtml");
+        var dialog = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "_EmployeeEditor.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        index.Should().Contain("employee-summary-metric--total")
+            .And.Contain("employee-summary-metric--active")
+            .And.Contain("employee-summary-metric--payable")
+            .And.Contain("employee-summary-metric--unpaid");
+        dialog.Should().Contain("employee-dialog-metric--wage")
+            .And.Contain("employee-dialog-metric--penalty")
+            .And.Contain("employee-dialog-metric--balance");
+        styles.Should().Contain(".employee-summary-metric--total")
+            .And.Contain(".employee-dialog-metric--wage")
+            .And.Contain(".employee-detail-metric-grid .employee-metric--balance");
     }
 
     [Fact]

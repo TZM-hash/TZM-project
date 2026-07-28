@@ -30,7 +30,7 @@
     <section class="employee-workspace-layout">
         <aside class="employee-workspace-summary">
             <div class="equipment-summary-heading"><span>员工概览</span><strong>@scopeName</strong></div>
-            <div class="overview-strip employee-summary-metrics"><article><span>员工总数</span><strong>@Model.TotalCount</strong></article><article><span>在职人数</span><strong>@Model.ActiveCount</strong></article><article><span>当前业务年度应付总额</span><strong>@Model.CurrentYearPayableTotal.ToString("N2")</strong></article><article><span>当前业务年度未付款</span><strong>@Model.CurrentYearUnpaidTotal.ToString("N2")</strong></article></div>
+            <div class="overview-strip employee-summary-metrics"><article class="employee-summary-metric--total"><span>员工总数</span><strong>@Model.TotalCount</strong></article><article class="employee-summary-metric--active"><span>在职人数</span><strong>@Model.ActiveCount</strong></article><article class="employee-summary-metric--payable"><span>当前业务年度应付总额</span><strong>@Model.CurrentYearPayableTotal.ToString("N2")</strong></article><article class="employee-summary-metric--unpaid"><span>当前业务年度未付款</span><strong>@Model.CurrentYearUnpaidTotal.ToString("N2")</strong></article></div>
             <section class="employee-type-summary" aria-label="员工类型筛选">
                 <div class="equipment-company-summary-heading"><div><span>人员分类</span><strong>按类型筛选</strong></div><small>3 类</small></div>
                 <div class="employee-type-summary-list">

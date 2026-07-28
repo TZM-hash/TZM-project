@@ -3,6 +3,7 @@ import { initEffects } from "./core/effects.js";
 
 const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard()];
 initSmartBack();
+initPasswordVisibility();
 initProjectAmountViews();
 initProjectGeneralContractors();
 initCollectionContractPayerDefaults();
@@ -292,6 +293,19 @@ function initCollectionContractPayerDefaults() {
       const nextPayer = contract.selectedOptions[0]?.dataset.businessPartnerId || "";
       if (!payer.value || payer.value === defaultPayer) payer.value = nextPayer;
       defaultPayer = nextPayer;
+    });
+  });
+}
+
+function initPasswordVisibility() {
+  document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    const input = button.closest(".password-field")?.querySelector("[data-password-input]");
+    if (!input) return;
+    button.addEventListener("click", () => {
+      const revealed = input.type === "password";
+      input.type = revealed ? "text" : "password";
+      button.setAttribute("aria-pressed", String(revealed));
+      button.textContent = revealed ? "隐藏密码" : "显示密码";
     });
   });
 }

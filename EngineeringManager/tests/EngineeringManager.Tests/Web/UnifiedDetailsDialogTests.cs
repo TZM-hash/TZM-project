@@ -9,8 +9,8 @@ public sealed class UnifiedDetailsDialogTests
     {
         var pages = new[]
         {
-            ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Index.cshtml"),
             ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "_EmployeeEditor.cshtml"),
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "_EmployeeReadOnlyDetails.cshtml"),
             ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml"),
             ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml"),
             ReadFile("src", "EngineeringManager.Web", "Pages", "Crews", "Index.cshtml"),
