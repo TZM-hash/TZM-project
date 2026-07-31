@@ -1597,17 +1597,21 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-ledger-table th[data-column-key="progress"] { width: 7rem; }
 .employee-ledger-table th[data-column-key="actions"] { width: 7rem; }
 .employee-ledger-table .employee-row-actions { grid-template-columns: minmax(0, 1fr); }
-.employee-certificate-table { min-width: 95rem; }
-.employee-certificate-table th[data-column-key="employee"] { width: 9rem; }
-.employee-certificate-table th[data-column-key="certificate_type"] { width: 9rem; }
-.employee-certificate-table th[data-column-key="certificate_number"] { width: 10rem; }
-.employee-certificate-table th[data-column-key="scope"] { width: 11rem; }
-.employee-certificate-table th[data-column-key="authority"] { width: 13rem; }
-.employee-certificate-table th[data-column-key="issued_on"], .employee-certificate-table th[data-column-key="expires_on"] { width: 7.5rem; }
-.employee-certificate-table th[data-column-key="status"] { width: 7rem; }
-.employee-certificate-table th[data-column-key="attachment"] { width: 9rem; }
-.employee-certificate-table th[data-column-key="actions"] { width: 12rem; }
-.employee-certificate-table .employee-row-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.employee-certificate-table { width: 100%; min-width: 0; table-layout: fixed; }
+.employee-certificate-table th, .employee-certificate-table td { min-width: 0; padding: .48rem .3rem; overflow: hidden; font-size: .72rem; text-overflow: ellipsis; }
+.employee-certificate-table th[data-column-key="employee"] { width: 10%; }
+.employee-certificate-table th[data-column-key="certificate_type"] { width: 8.5%; }
+.employee-certificate-table th[data-column-key="certificate_number"] { width: 10.5%; }
+.employee-certificate-table th[data-column-key="scope"] { width: 11%; }
+.employee-certificate-table th[data-column-key="authority"] { width: 15%; }
+.employee-certificate-table th[data-column-key="issued_on"], .employee-certificate-table th[data-column-key="expires_on"] { width: 8%; }
+.employee-certificate-table th[data-column-key="status"] { width: 8%; }
+.employee-certificate-table th[data-column-key="attachment"] { width: 6%; }
+.employee-certificate-table th[data-column-key="actions"] { width: 15%; }
+.employee-certificate-table td[data-column-key="employee"] > strong, .employee-certificate-table td[data-column-key="employee"] > span, .employee-certificate-table td[data-column-key="attachment"] > a, .employee-certificate-table td[data-column-key="attachment"] > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.employee-certificate-table td[data-column-key="scope"], .employee-certificate-table td[data-column-key="authority"] { line-height: 1.4; overflow-wrap: anywhere; white-space: normal; }
+.employee-certificate-table .employee-row-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .2rem; }
+.employee-certificate-table .employee-row-actions .action-button { width: 100%; padding-inline: .2rem; font-size: .7rem; }
 .employee-certificate-authority { display: block; min-width: 0; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
 
 /* Shared read-only details dialogs */
@@ -1635,6 +1639,7 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 @media (max-width: 900px) {
   .employee-workspace-layout { grid-template-columns: 1fr; }
   .employee-workspace-summary { position: static; min-height: auto; max-height: none; }
+  .employee-certificate-table { min-width: 62rem; }
 }
 
 @media (max-width: 680px) {

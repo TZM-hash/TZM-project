@@ -175,7 +175,9 @@ public sealed class EmployeeAnnualLedgerPageTests
             .And.Contain("employee-certificate-workspace.js");
         styles.Should().Contain(".employee-ledger-table .employee-row-actions { grid-template-columns: minmax(0, 1fr); }")
             .And.Contain(".ledger-amount--payable")
-            .And.Contain(".employee-certificate-table { min-width: 95rem; }")
+            .And.Contain(".employee-certificate-table { width: 100%; min-width: 0; table-layout: fixed; }")
+            .And.Contain(".employee-certificate-table th[data-column-key=\"actions\"] { width: 15%; }")
+            .And.NotContain(".employee-certificate-table { min-width: 95rem; }")
             .And.Contain(".employee-certificate-authority { display: block;")
             .And.Contain("white-space: normal;");
         employeeScript.Should().Contain("data-employee-details-dialog")
