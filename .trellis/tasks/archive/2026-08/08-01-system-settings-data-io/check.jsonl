@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查财务聚合、员工补导的查询、事务、唯一键和数据校验。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"检查服务实现、异常处理、日志及测试覆盖。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查字号设置、导航初始化、动效和中文显示的回归。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"检查前端设置数据属性、枚举值和脚本接口的稳定性。"}

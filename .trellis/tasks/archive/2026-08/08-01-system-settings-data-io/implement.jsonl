@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"财务汇总、业务年度和员工工资导入涉及 EF Core 查询、事务及持久化约束。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端服务、导入幂等和测试质量需要遵循项目质量约定。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"设置页、全局布局和前端初始化改动需要遵循现有组件约定。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"页面切换性能和中文化修改需要前端测试与质量约定。"}
