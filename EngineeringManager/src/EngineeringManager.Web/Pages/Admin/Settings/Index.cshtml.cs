@@ -41,15 +41,17 @@ public sealed class IndexModel(ISystemSettingsService settingsService) : PageMod
         public UiEffectsLevel Effects { get; set; } = UiEffectsLevel.Medium;
         public GlobalFont Font { get; set; } = GlobalFont.SystemDefault;
         public TableDensity Density { get; set; } = TableDensity.Standard;
+        public GlobalFontSize FontSize { get; set; } = GlobalFontSize.Standard;
 
-        public SystemDisplaySettings ToSettings() => new(Theme, Motion, Effects, Font, Density);
+        public SystemDisplaySettings ToSettings() => new(Theme, Motion, Effects, Font, Density, FontSize);
         public static InputModel From(SystemDisplaySettings settings) => new()
         {
             Theme = settings.Theme,
             Motion = settings.Motion,
             Effects = settings.Effects,
             Font = settings.Font,
-            Density = settings.Density
+            Density = settings.Density,
+            FontSize = settings.FontSize
         };
     }
 }

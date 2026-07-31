@@ -144,6 +144,7 @@ public sealed class ExportService : IExportService
                 new("legal_entity", "发放公司", ExportFieldDataType.Text, false),
                 new("account", "付款账户", ExportFieldDataType.Text, false),
                 new("recipient_type", "人员来源", ExportFieldDataType.Text, true),
+                new("employee_number", "员工编号", ExportFieldDataType.Text, false),
                 new("recipient_name", "人员姓名", ExportFieldDataType.Text, true),
                 new("crew", "施工班组", ExportFieldDataType.Text, false),
                 new("amount", "个人金额", ExportFieldDataType.Number, true, true, true, true),
@@ -153,12 +154,89 @@ public sealed class ExportService : IExportService
                 new("unpaid_amount", "未发工资", ExportFieldDataType.Number, true, true, true, true),
                 new("notes", "备注", ExportFieldDataType.Text, false)
             ],
+            [ExportDataset.EmployeeWages] =
+            [
+                new("employee_number", "员工编号", ExportFieldDataType.Text, true),
+                new("employee_name", "员工姓名", ExportFieldDataType.Text, true),
+                new("business_year", "业务年度", ExportFieldDataType.Text, true),
+                new("start_date", "开始日期", ExportFieldDataType.Date, true),
+                new("end_date", "结束日期", ExportFieldDataType.Date, true),
+                new("entry_type", "工资明细类型", ExportFieldDataType.Text, true),
+                new("wage_category", "工资类别", ExportFieldDataType.Text, true),
+                new("calculation_method", "计薪方式", ExportFieldDataType.Text, true),
+                new("nature", "收支性质", ExportFieldDataType.Text, true),
+                new("quantity", "数量", ExportFieldDataType.Number, false),
+                new("unit", "单位", ExportFieldDataType.Text, false),
+                new("unit_price", "单价", ExportFieldDataType.Number, false),
+                new("automatic_amount", "自动金额", ExportFieldDataType.Number, true),
+                new("adjustment_amount", "调整金额", ExportFieldDataType.Number, true),
+                new("final_amount", "最终金额", ExportFieldDataType.Number, true),
+                new("legal_entity_code", "公司编码", ExportFieldDataType.Text, false),
+                new("legal_entity", "公司名称", ExportFieldDataType.Text, false),
+                new("project_number", "项目编号", ExportFieldDataType.Text, false),
+                new("project_name", "项目名称", ExportFieldDataType.Text, false),
+                new("notes", "备注", ExportFieldDataType.Text, false),
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true)
+            ],
+            [ExportDataset.EmployeeOtherPayments] =
+            [
+                new("employee_number", "员工编号", ExportFieldDataType.Text, true),
+                new("employee_name", "员工姓名", ExportFieldDataType.Text, true),
+                new("project_number", "项目编号", ExportFieldDataType.Text, false),
+                new("project_name", "项目名称", ExportFieldDataType.Text, false),
+                new("legal_entity_code", "公司编码", ExportFieldDataType.Text, true),
+                new("legal_entity", "公司名称", ExportFieldDataType.Text, true),
+                new("entry_type", "往来类型", ExportFieldDataType.Text, true),
+                new("record_kind", "记录性质", ExportFieldDataType.Text, true),
+                new("related_payable_id", "关联应付ID", ExportFieldDataType.Text, false),
+                new("account_number", "账户账号", ExportFieldDataType.Text, false),
+                new("account", "账户名称", ExportFieldDataType.Text, false),
+                new("entry_date", "日期", ExportFieldDataType.Date, true),
+                new("amount", "金额", ExportFieldDataType.Number, true),
+                new("payment_method", "付款方式", ExportFieldDataType.Text, false),
+                new("description", "说明", ExportFieldDataType.Text, false),
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true)
+            ],
+            [ExportDataset.EmployeeReceipts] =
+            [
+                new("employee_number", "员工编号", ExportFieldDataType.Text, true),
+                new("employee_name", "员工姓名", ExportFieldDataType.Text, true),
+                new("business_year", "业务年度", ExportFieldDataType.Text, true),
+                new("receipt_date", "收款日期", ExportFieldDataType.Date, true),
+                new("receipt_type", "收款类型", ExportFieldDataType.Text, true),
+                new("amount", "金额", ExportFieldDataType.Number, true),
+                new("payment_legal_entity_code", "付款公司编码", ExportFieldDataType.Text, true),
+                new("payment_legal_entity", "付款公司", ExportFieldDataType.Text, true),
+                new("account_number", "账户账号", ExportFieldDataType.Text, false),
+                new("account", "账户名称", ExportFieldDataType.Text, true),
+                new("payment_method", "付款方式", ExportFieldDataType.Text, true),
+                new("actual_recipient_name", "实际收款人", ExportFieldDataType.Text, true),
+                new("project_number", "项目编号", ExportFieldDataType.Text, false),
+                new("project_name", "项目名称", ExportFieldDataType.Text, false),
+                new("notes", "备注", ExportFieldDataType.Text, false),
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true)
+            ],
+            [ExportDataset.EmployeeFinancialAdjustments] =
+            [
+                new("employee_number", "员工编号", ExportFieldDataType.Text, true),
+                new("employee_name", "员工姓名", ExportFieldDataType.Text, true),
+                new("business_year", "业务年度", ExportFieldDataType.Text, true),
+                new("adjustment_date", "调整日期", ExportFieldDataType.Date, true),
+                new("amount", "调整金额", ExportFieldDataType.Number, true),
+                new("adjustment_type", "调整类型", ExportFieldDataType.Text, true),
+                new("notes", "说明", ExportFieldDataType.Text, true),
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true)
+            ],
             [ExportDataset.Collections] =
             [
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true),
                 new("project_number", "项目编号", ExportFieldDataType.Text, true),
                 new("collection_date", "收款日期", ExportFieldDataType.Date, true),
+                new("legal_entity_code", "签约公司编码", ExportFieldDataType.Text, true),
                 new("legal_entity", "签约公司", ExportFieldDataType.Text, true),
+                new("partner_number", "合作单位编号", ExportFieldDataType.Text, false),
                 new("partner", "合作单位", ExportFieldDataType.Text, false),
+                new("account_number", "收款账户账号", ExportFieldDataType.Text, false),
                 new("account", "收款账户", ExportFieldDataType.Text, true),
                 new("amount", "收款金额", ExportFieldDataType.Number, true),
                 new("payment_method", "收款方式", ExportFieldDataType.Text, true),
@@ -166,10 +244,14 @@ public sealed class ExportService : IExportService
             ],
             [ExportDataset.Payments] =
             [
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true),
                 new("project_number", "项目编号", ExportFieldDataType.Text, true),
                 new("payment_date", "付款日期", ExportFieldDataType.Date, true),
+                new("legal_entity_code", "签约公司编码", ExportFieldDataType.Text, true),
                 new("legal_entity", "签约公司", ExportFieldDataType.Text, true),
+                new("partner_number", "合作单位编号", ExportFieldDataType.Text, true),
                 new("partner", "合作单位", ExportFieldDataType.Text, true),
+                new("account_number", "付款账户账号", ExportFieldDataType.Text, false),
                 new("account", "付款账户", ExportFieldDataType.Text, true),
                 new("amount", "付款金额", ExportFieldDataType.Number, true),
                 new("payment_method", "付款方式", ExportFieldDataType.Text, true),
@@ -177,13 +259,18 @@ public sealed class ExportService : IExportService
             ],
             [ExportDataset.Invoices] =
             [
+                new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true),
                 new("project_number", "项目编号", ExportFieldDataType.Text, true),
                 new("invoice_number", "发票号码", ExportFieldDataType.Text, true),
                 new("invoice_date", "发票日期", ExportFieldDataType.Date, true),
                 new("direction", "发票方向", ExportFieldDataType.Text, true),
+                new("legal_entity_code", "签约公司编码", ExportFieldDataType.Text, true),
                 new("legal_entity", "签约公司", ExportFieldDataType.Text, true),
+                new("partner_number", "合作单位编号", ExportFieldDataType.Text, false),
+                new("partner", "合作单位", ExportFieldDataType.Text, false),
                 new("gross_amount", "含税金额", ExportFieldDataType.Number, true),
-                new("status", "状态", ExportFieldDataType.Text, true)
+                new("status", "状态", ExportFieldDataType.Text, true),
+                new("notes", "备注", ExportFieldDataType.Text, false)
             ],
             [ExportDataset.Accounts] =
             [
@@ -302,6 +389,10 @@ public sealed class ExportService : IExportService
             ExportDataset.EmployeeCertificates => await ExportEmployeeCertificatesAsync(fields, cancellationToken),
             ExportDataset.Partners => await ExportPartnersAsync(fields, cancellationToken),
             ExportDataset.Payroll => await ExportPayrollAsync(fields, request.CutoffDate, cancellationToken),
+            ExportDataset.EmployeeWages => await ExportEmployeeWagesAsync(fields, request.CutoffDate, cancellationToken),
+            ExportDataset.EmployeeOtherPayments => await ExportEmployeeOtherPaymentsAsync(fields, request.CutoffDate, cancellationToken),
+            ExportDataset.EmployeeReceipts => await ExportEmployeeReceiptsAsync(fields, request.CutoffDate, cancellationToken),
+            ExportDataset.EmployeeFinancialAdjustments => await ExportEmployeeFinancialAdjustmentsAsync(fields, request.CutoffDate, cancellationToken),
             ExportDataset.Collections => await ExportCollectionsAsync(fields, request.CutoffDate, cancellationToken),
             ExportDataset.Payments => await ExportPaymentsAsync(fields, request.CutoffDate, cancellationToken),
             ExportDataset.Invoices => await ExportInvoicesAsync(fields, request.CutoffDate, cancellationToken),
@@ -323,7 +414,7 @@ public sealed class ExportService : IExportService
             task.RowCount = SimpleXlsxReader.Read(file.Content).Sum(sheet => Math.Max(0, sheet.Rows.Count - 1));
             task.Sha256 = Convert.ToHexString(SHA256.HashData(file.Content));
             task.CompletedAt = DateTimeOffset.UtcNow;
-            db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "DataExport", EntityType = nameof(DataExchangeTask), EntityId = task.Id.ToString(), Reason = $"导出 {request.Dataset}", AfterJson = JsonSerializer.Serialize(new { request.Dataset, fields = fields.Select(item => item.Key), task.RowCount, task.Sha256 }) });
+            db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "DataExport", EntityType = nameof(DataExchangeTask), EntityId = task.Id.ToString(), Reason = $"导出 {DataExchangeValueLabels.Dataset(request.Dataset)}", AfterJson = JsonSerializer.Serialize(new { request.Dataset, fields = fields.Select(item => item.Key), task.RowCount, task.Sha256 }) });
             await SaveLastSelectionAsync(userId, request.Dataset, fields.Select(item => item.Key).ToArray(), request.CutoffDate, cancellationToken);
             return file;
         }
@@ -356,7 +447,7 @@ public sealed class ExportService : IExportService
         if (request.PackageFormat == ExportPackageFormat.Workbook)
         {
             var workbook = new SimpleXlsxWorkbook();
-            var directory = datasets.Select((dataset, index) => (IReadOnlyList<object?>)[new XlsxHyperlink(dataset.ToString(), $"'{DatasetSheetName(dataset)}'!A1"), new XlsxHyperlink(files[index].FileName, files[index].FileName, true)]).ToArray();
+            var directory = datasets.Select((dataset, index) => (IReadOnlyList<object?>)[new XlsxHyperlink(DataExchangeValueLabels.Dataset(dataset), $"'{DatasetSheetName(dataset)}'!A1"), new XlsxHyperlink(files[index].FileName, files[index].FileName, true)]).ToArray();
             workbook.AddWorksheet("目录", ["数据集", "文件"], directory);
             var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "目录" };
             foreach (var file in files)
@@ -377,7 +468,7 @@ public sealed class ExportService : IExportService
         using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
         {
             var navigation = new SimpleXlsxWorkbook();
-            navigation.AddWorksheet("目录", ["数据集", "文件"], datasets.Select((dataset, index) => (IReadOnlyList<object?>)[dataset.ToString(), new XlsxHyperlink(files[index].FileName, files[index].FileName, true)]));
+            navigation.AddWorksheet("目录", ["数据集", "文件"], datasets.Select((dataset, index) => (IReadOnlyList<object?>)[DataExchangeValueLabels.Dataset(dataset), new XlsxHyperlink(files[index].FileName, files[index].FileName, true)]));
             if (attachments.Count > 0)
             {
                 navigation.AddWorksheet("附件", ["原文件名", "所属项目", "相对路径"], attachments.Select(item =>
@@ -529,14 +620,9 @@ public sealed class ExportService : IExportService
                 ["serial_number"] = index + 1,
                 ["project_number"] = project.ProjectNumber,
                 ["project_name"] = project.Name,
-                ["stage"] = project.Stage.ToString(),
-                ["contract_signing_status"] = project.ContractSigningStatus.ToString(),
-                ["affiliation_type"] = project.AffiliationType switch
-                {
-                    EngineeringManager.Domain.Projects.ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方",
-                    EngineeringManager.Domain.Projects.ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方",
-                    _ => "自营项目"
-                },
+                ["stage"] = DataExchangeValueLabels.LabelProjectStage(project.Stage),
+                ["contract_signing_status"] = DataExchangeValueLabels.LabelContractSigningStatus(project.ContractSigningStatus),
+                ["affiliation_type"] = DataExchangeValueLabels.ProjectAffiliation(project.AffiliationType),
                 ["parent_project"] = project.ParentProjectName,
                 ["general_contractor"] = project.GeneralContractorName,
                 ["general_contractor_contact"] = project.GeneralContractorContact,
@@ -551,7 +637,7 @@ public sealed class ExportService : IExportService
                 ["estimated_amount"] = projectSummary.EstimatedAmount,
                 ["settled_amount"] = projectSummary.SettledAmount,
                 ["current_project_amount"] = projectSummary.CurrentAmount,
-                ["settlement_status"] = projectSummary.SettlementStatus.ToString(),
+                ["settlement_status"] = DataExchangeValueLabels.LabelProjectSettlementStatus(projectSummary.SettlementStatus),
                 ["contract_count"] = projectSummary.ContractCount,
                 ["line_item_count"] = projectSummary.LineItemCount,
                 ["receivable_amount"] = finance.ReceivableAmount,
@@ -628,7 +714,7 @@ public sealed class ExportService : IExportService
         var projects = await db.Projects.AsNoTracking().OrderBy(item => item.ProjectNumber).ToListAsync(cancellationToken);
         return CreateSingleSheet("项目", fields, projects.Select(item => Project(fields, new(StringComparer.Ordinal)
         {
-            ["project_number"] = item.ProjectNumber, ["project_name"] = item.Name, ["stage"] = item.Stage.ToString(), ["contract_signing_status"] = item.ContractSigningStatus.ToString(), ["affiliation_type"] = item.AffiliationType.ToString(), ["general_contractor"] = item.GeneralContractorName, ["actual_start_date"] = item.ActualStartDate, ["actual_completion_date"] = item.ActualCompletionDate, ["is_active"] = item.IsActive, ["notes"] = item.Notes, ["_system_id"] = item.Id.ToString(), ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString()
+            ["project_number"] = item.ProjectNumber, ["project_name"] = item.Name, ["stage"] = DataExchangeValueLabels.LabelProjectStage(item.Stage), ["contract_signing_status"] = DataExchangeValueLabels.LabelContractSigningStatus(item.ContractSigningStatus), ["affiliation_type"] = DataExchangeValueLabels.ProjectAffiliation(item.AffiliationType), ["general_contractor"] = item.GeneralContractorName, ["actual_start_date"] = item.ActualStartDate, ["actual_completion_date"] = item.ActualCompletionDate, ["is_active"] = item.IsActive, ["notes"] = item.Notes, ["_system_id"] = item.Id.ToString(), ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString()
         })), "项目台账");
     }
 
@@ -637,7 +723,7 @@ public sealed class ExportService : IExportService
         var contracts = await db.Contracts.AsNoTracking().Include(item => item.Project).OrderBy(item => item.Project.ProjectNumber).ThenBy(item => item.ContractNumber).ToListAsync(cancellationToken);
         return CreateSingleSheet("合同", fields, contracts.Select(item => Project(fields, new(StringComparer.Ordinal)
         {
-            ["project_number"] = item.Project.ProjectNumber, ["contract_number"] = item.ContractNumber, ["name"] = item.Name, ["contract_type"] = item.ContractType.ToString(), ["counterparty_name"] = item.CounterpartyName, ["signed_date"] = item.SignedDate, ["total_amount"] = item.TotalAmount, ["is_active"] = item.IsActive, ["notes"] = item.Notes
+            ["project_number"] = item.Project.ProjectNumber, ["contract_number"] = item.ContractNumber, ["name"] = item.Name, ["contract_type"] = DataExchangeValueLabels.LabelContractType(item.ContractType), ["counterparty_name"] = item.CounterpartyName, ["signed_date"] = item.SignedDate, ["total_amount"] = item.TotalAmount, ["is_active"] = item.IsActive, ["notes"] = item.Notes
         })), "合同台账");
     }
 
@@ -646,17 +732,11 @@ public sealed class ExportService : IExportService
         var results = await db.StageResults.AsNoTracking().Include(item => item.Project).OrderBy(item => item.Project.ProjectNumber).ThenBy(item => item.ResultDate).ToListAsync(cancellationToken);
         return CreateSingleSheet("阶段成果", fields, results.Select(item => Project(fields, new(StringComparer.Ordinal)
         {
-            ["project_number"] = item.Project.ProjectNumber, ["title"] = item.Title, ["result_type"] = item.ResultType.ToString(), ["status"] = item.Status.ToString(), ["result_date"] = item.ResultDate, ["quality_result"] = item.QualityResult.ToString(), ["description"] = item.Description
+            ["project_number"] = item.Project.ProjectNumber, ["title"] = item.Title, ["result_type"] = DataExchangeValueLabels.LabelStageResultType(item.ResultType), ["status"] = DataExchangeValueLabels.LabelStageResultStatus(item.Status), ["result_date"] = item.ResultDate, ["quality_result"] = DataExchangeValueLabels.LabelQualityResult(item.QualityResult), ["description"] = item.Description
         })), "阶段成果");
     }
 
-    private static string EmployeeTypeLabel(EmployeeType employeeType) => employeeType switch
-    {
-        EmployeeType.Formal => "正式员工",
-        EmployeeType.Labor => "劳务员工",
-        EmployeeType.Temporary => "特殊临时人员",
-        _ => employeeType.ToString()
-    };
+    private static string EmployeeTypeLabel(EmployeeType employeeType) => DataExchangeValueLabels.LabelEmployeeType(employeeType);
 
     private async Task<ExportFileResult> ExportPartnersAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
     {
@@ -666,7 +746,7 @@ public sealed class ExportService : IExportService
             ["partner_number"] = item.PartnerNumber,
             ["name"] = item.Name,
             ["short_name"] = item.ShortName,
-            ["roles"] = string.Join("、", item.Roles.Select(role => role.RoleType.ToString())),
+            ["roles"] = string.Join("、", item.Roles.Select(role => DataExchangeValueLabels.BusinessPartnerRole(role.RoleType))),
             ["is_active"] = item.IsActive,
             ["notes"] = item.Notes
         })), "合作单位台账");
@@ -711,14 +791,15 @@ public sealed class ExportService : IExportService
         {
             ["batch_number"] = batch.BatchNumber,
             ["batch_name"] = batch.Name,
-            ["batch_type"] = batch.BatchType.ToString(),
+            ["batch_type"] = DataExchangeValueLabels.LabelPayrollBatchType(batch.BatchType),
             ["start_date"] = batch.StartDate,
             ["end_date"] = batch.EndDate,
             ["payment_date"] = batch.PaymentDate ?? payment?.PaymentDate,
             ["project"] = batch.Project?.Name,
             ["legal_entity"] = batch.LegalEntity?.ShortName,
             ["account"] = batch.Account?.AccountName ?? payment?.Account?.AccountName,
-            ["recipient_type"] = payment?.RecipientType.ToString(),
+            ["recipient_type"] = payment is null ? null : DataExchangeValueLabels.LabelPayrollRecipientType(payment.RecipientType),
+            ["employee_number"] = payment?.Employee?.EmployeeNumber,
             ["recipient_name"] = payment?.RecipientNameSnapshot ?? payment?.PayeeName,
             ["crew"] = payment?.CrewNameSnapshot,
             ["amount"] = payment?.Amount,
@@ -729,70 +810,238 @@ public sealed class ExportService : IExportService
             ["notes"] = payment?.Notes ?? batch.Notes
         };
 
+    private async Task<ExportFileResult> ExportEmployeeWagesAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
+    {
+        var query = db.EmployeeWageEntries.AsNoTracking()
+            .Include(item => item.Employee)
+            .Include(item => item.BusinessYear)
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Project)
+            .AsQueryable();
+        if (cutoffDate.HasValue) query = query.Where(item => item.EndDate <= cutoffDate);
+        var entries = await query.OrderBy(item => item.Employee.EmployeeNumber).ThenBy(item => item.StartDate).ThenBy(item => item.Id).ToListAsync(cancellationToken);
+        return CreateSingleSheet("员工工资明细", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["employee_number"] = item.Employee.EmployeeNumber,
+            ["employee_name"] = item.Employee.Name,
+            ["business_year"] = item.BusinessYear.Name,
+            ["start_date"] = item.StartDate,
+            ["end_date"] = item.EndDate,
+            ["entry_type"] = DataExchangeValueLabels.LabelEmployeeWageEntryType(item.EntryType),
+            ["wage_category"] = DataExchangeValueLabels.LabelEmployeeWageCategory(item.WageCategory),
+            ["calculation_method"] = DataExchangeValueLabels.LabelEmployeeWageCalculationMethod(item.CalculationMethod),
+            ["nature"] = DataExchangeValueLabels.LabelPayrollItemNature(item.Nature),
+            ["quantity"] = item.Quantity,
+            ["unit"] = item.Unit,
+            ["unit_price"] = item.UnitPrice,
+            ["automatic_amount"] = item.AutomaticAmount,
+            ["adjustment_amount"] = item.AdjustmentAmount,
+            ["final_amount"] = item.FinalAmount,
+            ["legal_entity_code"] = item.LegalEntity?.Code,
+            ["legal_entity"] = item.LegalEntity?.ShortName,
+            ["project_number"] = item.Project?.ProjectNumber,
+            ["project_name"] = item.Project?.Name,
+            ["notes"] = item.Notes,
+            ["_system_id"] = item.Id.ToString()
+        })), "员工工资明细");
+    }
+
+    private async Task<ExportFileResult> ExportEmployeeOtherPaymentsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
+    {
+        var query = db.EmployeeOtherPayments.AsNoTracking()
+            .Include(item => item.Employee)
+            .Include(item => item.Project)
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Account)
+            .AsQueryable();
+        if (cutoffDate.HasValue) query = query.Where(item => item.EntryDate <= cutoffDate);
+        var entries = await query.OrderBy(item => item.Employee.EmployeeNumber).ThenBy(item => item.EntryDate).ThenBy(item => item.Id).ToListAsync(cancellationToken);
+        return CreateSingleSheet("员工其他往来", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["employee_number"] = item.Employee.EmployeeNumber,
+            ["employee_name"] = item.Employee.Name,
+            ["project_number"] = item.Project?.ProjectNumber,
+            ["project_name"] = item.Project?.Name,
+            ["legal_entity_code"] = item.LegalEntity.Code,
+            ["legal_entity"] = item.LegalEntity.ShortName,
+            ["entry_type"] = DataExchangeValueLabels.LabelEmployeeLedgerEntryType(item.EntryType),
+            ["record_kind"] = DataExchangeValueLabels.LabelEmployeeLedgerRecordKind(item.RecordKind),
+            ["related_payable_id"] = item.RelatedPayableId?.ToString(),
+            ["account_number"] = item.Account?.AccountNumber,
+            ["account"] = item.Account?.AccountName,
+            ["entry_date"] = item.EntryDate,
+            ["amount"] = item.Amount,
+            ["payment_method"] = item.PaymentMethod.HasValue ? DataExchangeValueLabels.LabelPaymentMethod(item.PaymentMethod.Value) : null,
+            ["description"] = item.Description,
+            ["_system_id"] = item.Id.ToString()
+        })), "员工其他往来");
+    }
+
+    private async Task<ExportFileResult> ExportEmployeeReceiptsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
+    {
+        var query = db.EmployeeReceipts.AsNoTracking()
+            .Include(item => item.Employee)
+            .Include(item => item.BusinessYear)
+            .Include(item => item.PaymentLegalEntity)
+            .Include(item => item.Account)
+            .Include(item => item.Project)
+            .AsQueryable();
+        if (cutoffDate.HasValue) query = query.Where(item => item.ReceiptDate <= cutoffDate);
+        var entries = await query.OrderBy(item => item.Employee.EmployeeNumber).ThenBy(item => item.ReceiptDate).ThenBy(item => item.Id).ToListAsync(cancellationToken);
+        return CreateSingleSheet("员工收款", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["employee_number"] = item.Employee.EmployeeNumber,
+            ["employee_name"] = item.Employee.Name,
+            ["business_year"] = item.BusinessYear.Name,
+            ["receipt_date"] = item.ReceiptDate,
+            ["receipt_type"] = DataExchangeValueLabels.LabelEmployeeReceiptType(item.ReceiptType),
+            ["amount"] = item.Amount,
+            ["payment_legal_entity_code"] = item.PaymentLegalEntity.Code,
+            ["payment_legal_entity"] = item.PaymentLegalEntity.ShortName,
+            ["account_number"] = item.Account.AccountNumber,
+            ["account"] = item.Account.AccountName,
+            ["payment_method"] = DataExchangeValueLabels.LabelPaymentMethod(item.PaymentMethod),
+            ["actual_recipient_name"] = item.ActualRecipientName,
+            ["project_number"] = item.Project?.ProjectNumber,
+            ["project_name"] = item.Project?.Name,
+            ["notes"] = item.Notes,
+            ["_system_id"] = item.Id.ToString()
+        })), "员工收款");
+    }
+
+    private async Task<ExportFileResult> ExportEmployeeFinancialAdjustmentsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
+    {
+        var query = db.EmployeeFinancialAdjustments.AsNoTracking()
+            .Include(item => item.Employee)
+            .Include(item => item.BusinessYear)
+            .AsQueryable();
+        if (cutoffDate.HasValue) query = query.Where(item => item.AdjustmentDate <= cutoffDate);
+        var entries = await query.OrderBy(item => item.Employee.EmployeeNumber).ThenBy(item => item.AdjustmentDate).ThenBy(item => item.Id).ToListAsync(cancellationToken);
+        return CreateSingleSheet("员工财务调整", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["employee_number"] = item.Employee.EmployeeNumber,
+            ["employee_name"] = item.Employee.Name,
+            ["business_year"] = item.BusinessYear.Name,
+            ["adjustment_date"] = item.AdjustmentDate,
+            ["amount"] = item.Amount,
+            ["adjustment_type"] = DataExchangeValueLabels.LabelEmployeeFinancialAdjustmentType(item.AdjustmentType),
+            ["notes"] = item.Notes,
+            ["_system_id"] = item.Id.ToString()
+        })), "员工财务调整");
+    }
+
     private async Task<ExportFileResult> ExportCollectionsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
-        var query = db.FinanceCashAllocations.AsNoTracking()
-            .Include(item => item.Project)
-            .Include(item => item.CashEntry).ThenInclude(item => item.LegalEntity)
-            .Include(item => item.CashEntry).ThenInclude(item => item.BusinessPartner)
-            .Include(item => item.CashEntry).ThenInclude(item => item.Account)
-            .Where(item => item.CashEntry.Direction == LedgerDirection.Receivable && item.CashEntry.CashType == LedgerCashType.Collection &&
-                !item.CashEntry.IsReversal && item.CashEntry.Status == LedgerRecordStatus.Active);
-        if (cutoffDate.HasValue) query = query.Where(item => item.CashEntry.BusinessDate <= cutoffDate);
-        var entries = await query.OrderByDescending(item => item.CashEntry.BusinessDate).ThenBy(item => item.AllocationOrder).ToListAsync(cancellationToken);
-        return CreateSingleSheet("收款", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["project_number"] = item.Project?.ProjectNumber,
-            ["collection_date"] = item.CashEntry.BusinessDate,
-            ["legal_entity"] = item.CashEntry.LegalEntity.ShortName,
-            ["partner"] = item.CashEntry.BusinessPartner?.ShortName,
-            ["account"] = item.CashEntry.Account?.AccountName,
-            ["amount"] = item.Amount,
-            ["payment_method"] = item.CashEntry.PaymentMethod,
-            ["notes"] = item.CashEntry.Notes
-        })), "收款台账");
+        return await ExportCashAsync(LedgerDirection.Receivable, LedgerCashType.Collection, "收款", "collection_date", "收款台账", fields, cutoffDate, cancellationToken);
     }
 
     private async Task<ExportFileResult> ExportPaymentsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
-        var query = db.FinanceCashAllocations.AsNoTracking()
-            .Include(item => item.Project)
-            .Include(item => item.CashEntry).ThenInclude(item => item.LegalEntity)
-            .Include(item => item.CashEntry).ThenInclude(item => item.BusinessPartner)
-            .Include(item => item.CashEntry).ThenInclude(item => item.Account)
-            .Where(item => item.CashEntry.Direction == LedgerDirection.Payable && item.CashEntry.CashType == LedgerCashType.Payment &&
-                !item.CashEntry.IsReversal && item.CashEntry.Status == LedgerRecordStatus.Active);
-        if (cutoffDate.HasValue) query = query.Where(item => item.CashEntry.BusinessDate <= cutoffDate);
-        var entries = await query.OrderByDescending(item => item.CashEntry.BusinessDate).ThenBy(item => item.AllocationOrder).ToListAsync(cancellationToken);
-        return CreateSingleSheet("付款", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["project_number"] = item.Project?.ProjectNumber,
-            ["payment_date"] = item.CashEntry.BusinessDate,
-            ["legal_entity"] = item.CashEntry.LegalEntity.ShortName,
-            ["partner"] = item.CashEntry.BusinessPartner?.ShortName,
-            ["account"] = item.CashEntry.Account?.AccountName,
-            ["amount"] = item.Amount,
-            ["payment_method"] = item.CashEntry.PaymentMethod,
-            ["notes"] = item.CashEntry.Notes
-        })), "付款台账");
+        return await ExportCashAsync(LedgerDirection.Payable, LedgerCashType.Payment, "付款", "payment_date", "付款台账", fields, cutoffDate, cancellationToken);
     }
 
     private async Task<ExportFileResult> ExportInvoicesAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
-        var query = db.InvoiceEntries.AsNoTracking().Include(item => item.Project).Include(item => item.LegalEntity).AsQueryable();
+        var query = db.FinanceInvoices.AsNoTracking()
+            .Include(item => item.Project)
+            .Include(item => item.LegalEntity)
+            .Include(item => item.BusinessPartner)
+            .Include(item => item.Allocations).ThenInclude(item => item.Project)
+            .Include(item => item.Allocations).ThenInclude(item => item.Settlement).ThenInclude(item => item.Project)
+            .Where(item => item.Status == LedgerRecordStatus.Active);
         if (cutoffDate.HasValue) query = query.Where(item => item.InvoiceDate <= cutoffDate);
-        var entries = await query.OrderByDescending(item => item.InvoiceDate).ToListAsync(cancellationToken);
-        return CreateSingleSheet("发票", fields, entries.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        var entries = await query.OrderByDescending(item => item.InvoiceDate).ThenBy(item => item.InvoiceNumber).ToListAsync(cancellationToken);
+        var rows = entries.SelectMany(ExpandInvoiceEntry).Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["project_number"] = item.Project.ProjectNumber,
-            ["invoice_number"] = item.InvoiceNumber,
-            ["invoice_date"] = item.InvoiceDate,
-            ["direction"] = item.Direction.ToString(),
-            ["legal_entity"] = item.LegalEntity.ShortName,
-            ["gross_amount"] = item.GrossAmount,
-            ["status"] = item.Status.ToString()
-        })), "发票台账");
+            ["_system_id"] = item.Invoice.Id.ToString(),
+            ["project_number"] = item.Project?.ProjectNumber,
+            ["invoice_number"] = item.Invoice.InvoiceNumber,
+            ["invoice_date"] = item.Invoice.InvoiceDate,
+            ["direction"] = DataExchangeValueLabels.LabelLedgerDirection(item.Invoice.Direction),
+            ["legal_entity_code"] = item.Invoice.LegalEntity.Code,
+            ["legal_entity"] = item.Invoice.LegalEntity.ShortName,
+            ["partner_number"] = item.Invoice.BusinessPartner?.PartnerNumber,
+            ["partner"] = item.Invoice.BusinessPartner?.ShortName,
+            ["gross_amount"] = item.Amount,
+            ["status"] = DataExchangeValueLabels.LabelLedgerRecordStatus(item.Invoice.Status),
+            ["notes"] = item.Invoice.Notes
+        }));
+        return CreateSingleSheet("发票", fields, rows, "发票台账");
     }
+
+    private async Task<ExportFileResult> ExportCashAsync(
+        LedgerDirection direction,
+        LedgerCashType cashType,
+        string sheetName,
+        string dateKey,
+        string filePrefix,
+        IReadOnlyList<ExportFieldDefinition> fields,
+        DateOnly? cutoffDate,
+        CancellationToken cancellationToken)
+    {
+        var query = db.FinanceCashEntries.AsNoTracking()
+            .Include(item => item.Project)
+            .Include(item => item.LegalEntity)
+            .Include(item => item.BusinessPartner)
+            .Include(item => item.Account)
+            .Include(item => item.Allocations).ThenInclude(item => item.Project)
+            .Include(item => item.Allocations).ThenInclude(item => item.Settlement).ThenInclude(item => item.Project)
+            .Where(item => item.Direction == direction && item.CashType == cashType &&
+                !item.IsReversal && item.Status == LedgerRecordStatus.Active);
+        if (cutoffDate.HasValue) query = query.Where(item => item.BusinessDate <= cutoffDate);
+        var entries = await query.OrderByDescending(item => item.BusinessDate).ThenBy(item => item.Id).ToListAsync(cancellationToken);
+        var rows = entries.SelectMany(ExpandCashEntry).Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["_system_id"] = item.Entry.Id.ToString(),
+            ["project_number"] = item.Project?.ProjectNumber,
+            [dateKey] = item.Entry.BusinessDate,
+            ["legal_entity_code"] = item.Entry.LegalEntity.Code,
+            ["legal_entity"] = item.Entry.LegalEntity.ShortName,
+            ["partner_number"] = item.Entry.BusinessPartner?.PartnerNumber,
+            ["partner"] = item.Entry.BusinessPartner?.ShortName,
+            ["account_number"] = item.Entry.Account?.AccountNumber,
+            ["account"] = item.Entry.Account?.AccountName,
+            ["amount"] = item.Amount,
+            ["payment_method"] = DataExchangeValueLabels.LabelPaymentMethod(item.Entry.PaymentMethod),
+            ["notes"] = item.Entry.Notes
+        }));
+        return CreateSingleSheet(sheetName, fields, rows, filePrefix);
+    }
+
+    private static IEnumerable<CashExportRow> ExpandCashEntry(FinanceCashEntry entry)
+    {
+        var allocations = entry.Allocations.OrderBy(item => item.AllocationOrder).ThenBy(item => item.Id).ToArray();
+        var allocatedAmount = allocations.Sum(item => item.Amount);
+        foreach (var allocation in allocations)
+        {
+            yield return new CashExportRow(entry, allocation.Project ?? allocation.Settlement?.Project, allocation.Amount);
+        }
+
+        var remainder = allocations.Length == 0 ? entry.Amount : entry.Amount - allocatedAmount;
+        if (remainder != 0m)
+        {
+            yield return new CashExportRow(entry, entry.Project, remainder);
+        }
+    }
+
+    private static IEnumerable<InvoiceExportRow> ExpandInvoiceEntry(FinanceInvoice invoice)
+    {
+        var allocations = invoice.Allocations.OrderBy(item => item.AllocationOrder).ThenBy(item => item.Id).ToArray();
+        var allocatedAmount = allocations.Sum(item => item.Amount);
+        foreach (var allocation in allocations)
+        {
+            yield return new InvoiceExportRow(invoice, allocation.Project ?? allocation.Settlement?.Project, allocation.Amount);
+        }
+
+        var remainder = allocations.Length == 0 ? invoice.Amount : invoice.Amount - allocatedAmount;
+        if (remainder != 0m)
+        {
+            yield return new InvoiceExportRow(invoice, invoice.Project, remainder);
+        }
+    }
+
+    private sealed record CashExportRow(FinanceCashEntry Entry, Project? Project, decimal Amount);
+    private sealed record InvoiceExportRow(FinanceInvoice Invoice, Project? Project, decimal Amount);
 
     private async Task<ExportFileResult> ExportAccountsAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {
@@ -809,7 +1058,7 @@ public sealed class ExportService : IExportService
             {
                 ["legal_entity"] = item.LegalEntity.ShortName,
                 ["account_name"] = item.AccountName,
-                ["account_type"] = item.AccountType.ToString(),
+                ["account_type"] = DataExchangeValueLabels.LabelFinancialAccountType(item.AccountType),
                 ["opening_balance"] = item.OpeningBalance,
                 ["current_balance"] = item.OpeningBalance + inflow - outflow,
                 ["is_active"] = item.IsActive,
@@ -845,7 +1094,7 @@ public sealed class ExportService : IExportService
         {
             ["company_code"] = item.LegalEntity.Code,
             ["account_name"] = item.AccountName,
-            ["account_type"] = item.AccountType.ToString(),
+            ["account_type"] = DataExchangeValueLabels.LabelFinancialAccountType(item.AccountType),
             ["account_number"] = item.AccountNumber,
             ["bank_name"] = item.BankName,
             ["opening_balance"] = item.OpeningBalance,
@@ -895,25 +1144,25 @@ public sealed class ExportService : IExportService
     private async Task<ExportFileResult> ExportEquipmentAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
     {
         var items = await db.Equipment.AsNoTracking().Include(item => item.OwnerLegalEntity).Include(item => item.LessorBusinessPartner).OrderBy(item => item.EquipmentNumber).ToListAsync(token);
-        return CreateSingleSheet("设备档案", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.EquipmentNumber, ["name"] = item.Name, ["model"] = item.Model, ["category"] = item.Category, ["ownership"] = item.OwnershipType.ToString(), ["owner_company"] = item.OwnerLegalEntity?.Name, ["lessor"] = item.LessorBusinessPartner?.Name, ["status"] = item.Status.ToString(), ["internal_daily_rate"] = item.InternalDailyRate, ["notes"] = item.Notes })), "设备档案");
+        return CreateSingleSheet("设备档案", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.EquipmentNumber, ["name"] = item.Name, ["model"] = item.Model, ["category"] = item.Category, ["ownership"] = DataExchangeValueLabels.EquipmentOwnership(item.OwnershipType), ["owner_company"] = item.OwnerLegalEntity?.Name, ["lessor"] = item.LessorBusinessPartner?.Name, ["status"] = DataExchangeValueLabels.LabelEquipmentStatus(item.Status), ["internal_daily_rate"] = item.InternalDailyRate, ["notes"] = item.Notes })), "设备档案");
     }
 
     private async Task<ExportFileResult> ExportEquipmentLeasesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
     {
         var items = await db.EquipmentLeaseAgreements.AsNoTracking().Include(item => item.Equipment).Include(item => item.LessorBusinessPartner).OrderBy(item => item.Equipment.EquipmentNumber).ToListAsync(token);
-        return CreateSingleSheet("租赁约定", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Equipment.EquipmentNumber, ["contract_number"] = item.ContractNumber, ["lessor"] = item.LessorBusinessPartner.Name, ["start_date"] = item.StartDate, ["end_date"] = item.EndDate, ["rent_mode"] = item.RentMode.ToString(), ["unit_rate"] = item.UnitRate })), "设备租赁");
+        return CreateSingleSheet("租赁约定", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Equipment.EquipmentNumber, ["contract_number"] = item.ContractNumber, ["lessor"] = item.LessorBusinessPartner.Name, ["start_date"] = item.StartDate, ["end_date"] = item.EndDate, ["rent_mode"] = DataExchangeValueLabels.LabelRentMode(item.RentMode), ["unit_rate"] = item.UnitRate })), "设备租赁");
     }
 
     private async Task<ExportFileResult> ExportEquipmentUsagesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
     {
         var items = await db.EquipmentProjectUsages.AsNoTracking().Include(item => item.Equipment).Include(item => item.Project).Include(item => item.LegalEntity).OrderBy(item => item.EntryDate).ToListAsync(token);
-        return CreateSingleSheet("设备使用", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Equipment.EquipmentNumber, ["project_number"] = item.Project.ProjectNumber, ["company"] = item.LegalEntity.Name, ["entry_date"] = item.EntryDate, ["exit_date"] = item.ExitDate, ["rent_mode"] = item.RentMode.ToString(), ["unit_rate"] = item.UnitRate })), "设备使用");
+        return CreateSingleSheet("设备使用", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Equipment.EquipmentNumber, ["project_number"] = item.Project.ProjectNumber, ["company"] = item.LegalEntity.Name, ["entry_date"] = item.EntryDate, ["exit_date"] = item.ExitDate, ["rent_mode"] = DataExchangeValueLabels.LabelRentMode(item.RentMode), ["unit_rate"] = item.UnitRate })), "设备使用");
     }
 
     private async Task<ExportFileResult> ExportEquipmentPeriodsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
     {
         var items = await db.EquipmentWorkPeriods.AsNoTracking().Include(item => item.Usage).ThenInclude(item => item.Equipment).Include(item => item.Usage).ThenInclude(item => item.Project).OrderBy(item => item.StartDate).ToListAsync(token);
-        return CreateSingleSheet("设备日期段", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Usage.Equipment.EquipmentNumber, ["project_number"] = item.Usage.Project.ProjectNumber, ["start_date"] = item.StartDate, ["end_date"] = item.EndDate, ["period_type"] = item.PeriodType.ToString(), ["chargeable"] = item.IsChargeable })), "设备日期段");
+        return CreateSingleSheet("设备日期段", fields, items.Select(item => Project(fields, new(StringComparer.Ordinal) { ["equipment_number"] = item.Usage.Equipment.EquipmentNumber, ["project_number"] = item.Usage.Project.ProjectNumber, ["start_date"] = item.StartDate, ["end_date"] = item.EndDate, ["period_type"] = DataExchangeValueLabels.LabelEquipmentPeriodType(item.PeriodType), ["chargeable"] = item.IsChargeable })), "设备日期段");
     }
 
     private async Task<ExportFileResult> ExportEquipmentSettlementsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken token)
@@ -957,6 +1206,10 @@ public sealed class ExportService : IExportService
         ExportDataset.EmployeeCertificates => "员工证书",
         ExportDataset.Partners => "合作单位",
         ExportDataset.Payroll => "工资",
+        ExportDataset.EmployeeWages => "员工工资明细",
+        ExportDataset.EmployeeOtherPayments => "员工其他往来",
+        ExportDataset.EmployeeReceipts => "员工收款",
+        ExportDataset.EmployeeFinancialAdjustments => "员工财务调整",
         ExportDataset.Collections => "收款",
         ExportDataset.Payments => "付款",
         ExportDataset.Invoices => "发票",
@@ -969,7 +1222,7 @@ public sealed class ExportService : IExportService
         ExportDataset.EquipmentUsages => "设备使用",
         ExportDataset.EquipmentPeriods => "设备日期段",
         ExportDataset.EquipmentSettlements => "设备结算",
-        _ => dataset.ToString()
+        _ => DataExchangeValueLabels.Dataset(dataset)
     };
 
     private static string SafeFileName(string fileName)

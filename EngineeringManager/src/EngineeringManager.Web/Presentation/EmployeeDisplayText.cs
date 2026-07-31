@@ -11,28 +11,28 @@ public static class EmployeeDisplayText
         EmployeeWageEntryType.Bonus => "奖金",
         EmployeeWageEntryType.Penalty => "罚款",
         EmployeeWageEntryType.Other => "其他",
-        _ => value.ToString()
+        _ => "未知工资明细类型"
     };
 
     public static string DisbursementType(PayrollDisbursementType value) => value switch
     {
         PayrollDisbursementType.Wage => "工资",
         PayrollDisbursementType.Other => "其他",
-        _ => value.ToString()
+        _ => "未知发放类型"
     };
 
     public static string PaymentCategory(PayrollPaymentCategory value) => value switch
     {
         PayrollPaymentCategory.Wage => "工资",
         PayrollPaymentCategory.Other => "其他",
-        _ => value.ToString()
+        _ => "未知付款类别"
     };
 
     public static string FundingSource(PayrollFundingSource value) => value switch
     {
         PayrollFundingSource.CompanyAccount => "公司账户",
         PayrollFundingSource.PersonalAdvance => "私人转账",
-        _ => value.ToString()
+        _ => "未知资金来源"
     };
 
     public static string WageCategory(EmployeeWageCategory value) => value switch
@@ -40,6 +40,6 @@ public static class EmployeeDisplayText
         EmployeeWageCategory.SocialSecurityWage => "社保工资",
         EmployeeWageCategory.MigrantWorkerWage => "民工工资",
         EmployeeWageCategory.OtherWage => "其他工资",
-        _ => value.ToString()
+        _ => "未知工资类别"
     };
 }

@@ -5,20 +5,23 @@ public enum MotionStyle { Technology = 1, Apple = 2 }
 public enum UiEffectsLevel { Low = 1, Medium = 2, High = 3 }
 public enum GlobalFont { SystemDefault = 1, MicrosoftYaHei = 2, MicrosoftJhengHei = 3, ChineseSerif = 4, ChineseKai = 5 }
 public enum TableDensity { Compact = 1, Standard = 2, Spacious = 3 }
+public enum GlobalFontSize { Small = 1, Standard = 2, Large = 3, ExtraLarge = 4 }
 
 public sealed record SystemDisplaySettings(
     VisualTheme Theme,
     MotionStyle Motion,
     UiEffectsLevel Effects,
     GlobalFont Font,
-    TableDensity Density)
+    TableDensity Density,
+    GlobalFontSize FontSize)
 {
     public static SystemDisplaySettings Default { get; } = new(
         VisualTheme.Default,
         MotionStyle.Technology,
         UiEffectsLevel.Medium,
         GlobalFont.SystemDefault,
-        TableDensity.Standard);
+        TableDensity.Standard,
+        GlobalFontSize.Standard);
 
     public string ThemeCssClass => Theme == VisualTheme.ClearGlass ? "theme-clear-glass" : "theme-default";
     public string MotionCssClass => Motion == MotionStyle.Apple ? "motion-apple" : "motion-technology";
@@ -36,6 +39,13 @@ public sealed record SystemDisplaySettings(
         TableDensity.Compact => "table-density-compact",
         TableDensity.Spacious => "table-density-spacious",
         _ => "table-density-standard"
+    };
+    public string FontSizeCssClass => FontSize switch
+    {
+        GlobalFontSize.Small => "font-size-small",
+        GlobalFontSize.Large => "font-size-large",
+        GlobalFontSize.ExtraLarge => "font-size-extra-large",
+        _ => "font-size-standard"
     };
 }
 

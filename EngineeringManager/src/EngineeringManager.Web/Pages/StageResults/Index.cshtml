@@ -1,5 +1,6 @@
 @page
 @model EngineeringManager.Web.Pages.StageResults.IndexModel
+@using EngineeringManager.Web.Presentation
 @{
     ViewData["Title"] = "阶段成果";
 }
@@ -24,7 +25,7 @@
                 <tbody>
                 @foreach (var result in Model.Results)
                 {
-                    <tr><td data-column-key="date">@result.ResultDate</td><td data-column-key="name">@result.Title</td><td data-column-key="type">@result.ResultType</td><td data-column-key="status">@result.Status</td><td data-column-key="quality">@result.QualityResult</td><td data-column-key="lines">@result.Lines.Count</td><td data-column-key="attachments">@result.Attachments.Count</td></tr>
+                    <tr><td data-column-key="date">@result.ResultDate</td><td data-column-key="name">@result.Title</td><td data-column-key="type">@result.ResultType.ToChinese()</td><td data-column-key="status">@result.Status.ToChinese()</td><td data-column-key="quality">@result.QualityResult.ToChinese()</td><td data-column-key="lines">@result.Lines.Count</td><td data-column-key="attachments">@result.Attachments.Count</td></tr>
                 }
                 </tbody>
             </table>

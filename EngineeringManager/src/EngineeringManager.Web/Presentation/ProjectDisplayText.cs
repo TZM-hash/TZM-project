@@ -3,6 +3,7 @@ using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
+using EngineeringManager.Domain.StageResults;
 
 namespace EngineeringManager.Web.Presentation;
 
@@ -13,7 +14,7 @@ public static class ProjectDisplayText
         EmployeeType.Formal => "正式员工",
         EmployeeType.Labor => "劳务员工",
         EmployeeType.Temporary => "特殊临时人员",
-        _ => value.ToString()
+        _ => "未知人员类型"
     };
 
     public static string ToChinese(this BusinessPartnerRoleType value) => value switch
@@ -22,7 +23,7 @@ public static class ProjectDisplayText
         BusinessPartnerRoleType.ConstructionCrew => "施工班组",
         BusinessPartnerRoleType.MaterialSupplier => "材料供应商",
         BusinessPartnerRoleType.MiscellaneousSupplier => "零星供应商",
-        _ => value.ToString()
+        _ => "未知角色"
     };
 
     public static string ToChinese(this EquipmentOwnershipType value) => value switch
@@ -30,7 +31,7 @@ public static class ProjectDisplayText
         EquipmentOwnershipType.SelfOwned => "自有设备",
         EquipmentOwnershipType.Rented => "租赁设备",
         EquipmentOwnershipType.Other => "其他",
-        _ => value.ToString()
+        _ => "未知权属"
     };
 
     public static string ToChinese(this EquipmentStatus value) => value switch
@@ -41,14 +42,14 @@ public static class ProjectDisplayText
         EquipmentStatus.Disabled => "停用",
         EquipmentStatus.Scrapped => "已报废",
         EquipmentStatus.TransferredOut => "已调出",
-        _ => value.ToString()
+        _ => "未知状态"
     };
 
     public static string ToChinese(this InvoiceDirection value) => value switch
     {
         InvoiceDirection.Output => "销项发票",
         InvoiceDirection.Input => "进项发票",
-        _ => value.ToString()
+        _ => "未知发票方向"
     };
 
     public static string ToChinese(this InvoiceStatus value) => value switch
@@ -56,7 +57,7 @@ public static class ProjectDisplayText
         InvoiceStatus.Draft => "草稿",
         InvoiceStatus.IssuedOrReceived => "已开具/已收到",
         InvoiceStatus.Voided => "已作废",
-        _ => value.ToString()
+        _ => "未知发票状态"
     };
 
     public static string ToChinese(this PaymentMethod value) => value switch
@@ -66,7 +67,7 @@ public static class ProjectDisplayText
         PaymentMethod.WeChat => "微信",
         PaymentMethod.Alipay => "支付宝",
         PaymentMethod.Other => "其他",
-        _ => value.ToString()
+        _ => "未知方式"
     };
 
     public static string PaymentMethodLabel(string? value) => value switch
@@ -88,7 +89,7 @@ public static class ProjectDisplayText
         ProjectStage.CompletedUnsettled => "已完工未结算",
         ProjectStage.PartiallySettled => "部分结算",
         ProjectStage.SettledArchived => "已结算归档",
-        _ => value.ToString()
+        _ => "未知阶段"
     };
 
     public static string ToChinese(this ContractSigningStatus value) => value switch
@@ -96,14 +97,14 @@ public static class ProjectDisplayText
         ContractSigningStatus.NotSigned => "未签合同",
         ContractSigningStatus.SentForSignature => "合同已寄出",
         ContractSigningStatus.FullySigned => "合同已签完",
-        _ => value.ToString()
+        _ => "未知合同状态"
     };
 
     public static string ToChinese(this ProjectInvoiceType value) => value switch
     {
         ProjectInvoiceType.Ordinary => "普票",
         ProjectInvoiceType.Special => "专票",
-        _ => value.ToString()
+        _ => "未知发票类型"
     };
 
     public static string ToChinese(this ProjectSettlementStatus value) => value switch
@@ -111,7 +112,7 @@ public static class ProjectDisplayText
         ProjectSettlementStatus.Estimated => "暂估",
         ProjectSettlementStatus.PartiallySettled => "部分结算",
         ProjectSettlementStatus.Settled => "已结算",
-        _ => value.ToString()
+        _ => "未知结算状态"
     };
 
     public static string ToChinese(this ProjectAffiliationType value) => value switch
@@ -119,6 +120,41 @@ public static class ProjectDisplayText
         ProjectAffiliationType.SelfOperated => "自营项目",
         ProjectAffiliationType.ExternalPartyAttachedToUs => "他方挂靠我方",
         ProjectAffiliationType.WeAttachedToExternalParty => "我方挂靠他方",
-        _ => value.ToString()
+        _ => "未知合作方式"
+    };
+
+    public static string ToChinese(this FinancialAccountType value) => value switch
+    {
+        FinancialAccountType.Bank => "银行",
+        FinancialAccountType.Cash => "现金",
+        FinancialAccountType.Other => "其他",
+        FinancialAccountType.PersonalAdvance => "个人垫付账户",
+        _ => "未知账户类型"
+    };
+
+    public static string ToChinese(this StageResultType value) => value switch
+    {
+        StageResultType.Progress => "进度",
+        StageResultType.Acceptance => "验收",
+        StageResultType.Completion => "完工",
+        StageResultType.SettlementSupport => "结算支撑",
+        _ => "未知成果类型"
+    };
+
+    public static string ToChinese(this StageResultStatus value) => value switch
+    {
+        StageResultStatus.Draft => "草稿",
+        StageResultStatus.Recorded => "已记录",
+        StageResultStatus.Voided => "已作废",
+        _ => "未知状态"
+    };
+
+    public static string ToChinese(this QualityResult value) => value switch
+    {
+        QualityResult.NotChecked => "未检查",
+        QualityResult.Qualified => "合格",
+        QualityResult.ConditionallyQualified => "有条件合格",
+        QualityResult.Unqualified => "不合格",
+        _ => "未知结果"
     };
 }

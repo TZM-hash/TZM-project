@@ -29,7 +29,9 @@ public sealed class EmployeeTypeTests
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Create.cshtml");
 
-        page.Should().Contain("GetEnumSelectList<EngineeringManager.Domain.Employees.EmployeeType>()");
+        page.Should().Contain("<option value=\"1\">正式员工</option>")
+            .And.Contain("<option value=\"2\">劳务员工</option>")
+            .And.Contain("<option value=\"3\">特殊临时人员</option>");
     }
 
     private static string ReadFile(params string[] parts) => File.ReadAllText(Path.Combine(RepositoryRoot(), Path.Combine(parts)));

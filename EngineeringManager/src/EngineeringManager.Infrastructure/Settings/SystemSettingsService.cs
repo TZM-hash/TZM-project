@@ -19,6 +19,7 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
     private const string EffectsKey = "Display.Effects";
     private const string FontKey = "Display.Font";
     private const string DensityKey = "Display.TableDensity";
+    private const string FontSizeKey = "Display.FontSize";
 
     public async Task<SystemDisplaySettings> GetAsync(CancellationToken token)
     {
@@ -33,7 +34,8 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
             Parse(values, MotionKey, MotionStyle.Technology),
             Parse(values, EffectsKey, UiEffectsLevel.Medium),
             Parse(values, FontKey, GlobalFont.SystemDefault),
-            Parse(values, DensityKey, TableDensity.Standard));
+            Parse(values, DensityKey, TableDensity.Standard),
+            Parse(values, FontSizeKey, GlobalFontSize.Standard));
         cache.Set(CacheKey, settings, TimeSpan.FromMinutes(5));
         return settings;
     }
@@ -52,6 +54,7 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
         Upsert(existing, EffectsKey, settings.Effects.ToString(), actor.UserId);
         Upsert(existing, FontKey, settings.Font.ToString(), actor.UserId);
         Upsert(existing, DensityKey, settings.Density.ToString(), actor.UserId);
+        Upsert(existing, FontSizeKey, settings.FontSize.ToString(), actor.UserId);
         db.AuditLogs.Add(new AuditLog
         {
             UserId = actor.UserId,

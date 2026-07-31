@@ -8,6 +8,7 @@ using EngineeringManager.Application.Settings;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Security;
+using EngineeringManager.Web.Presentation;
 using EngineeringManager.Web.Workbenches;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -232,15 +233,7 @@ public sealed class IndexModel(
 
     private string UserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new InvalidOperationException("当前用户没有标识。");
 
-    private static string StageLabel(ProjectStage stage) => stage switch
-    {
-        ProjectStage.AwaitingMobilization => "待进场",
-        ProjectStage.UnderConstruction => "施工中",
-        ProjectStage.Suspended => "停工中",
-        ProjectStage.CompletedUnsettled => "已完工未结算",
-        ProjectStage.SettledArchived => "已结算归档",
-        _ => stage.ToString()
-    };
+    private static string StageLabel(ProjectStage stage) => stage.ToChinese();
 
     private static bool TryReadStage(string? value, out ProjectStage stage)
     {

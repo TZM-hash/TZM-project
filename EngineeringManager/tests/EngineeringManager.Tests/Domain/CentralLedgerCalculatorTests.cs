@@ -111,6 +111,39 @@ public sealed class CentralLedgerCalculatorTests
     }
 
     [Fact]
+    public void TreatsNegativeNetCashAsZeroForSettlementMetrics()
+    {
+        var result = CentralLedgerCalculator.Calculate(new CentralLedgerCalculationInput(
+            GrossSettlementAmount: 100m,
+            Deductions: 0m,
+            InvoiceReducingDeductions: 0m,
+            BaseInvoiceAmount: 100m,
+            InvoicedAmount: 0m,
+            CashAmount: -50m));
+
+        result.CashAmount.Should().Be(0m);
+        result.UncollectedOrUnpaid.Should().Be(100m);
+    }
+
+    [Fact]
+    public void FloorsNegativeSettlementInvoiceAndCashBasesForImportedRefundRows()
+    {
+        var result = CentralLedgerCalculator.Calculate(new CentralLedgerCalculationInput(
+            GrossSettlementAmount: -100m,
+            Deductions: 0m,
+            InvoiceReducingDeductions: 0m,
+            BaseInvoiceAmount: -100m,
+            InvoicedAmount: -50m,
+            CashAmount: -25m));
+
+        result.GrossSettlementAmount.Should().Be(0m);
+        result.ActualAmount.Should().Be(0m);
+        result.ShouldInvoiceAmount.Should().Be(0m);
+        result.InvoicedAmount.Should().Be(0m);
+        result.CashAmount.Should().Be(0m);
+    }
+
+    [Fact]
     public void AggregatesAlreadyCalculatedDetailMetricsWithoutRecalculation()
     {
         var first = CentralLedgerCalculator.Calculate(new CentralLedgerCalculationInput(100m, 10m, 0m, 100m, 60m, 80m));

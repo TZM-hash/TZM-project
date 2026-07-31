@@ -48,6 +48,48 @@ public sealed class FinanceSummaryTests
     }
 
     [Fact]
+    public async Task ProjectOverviewIncludesDirectProjectCashAndInvoicesWithoutSettlementAllocations()
+    {
+        await using var fixture = await FinanceSummaryFixture.CreateAsync();
+        fixture.Db.FinanceCashEntries.Add(new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            CashType = LedgerCashType.Collection,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            ProjectId = fixture.Project.Id,
+            ContractId = fixture.Contract.Id,
+            BusinessDate = new DateOnly(2026, 7, 20),
+            Amount = 35m,
+            PaymentMethod = "银行转账"
+        });
+        fixture.Db.FinanceInvoices.Add(new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            ProjectId = fixture.Project.Id,
+            ContractId = fixture.Contract.Id,
+            InvoiceNumber = "直接-001",
+            InvoiceDate = new DateOnly(2026, 7, 21),
+            Amount = 45m,
+            NetAmount = 43.69m,
+            TaxAmount = 1.31m,
+            TaxRate = 0.03m
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var item = (await fixture.Service.ListProjectSummariesAsync(CancellationToken.None)).Single();
+
+        item.Summary.CollectedAmount.Should().Be(35m);
+        item.Summary.OutputInvoiceAmount.Should().Be(45m);
+    }
+
+    [Fact]
     public async Task OutputInvoiceCanLinkMultipleReceivablesAndLineItemsAndUpdatesSummary()
     {
         await using var fixture = await FinanceSummaryFixture.CreateAsync();

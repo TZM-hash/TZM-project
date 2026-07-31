@@ -38,6 +38,10 @@
 
 * { box-sizing: border-box; }
 html { min-width: 320px; min-height: 100%; font-size: 15px; }
+html.font-size-small { font-size: 13px; }
+html.font-size-standard { font-size: 15px; }
+html.font-size-large { font-size: 17px; }
+html.font-size-extra-large { font-size: 19px; }
 body { min-width: 320px; min-height: 100vh; margin: 0; overflow-x: hidden; background: var(--app-bg); color: var(--app-text); font-family: var(--app-font-family); }
 body.font-system-default { --app-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif; }
 body.font-microsoft-yahei { --app-font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif; }
@@ -72,6 +76,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .status-dot { width: .52rem; height: .52rem; flex: 0 0 .52rem; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.12); }
 
 .app-content { min-height: 100vh; margin-left: var(--sidebar-width); }
+.navigation-pending-indicator { position: fixed; top: .7rem; left: 50%; z-index: 1200; padding: .35rem .7rem; border: 1px solid var(--app-border); border-radius: 999px; color: var(--app-primary); background: rgba(255,255,255,.94); box-shadow: var(--app-shadow-soft); font-size: .72rem; font-weight: 700; transform: translateX(-50%); }
 .app-header { position: sticky; top: 0; z-index: 1010; min-height: var(--header-height); border-bottom: 1px solid rgba(203,213,225,.78); background: rgba(255,255,255,.88); backdrop-filter: blur(18px) saturate(145%); }
 .app-header-content { display: flex; width: min(100%, 112rem); min-height: var(--header-height); align-items: center; justify-content: space-between; gap: 1rem; margin: 0 auto; padding: 0 1.5rem; }
 .menu-toggle, .header-icon-button { display: inline-grid; width: 2.55rem; height: 2.55rem; place-items: center; border: 1px solid var(--app-border); border-radius: 9px; color: var(--app-text-soft); background: var(--app-surface); box-shadow: var(--app-shadow-soft); cursor: pointer; }

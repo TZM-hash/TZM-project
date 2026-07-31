@@ -13,7 +13,7 @@
         <p class="section-help">员工编号和类型用于后续工资批次、项目归属与台账导出。</p>
         <label>员工编号<input asp-for="EmployeeNumber" /></label>
         <label>姓名<input asp-for="Name" /></label>
-        <label>员工类型<select asp-for="EmployeeType" asp-items="Html.GetEnumSelectList<EngineeringManager.Domain.Employees.EmployeeType>()"></select></label>
+        <label>员工类型<select asp-for="EmployeeType"><option value="1">正式员工</option><option value="2">劳务员工</option><option value="3">特殊临时人员</option></select></label>
         <label>岗位<input asp-for="PositionTitle" /></label>
         <label>电话<input asp-for="Phone" /></label>
         <label>入职日期<input asp-for="HireDate" type="date" /></label>

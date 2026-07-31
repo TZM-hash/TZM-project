@@ -49,7 +49,7 @@ public sealed class IndexModel(IEmployeeCertificateService certificateService, I
         CertificateExpiryState.Warning => "中度提醒",
         CertificateExpiryState.Critical => "高度提醒",
         CertificateExpiryState.Expired => "已过期",
-        _ => state.ToString()
+        _ => "未知状态"
     };
     public static string StatusClass(CertificateExpiryState state) => state.ToString().ToLowerInvariant();
     private static DateOnly Today() => DateOnly.FromDateTime(DateTime.Today);

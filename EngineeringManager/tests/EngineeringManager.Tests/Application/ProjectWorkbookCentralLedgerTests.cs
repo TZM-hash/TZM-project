@@ -53,11 +53,76 @@ public sealed class ProjectWorkbookCentralLedgerTests
 
         var receivables = sheets.Single(item => item.Name == "应收");
         receivables.Rows[0].Should().Contain(["结算状态", "原始金额", "实际金额", "原始应开票金额", "当前应开票金额", "发票分摊状态", "资金分摊状态"]);
-        receivables.Rows.SelectMany(item => item).Should().Contain(settlement.Id.ToString()).And.Contain("Provisional");
+        receivables.Rows.SelectMany(item => item).Should().Contain(settlement.Id.ToString()).And.Contain("暂估").And.NotContain("Provisional");
         var deductions = sheets.Single(item => item.Name == "扣款");
         deductions.Rows[0].Should().Contain("同时扣减应开票金额");
         deductions.Rows.SelectMany(item => item).Should().Contain(true);
         sheets.Single(item => item.Name == "收款").Rows.SelectMany(item => item).Should().Contain(cash.Id.ToString());
         sheets.Single(item => item.Name == "发票").Rows.SelectMany(item => item).Should().Contain(invoice.Id.ToString());
+    }
+
+    [Fact]
+    public async Task AllocatedCashAndInvoicesExportParentAndProjectAmountsForEveryProject()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var company = new LegalEntity { Code = "WB-MULTI-LE", Name = "多项目公司", ShortName = "多项目" };
+        var partner = new BusinessPartner { PartnerNumber = "WB-MULTI-BP", Name = "多项目单位", ShortName = "多单位" };
+        var first = new Project { ProjectNumber = "WB-MULTI-P1", Name = "多项目一", Stage = ProjectStage.UnderConstruction };
+        var second = new Project { ProjectNumber = "WB-MULTI-P2", Name = "多项目二", Stage = ProjectStage.UnderConstruction };
+        first.LegalEntities.Add(new ProjectLegalEntity { Project = first, LegalEntity = company, IsPrimary = true });
+        second.LegalEntities.Add(new ProjectLegalEntity { Project = second, LegalEntity = company, IsPrimary = true });
+        var firstContract = new Contract { Project = first, BusinessPartner = partner, ContractNumber = "WB-MULTI-C1", Name = "多项目合同一", TotalAmount = 400m };
+        var secondContract = new Contract { Project = second, BusinessPartner = partner, ContractNumber = "WB-MULTI-C2", Name = "多项目合同二", TotalAmount = 600m };
+        first.Contracts.Add(firstContract);
+        second.Contracts.Add(secondContract);
+        var settlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, BusinessPartner = partner,
+            Project = first, Contract = firstContract, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 400m, OriginalInvoiceAmount = 400m
+        };
+        var secondSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, BusinessPartner = partner,
+            Project = second, Contract = secondContract, BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 600m, OriginalInvoiceAmount = 600m
+        };
+        var invoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, LegalEntity = company, BusinessPartner = partner,
+            InvoiceNumber = "WB-MULTI-INV", InvoiceDate = new DateOnly(2026, 7, 3), Amount = 1_000m, NetAmount = 970m, TaxAmount = 30m,
+            Status = LedgerRecordStatus.Active
+        };
+        invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = settlement, Project = first, Contract = firstContract, Amount = 400m, AllocationOrder = 1 });
+        invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = secondSettlement, Project = second, Contract = secondContract, Amount = 600m, AllocationOrder = 2 });
+        var cash = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, LegalEntity = company, BusinessPartner = partner,
+            BusinessDate = new DateOnly(2026, 7, 4), Amount = 1_000m, PaymentMethod = "银行转账"
+        };
+        cash.Allocations.Add(new FinanceCashAllocation { CashEntry = cash, Settlement = settlement, Project = first, Contract = firstContract, Amount = 400m, AllocationOrder = 1 });
+        cash.Allocations.Add(new FinanceCashAllocation { CashEntry = cash, Settlement = secondSettlement, Project = second, Contract = secondContract, Amount = 600m, AllocationOrder = 2 });
+        db.AddRange(company, partner, first, second, settlement, secondSettlement, invoice, cash);
+        await db.SaveChangesAsync();
+        var service = new ProjectWorkbookService(db, new ProjectService(db), new FinanceLedgerService(db));
+
+        var file = await service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(new ProjectListActor("admin", true), new ProjectListQuery(null, [], null, null, null, null, null, false), false, [first.Id, second.Id]),
+            [ProjectWorkbookSheet.Collections, ProjectWorkbookSheet.Invoices],
+            Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+        var sheets = SimpleXlsxReader.Read(file.Content);
+
+        var collectionRows = sheets.Single(item => item.Name == "收款").Rows.Where(row => row.Contains(cash.Id.ToString())).ToArray();
+        collectionRows.Should().HaveCount(2);
+        collectionRows.Select(row => row[Array.IndexOf(sheets.Single(item => item.Name == "收款").Rows[0].ToArray(), "项目分摊金额")]).Should().Contain([400m, 600m]);
+        collectionRows.Select(row => row[Array.IndexOf(sheets.Single(item => item.Name == "收款").Rows[0].ToArray(), "源记录总额")]).Distinct().Should().Equal(1000m);
+
+        var invoiceRows = sheets.Single(item => item.Name == "发票").Rows.Where(row => row.Contains(invoice.Id.ToString())).ToArray();
+        invoiceRows.Should().HaveCount(2);
+        invoiceRows.Select(row => row[Array.IndexOf(sheets.Single(item => item.Name == "发票").Rows[0].ToArray(), "项目分摊金额")]).Should().Contain([400m, 600m]);
+        invoiceRows.Select(row => row[Array.IndexOf(sheets.Single(item => item.Name == "发票").Rows[0].ToArray(), "源记录总额")]).Distinct().Should().Equal(1000m);
     }
 }

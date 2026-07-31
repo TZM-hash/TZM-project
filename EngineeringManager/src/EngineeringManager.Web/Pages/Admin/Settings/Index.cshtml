@@ -67,6 +67,15 @@
                 <option value="ChineseKai">楷体</option>
             </select>
         </label>
+        <label class="settings-select-card" data-global-font-size-picker>
+            <span><strong>全局字号</strong><small>调整全站正文、表格和控件的基础字号，默认保持标准大小。</small></span>
+            <select asp-for="Input.FontSize" disabled="@Model.IsReadOnly" data-global-font-size-select>
+                <option value="Small">小</option>
+                <option value="Standard">标准（默认）</option>
+                <option value="Large">大</option>
+                <option value="ExtraLarge">特大</option>
+            </select>
+        </label>
         <label class="settings-select-card">
             <span><strong>表格密度</strong><small>设置全站业务表格的默认行高。</small></span>
             <select asp-for="Input.Density" disabled="@Model.IsReadOnly" data-table-density>

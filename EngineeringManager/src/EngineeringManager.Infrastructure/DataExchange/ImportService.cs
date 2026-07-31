@@ -3,6 +3,8 @@ using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Equipment;
+using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +13,8 @@ namespace EngineeringManager.Infrastructure.DataExchange;
 
 public sealed class ImportService(ApplicationDbContext db) : IImportService
 {
+    private const string CompleteEmployeeWorkbookMarker = "__完整员工工作簿";
+
     private static readonly Dictionary<ExportDataset, IReadOnlyList<ImportColumn>> Columns = new()
     {
         [ExportDataset.Employees] =
@@ -29,6 +33,135 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("默认计件单价", "default_piecework_rate", false),
             new("系统ID", "_system_id", false),
             new("并发版本", "_concurrency_stamp", false)
+        ],
+        [ExportDataset.Payroll] =
+        [
+            new("批次编号", "batch_number", true),
+            new("批次名称", "batch_name", true),
+            new("批次类型", "batch_type", true),
+            new("开始日期", "start_date", true),
+            new("结束日期", "end_date", true),
+            new("发放日期", "payment_date", false),
+            new("项目编号", "project_number", false),
+            new("公司编码", "legal_entity_code", false),
+            new("账户账号", "account_number", false),
+            new("实际总额", "actual_amount", true),
+            new("付款方式", "payment_method", false),
+            new("员工编号", "employee_number", false),
+            new("人员来源", "recipient_type", false),
+            new("人员姓名", "recipient_name", false),
+            new("个人金额", "amount", false),
+            new("备注", "notes", false)
+        ],
+        [ExportDataset.Collections] =
+        [
+            new("系统ID", "_system_id", false),
+            new("项目编号", "project_number", false),
+            new("收款日期", "collection_date", true),
+            new("签约公司编码", "legal_entity_code", false),
+            new("签约公司", "legal_entity", false),
+            new("合作单位编号", "partner_number", false),
+            new("合作单位", "partner", false),
+            new("收款账户账号", "account_number", false),
+            new("收款账户", "account", false),
+            new("收款金额", "amount", true),
+            new("收款方式", "payment_method", true),
+            new("备注", "notes", false)
+        ],
+        [ExportDataset.Payments] =
+        [
+            new("系统ID", "_system_id", false),
+            new("项目编号", "project_number", false),
+            new("付款日期", "payment_date", true),
+            new("签约公司编码", "legal_entity_code", false),
+            new("签约公司", "legal_entity", false),
+            new("合作单位编号", "partner_number", false),
+            new("合作单位", "partner", false),
+            new("付款账户账号", "account_number", false),
+            new("付款账户", "account", false),
+            new("付款金额", "amount", true),
+            new("付款方式", "payment_method", true),
+            new("备注", "notes", false)
+        ],
+        [ExportDataset.Invoices] =
+        [
+            new("系统ID", "_system_id", false),
+            new("项目编号", "project_number", false),
+            new("发票号码", "invoice_number", true),
+            new("发票日期", "invoice_date", true),
+            new("发票方向", "direction", true),
+            new("签约公司编码", "legal_entity_code", false),
+            new("签约公司", "legal_entity", false),
+            new("合作单位编号", "partner_number", false),
+            new("合作单位", "partner", false),
+            new("含税金额", "gross_amount", true),
+            new("状态", "status", true),
+            new("备注", "notes", false)
+        ],
+        [ExportDataset.EmployeeWages] =
+        [
+            new("系统ID", "_system_id", false),
+            new("员工编号", "employee_number", true),
+            new("业务年度", "business_year", true),
+            new("开始日期", "start_date", true),
+            new("结束日期", "end_date", true),
+            new("工资明细类型", "entry_type", true),
+            new("工资类别", "wage_category", true),
+            new("计薪方式", "calculation_method", true),
+            new("收支性质", "nature", true),
+            new("数量", "quantity", false),
+            new("单位", "unit", false),
+            new("单价", "unit_price", false),
+            new("自动金额", "automatic_amount", false),
+            new("调整金额", "adjustment_amount", false),
+            new("最终金额", "final_amount", true),
+            new("公司编码", "legal_entity_code", false),
+            new("项目编号", "project_number", false),
+            new("备注", "notes", false)
+        ],
+        [ExportDataset.EmployeeOtherPayments] =
+        [
+            new("系统ID", "_system_id", false),
+            new("员工编号", "employee_number", true),
+            new("项目编号", "project_number", false),
+            new("公司编码", "legal_entity_code", false),
+            new("公司名称", "legal_entity", false),
+            new("往来类型", "entry_type", true),
+            new("记录性质", "record_kind", true),
+            new("关联应付ID", "related_payable_id", false),
+            new("账户账号", "account_number", false),
+            new("账户名称", "account", false),
+            new("日期", "entry_date", true),
+            new("金额", "amount", true),
+            new("付款方式", "payment_method", false),
+            new("说明", "description", false)
+        ],
+        [ExportDataset.EmployeeReceipts] =
+        [
+            new("系统ID", "_system_id", false),
+            new("员工编号", "employee_number", true),
+            new("业务年度", "business_year", true),
+            new("收款日期", "receipt_date", true),
+            new("收款类型", "receipt_type", true),
+            new("金额", "amount", true),
+            new("付款公司编码", "payment_legal_entity_code", false),
+            new("付款公司", "payment_legal_entity", false),
+            new("账户账号", "account_number", false),
+            new("账户名称", "account", false),
+            new("付款方式", "payment_method", true),
+            new("实际收款人", "actual_recipient_name", true),
+            new("项目编号", "project_number", false),
+            new("备注", "notes", false)
+        ],
+        [ExportDataset.EmployeeFinancialAdjustments] =
+        [
+            new("系统ID", "_system_id", false),
+            new("员工编号", "employee_number", true),
+            new("业务年度", "business_year", true),
+            new("调整日期", "adjustment_date", true),
+            new("调整金额", "amount", true),
+            new("调整类型", "adjustment_type", true),
+            new("说明", "notes", true)
         ],
         [ExportDataset.EmployeeCertificates] =
         [
@@ -119,6 +252,9 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         ]
     };
 
+    public IReadOnlyList<ExportDataset> ImportableDatasets { get; } =
+        Columns.Keys.OrderBy(item => item).ToArray();
+
     public Task<ExportFileResult> GenerateTemplateAsync(ExportDataset dataset, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -145,16 +281,35 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         }
 
         var sheets = SimpleXlsxReader.Read(request.Content);
-        var sheet = sheets.Count > 0 ? sheets[0] : throw new InvalidDataException("导入文件没有工作表。");
-        if (sheet.Rows.Count == 0)
+        if (sheets.Count == 0)
         {
-            throw new InvalidDataException("导入工作表没有表头。");
+            throw new InvalidDataException("导入文件没有工作表。");
         }
 
-        var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
-        var mapping = ResolveMapping(request.Dataset, headers, request.SourceToTargetMapping);
-        var errors = await ValidateRowsAsync(request.Dataset, sheet.Rows.Skip(1).ToArray(), headers, mapping, request.Mode, cancellationToken);
-        var totalRows = Math.Max(sheet.Rows.Count - 1, 0);
+        IReadOnlyList<ImportErrorDto> errors;
+        var mapping = new Dictionary<string, string>(StringComparer.Ordinal);
+        int totalRows;
+        if (IsCompleteEmployeeWorkbook(request.Dataset, sheets))
+        {
+            var analysis = await new EmployeeWorkbookImporter(db).AnalyzeAsync(sheets, fileName, cancellationToken);
+            errors = analysis.Errors;
+            totalRows = analysis.TotalRows;
+            mapping[CompleteEmployeeWorkbookMarker] = "true";
+        }
+        else
+        {
+            var sheet = sheets[0];
+            if (sheet.Rows.Count == 0)
+            {
+                throw new InvalidDataException("导入工作表没有表头。");
+            }
+
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            mapping = ResolveMapping(request.Dataset, headers, request.SourceToTargetMapping);
+            errors = await ValidateRowsAsync(request.Dataset, sheet.Rows.Skip(1).ToArray(), headers, mapping, request.Mode, cancellationToken);
+            totalRows = Math.Max(sheet.Rows.Count - 1, 0);
+        }
+
         var errorRows = errors.Select(item => item.RowNumber).Distinct().Count();
         var batch = new ImportBatch
         {
@@ -166,7 +321,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             Mode = request.Mode,
             Status = DataExchangeTaskStatus.PreviewReady,
             TotalRows = totalRows,
-            ValidRows = totalRows - errorRows,
+            ValidRows = Math.Max(0, totalRows - errorRows),
             ErrorRows = errorRows
         };
         foreach (var error in errors)
@@ -194,18 +349,43 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var sheet = SimpleXlsxReader.Read(batch.OriginalContent)[0];
-        var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
-        var mapping = JsonSerializer.Deserialize<Dictionary<string, string>>(batch.MappingJson) ?? [];
-        foreach (var row in sheet.Rows.Skip(1))
+        var sheets = SimpleXlsxReader.Read(batch.OriginalContent);
+        if (sheets.Count == 0)
         {
-            var values = RowValues(headers, row, mapping);
-            AddOrUpdateEntity(batch.Dataset, values, batch.Mode);
+            throw new InvalidDataException("导入文件没有工作表。");
+        }
+
+        if (IsCompleteEmployeeWorkbook(batch.Dataset, sheets))
+        {
+            var importer = new EmployeeWorkbookImporter(db);
+            var analysis = await importer.AnalyzeAsync(sheets, batch.OriginalFileName, cancellationToken);
+            if (analysis.Errors.Count > 0)
+            {
+                throw new InvalidOperationException("员工工作簿重新校验后存在错误，不能确认导入。");
+            }
+
+            await importer.ApplyAsync(analysis, batch.OriginalFileName, cancellationToken);
+        }
+        else
+        {
+            var sheet = sheets[0];
+            if (sheet.Rows.Count == 0)
+            {
+                throw new InvalidDataException("导入工作表没有表头。");
+            }
+
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            var mapping = JsonSerializer.Deserialize<Dictionary<string, string>>(batch.MappingJson) ?? [];
+            foreach (var row in sheet.Rows.Skip(1))
+            {
+                var values = RowValues(headers, row, mapping);
+                AddOrUpdateEntity(batch.Dataset, values, batch.Mode);
+            }
         }
 
         batch.Status = DataExchangeTaskStatus.Completed;
         batch.CompletedAt = DateTimeOffset.UtcNow;
-        db.AuditLogs.Add(new AuditLog { UserId = batch.CreatedByUserId, Action = "DataImport", EntityType = nameof(ImportBatch), EntityId = batch.Id.ToString(), Reason = $"导入 {batch.Dataset}", AfterJson = JsonSerializer.Serialize(new { batch.Dataset, batch.Mode, batch.TotalRows, batch.ValidRows }) });
+        db.AuditLogs.Add(new AuditLog { UserId = batch.CreatedByUserId, Action = "DataImport", EntityType = nameof(ImportBatch), EntityId = batch.Id.ToString(), Reason = $"导入 {DataExchangeValueLabels.Dataset(batch.Dataset)}", AfterJson = JsonSerializer.Serialize(new { batch.Dataset, batch.Mode, batch.TotalRows, batch.ValidRows }) });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -223,6 +403,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         var numberKey = dataset switch
         {
             ExportDataset.Employees => "employee_number",
+            ExportDataset.Payroll => "batch_number",
             ExportDataset.Partners => "partner_number",
             ExportDataset.Projects => "project_number",
             ExportDataset.Companies => "company_code",
@@ -241,7 +422,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 }
             }
 
-            if (values.TryGetValue(numberKey, out var number) && !string.IsNullOrWhiteSpace(number) && !seenNumbers.Add(number))
+            if (dataset != ExportDataset.Payroll && values.TryGetValue(numberKey, out var number) && !string.IsNullOrWhiteSpace(number) && !seenNumbers.Add(number))
             {
                 errors.Add(new ImportErrorDto(excelRow, HeaderFor(dataset, numberKey), "文件内编号重复。", number));
             }
@@ -361,6 +542,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 ValidateDate(values.GetValueOrDefault("result_date"), excelRow, "成果日期", errors);
                 if (!Enum.TryParse<EngineeringManager.Domain.StageResults.StageResultType>(values.GetValueOrDefault("result_type"), true, out _)) errors.Add(new ImportErrorDto(excelRow, "成果类型", "成果类型无法识别。", values.GetValueOrDefault("result_type")));
             }
+
+            await ValidateExtendedRowAsync(dataset, values, excelRow, errors, requestMode, cancellationToken);
         }
 
         foreach (var number in seenNumbers)
@@ -368,6 +551,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             var exists = dataset switch
             {
                 ExportDataset.Employees => await db.Employees.AnyAsync(item => item.EmployeeNumber == number, cancellationToken),
+                ExportDataset.Payroll => await db.PayrollBatches.AnyAsync(item => item.BatchNumber == number, cancellationToken),
                 ExportDataset.Partners => await db.BusinessPartners.AnyAsync(item => item.PartnerNumber == number, cancellationToken),
                 ExportDataset.Projects => await db.Projects.AnyAsync(item => item.ProjectNumber == number, cancellationToken),
                 ExportDataset.Companies => await db.LegalEntities.AnyAsync(item => item.Code == number, cancellationToken),
@@ -387,6 +571,134 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         }
 
         return errors;
+    }
+
+    private async Task ValidateExtendedRowAsync(
+        ExportDataset dataset,
+        IReadOnlyDictionary<string, string?> values,
+        int row,
+        List<ImportErrorDto> errors,
+        ImportMode requestMode,
+        CancellationToken cancellationToken)
+    {
+        if (dataset == ExportDataset.Payroll)
+        {
+            if (requestMode == ImportMode.New && await db.PayrollBatches.AnyAsync(item => item.BatchNumber == values.GetValueOrDefault("batch_number"), cancellationToken))
+            {
+                errors.Add(new ImportErrorDto(row, "批次编号", "批次编号已存在。", values.GetValueOrDefault("batch_number")));
+            }
+            ValidateDate(values.GetValueOrDefault("start_date"), row, "开始日期", errors);
+            ValidateDate(values.GetValueOrDefault("end_date"), row, "结束日期", errors);
+            ValidateDate(values.GetValueOrDefault("payment_date"), row, "发放日期", errors);
+            ValidateDecimal(values.GetValueOrDefault("actual_amount"), row, "实际总额", errors);
+            if (!TryParsePayrollBatchType(values.GetValueOrDefault("batch_type"), out _)) errors.Add(new ImportErrorDto(row, "批次类型", "批次类型无法识别。", values.GetValueOrDefault("batch_type")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("payment_method")) && !TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out _)) errors.Add(new ImportErrorDto(row, "付款方式", "付款方式无法识别。", values.GetValueOrDefault("payment_method")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("project_number")) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("legal_entity_code")) && !await db.LegalEntities.AnyAsync(item => item.Code == values.GetValueOrDefault("legal_entity_code"), cancellationToken)) errors.Add(new ImportErrorDto(row, "公司编码", "公司编码不存在。", values.GetValueOrDefault("legal_entity_code")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("employee_number")) && !await db.Employees.AnyAsync(item => item.EmployeeNumber == values.GetValueOrDefault("employee_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "员工编号", "员工编号不存在。", values.GetValueOrDefault("employee_number")));
+            ValidateDecimal(values.GetValueOrDefault("amount"), row, "个人金额", errors);
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("employee_number")) && !TryParsePayrollRecipientType(values.GetValueOrDefault("recipient_type"), out _)) errors.Add(new ImportErrorDto(row, "人员来源", "人员来源必须是员工或班组工人。", values.GetValueOrDefault("recipient_type")));
+        }
+
+        if (dataset is ExportDataset.Collections or ExportDataset.Payments)
+        {
+            var company = values.GetValueOrDefault("legal_entity_code");
+            var companyName = values.GetValueOrDefault("legal_entity");
+            var partner = values.GetValueOrDefault("partner_number");
+            var partnerName = values.GetValueOrDefault("partner");
+            var account = values.GetValueOrDefault("account_number");
+            var accountName = values.GetValueOrDefault("account");
+            if (string.IsNullOrWhiteSpace(company) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "签约公司", "必须填写签约公司编码或名称。", null));
+            if (string.IsNullOrWhiteSpace(partner) && string.IsNullOrWhiteSpace(partnerName)) errors.Add(new ImportErrorDto(row, "合作单位", "必须填写合作单位编号或名称。", null));
+            if (string.IsNullOrWhiteSpace(account) && string.IsNullOrWhiteSpace(accountName)) errors.Add(new ImportErrorDto(row, "账户", "必须填写账户账号或名称。", null));
+            if (!string.IsNullOrWhiteSpace(company) && !await db.LegalEntities.AnyAsync(item => item.Code == company, cancellationToken) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "签约公司编码", "签约公司编码不存在。", company));
+            if (!string.IsNullOrWhiteSpace(partner) && !await db.BusinessPartners.AnyAsync(item => item.PartnerNumber == partner, cancellationToken) && string.IsNullOrWhiteSpace(partnerName)) errors.Add(new ImportErrorDto(row, "合作单位编号", "合作单位编号不存在。", partner));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("project_number")) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
+            if (!string.IsNullOrWhiteSpace(account) && !await db.FinancialAccounts.AnyAsync(item => item.AccountNumber == account, cancellationToken)) errors.Add(new ImportErrorDto(row, "账户账号", "账户账号不存在。", account));
+            ValidateDate(values.GetValueOrDefault(dataset == ExportDataset.Collections ? "collection_date" : "payment_date"), row, dataset == ExportDataset.Collections ? "收款日期" : "付款日期", errors);
+            ValidateDecimal(values.GetValueOrDefault("amount"), row, dataset == ExportDataset.Collections ? "收款金额" : "付款金额", errors);
+            if (!TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out _)) errors.Add(new ImportErrorDto(row, "付款方式", "付款方式无法识别。", values.GetValueOrDefault("payment_method")));
+        }
+
+        if (dataset == ExportDataset.Invoices)
+        {
+            var company = values.GetValueOrDefault("legal_entity_code");
+            var companyName = values.GetValueOrDefault("legal_entity");
+            var partner = values.GetValueOrDefault("partner_number");
+            var partnerName = values.GetValueOrDefault("partner");
+            if (string.IsNullOrWhiteSpace(company) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "签约公司", "必须填写签约公司编码或名称。", null));
+            if (!string.IsNullOrWhiteSpace(company) && !await db.LegalEntities.AnyAsync(item => item.Code == company, cancellationToken) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "签约公司编码", "签约公司编码不存在。", company));
+            if (string.IsNullOrWhiteSpace(partner) && string.IsNullOrWhiteSpace(partnerName)) errors.Add(new ImportErrorDto(row, "合作单位", "必须填写合作单位编号或名称。", null));
+            if (!string.IsNullOrWhiteSpace(partner) && !await db.BusinessPartners.AnyAsync(item => item.PartnerNumber == partner, cancellationToken) && string.IsNullOrWhiteSpace(partnerName)) errors.Add(new ImportErrorDto(row, "合作单位编号", "合作单位编号不存在。", partner));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("project_number")) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
+            ValidateDate(values.GetValueOrDefault("invoice_date"), row, "发票日期", errors);
+            ValidateDecimal(values.GetValueOrDefault("gross_amount"), row, "含税金额", errors);
+            if (!TryParseLedgerDirection(values.GetValueOrDefault("direction"), out _)) errors.Add(new ImportErrorDto(row, "发票方向", "发票方向必须是应收或应付。", values.GetValueOrDefault("direction")));
+            if (!TryParseLedgerStatus(values.GetValueOrDefault("status"), out _)) errors.Add(new ImportErrorDto(row, "状态", "发票状态必须是有效或已作废。", values.GetValueOrDefault("status")));
+        }
+
+        if (dataset == ExportDataset.EmployeeWages)
+        {
+            await ValidateEmployeeReferenceAsync(values, row, errors, cancellationToken);
+            ValidateDate(values.GetValueOrDefault("start_date"), row, "开始日期", errors);
+            ValidateDate(values.GetValueOrDefault("end_date"), row, "结束日期", errors);
+            ValidateDecimal(values.GetValueOrDefault("quantity"), row, "数量", errors);
+            ValidateDecimal(values.GetValueOrDefault("unit_price"), row, "单价", errors);
+            ValidateDecimal(values.GetValueOrDefault("automatic_amount"), row, "自动金额", errors);
+            ValidateDecimal(values.GetValueOrDefault("adjustment_amount"), row, "调整金额", errors);
+            ValidateDecimal(values.GetValueOrDefault("final_amount"), row, "最终金额", errors);
+            if (!TryParseEmployeeWageEntryType(values.GetValueOrDefault("entry_type"), out _)) errors.Add(new ImportErrorDto(row, "工资明细类型", "工资明细类型无法识别。", values.GetValueOrDefault("entry_type")));
+            if (!TryParseEmployeeWageCategory(values.GetValueOrDefault("wage_category"), out _)) errors.Add(new ImportErrorDto(row, "工资类别", "工资类别无法识别。", values.GetValueOrDefault("wage_category")));
+            if (!TryParseEmployeeWageCalculationMethod(values.GetValueOrDefault("calculation_method"), out _)) errors.Add(new ImportErrorDto(row, "计薪方式", "计薪方式无法识别。", values.GetValueOrDefault("calculation_method")));
+            if (!TryParsePayrollItemNature(values.GetValueOrDefault("nature"), out _)) errors.Add(new ImportErrorDto(row, "收支性质", "收支性质必须是收入或扣款。", values.GetValueOrDefault("nature")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("legal_entity_code")) && !await db.LegalEntities.AnyAsync(item => item.Code == values.GetValueOrDefault("legal_entity_code"), cancellationToken)) errors.Add(new ImportErrorDto(row, "公司编码", "公司编码不存在。", values.GetValueOrDefault("legal_entity_code")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("project_number")) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
+        }
+
+        if (dataset == ExportDataset.EmployeeOtherPayments)
+        {
+            await ValidateEmployeeReferenceAsync(values, row, errors, cancellationToken);
+            var company = values.GetValueOrDefault("legal_entity_code");
+            var companyName = values.GetValueOrDefault("legal_entity");
+            if (string.IsNullOrWhiteSpace(company) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "公司", "必须填写公司编码或名称。", null));
+            if (!string.IsNullOrWhiteSpace(company) && !await db.LegalEntities.AnyAsync(item => item.Code == company, cancellationToken) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "公司编码", "公司编码不存在。", company));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("project_number")) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("account_number")) && !await db.FinancialAccounts.AnyAsync(item => item.AccountNumber == values.GetValueOrDefault("account_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "账户账号", "账户账号不存在。", values.GetValueOrDefault("account_number")));
+            ValidateDate(values.GetValueOrDefault("entry_date"), row, "日期", errors);
+            ValidateDecimal(values.GetValueOrDefault("amount"), row, "金额", errors);
+            if (!TryParseEmployeeLedgerEntryType(values.GetValueOrDefault("entry_type"), out _)) errors.Add(new ImportErrorDto(row, "往来类型", "往来类型无法识别。", values.GetValueOrDefault("entry_type")));
+            if (!TryParseEmployeeLedgerRecordKind(values.GetValueOrDefault("record_kind"), out _)) errors.Add(new ImportErrorDto(row, "记录性质", "记录性质无法识别。", values.GetValueOrDefault("record_kind")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("payment_method")) && !TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out _)) errors.Add(new ImportErrorDto(row, "付款方式", "付款方式无法识别。", values.GetValueOrDefault("payment_method")));
+        }
+
+        if (dataset == ExportDataset.EmployeeReceipts)
+        {
+            await ValidateEmployeeReferenceAsync(values, row, errors, cancellationToken);
+            var company = values.GetValueOrDefault("payment_legal_entity_code");
+            var companyName = values.GetValueOrDefault("payment_legal_entity");
+            if (string.IsNullOrWhiteSpace(company) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "付款公司", "必须填写付款公司编码或名称。", null));
+            if (!string.IsNullOrWhiteSpace(company) && !await db.LegalEntities.AnyAsync(item => item.Code == company, cancellationToken) && string.IsNullOrWhiteSpace(companyName)) errors.Add(new ImportErrorDto(row, "付款公司编码", "付款公司编码不存在。", company));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("account_number")) && !await db.FinancialAccounts.AnyAsync(item => item.AccountNumber == values.GetValueOrDefault("account_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "账户账号", "账户账号不存在。", values.GetValueOrDefault("account_number")));
+            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("project_number")) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
+            ValidateDate(values.GetValueOrDefault("receipt_date"), row, "收款日期", errors);
+            ValidateDecimal(values.GetValueOrDefault("amount"), row, "金额", errors);
+            if (!TryParseEmployeeReceiptType(values.GetValueOrDefault("receipt_type"), out _)) errors.Add(new ImportErrorDto(row, "收款类型", "收款类型无法识别。", values.GetValueOrDefault("receipt_type")));
+            if (!TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out _)) errors.Add(new ImportErrorDto(row, "付款方式", "付款方式无法识别。", values.GetValueOrDefault("payment_method")));
+        }
+
+        if (dataset == ExportDataset.EmployeeFinancialAdjustments)
+        {
+            await ValidateEmployeeReferenceAsync(values, row, errors, cancellationToken);
+            ValidateDate(values.GetValueOrDefault("adjustment_date"), row, "调整日期", errors);
+            ValidateDecimal(values.GetValueOrDefault("amount"), row, "调整金额", errors);
+            if (!TryParseEmployeeFinancialAdjustmentType(values.GetValueOrDefault("adjustment_type"), out _)) errors.Add(new ImportErrorDto(row, "调整类型", "调整类型无法识别。", values.GetValueOrDefault("adjustment_type")));
+        }
+    }
+
+    private async Task ValidateEmployeeReferenceAsync(IReadOnlyDictionary<string, string?> values, int row, List<ImportErrorDto> errors, CancellationToken cancellationToken)
+    {
+        var employeeNumber = values.GetValueOrDefault("employee_number");
+        if (!await db.Employees.AnyAsync(item => item.EmployeeNumber == employeeNumber, cancellationToken)) errors.Add(new ImportErrorDto(row, "员工编号", "员工编号不存在。", employeeNumber));
     }
 
     private static Dictionary<string, string> ResolveMapping(ExportDataset dataset, IReadOnlyList<string> headers, IReadOnlyDictionary<string, string>? provided)
@@ -442,6 +754,30 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     DefaultHourlyRate = ParseDecimal(values.GetValueOrDefault("default_hourly_rate")),
                     DefaultPieceworkRate = ParseDecimal(values.GetValueOrDefault("default_piecework_rate"))
                 });
+                break;
+            case ExportDataset.Collections:
+                AddCentralCashEntry(values, LedgerDirection.Receivable, LedgerCashType.Collection);
+                break;
+            case ExportDataset.Payments:
+                AddCentralCashEntry(values, LedgerDirection.Payable, LedgerCashType.Payment);
+                break;
+            case ExportDataset.Invoices:
+                AddCentralInvoice(values);
+                break;
+            case ExportDataset.Payroll:
+                AddPayrollBatch(values);
+                break;
+            case ExportDataset.EmployeeWages:
+                AddEmployeeWage(values);
+                break;
+            case ExportDataset.EmployeeOtherPayments:
+                AddEmployeeOtherPayment(values);
+                break;
+            case ExportDataset.EmployeeReceipts:
+                AddEmployeeReceipt(values);
+                break;
+            case ExportDataset.EmployeeFinancialAdjustments:
+                AddEmployeeFinancialAdjustment(values);
                 break;
             case ExportDataset.EmployeeCertificates:
                 var certificateEmployee = db.Employees.Single(item => item.EmployeeNumber == values["employee_number"]);
@@ -561,6 +897,306 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         }
     }
 
+    private void AddCentralCashEntry(Dictionary<string, string?> values, LedgerDirection direction, LedgerCashType cashType)
+    {
+        var legalEntity = ResolveLegalEntity(values.GetValueOrDefault("legal_entity_code"), values.GetValueOrDefault("legal_entity"));
+        var partner = ResolvePartner(values.GetValueOrDefault("partner_number"), values.GetValueOrDefault("partner"));
+        var project = ResolveProject(values.GetValueOrDefault("project_number"));
+        var account = ResolveAccount(legalEntity.Id, values.GetValueOrDefault("account_number"), values.GetValueOrDefault("account"))
+            ?? throw new InvalidOperationException("导入现金记录必须能匹配到账户。");
+        if (!TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var paymentMethod)) throw new InvalidOperationException("已通过预览的付款方式无法解析。");
+        var entry = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = direction,
+            CashType = cashType,
+            LegalEntity = legalEntity,
+            BusinessPartner = partner,
+            Project = project,
+            Account = account,
+            BusinessDate = ParseDate(values.GetValueOrDefault(direction == LedgerDirection.Receivable ? "collection_date" : "payment_date"))!.Value,
+            Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? 0m,
+            PaymentMethod = paymentMethod.ToString(),
+            SourceType = LedgerSourceType.CentralLedger,
+            Notes = values.GetValueOrDefault("notes")
+        };
+        db.FinanceCashEntries.Add(entry);
+        db.AccountTransactions.Add(new AccountTransaction
+        {
+            Account = account,
+            Direction = direction == LedgerDirection.Receivable ? AccountTransactionDirection.Inflow : AccountTransactionDirection.Outflow,
+            SourceType = direction == LedgerDirection.Receivable ? AccountTransactionSourceType.Collection : AccountTransactionSourceType.Payment,
+            SourceId = entry.Id,
+            TransactionDate = entry.BusinessDate,
+            Amount = entry.Amount,
+            Description = entry.Notes
+        });
+    }
+
+    private void AddCentralInvoice(Dictionary<string, string?> values)
+    {
+        var legalEntity = ResolveLegalEntity(values.GetValueOrDefault("legal_entity_code"), values.GetValueOrDefault("legal_entity"));
+        var partner = ResolvePartner(values.GetValueOrDefault("partner_number"), values.GetValueOrDefault("partner"));
+        var project = ResolveProject(values.GetValueOrDefault("project_number"));
+        if (!TryParseLedgerDirection(values.GetValueOrDefault("direction"), out var direction)) throw new InvalidOperationException("已通过预览的发票方向无法解析。");
+        if (!TryParseLedgerStatus(values.GetValueOrDefault("status"), out var status)) throw new InvalidOperationException("已通过预览的发票状态无法解析。");
+        db.FinanceInvoices.Add(new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = direction,
+            LegalEntity = legalEntity,
+            BusinessPartner = partner,
+            Project = project,
+            InvoiceNumber = values["invoice_number"]!,
+            InvoiceDate = ParseDate(values.GetValueOrDefault("invoice_date"))!.Value,
+            Amount = ParseDecimal(values.GetValueOrDefault("gross_amount")) ?? 0m,
+            Status = status,
+            SourceType = LedgerSourceType.CentralLedger,
+            Notes = values.GetValueOrDefault("notes")
+        });
+    }
+
+    private void AddPayrollBatch(Dictionary<string, string?> values)
+    {
+        if (!TryParsePayrollBatchType(values.GetValueOrDefault("batch_type"), out var batchType)) throw new InvalidOperationException("已通过预览的工资批次类型无法解析。");
+        var legalEntity = ResolveLegalEntityOptional(values.GetValueOrDefault("legal_entity_code"), null);
+        var project = ResolveProject(values.GetValueOrDefault("project_number"));
+        var account = legalEntity is null ? null : ResolveAccount(legalEntity.Id, values.GetValueOrDefault("account_number"), null);
+        var startDate = ParseDate(values.GetValueOrDefault("start_date"))!.Value;
+        var endDate = ParseDate(values.GetValueOrDefault("end_date"))!.Value;
+        var paymentDate = ParseDate(values.GetValueOrDefault("payment_date"));
+        var paymentMethod = TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var parsedPaymentMethod) ? parsedPaymentMethod : PaymentMethod.BankTransfer;
+        var batchNumber = values["batch_number"]!;
+        var batch = db.PayrollBatches.Local.FirstOrDefault(item => item.BatchNumber == batchNumber)
+            ?? db.PayrollBatches.SingleOrDefault(item => item.BatchNumber == batchNumber);
+        if (batch is null)
+        {
+            batch = new PayrollBatch
+            {
+                BatchNumber = batchNumber,
+                Name = values["batch_name"]!,
+                BatchType = batchType,
+                StartDate = startDate,
+                EndDate = endDate,
+                PaymentDate = paymentDate,
+                Project = project,
+                LegalEntity = legalEntity,
+                Account = account,
+                ActualAmount = ParseDecimal(values.GetValueOrDefault("actual_amount")) ?? 0m,
+                PaymentMethod = paymentMethod,
+                Status = PayrollBatchStatus.Draft,
+                Notes = values.GetValueOrDefault("notes")
+            };
+            db.PayrollBatches.Add(batch);
+        }
+
+        var employeeNumber = values.GetValueOrDefault("employee_number");
+        if (string.IsNullOrWhiteSpace(employeeNumber)) return;
+        if (!TryParsePayrollRecipientType(values.GetValueOrDefault("recipient_type"), out var recipientType) || recipientType != PayrollRecipientType.Employee) throw new InvalidOperationException("工资导入目前只支持员工收款行。");
+        var employee = FindEmployee(employeeNumber);
+        var recipientKey = $"employee:{employee.Id:N}";
+        var payment = batch.Payments.FirstOrDefault(item => item.RecipientKey == recipientKey)
+            ?? db.PayrollPayments.Local.FirstOrDefault(item => item.PayrollBatchId == batch.Id && item.RecipientKey == recipientKey)
+            ?? (batch.Id == Guid.Empty ? null : db.PayrollPayments.SingleOrDefault(item => item.PayrollBatchId == batch.Id && item.RecipientKey == recipientKey));
+        if (payment is null)
+        {
+            payment = new PayrollPayment
+            {
+                Batch = batch,
+                RecipientType = PayrollRecipientType.Employee,
+                PaymentCategory = PayrollPaymentCategory.Wage,
+                RecipientKey = recipientKey,
+                Employee = employee,
+                Account = account,
+                PaymentDate = paymentDate,
+                Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? 0m,
+                PaymentMethod = paymentMethod,
+                PayeeType = PayrollPayeeType.Employee,
+                PayeeName = values.GetValueOrDefault("recipient_name") ?? employee.Name,
+                RecipientNameSnapshot = values.GetValueOrDefault("recipient_name") ?? employee.Name
+            };
+            batch.Payments.Add(payment);
+        }
+        else
+        {
+            payment.Batch = batch;
+            payment.RecipientType = PayrollRecipientType.Employee;
+            payment.PaymentCategory = PayrollPaymentCategory.Wage;
+            payment.Employee = employee;
+            payment.Account = account;
+            payment.PaymentDate = paymentDate;
+            payment.Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? payment.Amount;
+            payment.PaymentMethod = paymentMethod;
+            payment.PayeeType = PayrollPayeeType.Employee;
+            payment.PayeeName = values.GetValueOrDefault("recipient_name") ?? employee.Name;
+            payment.RecipientNameSnapshot = values.GetValueOrDefault("recipient_name") ?? employee.Name;
+        }
+    }
+
+    private void AddEmployeeWage(Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        var startDate = ParseDate(values.GetValueOrDefault("start_date"))!.Value;
+        var endDate = ParseDate(values.GetValueOrDefault("end_date"))!.Value;
+        if (!TryParseEmployeeWageEntryType(values.GetValueOrDefault("entry_type"), out var entryType)) throw new InvalidOperationException("已通过预览的工资明细类型无法解析。");
+        if (!TryParseEmployeeWageCategory(values.GetValueOrDefault("wage_category"), out var wageCategory)) throw new InvalidOperationException("已通过预览的工资类别无法解析。");
+        if (!TryParseEmployeeWageCalculationMethod(values.GetValueOrDefault("calculation_method"), out var calculationMethod)) throw new InvalidOperationException("已通过预览的计薪方式无法解析。");
+        if (!TryParsePayrollItemNature(values.GetValueOrDefault("nature"), out var nature)) throw new InvalidOperationException("已通过预览的收支性质无法解析。");
+        var legalEntity = ResolveLegalEntityOptional(values.GetValueOrDefault("legal_entity_code"), null);
+        var project = ResolveProject(values.GetValueOrDefault("project_number"));
+        var automaticAmount = ParseDecimal(values.GetValueOrDefault("automatic_amount")) ?? 0m;
+        var adjustmentAmount = ParseDecimal(values.GetValueOrDefault("adjustment_amount")) ?? 0m;
+        var finalAmount = ParseDecimal(values.GetValueOrDefault("final_amount")) ?? automaticAmount + adjustmentAmount;
+        db.EmployeeWageEntries.Add(new EmployeeWageEntry
+        {
+            Employee = employee,
+            BusinessYear = ResolveBusinessYear(values.GetValueOrDefault("business_year"), startDate),
+            StartDate = startDate,
+            EndDate = endDate,
+            EntryType = entryType,
+            WageCategory = wageCategory,
+            CalculationMethod = calculationMethod,
+            Nature = nature,
+            Quantity = ParseDecimal(values.GetValueOrDefault("quantity")),
+            Unit = values.GetValueOrDefault("unit"),
+            UnitPrice = ParseDecimal(values.GetValueOrDefault("unit_price")),
+            AutomaticAmount = automaticAmount,
+            AdjustmentAmount = adjustmentAmount,
+            FinalAmount = finalAmount,
+            LegalEntity = legalEntity,
+            Project = project,
+            Notes = values.GetValueOrDefault("notes")
+        });
+    }
+
+    private void AddEmployeeOtherPayment(Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        var legalEntity = ResolveLegalEntity(values.GetValueOrDefault("legal_entity_code"), values.GetValueOrDefault("legal_entity"));
+        if (!TryParseEmployeeLedgerEntryType(values.GetValueOrDefault("entry_type"), out var entryType)) throw new InvalidOperationException("已通过预览的往来类型无法解析。");
+        if (!TryParseEmployeeLedgerRecordKind(values.GetValueOrDefault("record_kind"), out var recordKind)) throw new InvalidOperationException("已通过预览的记录性质无法解析。");
+        var paymentMethod = string.IsNullOrWhiteSpace(values.GetValueOrDefault("payment_method")) ? (PaymentMethod?)null : TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var parsed) ? parsed : null;
+        db.EmployeeOtherPayments.Add(new EmployeeOtherPayment
+        {
+            Employee = employee,
+            Project = ResolveProject(values.GetValueOrDefault("project_number")),
+            LegalEntity = legalEntity,
+            EntryType = entryType,
+            RecordKind = recordKind,
+            RelatedPayableId = Guid.TryParse(values.GetValueOrDefault("related_payable_id"), out var relatedId) ? relatedId : null,
+            Account = ResolveAccount(legalEntity.Id, values.GetValueOrDefault("account_number"), values.GetValueOrDefault("account")),
+            EntryDate = ParseDate(values.GetValueOrDefault("entry_date"))!.Value,
+            Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? 0m,
+            PaymentMethod = paymentMethod,
+            Description = values.GetValueOrDefault("description")
+        });
+    }
+
+    private void AddEmployeeReceipt(Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        var legalEntity = ResolveLegalEntity(values.GetValueOrDefault("payment_legal_entity_code"), values.GetValueOrDefault("payment_legal_entity"));
+        var account = ResolveAccount(legalEntity.Id, values.GetValueOrDefault("account_number"), values.GetValueOrDefault("account"))
+            ?? throw new InvalidOperationException("员工收款必须能匹配到账户。");
+        if (!TryParseEmployeeReceiptType(values.GetValueOrDefault("receipt_type"), out var receiptType)) throw new InvalidOperationException("已通过预览的收款类型无法解析。");
+        if (!TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var paymentMethod)) throw new InvalidOperationException("已通过预览的付款方式无法解析。");
+        var receiptDate = ParseDate(values.GetValueOrDefault("receipt_date"))!.Value;
+        db.EmployeeReceipts.Add(new EmployeeReceipt
+        {
+            Employee = employee,
+            BusinessYear = ResolveBusinessYear(values.GetValueOrDefault("business_year"), receiptDate),
+            ReceiptDate = receiptDate,
+            ReceiptType = receiptType,
+            Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? 0m,
+            PaymentLegalEntity = legalEntity,
+            Account = account,
+            PaymentMethod = paymentMethod,
+            ActualRecipientName = values.GetValueOrDefault("actual_recipient_name") ?? employee.Name,
+            Project = ResolveProject(values.GetValueOrDefault("project_number")),
+            Notes = values.GetValueOrDefault("notes")
+        });
+    }
+
+    private void AddEmployeeFinancialAdjustment(Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        if (!TryParseEmployeeFinancialAdjustmentType(values.GetValueOrDefault("adjustment_type"), out var adjustmentType)) throw new InvalidOperationException("已通过预览的调整类型无法解析。");
+        var adjustmentDate = ParseDate(values.GetValueOrDefault("adjustment_date"))!.Value;
+        db.EmployeeFinancialAdjustments.Add(new EmployeeFinancialAdjustment
+        {
+            Employee = employee,
+            BusinessYear = ResolveBusinessYear(values.GetValueOrDefault("business_year"), adjustmentDate),
+            AdjustmentDate = adjustmentDate,
+            Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? 0m,
+            AdjustmentType = adjustmentType,
+            Notes = values.GetValueOrDefault("notes") ?? string.Empty
+        });
+    }
+
+    private Employee FindEmployee(string employeeNumber) => db.Employees.Local.FirstOrDefault(item => item.EmployeeNumber == employeeNumber)
+        ?? db.Employees.Single(item => item.EmployeeNumber == employeeNumber);
+
+    private LegalEntity ResolveLegalEntity(string? code, string? name) => ResolveLegalEntityOptional(code, name)
+        ?? throw new InvalidOperationException("无法匹配导入数据中的公司。");
+
+    private LegalEntity? ResolveLegalEntityOptional(string? code, string? name)
+    {
+        var normalizedCode = string.IsNullOrWhiteSpace(code) ? null : code.Trim();
+        var normalizedName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        return db.LegalEntities.Local.FirstOrDefault(item =>
+                   (normalizedCode != null && item.Code == normalizedCode) ||
+                   (normalizedName != null && (item.Name == normalizedName || item.ShortName == normalizedName)))
+               ?? db.LegalEntities.FirstOrDefault(item =>
+                   (normalizedCode != null && item.Code == normalizedCode) ||
+                   (normalizedName != null && (item.Name == normalizedName || item.ShortName == normalizedName)));
+    }
+
+    private BusinessPartner? ResolvePartner(string? number, string? name)
+    {
+        var normalizedNumber = string.IsNullOrWhiteSpace(number) ? null : number.Trim();
+        var normalizedName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        return db.BusinessPartners.Local.FirstOrDefault(item =>
+                   (normalizedNumber != null && item.PartnerNumber == normalizedNumber) ||
+                   (normalizedName != null && (item.Name == normalizedName || item.ShortName == normalizedName)))
+               ?? db.BusinessPartners.FirstOrDefault(item =>
+                   (normalizedNumber != null && item.PartnerNumber == normalizedNumber) ||
+                   (normalizedName != null && (item.Name == normalizedName || item.ShortName == normalizedName)));
+    }
+
+    private Project? ResolveProject(string? number)
+    {
+        var normalized = string.IsNullOrWhiteSpace(number) ? null : number.Trim();
+        return normalized is null ? null : db.Projects.Local.FirstOrDefault(item => item.ProjectNumber == normalized)
+            ?? db.Projects.FirstOrDefault(item => item.ProjectNumber == normalized);
+    }
+
+    private FinancialAccount? ResolveAccount(Guid legalEntityId, string? accountNumber, string? accountName)
+    {
+        var normalizedNumber = string.IsNullOrWhiteSpace(accountNumber) ? null : accountNumber.Trim();
+        var normalizedName = string.IsNullOrWhiteSpace(accountName) ? null : accountName.Trim();
+        return db.FinancialAccounts.Local.FirstOrDefault(item => item.LegalEntityId == legalEntityId &&
+                   ((normalizedNumber != null && item.AccountNumber == normalizedNumber) || (normalizedName != null && item.AccountName == normalizedName)))
+               ?? db.FinancialAccounts.FirstOrDefault(item => item.LegalEntityId == legalEntityId &&
+                   ((normalizedNumber != null && item.AccountNumber == normalizedNumber) || (normalizedName != null && item.AccountName == normalizedName)));
+    }
+
+    private BusinessYear ResolveBusinessYear(string? name, DateOnly referenceDate)
+    {
+        var digits = new string((name ?? string.Empty).Where(char.IsDigit).ToArray());
+        var yearNumber = int.TryParse(digits, out var parsedYear) && parsedYear >= 1900 && parsedYear <= 2200 ? parsedYear : referenceDate.Year;
+        var normalizedName = string.IsNullOrWhiteSpace(name) ? $"{yearNumber}年度" : name.Trim();
+        return db.BusinessYears.Local.FirstOrDefault(item => item.Name == normalizedName)
+            ?? db.BusinessYears.SingleOrDefault(item => item.Name == normalizedName)
+            ?? AddBusinessYear(normalizedName, yearNumber);
+    }
+
+    private BusinessYear AddBusinessYear(string name, int year)
+    {
+        var businessYear = new BusinessYear { Name = name, StartDate = new DateOnly(year, 1, 1), EndDate = new DateOnly(year, 12, 31) };
+        db.BusinessYears.Add(businessYear);
+        return businessYear;
+    }
+
     public async Task<ImportMappingTemplateDto> SaveMappingTemplateAsync(SaveImportMappingTemplateRequest request, CancellationToken cancellationToken)
     {
         var owner = NormalizeRequired(request.OwnerUserId, nameof(request.OwnerUserId));
@@ -637,9 +1273,176 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 equipment.InternalDailyRate = ParseDecimal(values.GetValueOrDefault("internal_daily_rate"), equipment.InternalDailyRate ?? 0m);
                 equipment.ConcurrencyStamp = Guid.NewGuid();
                 return true;
+            case ExportDataset.Collections:
+            case ExportDataset.Payments:
+                if (!systemId.HasValue) return false;
+                var cashEntry = db.FinanceCashEntries.SingleOrDefault(item => item.Id == systemId.Value);
+                if (cashEntry is null) return false;
+                var cashCompany = ResolveLegalEntity(values.GetValueOrDefault("legal_entity_code"), values.GetValueOrDefault("legal_entity"));
+                var cashPartner = ResolvePartner(values.GetValueOrDefault("partner_number"), values.GetValueOrDefault("partner"))
+                    ?? throw new InvalidOperationException("中央现金记录缺少合作单位。");
+                var cashAccount = ResolveAccount(cashCompany.Id, values.GetValueOrDefault("account_number"), values.GetValueOrDefault("account"))
+                    ?? throw new InvalidOperationException("中央现金记录无法匹配到账户。");
+                if (!TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var cashPaymentMethod)) throw new InvalidOperationException("付款方式无法解析。");
+                cashEntry.LegalEntity = cashCompany;
+                cashEntry.BusinessPartner = cashPartner;
+                cashEntry.Project = ResolveProject(values.GetValueOrDefault("project_number"));
+                cashEntry.Account = cashAccount;
+                cashEntry.BusinessDate = ParseDate(values.GetValueOrDefault(dataset == ExportDataset.Collections ? "collection_date" : "payment_date"))!.Value;
+                cashEntry.Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? cashEntry.Amount;
+                cashEntry.PaymentMethod = cashPaymentMethod.ToString();
+                cashEntry.Notes = values.GetValueOrDefault("notes");
+                var cashTransaction = db.AccountTransactions.SingleOrDefault(item => item.SourceId == cashEntry.Id && item.SourceType == (dataset == ExportDataset.Collections ? AccountTransactionSourceType.Collection : AccountTransactionSourceType.Payment));
+                if (cashTransaction is null)
+                {
+                    cashTransaction = new AccountTransaction { SourceId = cashEntry.Id, SourceType = dataset == ExportDataset.Collections ? AccountTransactionSourceType.Collection : AccountTransactionSourceType.Payment };
+                    db.AccountTransactions.Add(cashTransaction);
+                }
+                cashTransaction.Account = cashAccount;
+                cashTransaction.Direction = dataset == ExportDataset.Collections ? AccountTransactionDirection.Inflow : AccountTransactionDirection.Outflow;
+                cashTransaction.TransactionDate = cashEntry.BusinessDate;
+                cashTransaction.Amount = cashEntry.Amount;
+                cashTransaction.Description = cashEntry.Notes;
+                return true;
+            case ExportDataset.Invoices:
+                if (!systemId.HasValue) return false;
+                var invoice = db.FinanceInvoices.SingleOrDefault(item => item.Id == systemId.Value);
+                if (invoice is null) return false;
+                if (!TryParseLedgerDirection(values.GetValueOrDefault("direction"), out var invoiceDirection)) throw new InvalidOperationException("发票方向无法解析。");
+                if (!TryParseLedgerStatus(values.GetValueOrDefault("status"), out var invoiceStatus)) throw new InvalidOperationException("发票状态无法解析。");
+                invoice.LegalEntity = ResolveLegalEntity(values.GetValueOrDefault("legal_entity_code"), values.GetValueOrDefault("legal_entity"));
+                invoice.BusinessPartner = ResolvePartner(values.GetValueOrDefault("partner_number"), values.GetValueOrDefault("partner"));
+                invoice.Project = ResolveProject(values.GetValueOrDefault("project_number"));
+                invoice.Direction = invoiceDirection;
+                invoice.InvoiceNumber = values.GetValueOrDefault("invoice_number") ?? invoice.InvoiceNumber;
+                invoice.InvoiceDate = ParseDate(values.GetValueOrDefault("invoice_date"))!.Value;
+                invoice.Amount = ParseDecimal(values.GetValueOrDefault("gross_amount")) ?? invoice.Amount;
+                invoice.Status = invoiceStatus;
+                invoice.Notes = values.GetValueOrDefault("notes");
+                return true;
+            case ExportDataset.Payroll:
+                var batch = db.PayrollBatches.SingleOrDefault(item => item.BatchNumber == values.GetValueOrDefault("batch_number"));
+                if (batch is null) return false;
+                batch.Name = values.GetValueOrDefault("batch_name") ?? batch.Name;
+                if (TryParsePayrollBatchType(values.GetValueOrDefault("batch_type"), out var batchType)) batch.BatchType = batchType;
+                batch.StartDate = ParseDate(values.GetValueOrDefault("start_date")) ?? batch.StartDate;
+                batch.EndDate = ParseDate(values.GetValueOrDefault("end_date")) ?? batch.EndDate;
+                batch.PaymentDate = ParseDate(values.GetValueOrDefault("payment_date"));
+                batch.Project = ResolveProject(values.GetValueOrDefault("project_number"));
+                batch.LegalEntity = ResolveLegalEntityOptional(values.GetValueOrDefault("legal_entity_code"), null);
+                batch.ActualAmount = ParseDecimal(values.GetValueOrDefault("actual_amount"), batch.ActualAmount);
+                if (TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var batchPaymentMethod)) batch.PaymentMethod = batchPaymentMethod;
+                batch.Notes = values.GetValueOrDefault("notes") ?? batch.Notes;
+                AddPayrollBatch(values);
+                return true;
+            case ExportDataset.EmployeeWages:
+                if (!systemId.HasValue) return false;
+                var wage = db.EmployeeWageEntries.SingleOrDefault(item => item.Id == systemId.Value);
+                if (wage is null) return false;
+                UpdateEmployeeWage(wage, values);
+                return true;
+            case ExportDataset.EmployeeOtherPayments:
+                if (!systemId.HasValue) return false;
+                var otherPayment = db.EmployeeOtherPayments.SingleOrDefault(item => item.Id == systemId.Value);
+                if (otherPayment is null) return false;
+                UpdateEmployeeOtherPayment(otherPayment, values);
+                return true;
+            case ExportDataset.EmployeeReceipts:
+                if (!systemId.HasValue) return false;
+                var receipt = db.EmployeeReceipts.SingleOrDefault(item => item.Id == systemId.Value);
+                if (receipt is null) return false;
+                UpdateEmployeeReceipt(receipt, values);
+                return true;
+            case ExportDataset.EmployeeFinancialAdjustments:
+                if (!systemId.HasValue) return false;
+                var adjustment = db.EmployeeFinancialAdjustments.SingleOrDefault(item => item.Id == systemId.Value);
+                if (adjustment is null) return false;
+                UpdateEmployeeFinancialAdjustment(adjustment, values);
+                return true;
             default:
                 return false;
         }
+    }
+
+    private void UpdateEmployeeWage(EmployeeWageEntry entry, Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        var startDate = ParseDate(values.GetValueOrDefault("start_date"))!.Value;
+        if (!TryParseEmployeeWageEntryType(values.GetValueOrDefault("entry_type"), out var entryType)) throw new InvalidOperationException("工资明细类型无法解析。");
+        if (!TryParseEmployeeWageCategory(values.GetValueOrDefault("wage_category"), out var wageCategory)) throw new InvalidOperationException("工资类别无法解析。");
+        if (!TryParseEmployeeWageCalculationMethod(values.GetValueOrDefault("calculation_method"), out var calculationMethod)) throw new InvalidOperationException("计薪方式无法解析。");
+        if (!TryParsePayrollItemNature(values.GetValueOrDefault("nature"), out var nature)) throw new InvalidOperationException("收支性质无法解析。");
+        entry.Employee = employee;
+        entry.BusinessYear = ResolveBusinessYear(values.GetValueOrDefault("business_year"), startDate);
+        entry.StartDate = startDate;
+        entry.EndDate = ParseDate(values.GetValueOrDefault("end_date"))!.Value;
+        entry.EntryType = entryType;
+        entry.WageCategory = wageCategory;
+        entry.CalculationMethod = calculationMethod;
+        entry.Nature = nature;
+        entry.Quantity = ParseDecimal(values.GetValueOrDefault("quantity"));
+        entry.Unit = values.GetValueOrDefault("unit");
+        entry.UnitPrice = ParseDecimal(values.GetValueOrDefault("unit_price"));
+        entry.AutomaticAmount = ParseDecimal(values.GetValueOrDefault("automatic_amount")) ?? 0m;
+        entry.AdjustmentAmount = ParseDecimal(values.GetValueOrDefault("adjustment_amount")) ?? 0m;
+        entry.FinalAmount = ParseDecimal(values.GetValueOrDefault("final_amount")) ?? entry.AutomaticAmount + entry.AdjustmentAmount;
+        entry.LegalEntity = ResolveLegalEntityOptional(values.GetValueOrDefault("legal_entity_code"), null);
+        entry.Project = ResolveProject(values.GetValueOrDefault("project_number"));
+        entry.Notes = values.GetValueOrDefault("notes");
+    }
+
+    private void UpdateEmployeeOtherPayment(EmployeeOtherPayment entry, Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        var legalEntity = ResolveLegalEntity(values.GetValueOrDefault("legal_entity_code"), values.GetValueOrDefault("legal_entity"));
+        if (!TryParseEmployeeLedgerEntryType(values.GetValueOrDefault("entry_type"), out var entryType)) throw new InvalidOperationException("往来类型无法解析。");
+        if (!TryParseEmployeeLedgerRecordKind(values.GetValueOrDefault("record_kind"), out var recordKind)) throw new InvalidOperationException("记录性质无法解析。");
+        entry.Employee = employee;
+        entry.Project = ResolveProject(values.GetValueOrDefault("project_number"));
+        entry.LegalEntity = legalEntity;
+        entry.EntryType = entryType;
+        entry.RecordKind = recordKind;
+        entry.RelatedPayableId = Guid.TryParse(values.GetValueOrDefault("related_payable_id"), out var relatedId) ? relatedId : null;
+        entry.Account = ResolveAccount(legalEntity.Id, values.GetValueOrDefault("account_number"), values.GetValueOrDefault("account"));
+        entry.EntryDate = ParseDate(values.GetValueOrDefault("entry_date"))!.Value;
+        entry.Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? entry.Amount;
+        entry.PaymentMethod = string.IsNullOrWhiteSpace(values.GetValueOrDefault("payment_method")) ? null : TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var paymentMethod) ? paymentMethod : null;
+        entry.Description = values.GetValueOrDefault("description");
+    }
+
+    private void UpdateEmployeeReceipt(EmployeeReceipt entry, Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        var legalEntity = ResolveLegalEntity(values.GetValueOrDefault("payment_legal_entity_code"), values.GetValueOrDefault("payment_legal_entity"));
+        var account = ResolveAccount(legalEntity.Id, values.GetValueOrDefault("account_number"), values.GetValueOrDefault("account"))
+            ?? throw new InvalidOperationException("员工收款无法匹配到账户。");
+        if (!TryParseEmployeeReceiptType(values.GetValueOrDefault("receipt_type"), out var receiptType)) throw new InvalidOperationException("收款类型无法解析。");
+        if (!TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var paymentMethod)) throw new InvalidOperationException("付款方式无法解析。");
+        var receiptDate = ParseDate(values.GetValueOrDefault("receipt_date"))!.Value;
+        entry.Employee = employee;
+        entry.BusinessYear = ResolveBusinessYear(values.GetValueOrDefault("business_year"), receiptDate);
+        entry.ReceiptDate = receiptDate;
+        entry.ReceiptType = receiptType;
+        entry.Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? entry.Amount;
+        entry.PaymentLegalEntity = legalEntity;
+        entry.Account = account;
+        entry.PaymentMethod = paymentMethod;
+        entry.ActualRecipientName = values.GetValueOrDefault("actual_recipient_name") ?? employee.Name;
+        entry.Project = ResolveProject(values.GetValueOrDefault("project_number"));
+        entry.Notes = values.GetValueOrDefault("notes");
+    }
+
+    private void UpdateEmployeeFinancialAdjustment(EmployeeFinancialAdjustment entry, Dictionary<string, string?> values)
+    {
+        var employee = FindEmployee(values["employee_number"]!);
+        if (!TryParseEmployeeFinancialAdjustmentType(values.GetValueOrDefault("adjustment_type"), out var adjustmentType)) throw new InvalidOperationException("调整类型无法解析。");
+        var adjustmentDate = ParseDate(values.GetValueOrDefault("adjustment_date"))!.Value;
+        entry.Employee = employee;
+        entry.BusinessYear = ResolveBusinessYear(values.GetValueOrDefault("business_year"), adjustmentDate);
+        entry.AdjustmentDate = adjustmentDate;
+        entry.Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? entry.Amount;
+        entry.AdjustmentType = adjustmentType;
+        entry.Notes = values.GetValueOrDefault("notes") ?? string.Empty;
     }
 
     private static decimal ParseDecimal(string? value, decimal fallback = 0m) => decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : fallback;
@@ -649,6 +1452,240 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         if (!string.IsNullOrWhiteSpace(expected) && Guid.TryParse(expected, out var parsed) && parsed != current)
         {
             throw new InvalidOperationException($"{label}已被其他用户修改，导入已停止，请重新导出后再导入。");
+        }
+    }
+
+    private static bool TryParsePaymentMethod(string? value, out PaymentMethod paymentMethod)
+    {
+        switch (value?.Trim())
+        {
+            case "银行转账":
+            case "银行":
+            case "BankTransfer":
+                paymentMethod = PaymentMethod.BankTransfer;
+                return true;
+            case "现金":
+            case "Cash":
+                paymentMethod = PaymentMethod.Cash;
+                return true;
+            case "微信":
+            case "WeChat":
+                paymentMethod = PaymentMethod.WeChat;
+                return true;
+            case "支付宝":
+            case "Alipay":
+                paymentMethod = PaymentMethod.Alipay;
+                return true;
+            case "其他":
+            case "Other":
+                paymentMethod = PaymentMethod.Other;
+                return true;
+            default:
+                paymentMethod = default;
+                return false;
+        }
+    }
+
+    private static bool TryParseLedgerDirection(string? value, out LedgerDirection direction)
+    {
+        switch (value?.Trim())
+        {
+            case "应收":
+            case "销项":
+            case "收款":
+            case "Receivable":
+            case "Output":
+                direction = LedgerDirection.Receivable;
+                return true;
+            case "应付":
+            case "进项":
+            case "付款":
+            case "Payable":
+            case "Input":
+                direction = LedgerDirection.Payable;
+                return true;
+            default:
+                direction = default;
+                return false;
+        }
+    }
+
+    private static bool TryParseLedgerStatus(string? value, out LedgerRecordStatus status)
+    {
+        switch (value?.Trim())
+        {
+            case "有效":
+            case "Active":
+                status = LedgerRecordStatus.Active;
+                return true;
+            case "已作废":
+            case "作废":
+            case "Voided":
+                status = LedgerRecordStatus.Voided;
+                return true;
+            default:
+                status = default;
+                return false;
+        }
+    }
+
+    private static bool TryParsePayrollBatchType(string? value, out PayrollBatchType batchType)
+    {
+        switch (value?.Trim())
+        {
+            case "按月":
+            case "Monthly": batchType = PayrollBatchType.Monthly; return true;
+            case "按日期范围":
+            case "DateRange": batchType = PayrollBatchType.DateRange; return true;
+            case "项目阶段":
+            case "ProjectStage": batchType = PayrollBatchType.ProjectStage; return true;
+            case "里程碑":
+            case "Milestone": batchType = PayrollBatchType.Milestone; return true;
+            case "临时":
+            case "Temporary": batchType = PayrollBatchType.Temporary; return true;
+            default: batchType = default; return false;
+        }
+    }
+
+    private static bool TryParsePayrollRecipientType(string? value, out PayrollRecipientType recipientType)
+    {
+        switch (value?.Trim())
+        {
+            case "员工":
+            case "Employee": recipientType = PayrollRecipientType.Employee; return true;
+            case "班组工人":
+            case "CrewWorker": recipientType = PayrollRecipientType.CrewWorker; return true;
+            default: recipientType = default; return false;
+        }
+    }
+
+    private static bool TryParseEmployeeWageCategory(string? value, out EmployeeWageCategory category)
+    {
+        switch (value?.Trim())
+        {
+            case "社保工资":
+            case "SocialSecurityWage": category = EmployeeWageCategory.SocialSecurityWage; return true;
+            case "农民工工资":
+            case "MigrantWorkerWage": category = EmployeeWageCategory.MigrantWorkerWage; return true;
+            case "其他工资":
+            case "OtherWage": category = EmployeeWageCategory.OtherWage; return true;
+            default: category = default; return false;
+        }
+    }
+
+    private static bool TryParseEmployeeWageCalculationMethod(string? value, out EmployeeWageCalculationMethod method)
+    {
+        switch (value?.Trim())
+        {
+            case "按月":
+            case "Monthly": method = EmployeeWageCalculationMethod.Monthly; return true;
+            case "按日":
+            case "Daily": method = EmployeeWageCalculationMethod.Daily; return true;
+            case "按小时":
+            case "Hourly": method = EmployeeWageCalculationMethod.Hourly; return true;
+            case "按计件":
+            case "Piecework": method = EmployeeWageCalculationMethod.Piecework; return true;
+            case "固定金额":
+            case "FixedAmount": method = EmployeeWageCalculationMethod.FixedAmount; return true;
+            case "自定义单位":
+            case "CustomUnit": method = EmployeeWageCalculationMethod.CustomUnit; return true;
+            default: method = default; return false;
+        }
+    }
+
+    private static bool TryParseEmployeeWageEntryType(string? value, out EmployeeWageEntryType entryType)
+    {
+        switch (value?.Trim())
+        {
+            case "出勤":
+            case "Attendance": entryType = EmployeeWageEntryType.Attendance; return true;
+            case "加班":
+            case "Overtime": entryType = EmployeeWageEntryType.Overtime; return true;
+            case "奖金":
+            case "Bonus": entryType = EmployeeWageEntryType.Bonus; return true;
+            case "罚款":
+            case "Penalty": entryType = EmployeeWageEntryType.Penalty; return true;
+            case "其他":
+            case "Other": entryType = EmployeeWageEntryType.Other; return true;
+            default: entryType = default; return false;
+        }
+    }
+
+    private static bool TryParsePayrollItemNature(string? value, out PayrollItemNature nature)
+    {
+        switch (value?.Trim())
+        {
+            case "收入":
+            case "Earning": nature = PayrollItemNature.Earning; return true;
+            case "扣款":
+            case "Deduction": nature = PayrollItemNature.Deduction; return true;
+            default: nature = default; return false;
+        }
+    }
+
+    private static bool TryParseEmployeeLedgerEntryType(string? value, out EmployeeLedgerEntryType entryType)
+    {
+        switch (value?.Trim())
+        {
+            case "费用":
+            case "Expense": entryType = EmployeeLedgerEntryType.Expense; return true;
+            case "借支发放":
+            case "AdvanceDisbursement": entryType = EmployeeLedgerEntryType.AdvanceDisbursement; return true;
+            case "借支归还":
+            case "AdvanceRepayment": entryType = EmployeeLedgerEntryType.AdvanceRepayment; return true;
+            case "分红":
+            case "Dividend": entryType = EmployeeLedgerEntryType.Dividend; return true;
+            case "利息":
+            case "Interest": entryType = EmployeeLedgerEntryType.Interest; return true;
+            case "其他":
+            case "Other": entryType = EmployeeLedgerEntryType.Other; return true;
+            default: entryType = default; return false;
+        }
+    }
+
+    private static bool TryParseEmployeeLedgerRecordKind(string? value, out EmployeeLedgerRecordKind recordKind)
+    {
+        switch (value?.Trim())
+        {
+            case "应付":
+            case "Payable": recordKind = EmployeeLedgerRecordKind.Payable; return true;
+            case "已付款":
+            case "Payment": recordKind = EmployeeLedgerRecordKind.Payment; return true;
+            case "退款/冲销":
+            case "RefundOrReversal": recordKind = EmployeeLedgerRecordKind.RefundOrReversal; return true;
+            default: recordKind = default; return false;
+        }
+    }
+
+    private static bool TryParseEmployeeReceiptType(string? value, out EmployeeReceiptType receiptType)
+    {
+        switch (value?.Trim())
+        {
+            case "工资":
+            case "Wage": receiptType = EmployeeReceiptType.Wage; return true;
+            case "报销":
+            case "Expense": receiptType = EmployeeReceiptType.Expense; return true;
+            case "分红/其他":
+            case "DividendOrOther": receiptType = EmployeeReceiptType.DividendOrOther; return true;
+            case "借支":
+            case "Advance": receiptType = EmployeeReceiptType.Advance; return true;
+            case "通用":
+            case "General": receiptType = EmployeeReceiptType.General; return true;
+            default: receiptType = default; return false;
+        }
+    }
+
+    private static bool TryParseEmployeeFinancialAdjustmentType(string? value, out EmployeeFinancialAdjustmentType adjustmentType)
+    {
+        switch (value?.Trim())
+        {
+            case "管理员调整":
+            case "AdministratorAdjustment": adjustmentType = EmployeeFinancialAdjustmentType.AdministratorAdjustment; return true;
+            case "历史期初余额":
+            case "HistoricalOpeningBalance": adjustmentType = EmployeeFinancialAdjustmentType.HistoricalOpeningBalance; return true;
+            case "冲销":
+            case "Reversal": adjustmentType = EmployeeFinancialAdjustmentType.Reversal; return true;
+            default: adjustmentType = default; return false;
         }
     }
 
@@ -697,14 +1734,27 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
     private static IReadOnlyList<ImportColumn> GetColumns(ExportDataset dataset) =>
         Columns.TryGetValue(dataset, out var columns) ? columns : throw new NotSupportedException($"暂不支持导入数据集：{dataset}");
 
+    private static bool IsCompleteEmployeeWorkbook(ExportDataset dataset, IReadOnlyList<SimpleXlsxSheet> sheets) =>
+        dataset == ExportDataset.Employees && sheets.Any(item => string.Equals(item.Name.Trim(), "员工总表", StringComparison.OrdinalIgnoreCase));
+
     private static string HeaderFor(ExportDataset dataset, string key) => GetColumns(dataset).Single(item => item.Key == key).Header;
 
     private static string TemplateSheetName(ExportDataset dataset) => dataset switch
     {
         ExportDataset.Employees => "员工导入",
+        ExportDataset.Payroll => "工资导入",
+        ExportDataset.Collections => "收款导入",
+        ExportDataset.Payments => "付款导入",
+        ExportDataset.Invoices => "发票导入",
+        ExportDataset.EmployeeWages => "员工工资明细导入",
+        ExportDataset.EmployeeOtherPayments => "员工往来导入",
+        ExportDataset.EmployeeReceipts => "员工收款导入",
+        ExportDataset.EmployeeFinancialAdjustments => "员工财务调整导入",
         ExportDataset.EmployeeCertificates => "员工证书导入",
         ExportDataset.Partners => "合作单位导入",
         ExportDataset.Projects => "项目导入",
+        ExportDataset.Contracts => "合同导入",
+        ExportDataset.StageResults => "阶段成果导入",
         ExportDataset.Companies => "公司导入",
         ExportDataset.CompanyAccounts => "公司账户导入",
         ExportDataset.CompanyCertificates => "公司证书导入",

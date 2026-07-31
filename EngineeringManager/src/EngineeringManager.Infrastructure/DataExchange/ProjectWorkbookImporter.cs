@@ -254,7 +254,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 foreach (var pair in keys)
                 {
                     present.Add(pair.Value);
-                    values[pair.Value] = pair.Key < row.Count ? ConvertValue(row[pair.Key]) : null;
+                    values[pair.Value] = DataExchangeValueLabels.NormalizeEnumValue(definition.Sheet, pair.Value, pair.Key < row.Count ? ConvertValue(row[pair.Key]) : null);
                 }
                 parsedRows.Add(new ParsedRow(definition.Sheet, rowIndex + 1, values, present));
             }
@@ -422,7 +422,9 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 ProjectWorkbookSheet.Assignments => $"{row.Values.GetValueOrDefault("project_number")}|{row.Values.GetValueOrDefault("user_id")}",
                 ProjectWorkbookSheet.Partners => $"{row.Values.GetValueOrDefault("project_number")}|{row.Values.GetValueOrDefault("partner_number")}",
                 ProjectWorkbookSheet.StageResults => $"{row.Values.GetValueOrDefault("project_number")}|{row.Values.GetValueOrDefault("title")}|{row.Values.GetValueOrDefault("result_date")}",
+                ProjectWorkbookSheet.Invoices when !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("_system_id")) => $"{row.Values.GetValueOrDefault("_system_id")}|{row.Values.GetValueOrDefault("project_number")}",
                 ProjectWorkbookSheet.Invoices => $"{row.Values.GetValueOrDefault("project_number")}|{row.Values.GetValueOrDefault("invoice_number")}",
+                ProjectWorkbookSheet.Collections or ProjectWorkbookSheet.Payments when !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("_system_id")) => $"{row.Values.GetValueOrDefault("_system_id")}|{row.Values.GetValueOrDefault("project_number")}|{row.Values.GetValueOrDefault("contract_number")}",
                 _ => row.Values.GetValueOrDefault("_system_id")
             };
             if (string.IsNullOrWhiteSpace(key) || key.Contains("||", StringComparison.Ordinal)) continue;
@@ -668,6 +670,12 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         }
 
         var payableInFile = workbook.Sheets.FirstOrDefault(item => item.Sheet == ProjectWorkbookSheet.Payables)?.Rows.Any(item => item.Values.GetValueOrDefault("_system_id") == row.Values.GetValueOrDefault("payable_id") && item.Values.GetValueOrDefault("project_number") == projectNumber) == true;
+        var receivableInFile = workbook.Sheets.FirstOrDefault(item => item.Sheet == ProjectWorkbookSheet.Receivables)?.Rows.Any(item => item.Values.GetValueOrDefault("_system_id") == row.Values.GetValueOrDefault("receivable_id") && item.Values.GetValueOrDefault("project_number") == projectNumber) == true;
+        if (sheet.Sheet == ProjectWorkbookSheet.Collections && row.PresentKeys.Contains("receivable_id") && !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("receivable_id"))
+            && !receivableInFile && (!Guid.TryParse(row.Values.GetValueOrDefault("receivable_id"), out var receivableId)
+                || !await db.FinanceSettlements.AnyAsync(item => item.Id == receivableId && item.Project!.ProjectNumber == projectNumber && item.Direction == LedgerDirection.Receivable && item.Status == LedgerRecordStatus.Active, cancellationToken)
+                && !await db.ReceivableEntries.AnyAsync(item => item.Id == receivableId && item.Project.ProjectNumber == projectNumber && !item.IsVoided, cancellationToken)))
+            errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/应收系统ID", "应收记录不存在、已作废或不属于当前项目。", row.Values.GetValueOrDefault("receivable_id")));
         if (sheet.Sheet == ProjectWorkbookSheet.Payments && row.PresentKeys.Contains("payable_id") && !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("payable_id"))
             && !payableInFile && (!Guid.TryParse(row.Values.GetValueOrDefault("payable_id"), out var payableId)
                 || !await db.FinanceSettlements.AnyAsync(item => item.Id == payableId && item.Project!.ProjectNumber == projectNumber && item.Direction == LedgerDirection.Payable && item.Status == LedgerRecordStatus.Active, cancellationToken)
@@ -1151,8 +1159,14 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
     {
         foreach (var sheet in workbook.Sheets.Where(item => item.Sheet is ProjectWorkbookSheet.Collections or ProjectWorkbookSheet.Payables or ProjectWorkbookSheet.Payments or ProjectWorkbookSheet.Invoices or ProjectWorkbookSheet.Deductions))
         {
-            foreach (var row in sheet.Rows)
+            IEnumerable<IReadOnlyList<ParsedRow>> rowGroups = sheet.Sheet is ProjectWorkbookSheet.Collections or ProjectWorkbookSheet.Payments or ProjectWorkbookSheet.Invoices
+                ? sheet.Rows
+                    .GroupBy(FinanceParentKey, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => (IReadOnlyList<ParsedRow>)group.ToArray())
+                : sheet.Rows.Select(row => (IReadOnlyList<ParsedRow>)new[] { row });
+            foreach (var rows in rowGroups)
             {
+                var row = rows[0];
                 var project = await ResolveProjectAsync(row, cancellationToken);
                 var existing = await FindExistingAsync(sheet, row, cancellationToken);
                 var contract = row.PresentKeys.Contains("contract_number")
@@ -1210,157 +1224,13 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                         payable.ConcurrencyStamp = Guid.NewGuid();
                         break;
                     case ProjectWorkbookSheet.Collections:
-                        var collectionAccountId = row.PresentKeys.Contains("account_id")
-                            ? Guid.Parse(Required(row, "account_id"))
-                            : (existing as FinanceCashEntry)?.AccountId ?? (existing as CollectionEntry)?.AccountId ?? throw new InvalidOperationException("缺少必填字段：account_id");
-                        if (partner is null) throw new InvalidOperationException("收款必须指定合作单位。");
-                        var finance = new FinanceLedgerService(db);
-                        if (existing is null)
-                        {
-                            await finance.RecordCollectionAsync(new RecordCollectionRequest(
-                                null, project.Id, contract?.Id, company.Id, partner.Id, collectionAccountId,
-                                ParseDate(Required(row, "collection_date"))!.Value,
-                                ParseDecimal(Required(row, "amount"))!.Value,
-                                row.Values.GetValueOrDefault("payment_method"), row.Values.GetValueOrDefault("notes"), RequestedId(row)), cancellationToken);
-                        }
-                        else if (existing is FinanceCashEntry existingCollection)
-                        {
-                            await finance.UpdateCollectionAsync(
-                                new FinanceRecordActor(actorUserId, actorUserId),
-                                new UpdateCollectionRequest(
-                                    existingCollection.Id, null, project.Id, contract?.Id, company.Id, partner.Id, collectionAccountId,
-                                    Has(row, "collection_date", blankMeansNoChange) ? ParseDate(row.Values["collection_date"])!.Value : existingCollection.BusinessDate,
-                                    Has(row, "amount", blankMeansNoChange) ? ParseDecimal(row.Values["amount"])!.Value : existingCollection.Amount,
-                                    Has(row, "payment_method", blankMeansNoChange) ? row.Values.GetValueOrDefault("payment_method") : existingCollection.PaymentMethod,
-                                    Has(row, "notes", blankMeansNoChange) ? row.Values.GetValueOrDefault("notes") : existingCollection.Notes,
-                                    existingCollection.ConcurrencyStamp, "项目工作簿收款更新"), cancellationToken);
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException("历史收款记录不是中央账本记录，不能按新规则导入。");
-                        }
+                        await WriteImportedCollectionAsync(rows, existing, project, contract, company, partner, blankMeansNoChange, actorUserId, cancellationToken);
                         break;
                     case ProjectWorkbookSheet.Payments:
-                        if (partner is null) throw new InvalidOperationException("付款必须指定合作单位。");
-                        var paymentAccountId = row.PresentKeys.Contains("account_id")
-                            ? Guid.Parse(Required(row, "account_id"))
-                            : (existing as FinanceCashEntry)?.AccountId ?? (existing as PaymentEntry)?.AccountId ?? throw new InvalidOperationException("缺少必填字段：account_id");
-                        var paymentAccount = await db.FinancialAccounts.SingleAsync(item => item.Id == paymentAccountId, cancellationToken);
-                        if (existing is null)
-                        {
-                            var settlementId = await ResolvePayableIdAsync(row, project.Id, cancellationToken) ?? throw new InvalidOperationException("付款必须关联应付结算。");
-                            var cash = new FinanceCashEntry
-                            {
-                                Id = RequestedId(row), Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment,
-                                SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, BusinessPartner = partner, Account = paymentAccount,
-                                BusinessDate = ParseDate(row.Values["payment_date"])!.Value, Amount = ParseDecimal(row.Values["amount"]) ?? 0m,
-                                PaymentMethod = row.Values.GetValueOrDefault("payment_method"), Notes = row.Values.GetValueOrDefault("notes")
-                            };
-                            cash.Allocations.Add(new FinanceCashAllocation { CashEntry = cash, SettlementId = settlementId, Project = project, Contract = contract, BusinessPartnerId = partner.Id, Amount = cash.Amount, AllocationOrder = 1 });
-                            db.FinanceCashEntries.Add(cash);
-                            db.AccountTransactions.Add(new AccountTransaction { Account = paymentAccount, Direction = AccountTransactionDirection.Outflow, SourceType = AccountTransactionSourceType.Payment, SourceId = cash.Id, TransactionDate = cash.BusinessDate, Amount = cash.Amount, Description = cash.Notes });
-                            break;
-                        }
-                        if (existing is FinanceCashEntry existingPayment)
-                        {
-                            existingPayment.LegalEntity = company; existingPayment.LegalEntityId = company.Id; existingPayment.BusinessPartner = partner; existingPayment.BusinessPartnerId = partner.Id;
-                            existingPayment.Account = paymentAccount; existingPayment.AccountId = paymentAccount.Id;
-                            if (Has(row, "payment_date", blankMeansNoChange)) existingPayment.BusinessDate = ParseDate(row.Values["payment_date"])!.Value;
-                            if (Has(row, "amount", blankMeansNoChange)) existingPayment.Amount = ParseDecimal(row.Values["amount"]) ?? 0m;
-                            if (Has(row, "payment_method", blankMeansNoChange)) existingPayment.PaymentMethod = row.Values.GetValueOrDefault("payment_method");
-                            Set(row, "notes", value => existingPayment.Notes = value, existingPayment.Notes, blankMeansNoChange);
-                            var paymentSettlementId = Has(row, "payable_id", blankMeansNoChange)
-                                ? await ResolvePayableIdAsync(row, project.Id, cancellationToken) ?? throw new InvalidOperationException("付款必须关联应付结算。")
-                                : existingPayment.Allocations.Single().SettlementId;
-                            db.FinanceCashAllocations.RemoveRange(existingPayment.Allocations);
-                            existingPayment.Allocations.Clear();
-                            db.FinanceCashAllocations.Add(new FinanceCashAllocation { CashEntry = existingPayment, SettlementId = paymentSettlementId, Project = project, Contract = contract, BusinessPartnerId = partner.Id, Amount = existingPayment.Amount, AllocationOrder = 1 });
-                            existingPayment.UpdatedAt = DateTimeOffset.UtcNow;
-                            existingPayment.ConcurrencyStamp = Guid.NewGuid();
-                            var centralPaymentTransaction = await db.AccountTransactions.SingleAsync(item => item.SourceType == AccountTransactionSourceType.Payment && item.SourceId == existingPayment.Id, cancellationToken);
-                            centralPaymentTransaction.Account = paymentAccount; centralPaymentTransaction.AccountId = paymentAccount.Id; centralPaymentTransaction.TransactionDate = existingPayment.BusinessDate; centralPaymentTransaction.Amount = existingPayment.Amount; centralPaymentTransaction.Description = existingPayment.Notes;
-                            break;
-                        }
-                        var payment = existing as PaymentEntry ?? new PaymentEntry { Id = RequestedId(row), Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = paymentAccount };
-                        if (existing is null) db.PaymentEntries.Add(payment);
-                        payment.Project = project; payment.ProjectId = project.Id; payment.Contract = contract; payment.ContractId = contract?.Id; payment.LegalEntity = company; payment.LegalEntityId = company.Id; payment.BusinessPartner = partner; payment.BusinessPartnerId = partner.Id;
-                        payment.Account = paymentAccount; payment.AccountId = paymentAccount.Id;
-                        if (Has(row, "payable_id", blankMeansNoChange)) payment.PayableEntryId = await ResolvePayableIdAsync(row, project.Id, cancellationToken);
-                        if (Has(row, "payment_date", blankMeansNoChange)) payment.PaymentDate = ParseDate(row.Values["payment_date"])!.Value;
-                        if (Has(row, "amount", blankMeansNoChange)) payment.Amount = ParseDecimal(row.Values["amount"]) ?? 0m;
-                        if (Has(row, "payment_method", blankMeansNoChange) && Enum.TryParse<PaymentMethod>(row.Values["payment_method"], true, out var paymentMethod)) payment.PaymentMethod = paymentMethod;
-                        Set(row, "notes", value => payment.Notes = value, payment.Notes, blankMeansNoChange);
-                        payment.ConcurrencyStamp = Guid.NewGuid();
-                        var paymentCash = existing is null
-                            ? new AccountTransaction { Direction = AccountTransactionDirection.Outflow, SourceType = AccountTransactionSourceType.Payment, SourceId = payment.Id }
-                            : await db.AccountTransactions.SingleAsync(item => item.SourceType == AccountTransactionSourceType.Payment && item.SourceId == payment.Id, cancellationToken);
-                        if (existing is null) db.AccountTransactions.Add(paymentCash);
-                        paymentCash.Account = paymentAccount; paymentCash.AccountId = paymentAccount.Id; paymentCash.TransactionDate = payment.PaymentDate; paymentCash.Amount = payment.Amount; paymentCash.Description = payment.Notes;
+                        await WriteImportedPaymentAsync(rows, existing, project, contract, company, partner, blankMeansNoChange, cancellationToken);
                         break;
                     case ProjectWorkbookSheet.Invoices:
-                        if (existing is null)
-                        {
-                            if (partner is null) throw new InvalidOperationException("发票必须指定合作单位。");
-                            const LedgerDirection invoiceDirection = LedgerDirection.Receivable;
-                            var invoiceAmount = ParseDecimal(row.Values["gross_amount"]) ?? 0m;
-                            var centralInvoice = new FinanceInvoice
-                            {
-                                Id = RequestedId(row), Scope = LedgerScope.External, Direction = invoiceDirection, LegalEntity = company, BusinessPartner = partner,
-                                Project = project, Contract = contract,
-                                InvoiceNumber = Required(row, "invoice_number"), InvoiceDate = ParseDate(row.Values["invoice_date"])!.Value,
-                                InvoiceType = row.Values.GetValueOrDefault("invoice_type"), TaxRate = ParseDecimal(row.Values.GetValueOrDefault("tax_rate")),
-                                NetAmount = ParseDecimal(row.Values.GetValueOrDefault("net_amount")), TaxAmount = ParseDecimal(row.Values.GetValueOrDefault("tax_amount")), Amount = invoiceAmount,
-                                Status = ParseInvoiceRecordStatus(row.Values.GetValueOrDefault("status"))
-                            };
-                            foreach (var allocation in await BuildProjectInvoiceAllocationsAsync(project, contract, company, partner, invoiceDirection, invoiceAmount, cancellationToken))
-                            {
-                                var invoiceAllocation = allocation.InvoiceAllocation;
-                                invoiceAllocation.Invoice = centralInvoice;
-                                centralInvoice.Allocations.Add(invoiceAllocation);
-                            }
-                            db.FinanceInvoices.Add(centralInvoice);
-                            break;
-                        }
-                        if (existing is FinanceInvoice existingInvoice)
-                        {
-                            if (partner is null) throw new InvalidOperationException("发票必须指定合作单位。");
-                            existingInvoice.LegalEntity = company; existingInvoice.LegalEntityId = company.Id; existingInvoice.BusinessPartner = partner; existingInvoice.BusinessPartnerId = partner.Id;
-                            existingInvoice.Project = project; existingInvoice.ProjectId = project.Id; existingInvoice.Contract = contract; existingInvoice.ContractId = contract?.Id;
-                            existingInvoice.Direction = LedgerDirection.Receivable;
-                            Set(row, "invoice_number", value => existingInvoice.InvoiceNumber = value!, existingInvoice.InvoiceNumber, blankMeansNoChange);
-                            if (Has(row, "invoice_date", blankMeansNoChange)) existingInvoice.InvoiceDate = ParseDate(row.Values["invoice_date"])!.Value;
-                            Set(row, "invoice_type", value => existingInvoice.InvoiceType = value, existingInvoice.InvoiceType, blankMeansNoChange);
-                            if (Has(row, "tax_rate", blankMeansNoChange)) existingInvoice.TaxRate = ParseDecimal(row.Values.GetValueOrDefault("tax_rate"));
-                            if (Has(row, "net_amount", blankMeansNoChange)) existingInvoice.NetAmount = ParseDecimal(row.Values.GetValueOrDefault("net_amount"));
-                            if (Has(row, "tax_amount", blankMeansNoChange)) existingInvoice.TaxAmount = ParseDecimal(row.Values.GetValueOrDefault("tax_amount"));
-                            if (Has(row, "gross_amount", blankMeansNoChange)) existingInvoice.Amount = ParseDecimal(row.Values["gross_amount"]) ?? 0m;
-                            if (Has(row, "status", blankMeansNoChange)) existingInvoice.Status = ParseInvoiceRecordStatus(row.Values.GetValueOrDefault("status"));
-                            var replacementAllocations = await BuildProjectInvoiceAllocationsAsync(project, contract, company, partner, existingInvoice.Direction, existingInvoice.Amount, cancellationToken, existingInvoice.Id);
-                            db.FinanceInvoiceAllocations.RemoveRange(existingInvoice.Allocations);
-                            existingInvoice.Allocations.Clear();
-                            foreach (var allocation in replacementAllocations)
-                            {
-                                var invoiceAllocation = allocation.InvoiceAllocation;
-                                invoiceAllocation.Invoice = existingInvoice;
-                                db.FinanceInvoiceAllocations.Add(invoiceAllocation);
-                            }
-                            existingInvoice.UpdatedAt = DateTimeOffset.UtcNow;
-                            existingInvoice.ConcurrencyStamp = Guid.NewGuid();
-                            break;
-                        }
-                        var invoice = existing as InvoiceEntry ?? new InvoiceEntry { Id = RequestedId(row), Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, InvoiceNumber = Required(row, "invoice_number") };
-                        if (existing is null) db.InvoiceEntries.Add(invoice);
-                        invoice.Project = project; invoice.ProjectId = project.Id; invoice.Contract = contract; invoice.ContractId = contract?.Id; invoice.LegalEntity = company; invoice.LegalEntityId = company.Id; invoice.BusinessPartner = partner; invoice.BusinessPartnerId = partner?.Id;
-                        Set(row, "invoice_number", value => invoice.InvoiceNumber = value!, invoice.InvoiceNumber, blankMeansNoChange);
-                        invoice.Direction = InvoiceDirection.Output;
-                        if (Has(row, "invoice_date", blankMeansNoChange)) invoice.InvoiceDate = ParseDate(row.Values["invoice_date"])!.Value;
-                        Set(row, "invoice_type", value => invoice.InvoiceType = value, invoice.InvoiceType, blankMeansNoChange);
-                        if (Has(row, "tax_rate", blankMeansNoChange)) invoice.TaxRate = ParseDecimal(row.Values["tax_rate"]) ?? 0m;
-                        if (Has(row, "net_amount", blankMeansNoChange)) invoice.NetAmount = ParseDecimal(row.Values["net_amount"]) ?? 0m;
-                        if (Has(row, "tax_amount", blankMeansNoChange)) invoice.TaxAmount = ParseDecimal(row.Values["tax_amount"]) ?? 0m;
-                        if (Has(row, "gross_amount", blankMeansNoChange)) invoice.GrossAmount = ParseDecimal(row.Values["gross_amount"]) ?? 0m;
-                        if (Has(row, "status", blankMeansNoChange) && Enum.TryParse<InvoiceStatus>(row.Values["status"], true, out var invoiceStatus)) invoice.Status = invoiceStatus;
-                        invoice.ConcurrencyStamp = Guid.NewGuid();
+                        await WriteImportedInvoiceAsync(rows, existing, project, contract, company, partner, blankMeansNoChange, cancellationToken);
                         break;
                     case ProjectWorkbookSheet.Deductions:
                         var deductionSettlementId = Guid.Parse(Required(row, "settlement_id"));
@@ -1391,6 +1261,375 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 }
             }
         }
+    }
+
+    private async Task WriteImportedCollectionAsync(
+        IReadOnlyList<ParsedRow> rows,
+        object? existing,
+        Project project,
+        Contract? contract,
+        LegalEntity company,
+        BusinessPartner? partner,
+        bool blankMeansNoChange,
+        string actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (partner is null) throw new InvalidOperationException("收款必须指定合作单位。");
+        var row = rows[0];
+        var existingCash = existing as FinanceCashEntry;
+        var accountId = row.PresentKeys.Contains("account_id")
+            ? Guid.Parse(Required(row, "account_id"))
+            : existingCash?.AccountId ?? (existing as CollectionEntry)?.AccountId ?? throw new InvalidOperationException("缺少必填字段：account_id");
+        var account = await db.FinancialAccounts.SingleAsync(item => item.Id == accountId, cancellationToken);
+        var amount = ImportedParentAmount(rows, "amount") ?? existingCash?.Amount ?? (existing as CollectionEntry)?.Amount ?? 0m;
+        var allocations = await BuildImportedAllocationsAsync(rows, "receivable_id", "amount", LedgerDirection.Receivable, cancellationToken);
+
+        if (allocations.Count == 0)
+        {
+            if (rows.Count != 1) throw new InvalidOperationException("多项目收款分摊必须提供应收系统ID。");
+            if (existing is not null and not FinanceCashEntry)
+                throw new InvalidOperationException("历史收款记录不是中央账本记录，不能按新规则导入。");
+            var finance = new FinanceLedgerService(db);
+            var collectionDate = Has(row, "collection_date", blankMeansNoChange)
+                ? ParseDate(Required(row, "collection_date"))!.Value
+                : existingCash?.BusinessDate ?? throw new InvalidOperationException("缺少必填字段：collection_date");
+            var paymentMethod = Has(row, "payment_method", blankMeansNoChange) ? row.Values.GetValueOrDefault("payment_method") : existingCash?.PaymentMethod;
+            var notes = Has(row, "notes", blankMeansNoChange) ? row.Values.GetValueOrDefault("notes") : existingCash?.Notes;
+            if (existingCash is null)
+            {
+                await finance.RecordCollectionAsync(new RecordCollectionRequest(
+                    null, project.Id, contract?.Id, company.Id, partner.Id, accountId,
+                    collectionDate, amount, paymentMethod, notes, RequestedId(row)), cancellationToken);
+            }
+            else
+            {
+                await finance.UpdateCollectionAsync(
+                    new FinanceRecordActor(actorUserId, actorUserId),
+                    new UpdateCollectionRequest(
+                        existingCash.Id, null, project.Id, contract?.Id, company.Id, partner.Id, accountId,
+                        collectionDate, amount, paymentMethod, notes,
+                        existingCash.ConcurrencyStamp, "项目工作簿收款更新"), cancellationToken);
+            }
+            return;
+        }
+
+        if (allocations.Sum(item => item.Amount) > amount)
+            throw new InvalidOperationException("收款分摊金额合计不能超过源记录总额。");
+
+        var hasMultipleProjects = HasMultipleProjects(rows);
+        var parentProjectId = hasMultipleProjects ? (Guid?)null : existingCash?.ProjectId ?? project.Id;
+        var parentContractId = hasMultipleProjects ? null : existingCash?.ContractId ?? contract?.Id;
+        var collectionDateForWrite = Has(row, "collection_date", blankMeansNoChange)
+            ? ParseDate(Required(row, "collection_date"))!.Value
+            : existingCash?.BusinessDate ?? throw new InvalidOperationException("缺少必填字段：collection_date");
+        var paymentMethodForWrite = Has(row, "payment_method", blankMeansNoChange) ? row.Values.GetValueOrDefault("payment_method") : existingCash?.PaymentMethod;
+        var notesForWrite = Has(row, "notes", blankMeansNoChange) ? row.Values.GetValueOrDefault("notes") : existingCash?.Notes;
+
+        if (existingCash is null)
+        {
+            if (existing is not null) throw new InvalidOperationException("历史收款记录不是中央账本记录，不能按新规则导入。");
+            existingCash = new FinanceCashEntry
+            {
+                Id = RequestedId(row), Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection,
+                SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, LegalEntityId = company.Id, BusinessPartner = partner, BusinessPartnerId = partner.Id,
+                ProjectId = parentProjectId, ContractId = parentContractId, Account = account, AccountId = account.Id,
+                BusinessDate = collectionDateForWrite, Amount = amount, PaymentMethod = paymentMethodForWrite, Notes = notesForWrite
+            };
+            db.FinanceCashEntries.Add(existingCash);
+        }
+        else
+        {
+            if (existingCash.CashType != LedgerCashType.Collection || existingCash.IsReversal)
+                throw new InvalidOperationException("导入记录不是有效的收款记录。");
+            existingCash.LegalEntity = company; existingCash.LegalEntityId = company.Id; existingCash.BusinessPartner = partner; existingCash.BusinessPartnerId = partner.Id;
+            existingCash.ProjectId = parentProjectId; existingCash.ContractId = parentContractId; existingCash.Account = account; existingCash.AccountId = account.Id;
+            existingCash.BusinessDate = collectionDateForWrite; existingCash.Amount = amount; existingCash.PaymentMethod = paymentMethodForWrite; existingCash.Notes = notesForWrite;
+            existingCash.UpdatedAt = DateTimeOffset.UtcNow;
+            existingCash.ConcurrencyStamp = Guid.NewGuid();
+            db.FinanceCashAllocations.RemoveRange(existingCash.Allocations);
+            existingCash.Allocations.Clear();
+        }
+
+        await AddImportedCashAllocationsAsync(existingCash, allocations, cancellationToken);
+        await UpsertCashAccountTransactionAsync(existingCash, account, AccountTransactionSourceType.Collection, AccountTransactionDirection.Inflow, cancellationToken);
+    }
+
+    private async Task WriteImportedPaymentAsync(
+        IReadOnlyList<ParsedRow> rows,
+        object? existing,
+        Project project,
+        Contract? contract,
+        LegalEntity company,
+        BusinessPartner? partner,
+        bool blankMeansNoChange,
+        CancellationToken cancellationToken)
+    {
+        if (partner is null) throw new InvalidOperationException("付款必须指定合作单位。");
+        var row = rows[0];
+        var existingCash = existing as FinanceCashEntry;
+        var paymentAccountId = row.PresentKeys.Contains("account_id")
+            ? Guid.Parse(Required(row, "account_id"))
+            : existingCash?.AccountId ?? (existing as PaymentEntry)?.AccountId ?? throw new InvalidOperationException("缺少必填字段：account_id");
+        var paymentAccount = await db.FinancialAccounts.SingleAsync(item => item.Id == paymentAccountId, cancellationToken);
+
+        if (existing is PaymentEntry legacyPayment)
+        {
+            var payment = legacyPayment;
+            payment.Project = project; payment.ProjectId = project.Id; payment.Contract = contract; payment.ContractId = contract?.Id; payment.LegalEntity = company; payment.LegalEntityId = company.Id; payment.BusinessPartner = partner; payment.BusinessPartnerId = partner.Id;
+            payment.Account = paymentAccount; payment.AccountId = paymentAccount.Id;
+            if (Has(row, "payable_id", blankMeansNoChange)) payment.PayableEntryId = await ResolvePayableIdAsync(row, project.Id, cancellationToken);
+            if (Has(row, "payment_date", blankMeansNoChange)) payment.PaymentDate = ParseDate(Required(row, "payment_date"))!.Value;
+            if (ImportedParentAmount(rows, "amount") is { } legacyAmount && Has(row, "amount", blankMeansNoChange)) payment.Amount = legacyAmount;
+            if (Has(row, "payment_method", blankMeansNoChange) && Enum.TryParse<PaymentMethod>(row.Values["payment_method"], true, out var paymentMethod)) payment.PaymentMethod = paymentMethod;
+            Set(row, "notes", value => payment.Notes = value, payment.Notes, blankMeansNoChange);
+            payment.ConcurrencyStamp = Guid.NewGuid();
+            var paymentCash = await db.AccountTransactions.SingleOrDefaultAsync(item => item.SourceType == AccountTransactionSourceType.Payment && item.SourceId == payment.Id, cancellationToken);
+            if (paymentCash is null)
+            {
+                paymentCash = new AccountTransaction { Direction = AccountTransactionDirection.Outflow, SourceType = AccountTransactionSourceType.Payment, SourceId = payment.Id };
+                db.AccountTransactions.Add(paymentCash);
+            }
+            paymentCash.Account = paymentAccount; paymentCash.AccountId = paymentAccount.Id; paymentCash.TransactionDate = payment.PaymentDate; paymentCash.Amount = payment.Amount; paymentCash.Description = payment.Notes;
+            return;
+        }
+
+        var amount = ImportedParentAmount(rows, "amount") ?? existingCash?.Amount ?? 0m;
+        var allocations = await BuildImportedAllocationsAsync(rows, "payable_id", "amount", LedgerDirection.Payable, cancellationToken);
+        if (allocations.Count == 0 && existingCash is not null && rows.Count == 1 && existingCash.Allocations.Count == 1)
+        {
+            allocations = [new FinanceAllocationRequest(existingCash.Allocations.Single().SettlementId, amount, 1)];
+        }
+        if (allocations.Count == 0) throw new InvalidOperationException("付款必须关联应付结算。");
+        if (allocations.Sum(item => item.Amount) > amount)
+            throw new InvalidOperationException("付款分摊金额合计不能超过源记录总额。");
+
+        var paymentDate = Has(row, "payment_date", blankMeansNoChange)
+            ? ParseDate(Required(row, "payment_date"))!.Value
+            : existingCash?.BusinessDate ?? throw new InvalidOperationException("缺少必填字段：payment_date");
+        var paymentMethodForWrite = Has(row, "payment_method", blankMeansNoChange) ? row.Values.GetValueOrDefault("payment_method") : existingCash?.PaymentMethod;
+        var notesForWrite = Has(row, "notes", blankMeansNoChange) ? row.Values.GetValueOrDefault("notes") : existingCash?.Notes;
+        if (existingCash is null)
+        {
+            if (existing is not null) throw new InvalidOperationException("历史付款记录不是中央账本记录，不能按新规则导入。");
+            existingCash = new FinanceCashEntry
+            {
+                Id = RequestedId(row), Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment,
+                SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, LegalEntityId = company.Id, BusinessPartner = partner, BusinessPartnerId = partner.Id,
+                Account = paymentAccount, AccountId = paymentAccount.Id, BusinessDate = paymentDate, Amount = amount,
+                PaymentMethod = paymentMethodForWrite, Notes = notesForWrite
+            };
+            db.FinanceCashEntries.Add(existingCash);
+        }
+        else
+        {
+            if (existingCash.CashType != LedgerCashType.Payment || existingCash.IsReversal)
+                throw new InvalidOperationException("导入记录不是有效的付款记录。");
+            existingCash.LegalEntity = company; existingCash.LegalEntityId = company.Id; existingCash.BusinessPartner = partner; existingCash.BusinessPartnerId = partner.Id;
+            existingCash.Account = paymentAccount; existingCash.AccountId = paymentAccount.Id; existingCash.BusinessDate = paymentDate; existingCash.Amount = amount;
+            existingCash.PaymentMethod = paymentMethodForWrite; existingCash.Notes = notesForWrite; existingCash.UpdatedAt = DateTimeOffset.UtcNow; existingCash.ConcurrencyStamp = Guid.NewGuid();
+            db.FinanceCashAllocations.RemoveRange(existingCash.Allocations);
+            existingCash.Allocations.Clear();
+        }
+
+        await AddImportedCashAllocationsAsync(existingCash, allocations, cancellationToken);
+        await UpsertCashAccountTransactionAsync(existingCash, paymentAccount, AccountTransactionSourceType.Payment, AccountTransactionDirection.Outflow, cancellationToken);
+    }
+
+    private async Task WriteImportedInvoiceAsync(
+        IReadOnlyList<ParsedRow> rows,
+        object? existing,
+        Project project,
+        Contract? contract,
+        LegalEntity company,
+        BusinessPartner? partner,
+        bool blankMeansNoChange,
+        CancellationToken cancellationToken)
+    {
+        if (partner is null) throw new InvalidOperationException("发票必须指定合作单位。");
+        var row = rows[0];
+        if (existing is InvoiceEntry legacyInvoice)
+        {
+            if (rows.Count != 1) throw new InvalidOperationException("历史发票记录不支持跨项目分摊导入。");
+            var invoice = legacyInvoice;
+            invoice.Project = project; invoice.ProjectId = project.Id; invoice.Contract = contract; invoice.ContractId = contract?.Id; invoice.LegalEntity = company; invoice.LegalEntityId = company.Id; invoice.BusinessPartner = partner; invoice.BusinessPartnerId = partner.Id;
+            Set(row, "invoice_number", value => invoice.InvoiceNumber = value!, invoice.InvoiceNumber, blankMeansNoChange);
+            invoice.Direction = InvoiceDirection.Output;
+            if (Has(row, "invoice_date", blankMeansNoChange)) invoice.InvoiceDate = ParseDate(Required(row, "invoice_date"))!.Value;
+            Set(row, "invoice_type", value => invoice.InvoiceType = value, invoice.InvoiceType, blankMeansNoChange);
+            if (Has(row, "tax_rate", blankMeansNoChange)) invoice.TaxRate = ParseDecimal(row.Values.GetValueOrDefault("tax_rate")) ?? 0m;
+            if (Has(row, "net_amount", blankMeansNoChange)) invoice.NetAmount = ParseDecimal(row.Values.GetValueOrDefault("net_amount")) ?? 0m;
+            if (Has(row, "tax_amount", blankMeansNoChange)) invoice.TaxAmount = ParseDecimal(row.Values.GetValueOrDefault("tax_amount")) ?? 0m;
+            if (ImportedParentAmount(rows, "gross_amount") is { } legacyGross && Has(row, "gross_amount", blankMeansNoChange)) invoice.GrossAmount = legacyGross;
+            if (Has(row, "status", blankMeansNoChange) && Enum.TryParse<InvoiceStatus>(row.Values["status"], true, out var invoiceStatus)) invoice.Status = invoiceStatus;
+            invoice.ConcurrencyStamp = Guid.NewGuid();
+            return;
+        }
+
+        var existingInvoice = existing as FinanceInvoice;
+        var amount = ImportedParentAmount(rows, "gross_amount") ?? existingInvoice?.Amount ?? 0m;
+        var netAmount = SumPresentDecimal(rows, "net_amount") ?? existingInvoice?.NetAmount;
+        var taxAmount = SumPresentDecimal(rows, "tax_amount") ?? existingInvoice?.TaxAmount;
+        var taxRate = FirstPresentDecimal(rows, "tax_rate") ?? existingInvoice?.TaxRate;
+        var allocations = await BuildImportedAllocationsAsync(rows, "settlement_id", "gross_amount", LedgerDirection.Receivable, cancellationToken);
+        if (allocations.Count == 0)
+        {
+            if (rows.Count != 1) throw new InvalidOperationException("多项目发票分摊必须提供应收系统ID。");
+            var drafts = await BuildProjectInvoiceAllocationsAsync(project, contract, company, partner, LedgerDirection.Receivable, amount, cancellationToken, existingInvoice?.Id);
+            allocations = drafts.Select(item => new FinanceAllocationRequest(item.Settlement.Id, item.Amount, item.AllocationOrder)).ToArray();
+        }
+        if (allocations.Sum(item => item.Amount) > amount)
+            throw new InvalidOperationException("发票分摊金额合计不能超过源记录总额。");
+
+        var hasMultipleProjects = HasMultipleProjects(rows);
+        var parentProjectId = hasMultipleProjects ? (Guid?)null : existingInvoice?.ProjectId ?? project.Id;
+        var parentContractId = hasMultipleProjects ? null : existingInvoice?.ContractId ?? contract?.Id;
+        var invoiceDate = Has(row, "invoice_date", blankMeansNoChange)
+            ? ParseDate(Required(row, "invoice_date"))!.Value
+            : existingInvoice?.InvoiceDate ?? throw new InvalidOperationException("缺少必填字段：invoice_date");
+        var invoiceNumber = Has(row, "invoice_number", blankMeansNoChange) ? Required(row, "invoice_number") : existingInvoice?.InvoiceNumber ?? throw new InvalidOperationException("缺少必填字段：invoice_number");
+        var invoiceType = Has(row, "invoice_type", blankMeansNoChange) ? row.Values.GetValueOrDefault("invoice_type") : existingInvoice?.InvoiceType;
+        var status = Has(row, "status", blankMeansNoChange) ? ParseInvoiceRecordStatus(row.Values.GetValueOrDefault("status")) : existingInvoice?.Status ?? LedgerRecordStatus.Active;
+
+        if (existingInvoice is null)
+        {
+            if (existing is not null) throw new InvalidOperationException("历史发票记录不是中央账本记录，不能按新规则导入。");
+            existingInvoice = new FinanceInvoice
+            {
+                Id = RequestedId(row), Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, LegalEntity = company, LegalEntityId = company.Id,
+                BusinessPartner = partner, BusinessPartnerId = partner.Id, ProjectId = parentProjectId, ContractId = parentContractId,
+                InvoiceNumber = invoiceNumber, InvoiceDate = invoiceDate, InvoiceType = invoiceType, TaxRate = taxRate, NetAmount = netAmount, TaxAmount = taxAmount,
+                Amount = amount, Status = status
+            };
+            db.FinanceInvoices.Add(existingInvoice);
+        }
+        else
+        {
+            existingInvoice.LegalEntity = company; existingInvoice.LegalEntityId = company.Id; existingInvoice.BusinessPartner = partner; existingInvoice.BusinessPartnerId = partner.Id;
+            existingInvoice.ProjectId = parentProjectId; existingInvoice.ContractId = parentContractId; existingInvoice.Direction = LedgerDirection.Receivable;
+            existingInvoice.InvoiceNumber = invoiceNumber; existingInvoice.InvoiceDate = invoiceDate; existingInvoice.InvoiceType = invoiceType; existingInvoice.TaxRate = taxRate; existingInvoice.NetAmount = netAmount; existingInvoice.TaxAmount = taxAmount; existingInvoice.Amount = amount; existingInvoice.Status = status;
+            existingInvoice.UpdatedAt = DateTimeOffset.UtcNow; existingInvoice.ConcurrencyStamp = Guid.NewGuid();
+            db.FinanceInvoiceAllocations.RemoveRange(existingInvoice.Allocations);
+            existingInvoice.Allocations.Clear();
+        }
+
+        await AddImportedInvoiceAllocationsAsync(existingInvoice, allocations, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<FinanceAllocationRequest>> BuildImportedAllocationsAsync(
+        IReadOnlyList<ParsedRow> rows,
+        string settlementKey,
+        string amountKey,
+        LedgerDirection direction,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<FinanceAllocationRequest>();
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault(settlementKey))) continue;
+            var project = await ResolveProjectAsync(row, cancellationToken);
+            var settlementId = direction == LedgerDirection.Receivable && settlementKey == "receivable_id"
+                ? await ResolveReceivableIdAsync(row, project.Id, cancellationToken)
+                : direction == LedgerDirection.Payable && settlementKey == "payable_id"
+                    ? await ResolvePayableIdAsync(row, project.Id, cancellationToken)
+                    : await ResolveSettlementIdAsync(row, project.Id, direction, settlementKey, cancellationToken);
+            if (!settlementId.HasValue) continue;
+            var settlementExists = db.FinanceSettlements.Local.Any(item => item.Id == settlementId.Value && item.Direction == direction && item.Status == LedgerRecordStatus.Active)
+                || await db.FinanceSettlements.AnyAsync(item => item.Id == settlementId.Value && item.Direction == direction && item.Status == LedgerRecordStatus.Active, cancellationToken);
+            if (!settlementExists)
+                throw new InvalidOperationException("财务分摊必须关联有效的中央账本结算记录。");
+            var amount = ImportedAllocationAmount(row, amountKey);
+            if (amount > 0m) result.Add(new FinanceAllocationRequest(settlementId.Value, amount, result.Count + 1));
+        }
+        return result;
+    }
+
+    private async Task AddImportedCashAllocationsAsync(FinanceCashEntry cash, IReadOnlyList<FinanceAllocationRequest> allocations, CancellationToken cancellationToken)
+    {
+        foreach (var allocation in allocations)
+        {
+            var settlement = db.FinanceSettlements.Local.SingleOrDefault(item => item.Id == allocation.SettlementId)
+                ?? await db.FinanceSettlements.SingleAsync(item => item.Id == allocation.SettlementId, cancellationToken);
+            db.FinanceCashAllocations.Add(new FinanceCashAllocation
+            {
+                CashEntry = cash, Settlement = settlement, ProjectId = settlement.ProjectId, ContractId = settlement.ContractId,
+                ContractLineItemId = settlement.ContractLineItemId, BusinessPartnerId = settlement.BusinessPartnerId, CounterLegalEntityId = settlement.CounterLegalEntityId,
+                Amount = allocation.Amount, AllocationOrder = allocation.AllocationOrder
+            });
+        }
+    }
+
+    private async Task AddImportedInvoiceAllocationsAsync(FinanceInvoice invoice, IReadOnlyList<FinanceAllocationRequest> allocations, CancellationToken cancellationToken)
+    {
+        foreach (var allocation in allocations)
+        {
+            var settlement = db.FinanceSettlements.Local.SingleOrDefault(item => item.Id == allocation.SettlementId)
+                ?? await db.FinanceSettlements.SingleAsync(item => item.Id == allocation.SettlementId, cancellationToken);
+            db.FinanceInvoiceAllocations.Add(new FinanceInvoiceAllocation
+            {
+                Invoice = invoice, Settlement = settlement, ProjectId = settlement.ProjectId, ContractId = settlement.ContractId,
+                ContractLineItemId = settlement.ContractLineItemId, BusinessPartnerId = settlement.BusinessPartnerId, CounterLegalEntityId = settlement.CounterLegalEntityId,
+                Amount = allocation.Amount, AllocationOrder = allocation.AllocationOrder
+            });
+        }
+    }
+
+    private async Task UpsertCashAccountTransactionAsync(
+        FinanceCashEntry cash,
+        FinancialAccount account,
+        AccountTransactionSourceType sourceType,
+        AccountTransactionDirection direction,
+        CancellationToken cancellationToken)
+    {
+        var transaction = await db.AccountTransactions.SingleOrDefaultAsync(item => item.SourceType == sourceType && item.SourceId == cash.Id, cancellationToken);
+        if (transaction is null)
+        {
+            transaction = new AccountTransaction { SourceType = sourceType, SourceId = cash.Id, Direction = direction };
+            db.AccountTransactions.Add(transaction);
+        }
+        transaction.Account = account; transaction.AccountId = account.Id; transaction.TransactionDate = cash.BusinessDate; transaction.Amount = cash.Amount; transaction.Description = cash.Notes;
+    }
+
+    private async Task<Guid?> ResolveSettlementIdAsync(ParsedRow row, Guid projectId, LedgerDirection direction, string key, CancellationToken cancellationToken)
+    {
+        var value = row.Values.GetValueOrDefault(key);
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var validLocal = Guid.TryParse(value, out var id)
+            && db.FinanceSettlements.Local.Any(item => item.Id == id && item.ProjectId == projectId && item.Direction == direction && item.Status == LedgerRecordStatus.Active);
+        var validPersisted = Guid.TryParse(value, out id)
+            && await db.FinanceSettlements.AnyAsync(item => item.Id == id && item.ProjectId == projectId && item.Direction == direction && item.Status == LedgerRecordStatus.Active, cancellationToken);
+        if (!validLocal && !validPersisted)
+            throw new InvalidOperationException("结算系统ID不存在、已作废或不属于当前项目。");
+        return id;
+    }
+
+    private static string FinanceParentKey(ParsedRow row) =>
+        string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("_system_id"))
+            ? $"row:{row.RowNumber}"
+            : $"id:{row.Values.GetValueOrDefault("_system_id")}";
+
+    private static bool HasMultipleProjects(IReadOnlyList<ParsedRow> rows) =>
+        rows.Select(row => row.Values.GetValueOrDefault("project_number")).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1;
+
+    private static decimal? ImportedParentAmount(IReadOnlyList<ParsedRow> rows, string amountKey)
+    {
+        var sourceAmount = FirstPresentDecimal(rows, "source_amount");
+        if (sourceAmount.HasValue) return sourceAmount;
+        var allocationAmounts = rows.Select(row => ParseDecimal(row.Values.GetValueOrDefault("allocation_amount"))).Where(value => value.HasValue).Select(value => value!.Value).ToArray();
+        if (allocationAmounts.Length > 0) return allocationAmounts.Sum();
+        var amounts = rows.Select(row => ParseDecimal(row.Values.GetValueOrDefault(amountKey))).Where(value => value.HasValue).Select(value => value!.Value).ToArray();
+        return amounts.Length == 0 ? null : amounts.Sum();
+    }
+
+    private static decimal ImportedAllocationAmount(ParsedRow row, string amountKey) =>
+        ParseDecimal(row.Values.GetValueOrDefault("allocation_amount")) ?? ParseDecimal(row.Values.GetValueOrDefault(amountKey)) ?? 0m;
+
+    private static decimal? FirstPresentDecimal(IReadOnlyList<ParsedRow> rows, string key) =>
+        rows.Select(row => ParseDecimal(row.Values.GetValueOrDefault(key))).FirstOrDefault(value => value.HasValue);
+
+    private static decimal? SumPresentDecimal(IReadOnlyList<ParsedRow> rows, string key)
+    {
+        var values = rows.Select(row => ParseDecimal(row.Values.GetValueOrDefault(key))).Where(value => value.HasValue).Select(value => value!.Value).ToArray();
+        return values.Length == 0 ? null : values.Sum();
     }
 
     private async Task<IReadOnlyList<FinanceInvoiceAllocationDraft>> BuildProjectInvoiceAllocationsAsync(

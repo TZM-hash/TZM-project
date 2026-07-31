@@ -86,6 +86,91 @@ public sealed class ProjectWorkbookImportTests
     }
 
     [Fact]
+    public async Task ChineseEnumValuesCanBeImportedAlongsideLegacyEnglishValues()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var workbook = CreateWorkbook(
+            (ProjectWorkbookSheet.ProjectMaster, [Row(ProjectWorkbookSheet.ProjectMaster, new Dictionary<string, object?>
+            {
+                ["project_number"] = "IMP-CN-P", ["project_name"] = "中文枚举项目", ["stage"] = "施工中",
+                ["contract_signing_status"] = "未签订", ["affiliation_type"] = "自营项目", ["is_active"] = true
+            })]),
+            (ProjectWorkbookSheet.Contracts, [Row(ProjectWorkbookSheet.Contracts, new Dictionary<string, object?>
+            {
+                ["project_number"] = "IMP-CN-P", ["contract_number"] = "IMP-CN-C", ["name"] = "中文枚举合同",
+                ["contract_type"] = "主合同", ["allocation_mode"] = "单一公司", ["total_amount"] = 100m, ["is_active"] = true
+            })]));
+
+        var preview = await fixture.Service.PreviewAsync(new ProjectWorkbookImportRequest("admin", "中文枚举.xlsx", workbook, Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+        (await fixture.Db.Projects.SingleAsync()).Stage.Should().Be(ProjectStage.UnderConstruction);
+        (await fixture.Db.Contracts.SingleAsync()).ContractType.Should().Be(ContractType.MainContract);
+        (await fixture.Db.Contracts.SingleAsync()).AllocationMode.Should().Be(ContractAllocationMode.SingleCompany);
+    }
+
+    [Fact]
+    public async Task MultiProjectCentralAllocationsRoundTripWithoutOverwritingParentAmount()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "RT-MULTI-LE", Name = "往返多项目公司", ShortName = "往返多项目" };
+        var partner = new BusinessPartner { PartnerNumber = "RT-MULTI-BP", Name = "往返多项目单位", ShortName = "往返单位" };
+        var account = new FinancialAccount { LegalEntity = company, AccountName = "往返账户", AccountType = FinancialAccountType.Bank };
+        var first = new Project { ProjectNumber = "RT-MULTI-P1", Name = "往返项目一", Stage = ProjectStage.UnderConstruction };
+        var second = new Project { ProjectNumber = "RT-MULTI-P2", Name = "往返项目二", Stage = ProjectStage.UnderConstruction };
+        first.LegalEntities.Add(new ProjectLegalEntity { Project = first, LegalEntity = company, IsPrimary = true });
+        second.LegalEntities.Add(new ProjectLegalEntity { Project = second, LegalEntity = company, IsPrimary = true });
+        var firstContract = new Contract { Project = first, BusinessPartner = partner, ContractNumber = "RT-MULTI-C1", Name = "往返合同一" };
+        var secondContract = new Contract { Project = second, BusinessPartner = partner, ContractNumber = "RT-MULTI-C2", Name = "往返合同二" };
+        first.Contracts.Add(firstContract);
+        second.Contracts.Add(secondContract);
+        var firstSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, BusinessPartner = partner, Project = first, Contract = firstContract,
+            BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 400m, OriginalInvoiceAmount = 400m
+        };
+        var secondSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, BusinessPartner = partner, Project = second, Contract = secondContract,
+            BusinessDate = new DateOnly(2026, 7, 1), OriginalAmount = 600m, OriginalInvoiceAmount = 600m
+        };
+        var invoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, LegalEntity = company, BusinessPartner = partner,
+            InvoiceNumber = "RT-MULTI-INV", InvoiceDate = new DateOnly(2026, 7, 3), Amount = 1_000m, NetAmount = 970m, TaxAmount = 30m, TaxRate = 0.03m
+        };
+        invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = firstSettlement, Project = first, Contract = firstContract, Amount = 400m, AllocationOrder = 1 });
+        invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = secondSettlement, Project = second, Contract = secondContract, Amount = 600m, AllocationOrder = 2 });
+        var cash = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, LegalEntity = company, BusinessPartner = partner,
+            Account = account, BusinessDate = new DateOnly(2026, 7, 4), Amount = 1_000m, PaymentMethod = "银行转账"
+        };
+        cash.Allocations.Add(new FinanceCashAllocation { CashEntry = cash, Settlement = firstSettlement, Project = first, Contract = firstContract, Amount = 400m, AllocationOrder = 1 });
+        cash.Allocations.Add(new FinanceCashAllocation { CashEntry = cash, Settlement = secondSettlement, Project = second, Contract = secondContract, Amount = 600m, AllocationOrder = 2 });
+        fixture.Db.AddRange(company, partner, account, first, second, firstSettlement, secondSettlement, invoice, cash);
+        await fixture.Db.SaveChangesAsync();
+
+        var exported = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(new ProjectListActor("admin", true), new ProjectListQuery(null, [], null, null, null, null, null, false), false, [first.Id, second.Id]),
+            [ProjectWorkbookSheet.Collections, ProjectWorkbookSheet.Invoices],
+            Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+        var preview = await fixture.Service.PreviewAsync(new ProjectWorkbookImportRequest("admin", "多项目往返.xlsx", exported.Content, ImportMode.Update, Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+        var storedCash = await fixture.Db.FinanceCashEntries.Include(item => item.Allocations).SingleAsync(item => item.Id == cash.Id);
+        var storedInvoice = await fixture.Db.FinanceInvoices.Include(item => item.Allocations).SingleAsync(item => item.Id == invoice.Id);
+        storedCash.Amount.Should().Be(1_000m);
+        storedCash.Allocations.Select(item => item.Amount).OrderBy(item => item).Should().Equal(400m, 600m);
+        storedInvoice.Amount.Should().Be(1_000m);
+        storedInvoice.Allocations.Select(item => item.Amount).OrderBy(item => item).Should().Equal(400m, 600m);
+    }
+
+    [Fact]
     public async Task StandardWorkbookUpdatesBySystemIdAndClearsPresentBlankNullableField()
     {
         await using var fixture = await ImportFixture.CreateAsync();

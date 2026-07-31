@@ -127,22 +127,196 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
 
     private async Task<IReadOnlyList<ProjectFinanceListItemDto>> BuildProjectSummariesAsync(
         IReadOnlyList<ProjectSummarySeed> projects,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        FinanceSummaryFilter? filter = null)
     {
-        var results = new List<ProjectFinanceListItemDto>(projects.Count);
-        foreach (var project in projects)
+        if (projects.Count == 0) return [];
+
+        var projectIds = projects.Select(item => item.Id).ToArray();
+        var accumulators = projectIds.ToDictionary(item => item, _ => new ProjectSummaryAccumulator());
+
+        IQueryable<FinanceSettlement> settlementQuery = db.FinanceSettlements
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(item => item.Scope == LedgerScope.External
+                && item.Status == LedgerRecordStatus.Active
+                && item.ProjectId.HasValue
+                && projectIds.Contains(item.ProjectId.Value))
+            .Include(item => item.Adjustments)
+            .Include(item => item.Deductions)
+            .Include(item => item.InvoiceAllocations).ThenInclude(item => item.Invoice)
+            .Include(item => item.CashAllocations).ThenInclude(item => item.CashEntry);
+        if (filter is not null)
         {
-            results.Add(new ProjectFinanceListItemDto(
-                project.Id,
-                project.ProjectNumber,
-                project.Name,
-                await GetProjectSummaryAsync(project.Id, cancellationToken)));
+            settlementQuery = settlementQuery
+                .Where(item => item.ProjectId == filter.ProjectId);
+            if (filter.ContractId.HasValue) settlementQuery = settlementQuery.Where(item => item.ContractId == filter.ContractId);
+            if (filter.LegalEntityId.HasValue) settlementQuery = settlementQuery.Where(item => item.LegalEntityId == filter.LegalEntityId);
+            if (filter.BusinessPartnerId.HasValue) settlementQuery = settlementQuery.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId);
+            if (filter.CutoffDate.HasValue) settlementQuery = settlementQuery.Where(item => item.BusinessDate <= filter.CutoffDate);
         }
 
-        return results;
+        var settlements = await settlementQuery.ToListAsync(cancellationToken);
+        var countedSettlementIds = settlements.Select(item => item.Id).ToHashSet();
+        foreach (var settlement in settlements)
+        {
+            if (!settlement.ProjectId.HasValue || !accumulators.TryGetValue(settlement.ProjectId.Value, out var accumulator)) continue;
+            accumulator.AddSettlement(settlement.Direction, CalculateSettlementMetrics(settlement));
+        }
+
+        IQueryable<FinanceCashEntry> cashQuery = db.FinanceCashEntries
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(item => item.Scope == LedgerScope.External
+                && item.Status == LedgerRecordStatus.Active
+                && ((item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value))
+                    || item.Allocations.Any(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value))))
+            .Include(item => item.Allocations).ThenInclude(item => item.Settlement);
+        if (filter is not null)
+        {
+            cashQuery = cashQuery.Where(item => item.ProjectId == filter.ProjectId || item.Allocations.Any(allocation => allocation.ProjectId == filter.ProjectId));
+            if (filter.ContractId.HasValue) cashQuery = cashQuery.Where(item => item.ContractId == filter.ContractId || item.Allocations.Any(allocation => allocation.ContractId == filter.ContractId));
+            if (filter.LegalEntityId.HasValue) cashQuery = cashQuery.Where(item => item.LegalEntityId == filter.LegalEntityId);
+            if (filter.BusinessPartnerId.HasValue) cashQuery = cashQuery.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId || item.Allocations.Any(allocation => allocation.BusinessPartnerId == filter.BusinessPartnerId));
+            if (filter.CutoffDate.HasValue) cashQuery = cashQuery.Where(item => item.BusinessDate <= filter.CutoffDate);
+        }
+
+        var cashEntries = await cashQuery.ToListAsync(cancellationToken);
+        foreach (var cashEntry in cashEntries)
+        {
+            var sign = cashEntry.IsReversal ? -1m : 1m;
+            var signedAmount = cashEntry.Amount * sign;
+            var signedAllocatedAmount = cashEntry.Allocations.Sum(item => item.Amount) * sign;
+            if (cashEntry.ProjectId.HasValue && accumulators.TryGetValue(cashEntry.ProjectId.Value, out var directAccumulator))
+            {
+                directAccumulator.AddDirectCash(cashEntry.Direction, signedAmount - signedAllocatedAmount);
+            }
+
+            foreach (var allocation in cashEntry.Allocations)
+            {
+                var allocationProjectId = allocation.ProjectId ?? allocation.Settlement?.ProjectId;
+                if (allocationProjectId.HasValue
+                    && accumulators.TryGetValue(allocationProjectId.Value, out var allocationAccumulator)
+                    && !countedSettlementIds.Contains(allocation.SettlementId))
+                {
+                    allocationAccumulator.AddDirectCash(cashEntry.Direction, allocation.Amount * sign);
+                }
+            }
+        }
+
+        IQueryable<FinanceInvoice> invoiceQuery = db.FinanceInvoices
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(item => item.Scope == LedgerScope.External
+                && item.Status == LedgerRecordStatus.Active
+                && ((item.ProjectId.HasValue && projectIds.Contains(item.ProjectId.Value))
+                    || item.Allocations.Any(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value))))
+            .Include(item => item.Allocations).ThenInclude(item => item.Settlement);
+        if (filter is not null)
+        {
+            invoiceQuery = invoiceQuery.Where(item => item.ProjectId == filter.ProjectId || item.Allocations.Any(allocation => allocation.ProjectId == filter.ProjectId));
+            if (filter.ContractId.HasValue) invoiceQuery = invoiceQuery.Where(item => item.ContractId == filter.ContractId || item.Allocations.Any(allocation => allocation.ContractId == filter.ContractId));
+            if (filter.LegalEntityId.HasValue) invoiceQuery = invoiceQuery.Where(item => item.LegalEntityId == filter.LegalEntityId);
+            if (filter.BusinessPartnerId.HasValue) invoiceQuery = invoiceQuery.Where(item => item.BusinessPartnerId == filter.BusinessPartnerId || item.Allocations.Any(allocation => allocation.BusinessPartnerId == filter.BusinessPartnerId));
+            if (filter.CutoffDate.HasValue) invoiceQuery = invoiceQuery.Where(item => item.InvoiceDate <= filter.CutoffDate);
+        }
+
+        var invoices = await invoiceQuery.ToListAsync(cancellationToken);
+        foreach (var invoice in invoices)
+        {
+            var unallocatedAmount = invoice.Amount - invoice.Allocations.Sum(item => item.Amount);
+            if (invoice.ProjectId.HasValue && accumulators.TryGetValue(invoice.ProjectId.Value, out var directAccumulator))
+            {
+                directAccumulator.AddDirectInvoice(invoice.Direction, unallocatedAmount);
+            }
+
+            foreach (var allocation in invoice.Allocations)
+            {
+                var allocationProjectId = allocation.ProjectId ?? allocation.Settlement?.ProjectId;
+                if (allocationProjectId.HasValue
+                    && accumulators.TryGetValue(allocationProjectId.Value, out var allocationAccumulator)
+                    && !countedSettlementIds.Contains(allocation.SettlementId))
+                {
+                    allocationAccumulator.AddDirectInvoice(invoice.Direction, allocation.Amount);
+                }
+            }
+        }
+
+        return projects.Select(project => new ProjectFinanceListItemDto(
+            project.Id,
+            project.ProjectNumber,
+            project.Name,
+            accumulators[project.Id].ToDto(project.Id))).ToArray();
     }
 
     private sealed record ProjectSummarySeed(Guid Id, string ProjectNumber, string Name);
+
+    private sealed class ProjectSummaryAccumulator
+    {
+        private CentralLedgerMetrics receivable = CentralLedgerMetrics.Zero;
+        private CentralLedgerMetrics payable = CentralLedgerMetrics.Zero;
+        private decimal directReceivableCash;
+        private decimal directPayableCash;
+        private decimal directOutputInvoice;
+        private decimal directInputInvoice;
+
+        public void AddSettlement(LedgerDirection direction, CentralLedgerMetrics metrics)
+        {
+            if (direction == LedgerDirection.Receivable) receivable = CentralLedgerCalculator.Add(receivable, metrics);
+            else payable = CentralLedgerCalculator.Add(payable, metrics);
+        }
+
+        public void AddDirectCash(LedgerDirection direction, decimal amount)
+        {
+            if (direction == LedgerDirection.Receivable) directReceivableCash += amount;
+            else directPayableCash += amount;
+        }
+
+        public void AddDirectInvoice(LedgerDirection direction, decimal amount)
+        {
+            if (amount <= 0m) return;
+            if (direction == LedgerDirection.Receivable) directOutputInvoice += amount;
+            else directInputInvoice += amount;
+        }
+
+        public FinanceProjectSummaryDto ToDto(Guid projectId)
+        {
+            var collected = receivable.CashAmount + directReceivableCash;
+            var paid = payable.CashAmount + directPayableCash;
+            return new FinanceProjectSummaryDto(
+                projectId,
+                receivable.GrossSettlementAmount,
+                collected,
+                Math.Max(receivable.UncollectedOrUnpaid - directReceivableCash, 0m),
+                payable.GrossSettlementAmount,
+                paid,
+                payable.Deductions,
+                Math.Max(payable.UncollectedOrUnpaid - directPayableCash, 0m),
+                receivable.InvoicedAmount + directOutputInvoice,
+                receivable.Uninvoiced,
+                payable.InvoicedAmount + directInputInvoice,
+                receivable.OverSettlementCash > 0m || collected > receivable.ActualAmount,
+                payable.OverSettlementCash > 0m || paid > payable.ActualAmount);
+        }
+    }
+
+    private static CentralLedgerMetrics CalculateSettlementMetrics(FinanceSettlement settlement)
+    {
+        var adjustments = settlement.Adjustments.Where(item => item.Status == LedgerRecordStatus.Active).ToArray();
+        var deductions = settlement.Deductions.Where(item => item.Status == LedgerRecordStatus.Active).ToArray();
+        var gross = settlement.OriginalAmount + adjustments.Sum(item => item.AmountDelta);
+        var baseInvoice = settlement.OriginalInvoiceAmount + adjustments.Sum(item => item.InvoiceAmountDelta);
+        var invoiced = settlement.InvoiceAllocations.Where(item => item.Invoice.Status == LedgerRecordStatus.Active).Sum(item => item.Amount);
+        var cash = settlement.CashAllocations.Where(item => item.CashEntry.Status == LedgerRecordStatus.Active)
+            .Sum(item => item.CashEntry.IsReversal ? -item.Amount : item.Amount);
+        return CentralLedgerCalculator.Calculate(new CentralLedgerCalculationInput(
+            gross,
+            deductions.Sum(item => item.Amount),
+            deductions.Where(item => item.ReduceInvoiceAmount).Sum(item => item.Amount),
+            baseInvoice,
+            invoiced,
+            cash));
+    }
 
     public async Task<FinanceOverviewDto> GetOverviewAsync(CancellationToken cancellationToken)
     {
@@ -845,45 +1019,16 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
 
     public async Task<FinanceProjectSummaryDto> GetSummaryAsync(FinanceSummaryFilter filter, CancellationToken cancellationToken)
     {
-        if (!await db.Projects.AnyAsync(item => item.Id == filter.ProjectId, cancellationToken))
+        var project = await db.Projects
+            .AsNoTracking()
+            .Where(item => item.Id == filter.ProjectId)
+            .Select(item => new ProjectSummarySeed(item.Id, item.ProjectNumber, item.Name))
+            .SingleOrDefaultAsync(cancellationToken);
+        if (project is null)
         {
             throw new InvalidOperationException("项目不存在。");
         }
-        var legalEntityIds = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).Select(item => item.Id).ToHashSetAsync(cancellationToken);
-        var actor = new CentralLedgerActor(
-            "finance-compatibility-adapter",
-            "财务兼容适配器",
-            legalEntityIds,
-            new HashSet<Guid> { filter.ProjectId },
-            true,
-            false,
-            false,
-            false);
-        var queryService = new CentralLedgerQueryService(db);
-        var common = new CentralLedgerQuery(
-            LedgerScope.External,
-            EndDate: filter.CutoffDate,
-            LegalEntityId: filter.LegalEntityId,
-            BusinessPartnerId: filter.BusinessPartnerId,
-            ProjectId: filter.ProjectId,
-            ContractId: filter.ContractId,
-            PageSize: 1);
-        var receivable = await queryService.SearchAsync(actor, common with { Direction = LedgerDirection.Receivable }, cancellationToken);
-        var payable = await queryService.SearchAsync(actor, common with { Direction = LedgerDirection.Payable }, cancellationToken);
-        return new FinanceProjectSummaryDto(
-            filter.ProjectId,
-            receivable.Totals.GrossSettlementAmount,
-            receivable.Totals.CashAmount,
-            receivable.Totals.UncollectedOrUnpaid,
-            payable.Totals.GrossSettlementAmount,
-            payable.Totals.CashAmount,
-            payable.Totals.Deductions,
-            payable.Totals.UncollectedOrUnpaid,
-            receivable.Totals.InvoicedAmount,
-            receivable.Totals.Uninvoiced,
-            payable.Totals.InvoicedAmount,
-            receivable.Totals.OverSettlementCash > 0m,
-            payable.Totals.OverSettlementCash > 0m);
+        return (await BuildProjectSummariesAsync([project], cancellationToken, filter)).Single().Summary;
     }
 
     private static void ValidateAllocations(IReadOnlyList<InvoiceAllocationRequest> allocations, decimal grossAmount)

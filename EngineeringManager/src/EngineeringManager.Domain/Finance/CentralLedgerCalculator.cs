@@ -35,27 +35,35 @@ public static class CentralLedgerCalculator
     {
         Validate(input);
 
-        var actualAmount = Math.Max(input.GrossSettlementAmount - input.Deductions, 0m);
-        var shouldInvoiceAmount = Math.Max(input.BaseInvoiceAmount - input.InvoiceReducingDeductions, 0m);
-        var invoicedCashBase = Math.Min(input.InvoicedAmount, actualAmount);
+        var grossSettlementAmount = Math.Max(input.GrossSettlementAmount, 0m);
+        var baseInvoiceAmount = Math.Max(input.BaseInvoiceAmount, 0m);
+        var invoicedAmount = Math.Max(input.InvoicedAmount, 0m);
+        var actualAmount = Math.Max(grossSettlementAmount - input.Deductions, 0m);
+        var shouldInvoiceAmount = Math.Max(baseInvoiceAmount - input.InvoiceReducingDeductions, 0m);
+        // Legacy refund rows can make the net allocated cash negative when the
+        // matching original receipt is not present in the imported history.
+        // Settlement metrics represent effective cash received/paid, so the
+        // lower bound is zero while the raw refund remains visible in the cash ledger.
+        var cashAmount = Math.Max(input.CashAmount, 0m);
+        var invoicedCashBase = Math.Min(invoicedAmount, actualAmount);
 
         return new CentralLedgerMetrics(
-            input.GrossSettlementAmount,
+            grossSettlementAmount,
             input.Deductions,
             actualAmount,
             shouldInvoiceAmount,
-            input.InvoicedAmount,
-            input.CashAmount,
-            Math.Max(actualAmount - input.CashAmount, 0m),
-            Math.Max(shouldInvoiceAmount - input.InvoicedAmount, 0m),
-            Math.Min(Math.Min(input.InvoicedAmount, input.CashAmount), actualAmount),
-            Math.Max(invoicedCashBase - input.CashAmount, 0m),
-            Math.Max(input.CashAmount - input.InvoicedAmount, 0m),
+            invoicedAmount,
+            cashAmount,
+            Math.Max(actualAmount - cashAmount, 0m),
+            Math.Max(shouldInvoiceAmount - invoicedAmount, 0m),
+            Math.Min(Math.Min(invoicedAmount, cashAmount), actualAmount),
+            Math.Max(invoicedCashBase - cashAmount, 0m),
+            Math.Max(cashAmount - invoicedAmount, 0m),
             Math.Max(actualAmount - Math.Max(
                 Math.Min(input.InvoicedAmount, actualAmount),
-                Math.Min(input.CashAmount, actualAmount)), 0m),
+                Math.Min(cashAmount, actualAmount)), 0m),
             Math.Max(Math.Min(input.InvoicedAmount, shouldInvoiceAmount) - actualAmount, 0m),
-            Math.Max(input.CashAmount - actualAmount, 0m),
+            Math.Max(cashAmount - actualAmount, 0m),
             Math.Max(input.InvoicedAmount - shouldInvoiceAmount, 0m));
     }
 
@@ -78,11 +86,6 @@ public static class CentralLedgerCalculator
 
     private static void Validate(CentralLedgerCalculationInput input)
     {
-        if (input.GrossSettlementAmount < 0m)
-        {
-            throw new ArgumentOutOfRangeException(nameof(input), input.GrossSettlementAmount, "结算金额不能为负数。");
-        }
-
         if (input.Deductions < 0m)
         {
             throw new ArgumentOutOfRangeException(nameof(input), input.Deductions, "扣款金额不能为负数。");
@@ -93,19 +96,5 @@ public static class CentralLedgerCalculator
             throw new ArgumentOutOfRangeException(nameof(input), input.InvoiceReducingDeductions, "扣减应开票的扣款必须位于全部扣款范围内。");
         }
 
-        if (input.BaseInvoiceAmount < 0m)
-        {
-            throw new ArgumentOutOfRangeException(nameof(input), input.BaseInvoiceAmount, "应开票金额不能为负数。");
-        }
-
-        if (input.InvoicedAmount < 0m)
-        {
-            throw new ArgumentOutOfRangeException(nameof(input), input.InvoicedAmount, "已开票金额不能为负数。");
-        }
-
-        if (input.CashAmount < 0m)
-        {
-            throw new ArgumentOutOfRangeException(nameof(input), input.CashAmount, "实际收付款金额不能为负数。");
-        }
     }
 }

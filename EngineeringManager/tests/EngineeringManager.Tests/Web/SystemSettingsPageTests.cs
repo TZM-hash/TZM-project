@@ -30,6 +30,7 @@ public sealed class SystemSettingsPageTests
         html.Should().Contain("name=\"Input.Motion\"").And.Contain("value=\"Apple\"");
         html.Should().Contain("name=\"Input.Effects\"").And.Contain("value=\"High\"");
         html.Should().Contain("name=\"Input.Font\"").And.Contain("value=\"MicrosoftYaHei\"");
+        html.Should().Contain("name=\"Input.FontSize\"").And.Contain("value=\"Large\"");
         html.Should().Contain("name=\"Input.Density\"").And.Contain("value=\"Compact\"");
         html.Should().Contain("type=\"submit\"").And.NotContain("data-settings-readonly");
     }

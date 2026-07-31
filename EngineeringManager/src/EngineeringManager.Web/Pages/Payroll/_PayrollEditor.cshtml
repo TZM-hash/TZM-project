@@ -1,6 +1,7 @@
 @model EngineeringManager.Web.Pages.Payroll.PayrollEditorViewModel
 @using EngineeringManager.Domain.Employees
 @using EngineeringManager.Domain.Finance
+@using EngineeringManager.Web.Presentation
 
 <form method="post" asp-page-handler="Save" class="payroll-editor" data-payroll-editor data-payroll-dependent-fields>
     <div asp-validation-summary="All" class="validation-summary payroll-dialog-validation"></div>
@@ -27,7 +28,7 @@
             <label data-personal-advance-account-field hidden>个人垫付账户<select asp-for="Input.PersonalAdvanceAccountId"><option value="">请选择</option>@foreach (var item in Model.PersonalAdvanceAccounts) { <option value="@item.Id">@item.Label · @item.OwnerName</option> }</select></label>
             <label data-personal-advance-repayment-field hidden>垫付归还目标<select asp-for="Input.RepaysPersonalAdvanceAccountId"><option value="">不归还个人垫付</option>@foreach (var item in Model.PersonalAdvanceAccounts) { <option value="@item.Id">@item.Label · @item.OwnerName</option> }</select></label>
             <label>实际发放总金额<input asp-for="Input.ActualAmount" type="number" step="0.01" data-payroll-actual /></label>
-            <label>支付方式<select asp-for="Input.PaymentMethod" asp-items="Html.GetEnumSelectList<PaymentMethod>()"></select></label>
+            <label>支付方式<select asp-for="Input.PaymentMethod">@foreach (var paymentMethod in Enum.GetValues<PaymentMethod>()) { <option value="@paymentMethod">@paymentMethod.ToChinese()</option> }</select></label>
             <label>付款凭证号<input asp-for="Input.VoucherNumber" /></label>
         </section>
         <section class="payroll-editor-notes">

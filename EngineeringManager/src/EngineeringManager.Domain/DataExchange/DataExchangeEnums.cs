@@ -21,7 +21,11 @@ public enum ExportDataset
     EquipmentUsages = 17,
     EquipmentPeriods = 18,
     EquipmentSettlements = 19,
-    EmployeeCertificates = 20
+    EmployeeCertificates = 20,
+    EmployeeWages = 21,
+    EmployeeOtherPayments = 22,
+    EmployeeReceipts = 23,
+    EmployeeFinancialAdjustments = 24
 }
 
 public enum ExportFieldDataType { Text = 1, Number = 2, Date = 3, Boolean = 4 }

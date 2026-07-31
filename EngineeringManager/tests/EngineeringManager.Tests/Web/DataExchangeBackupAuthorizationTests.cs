@@ -128,6 +128,7 @@ public sealed class DataExchangeBackupAuthorizationTests
 
     private sealed class FakeImportService : IImportService
     {
+        public IReadOnlyList<ExportDataset> ImportableDatasets => [ExportDataset.Employees];
         public Task<ExportFileResult> GenerateTemplateAsync(ExportDataset dataset, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ImportPreviewDto> PreviewAsync(ImportPreviewRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ConfirmAsync(Guid batchId, CancellationToken cancellationToken) => throw new NotSupportedException();

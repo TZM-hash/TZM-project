@@ -1,8 +1,9 @@
 import { initShell } from "./core/shell.js";
 import { initEffects } from "./core/effects.js";
 
-const jobs = [initShell(), initEffects(), initPwaStatus(), initOfflineDashboard()];
+void initShell();
 initSmartBack();
+initNavigationFeedback();
 initPasswordVisibility();
 initProjectAmountViews();
 initProjectGeneralContractors();
@@ -10,14 +11,17 @@ initCollectionContractPayerDefaults();
 initCompanyAccountEntries();
 initProjectContractEditor();
 initEmployeeWorkspaceControls();
+scheduleIdle(() => initEffects());
+scheduleIdle(() => initPwaStatus());
+scheduleIdle(() => initOfflineDashboard());
 if (document.querySelector("[data-conflict-notice]")) {
-  jobs.push(import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
+  scheduleIdle(() => import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
 }
-if (document.querySelector("[data-theme-option], [data-motion-option], [data-global-font-picker]")) {
-  jobs.push(import("./pages/settings.js").then((module) => module.initSettingsPreview()));
+if (document.querySelector("[data-theme-option], [data-motion-option], [data-global-font-picker], [data-global-font-size-picker]")) {
+  scheduleIdle(() => import("./pages/settings.js").then((module) => module.initSettingsPreview()));
 }
 if (document.querySelector("[data-workbench]")) {
-  jobs.push(Promise.all([
+  scheduleIdle(() => Promise.all([
     import("./components/data-table.js"),
     import("./components/saved-views.js"),
     import("./components/filter-drawer.js")
@@ -28,18 +32,26 @@ if (document.querySelector("[data-workbench]")) {
   }));
 }
 if (document.querySelector("[data-chart]")) {
-  jobs.push(import("./components/charts.js").then((module) => module.initCharts()));
+  scheduleIdle(() => import("./components/charts.js").then((module) => module.initCharts()));
 }
 if (document.querySelector("[data-inline-edit], [data-inline-edit-table], [data-finance-project-select]")) {
-  jobs.push(import("./components/quick-edit.js").then((module) => module.initInlineEditors()));
+  scheduleIdle(() => import("./components/quick-edit.js").then((module) => module.initInlineEditors()));
 }
 if (document.querySelector("[data-check-selector]")) {
-  jobs.push(import("./components/check-selector.js").then((module) => module.initCheckSelectors()));
+  scheduleIdle(() => import("./components/check-selector.js").then((module) => module.initCheckSelectors()));
 }
 if (document.querySelector("[data-central-ledger-nav]")) {
-  jobs.push(import("./components/collapsible-nav.js").then((module) => module.initCollapsibleNavigation()));
+  scheduleIdle(() => import("./components/collapsible-nav.js").then((module) => module.initCollapsibleNavigation()));
 }
-await Promise.all(jobs);
+
+function scheduleIdle(task) {
+  const run = () => Promise.resolve().then(task).catch(() => undefined);
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(run, { timeout: 500 });
+    return;
+  }
+  window.setTimeout(run, 0);
+}
 
 function initSmartBack() {
   document.querySelectorAll("[data-smart-back]").forEach((link) => link.addEventListener("click", (event) => {
@@ -295,6 +307,24 @@ function initCollectionContractPayerDefaults() {
       defaultPayer = nextPayer;
     });
   });
+}
+
+function initNavigationFeedback() {
+  const indicator = document.querySelector("[data-navigation-pending]");
+  if (!indicator) return;
+  const clear = () => {
+    indicator.hidden = true;
+    document.body.classList.remove("navigation-pending");
+  };
+  document.querySelectorAll("a[href]").forEach((link) => link.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (link.target && link.target !== "_self" || link.hasAttribute("download")) return;
+    const target = new URL(link.href, window.location.href);
+    if (target.origin !== window.location.origin || target.href === window.location.href) return;
+    indicator.hidden = false;
+    document.body.classList.add("navigation-pending");
+  }));
+  window.addEventListener("pageshow", clear);
 }
 
 function initPasswordVisibility() {

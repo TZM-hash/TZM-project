@@ -112,7 +112,236 @@ public sealed class ModuleExportTests
         var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
 
         rows[0].Should().Equal("发放日期", "人员来源", "人员姓名", "个人金额", "批次实际总额");
-        rows.Should().Contain(row => row.SequenceEqual(new object?[] { new DateOnly(2026, 7, 18), "Employee", employee.Name, 800m, 800m }));
+        rows.Should().Contain(row => row.SequenceEqual(new object?[] { new DateOnly(2026, 7, 18), "员工", employee.Name, 800m, 800m }));
+    }
+
+    [Fact]
+    public async Task CashExportsIncludeDirectProjectEntriesWithoutDuplicatingAllocatedEntries()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        var company = await fixture.Db.LegalEntities.FirstAsync();
+        var partner = await fixture.Db.BusinessPartners.FirstAsync();
+        var account = await fixture.Db.FinancialAccounts.FirstAsync();
+        var project = await fixture.Db.Projects.FirstAsync();
+
+        fixture.Db.FinanceCashEntries.AddRange(
+            new FinanceCashEntry
+            {
+                Scope = LedgerScope.External,
+                Direction = LedgerDirection.Receivable,
+                CashType = LedgerCashType.Collection,
+                LegalEntity = company,
+                BusinessPartner = partner,
+                Project = project,
+                Account = account,
+                BusinessDate = new DateOnly(2026, 7, 5),
+                Amount = 25m,
+                PaymentMethod = "银行转账",
+                Notes = "项目直接收款"
+            },
+            new FinanceCashEntry
+            {
+                Scope = LedgerScope.External,
+                Direction = LedgerDirection.Payable,
+                CashType = LedgerCashType.Payment,
+                LegalEntity = company,
+                BusinessPartner = partner,
+                Project = project,
+                Account = account,
+                BusinessDate = new DateOnly(2026, 7, 6),
+                Amount = 15m,
+                PaymentMethod = "现金",
+                Notes = "项目直接付款"
+            });
+        await fixture.Db.SaveChangesAsync();
+
+        var collectionFile = await fixture.Service.ExportAsync(
+            new ExportRequest(ExportDataset.Collections, "direct-cash", ["project_number", "amount", "notes"], null),
+            CancellationToken.None);
+        var paymentFile = await fixture.Service.ExportAsync(
+            new ExportRequest(ExportDataset.Payments, "direct-cash", ["project_number", "amount", "notes"], null),
+            CancellationToken.None);
+
+        var collectionRows = SimpleXlsxReader.Read(collectionFile.Content).Single().Rows.Skip(1).ToArray();
+        var paymentRows = SimpleXlsxReader.Read(paymentFile.Content).Single().Rows.Skip(1).ToArray();
+
+        collectionRows.Should().HaveCount(2);
+        collectionRows.Sum(row => Convert.ToDecimal(row[1], System.Globalization.CultureInfo.InvariantCulture)).Should().Be(85m);
+        collectionRows.Should().Contain(row => row.Contains("项目直接收款"));
+        paymentRows.Should().HaveCount(2);
+        paymentRows.Sum(row => Convert.ToDecimal(row[1], System.Globalization.CultureInfo.InvariantCulture)).Should().Be(35m);
+        paymentRows.Should().Contain(row => row.Contains("项目直接付款"));
+    }
+
+    [Fact]
+    public async Task InvoiceExportUsesCentralLedgerAndChineseValues()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        var company = await fixture.Db.LegalEntities.FirstAsync();
+        var partner = await fixture.Db.BusinessPartners.FirstAsync();
+        var project = await fixture.Db.Projects.FirstAsync();
+        fixture.Db.FinanceInvoices.Add(new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = project,
+            InvoiceNumber = "CENTRAL-INV-001",
+            InvoiceDate = new DateOnly(2026, 7, 7),
+            Amount = 88m,
+            Status = LedgerRecordStatus.Active,
+            Notes = "中央发票"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(
+            new ExportRequest(ExportDataset.Invoices, "central-invoice", ["project_number", "invoice_number", "direction", "gross_amount", "status"], null),
+            CancellationToken.None);
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+
+        rows.Should().Contain(row => row.SequenceEqual(new object?[] { project.ProjectNumber, "CENTRAL-INV-001", "应收", 88m, "有效" }));
+    }
+
+    [Fact]
+    public async Task CentralLedgerExportsIncludeSystemIdsThatCanUpdateCashAndInvoices()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        var company = await fixture.Db.LegalEntities.FirstAsync();
+        var partner = await fixture.Db.BusinessPartners.FirstAsync();
+        var account = await fixture.Db.FinancialAccounts.FirstAsync();
+        var project = await fixture.Db.Projects.FirstAsync();
+        fixture.Db.FinanceCashEntries.Add(new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            CashType = LedgerCashType.Collection,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = project,
+            Account = account,
+            BusinessDate = new DateOnly(2026, 7, 8),
+            Amount = 41m,
+            PaymentMethod = PaymentMethod.BankTransfer.ToString(),
+            Notes = "系统ID回读收款"
+        });
+        fixture.Db.FinanceInvoices.Add(new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = project,
+            InvoiceNumber = "SYSTEM-ID-INV",
+            InvoiceDate = new DateOnly(2026, 7, 9),
+            Amount = 51m,
+            Status = LedgerRecordStatus.Active,
+            Notes = "系统ID回读发票"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var cashFile = await fixture.Service.ExportAsync(new ExportRequest(
+            ExportDataset.Collections,
+            "system-id-export",
+            ["_system_id", "project_number", "collection_date", "legal_entity_code", "partner_number", "account_number", "account", "amount", "payment_method", "notes"],
+            null), CancellationToken.None);
+        var invoiceFile = await fixture.Service.ExportAsync(new ExportRequest(
+            ExportDataset.Invoices,
+            "system-id-export",
+            ["_system_id", "project_number", "invoice_number", "invoice_date", "direction", "legal_entity_code", "partner_number", "gross_amount", "status", "notes"],
+            null), CancellationToken.None);
+
+        var cashSheet = SimpleXlsxReader.Read(cashFile.Content).Single();
+        var invoiceSheet = SimpleXlsxReader.Read(invoiceFile.Content).Single();
+        cashSheet.Rows[0].Should().Contain("系统ID");
+        invoiceSheet.Rows[0].Should().Contain("系统ID");
+
+        var cashHeaders = cashSheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+        var cashRow = cashSheet.Rows.Single(row => row[cashHeaders.ToList().IndexOf("备注")]?.ToString() == "系统ID回读收款").ToArray();
+        cashRow[cashHeaders.ToList().IndexOf("收款金额")] = 77m;
+        var cashWorkbook = new SimpleXlsxWorkbook();
+        cashWorkbook.AddWorksheet("收款导入", cashHeaders, [cashRow]);
+
+        var invoiceHeaders = invoiceSheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+        var invoiceRow = invoiceSheet.Rows.Single(row => row[invoiceHeaders.ToList().IndexOf("备注")]?.ToString() == "系统ID回读发票").ToArray();
+        invoiceRow[invoiceHeaders.ToList().IndexOf("含税金额")] = 99m;
+        var invoiceWorkbook = new SimpleXlsxWorkbook();
+        invoiceWorkbook.AddWorksheet("发票导入", invoiceHeaders, [invoiceRow]);
+
+        var importService = new ImportService(fixture.Db);
+        var cashPreview = await importService.PreviewAsync(new ImportPreviewRequest("system-id-import", ExportDataset.Collections, "收款回读.xlsx", cashWorkbook.ToArray(), null, ImportMode.Update), CancellationToken.None);
+        var invoicePreview = await importService.PreviewAsync(new ImportPreviewRequest("system-id-import", ExportDataset.Invoices, "发票回读.xlsx", invoiceWorkbook.ToArray(), null, ImportMode.Update), CancellationToken.None);
+        cashPreview.Errors.Should().BeEmpty();
+        invoicePreview.Errors.Should().BeEmpty();
+        await importService.ConfirmAsync(cashPreview.BatchId, CancellationToken.None);
+        await importService.ConfirmAsync(invoicePreview.BatchId, CancellationToken.None);
+
+        (await fixture.Db.FinanceCashEntries.SingleAsync(item => item.Notes == "系统ID回读收款")).Amount.Should().Be(77m);
+        (await fixture.Db.FinanceInvoices.SingleAsync(item => item.Notes == "系统ID回读发票")).Amount.Should().Be(99m);
+    }
+
+    [Fact]
+    public async Task EmployeeLedgerExportsIncludeWagesAndReceiptsWithChineseLabels()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        var employee = await fixture.Db.Employees.FirstAsync();
+        var company = await fixture.Db.LegalEntities.FirstAsync();
+        var account = await fixture.Db.FinancialAccounts.FirstAsync();
+        var year = new BusinessYear { Name = "2026年度", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 12, 31) };
+        fixture.Db.Add(year);
+        fixture.Db.EmployeeWageEntries.Add(new EmployeeWageEntry
+        {
+            Employee = employee,
+            BusinessYear = year,
+            StartDate = new DateOnly(2026, 8, 1),
+            EndDate = new DateOnly(2026, 8, 31),
+            EntryType = EmployeeWageEntryType.Attendance,
+            WageCategory = EmployeeWageCategory.SocialSecurityWage,
+            CalculationMethod = EmployeeWageCalculationMethod.Monthly,
+            Nature = PayrollItemNature.Earning,
+            AutomaticAmount = 1000m,
+            FinalAmount = 1000m,
+            Notes = "工资导出"
+        });
+        fixture.Db.EmployeeOtherPayments.Add(new EmployeeOtherPayment
+        {
+            Employee = employee,
+            LegalEntity = company,
+            EntryType = EmployeeLedgerEntryType.Expense,
+            RecordKind = EmployeeLedgerRecordKind.Payable,
+            EntryDate = new DateOnly(2026, 8, 2),
+            Amount = 200m,
+            PaymentMethod = PaymentMethod.BankTransfer,
+            Description = "往来导出"
+        });
+        fixture.Db.EmployeeReceipts.Add(new EmployeeReceipt
+        {
+            Employee = employee,
+            BusinessYear = year,
+            ReceiptDate = new DateOnly(2026, 8, 3),
+            ReceiptType = EmployeeReceiptType.Wage,
+            Amount = 800m,
+            PaymentLegalEntity = company,
+            Account = account,
+            PaymentMethod = PaymentMethod.BankTransfer,
+            ActualRecipientName = employee.Name,
+            Notes = "收款导出"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var wageFile = await fixture.Service.ExportAsync(
+            new ExportRequest((ExportDataset)21, "employee-ledger", ["employee_number", "entry_type", "final_amount"], null),
+            CancellationToken.None);
+        var otherFile = await fixture.Service.ExportAsync(
+            new ExportRequest((ExportDataset)22, "employee-ledger", ["employee_number", "record_kind", "amount", "payment_method"], null),
+            CancellationToken.None);
+        var receiptFile = await fixture.Service.ExportAsync(
+            new ExportRequest((ExportDataset)23, "employee-ledger", ["employee_number", "receipt_type", "amount", "payment_method"], null),
+            CancellationToken.None);
+
+        SimpleXlsxReader.Read(wageFile.Content).Single().Rows.Should().Contain(row => row.SequenceEqual(new object?[] { employee.EmployeeNumber, "出勤", 1000m }));
+        SimpleXlsxReader.Read(otherFile.Content).Single().Rows.Should().Contain(row => row.SequenceEqual(new object?[] { employee.EmployeeNumber, "应付", 200m, "银行转账" }));
+        SimpleXlsxReader.Read(receiptFile.Content).Single().Rows.Should().Contain(row => row.SequenceEqual(new object?[] { employee.EmployeeNumber, "工资", 800m, "银行转账" }));
     }
 
     [Fact]

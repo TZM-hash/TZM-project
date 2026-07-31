@@ -23,7 +23,7 @@ public static class DataExchangeLabels
         ProjectWorkbookSheet.Invoices => "发票",
         ProjectWorkbookSheet.Deductions => "扣款",
         ProjectWorkbookSheet.Attachments => "附件清单",
-        _ => value.ToString()
+        _ => "未知"
     };
 
     public static string Dataset(ExportDataset value) => value switch
@@ -48,7 +48,11 @@ public static class DataExchangeLabels
         ExportDataset.EquipmentPeriods => "设备使用期间",
         ExportDataset.EquipmentSettlements => "设备结算",
         ExportDataset.EmployeeCertificates => "员工证书",
-        _ => value.ToString()
+        ExportDataset.EmployeeWages => "员工工资明细",
+        ExportDataset.EmployeeOtherPayments => "员工其他往来",
+        ExportDataset.EmployeeReceipts => "员工收款",
+        ExportDataset.EmployeeFinancialAdjustments => "员工财务调整",
+        _ => "未知"
     };
 
     public static string Scope(ExportScope value) => value switch
@@ -56,14 +60,14 @@ public static class DataExchangeLabels
         ExportScope.CurrentView => "当前筛选结果",
         ExportScope.FullAuthorized => "全部授权数据",
         ExportScope.SelectedModules => "勾选的模块",
-        _ => value.ToString()
+        _ => "未知"
     };
 
     public static string PackageFormat(ExportPackageFormat value) => value switch
     {
         ExportPackageFormat.Workbook => "单个 Excel 工作簿",
         ExportPackageFormat.Zip => "ZIP 压缩包",
-        _ => value.ToString()
+        _ => "未知"
     };
 
     public static string ImportMode(ImportMode value) => value switch
@@ -71,7 +75,7 @@ public static class DataExchangeLabels
         EngineeringManager.Domain.DataExchange.ImportMode.New => "仅新增",
         EngineeringManager.Domain.DataExchange.ImportMode.Update => "仅更新",
         EngineeringManager.Domain.DataExchange.ImportMode.Mixed => "新增或更新",
-        _ => value.ToString()
+        _ => "未知"
     };
 
     public static string TaskStatus(DataExchangeTaskStatus value) => value switch
@@ -81,6 +85,6 @@ public static class DataExchangeLabels
         DataExchangeTaskStatus.Running => "处理中",
         DataExchangeTaskStatus.Completed => "已完成",
         DataExchangeTaskStatus.Failed => "失败",
-        _ => value.ToString()
+        _ => "未知"
     };
 }

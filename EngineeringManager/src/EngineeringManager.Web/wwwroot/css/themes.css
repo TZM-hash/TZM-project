@@ -40,8 +40,8 @@ body.motion-apple .button,
 body.motion-apple .metric-card,
 body.motion-apple .panel,
 body.motion-apple .option-card { transition: transform .34s var(--apple-spring), box-shadow .34s var(--apple-spring), background-color .24s ease, border-color .24s ease; }
-body.motion-apple.ui-effects-medium .app-main { animation: apple-page-enter .42s var(--apple-spring) both; }
-body.motion-apple.ui-effects-high .app-main { animation: apple-page-enter-high .62s var(--apple-spring) both; }
+body.motion-apple.ui-effects-medium .app-main { animation: apple-page-enter .22s var(--apple-spring) both; }
+body.motion-apple.ui-effects-high .app-main { animation: apple-page-enter-high .32s var(--apple-spring) both; }
 body.motion-apple.ui-effects-high .button:active,
 body.motion-apple.ui-effects-high .nav-link:active { transform: scale(.96); }
 body.motion-apple.ui-effects-high .metric-card:hover,
@@ -49,8 +49,8 @@ body.motion-apple.ui-effects-high .panel:hover { transform: translateY(-5px) sca
 
 .ui-click-ripple { position: fixed; z-index: 1200; width: .5rem; height: .5rem; border-radius: 50%; pointer-events: none; background: rgba(37,99,235,.2); transform: translate(-50%,-50%) scale(0); animation: click-ripple .5s ease-out forwards; }
 @keyframes fx-drift { from { transform: translate3d(-2%, -2%, 0) scale(.96); } to { transform: translate3d(4%, 5%, 0) scale(1.08); } }
-@keyframes apple-page-enter { from { opacity: 0; transform: translateY(.55rem) scale(.995); } to { opacity: 1; transform: none; } }
-@keyframes apple-page-enter-high { from { opacity: 0; transform: translateY(.9rem) scale(.988); filter: blur(5px); } 75% { opacity: 1; filter: blur(0); } to { transform: none; } }
+@keyframes apple-page-enter { from { opacity: 0; transform: translateY(.2rem); } to { opacity: 1; transform: none; } }
+@keyframes apple-page-enter-high { from { opacity: 0; transform: translateY(.35rem); } to { opacity: 1; transform: none; } }
 @keyframes click-ripple { to { opacity: 0; transform: translate(-50%,-50%) scale(18); } }
 
 @media (prefers-reduced-motion: reduce) {

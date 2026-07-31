@@ -29,7 +29,7 @@
     var parentPage = ParentPage();
 }
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="@displaySettings.FontSizeCssClass">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -81,6 +81,7 @@
         <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span><span>阶段 0～10 已完成 · 体验优化迭代</span></div>
     </aside>
     <div class="app-content">
+        <div class="navigation-pending-indicator" data-navigation-pending hidden role="status" aria-live="polite">正在打开页面…</div>
         <header class="app-header">
             <div class="app-header-content">
                 <button class="menu-toggle" type="button" aria-expanded="true" aria-controls="primary-nav" data-menu-toggle><span class="sr-only">收起或打开导航菜单</span><svg aria-hidden="true"><use href="/img/icons.svg#menu"></use></svg></button>

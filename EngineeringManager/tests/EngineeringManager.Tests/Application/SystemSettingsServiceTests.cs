@@ -22,7 +22,20 @@ public sealed class SystemSettingsServiceTests
             MotionStyle.Technology,
             UiEffectsLevel.Medium,
             GlobalFont.SystemDefault,
-            TableDensity.Standard));
+            TableDensity.Standard,
+            GlobalFontSize.Standard));
+    }
+
+    [Fact]
+    public async Task DefaultGlobalFontSizeIsStandardAndCanBePersisted()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+
+        var settings = await fixture.Service.GetAsync(default);
+        var property = settings.GetType().GetProperty("FontSize");
+
+        property.Should().NotBeNull();
+        property!.GetValue(settings)!.ToString().Should().Be("Standard");
     }
 
     [Fact]
@@ -34,12 +47,13 @@ public sealed class SystemSettingsServiceTests
             MotionStyle.Apple,
             UiEffectsLevel.High,
             GlobalFont.MicrosoftYaHei,
-            TableDensity.Compact);
+            TableDensity.Compact,
+            GlobalFontSize.Large);
 
         await fixture.Service.SaveAsync(new SettingsActor("sys", "系统管理员", true), requested, default);
 
         (await fixture.Service.GetAsync(default)).Should().Be(requested);
-        (await fixture.Db.SystemSettings.CountAsync()).Should().Be(5);
+        (await fixture.Db.SystemSettings.CountAsync()).Should().Be(6);
         var audit = await fixture.Db.AuditLogs.SingleAsync(item => item.Action == "UpdateSystemDisplaySettings");
         audit.UserId.Should().Be("sys");
         audit.BeforeJson.Should().Contain("Medium");

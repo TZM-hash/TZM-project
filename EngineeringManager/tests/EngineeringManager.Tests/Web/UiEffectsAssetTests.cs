@@ -50,6 +50,18 @@ public sealed class UiEffectsAssetTests
             .And.NotContain("requestSubmit");
     }
 
+    [Fact]
+    public void PageNavigationDoesNotWaitForDeferredModules()
+    {
+        var site = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "site.js");
+        var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
+
+        site.Should().Contain("requestIdleCallback")
+            .And.NotContain("await Promise.all(jobs)")
+            .And.Contain("navigation-pending");
+        layout.Should().Contain("data-navigation-pending");
+    }
+
     private static string ReadCss() => string.Join('\n', CssFiles
         .Select(file => ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", file)));
 

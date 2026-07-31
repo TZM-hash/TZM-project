@@ -16,6 +16,7 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
 {
     public IReadOnlyList<EngineeringManager.Domain.DataExchange.ExportFieldDefinition> Fields { get; private set; } = [];
     public IReadOnlyList<ExportTemplateDto> Templates { get; private set; } = [];
+    public IReadOnlyList<ExportDataset> ImportableDatasets => importService.ImportableDatasets;
     public IReadOnlyList<ExportTaskDto> Tasks { get; private set; } = [];
     public IReadOnlyList<ImportMappingTemplateDto> MappingTemplates { get; private set; } = [];
     public ImportPreviewDto? Preview { get; private set; }
