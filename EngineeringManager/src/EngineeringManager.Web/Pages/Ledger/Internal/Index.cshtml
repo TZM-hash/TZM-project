@@ -3,16 +3,115 @@
 @model EngineeringManager.Web.Pages.Ledger.Internal.IndexModel
 @{
     ViewData["Title"] = "中央账本 · 内部账本";
+    var receivable = Model.Result.ReceivableTotals ?? CentralLedgerMetrics.Zero;
+    var payable = Model.Result.PayableTotals ?? CentralLedgerMetrics.Zero;
+    var detailsUrl = Url.Page("/Ledger/Internal/Index", "Details") ?? "/Ledger/Internal/Index?handler=Details";
+    var pendingTotal = (Model.Result.UnallocatedCash ?? []).Sum(item => item.UnallocatedAmount)
+        + (Model.Result.Invoices ?? []).Where(item => item.UnallocatedAmount > 0m).Sum(item => item.UnallocatedAmount);
 }
-<section class="page-heading ledger-heading"><div><h1>内部账本</h1><p class="page-lead">仅显示自有公司之间的内部往来，和外部客户、班组、合作商账目分开管理。</p></div>@if (Model.CanManage) { <a class="button button--primary" asp-page="/Ledger/Entries/Edit" asp-route-scope="Internal">新增内部往来</a> }</section>
-<partial name="../_LedgerMetrics" model="Model.Result.Totals" />
-<section class="panel ledger-filter-panel"><form method="get" class="ledger-filter-grid">
-    <label>财务年度<select asp-for="FinanceBusinessYearId"><option value="">全部年度</option>@foreach (var item in Model.Years) { <option value="@item.Id">@item.Name</option> }</select></label>
-    <label>开始日期<input asp-for="StartDate" type="date" /></label><label>结束日期<input asp-for="EndDate" type="date" /></label>
-    <label>本方自有公司<select asp-for="LegalEntityId"><option value="">全部公司</option>@foreach (var item in Model.Options.LegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
-    <label>对方自有公司<select asp-for="CounterLegalEntityId"><option value="">全部公司</option>@foreach (var item in Model.Options.CounterLegalEntities) { <option value="@item.Id">@item.Label</option> }</select></label>
-    <label>方向<select asp-for="Direction"><option value="">应收与应付</option><option value="Receivable">应收</option><option value="Payable">应付</option></select></label>
-    <label class="ledger-search">关键词<input asp-for="Search" placeholder="自有公司、说明" /></label><div class="ledger-filter-actions"><button class="button button--primary" type="submit">筛选</button><a class="button button--secondary" asp-page="/Ledger/Internal/Index">重置</a></div>
-</form></section>
-<nav class="ledger-tabs" aria-label="内部账本分类"><a href="#internal-table">总览</a><a href="#internal-table">内部应收</a><a href="#internal-table">内部应付</a><a href="#internal-table">内部收付</a><a href="#internal-table">年度账</a><a href="#internal-table">对账</a><a href="#internal-table">修改日志</a></nav>
-<section class="panel data-work-surface" id="internal-table"><div class="panel-heading"><div><h2>自有公司内部往来</h2><p>内部账不显示外部合作单位。</p></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>日期</th><th>方向</th><th>本方自有公司</th><th>对方自有公司</th><th>结算金额</th><th>已收/已付</th><th>未收/未付</th><th>发票状态</th></tr></thead><tbody>@foreach (var row in Model.Result.Rows) { <tr><td>@row.BusinessDate</td><td>@(row.Direction == LedgerDirection.Receivable ? "应收" : "应付")</td><td>@row.LegalEntityName</td><td>@row.CounterLegalEntityName</td><td>@row.Metrics.ActualAmount.ToString("N2")</td><td>@row.Metrics.CashAmount.ToString("N2")</td><td>@row.Metrics.UncollectedOrUnpaid.ToString("N2")</td><td>@row.InvoiceAllocationStatus</td></tr> }</tbody></table></div>@if (Model.Result.Rows.Count == 0) { <div class="empty-state"><strong>暂无内部往来</strong><p>新增自有公司之间的应收、应付、收付款或内部发票后在此统一查看。</p></div> }</section>
+
+<div class="ledger-workspace-page" data-ledger-workspace data-ledger-scope="Internal" data-ledger-active-tab="@Model.ActiveTab">
+    <section class="page-heading compact-page-heading ledger-workspace-heading">
+        <div>
+            <p class="eyebrow">中央账本 · 内部范围</p>
+            <h1>内部账本</h1>
+            <p class="page-lead">仅显示自有公司之间的内部往来，与外部客户、班组、合作商账目分开管理。</p>
+        </div>
+        @if (Model.CanManage)
+        {
+            <a class="button button--primary" asp-page="/Ledger/Entries/Edit" asp-route-scope="Internal" asp-route-view="@Model.ActiveTab" data-ledger-entry-open>新增内部往来</a>
+        }
+    </section>
+
+    <section class="ledger-workspace-layout">
+        <aside class="ledger-workspace-summary" aria-label="内部账本汇总">
+            <div class="ledger-summary-heading"><span class="eyebrow">范围汇总</span><strong>本次筛选结果</strong></div>
+            <div class="ledger-summary-metrics">
+                <a class="ledger-summary-metric ledger-summary-metric--receivable" href="@Model.TabUrl("receivable")"><span>内部应收未收</span><strong>@receivable.UncollectedOrUnpaid.ToString("N2")</strong><small>应收 @receivable.ActualAmount.ToString("N2")</small></a>
+                <a class="ledger-summary-metric ledger-summary-metric--payable" href="@Model.TabUrl("payable")"><span>内部应付未付</span><strong>@payable.UncollectedOrUnpaid.ToString("N2")</strong><small>应付 @payable.ActualAmount.ToString("N2")</small></a>
+                <a class="ledger-summary-metric ledger-summary-metric--transfer" href="@Model.TabUrl("transfer")"><span>内部转入</span><strong>@receivable.CashAmount.ToString("N2")</strong><small>内部收款</small></a>
+                <a class="ledger-summary-metric ledger-summary-metric--transfer" href="@Model.TabUrl("transfer")"><span>内部转出</span><strong>@payable.CashAmount.ToString("N2")</strong><small>内部付款</small></a>
+                <a class="ledger-summary-metric ledger-summary-metric--pending" href="@Model.TabUrl("pending")"><span>待分摊</span><strong>@pendingTotal.ToString("N2")</strong><small>转账与发票</small></a>
+                <a class="ledger-summary-metric ledger-summary-metric--danger" href="@Model.TabUrl("audit")"><span>修改记录</span><strong>@((Model.Result.AuditEntries ?? []).Count)</strong><small>查看审计轨迹</small></a>
+            </div>
+            <div class="ledger-summary-shortcuts">
+                <div class="ledger-summary-heading"><span class="eyebrow">快捷入口</span><strong>内部业务区</strong></div>
+                <a class="ledger-summary-link @(Model.ActiveTab == "invoice" ? "is-active" : null)" href="@Model.TabUrl("invoice")"><span>内部发票</span><strong>@((Model.Result.Invoices ?? []).Count)</strong></a>
+                <a class="ledger-summary-link @(Model.ActiveTab == "transfer" ? "is-active" : null)" href="@Model.TabUrl("transfer")"><span>内部转账</span><strong>@((Model.Result.CashEntries ?? []).Count)</strong></a>
+                <a class="ledger-summary-link @(Model.ActiveTab == "pending" ? "is-active" : null)" href="@Model.TabUrl("pending")"><span>待分摊</span><strong>@((Model.Result.UnallocatedCash ?? []).Count + (Model.Result.Invoices ?? []).Count(item => item.UnallocatedAmount > 0m))</strong></a>
+            </div>
+        </aside>
+
+        <main class="ledger-workspace-list">
+            <div class="ledger-list-toolbar">
+                <nav class="ledger-tabs ledger-tabs--workspace" aria-label="内部账本业务标签">
+                    @foreach (var tab in Model.Tabs)
+                    {
+                        <a class="@(Model.ActiveTab == tab.Key ? "is-active" : null)" href="@Model.TabUrl(tab.Key)" aria-current="@(Model.ActiveTab == tab.Key ? "page" : null)">@tab.Label</a>
+                    }
+                </nav>
+                <div class="data-workbench-toolbar ledger-inline-toolbar">
+                    <form method="get" class="workbench-inline-filters">
+                        <input type="hidden" name="view" value="@Model.ActiveTab" />
+                        <label class="workbench-inline-filter workbench-inline-filter--select"><span>年度</span><select name="FinanceBusinessYearId"><option value="">全部</option>@foreach (var year in Model.Years) { <option value="@year.Id" selected="@(Model.FinanceBusinessYearId == year.Id)">@year.Name</option> }</select></label>
+                        <label class="workbench-inline-filter workbench-inline-filter--text"><span>关键词</span><input name="Search" value="@Model.Search" placeholder="自有公司、项目或说明" /></label>
+                        <button class="button button--primary workbench-inline-submit" type="submit">筛选</button>
+                        <a class="button button--secondary workbench-inline-clear" href="@Model.TabUrl(Model.ActiveTab)">重置</a>
+                    </form>
+                    <div class="workbench-toolbar-actions"><span class="workbench-count">@Model.Result.TotalCount</span><span class="result-count">条内部结算</span><a class="button button--secondary workbench-tool-button" href="@Model.TabUrl("audit")">查看修改记录</a></div>
+                </div>
+            </div>
+
+            @if (Model.ActiveTab is "overview" or "receivable" or "payable")
+            {
+                <section class="panel ledger-tab-panel"><div class="panel-heading"><div><p class="eyebrow">@Model.Tabs.First(item => item.Key == Model.ActiveTab).Label</p><h2>自有公司内部往来</h2><p>本方和对方必须是不同的自有公司，中央账本不显示外部合作单位。</p></div><span class="result-count">共 @Model.Result.TotalCount 条</span></div>
+                    <div class="table-wrap ledger-table-wrap"><table class="data-table ledger-workspace-table"><thead><tr><th>日期</th><th>方向</th><th>本方自有公司</th><th>对方自有公司</th><th>结算状态</th><th>实际金额</th><th>已转账</th><th>未转账</th><th>发票</th><th>来源</th><th>操作</th></tr></thead><tbody>@foreach (var row in Model.Result.Rows) { var amountClass = row.Direction == LedgerDirection.Receivable ? "ledger-amount--receivable" : "ledger-amount--payable"; var canEdit = Model.CanManage && row.SourceType == LedgerSourceType.CentralLedger && row.Metrics.InvoicedAmount == 0m && row.Metrics.CashAmount == 0m; <tr><td><strong>@row.BusinessDate</strong><span class="table-secondary">@(row.SettlementState == LedgerSettlementState.Provisional ? "暂估" : "正式")</span></td><td><span class="ledger-direction ledger-direction--@(row.Direction == LedgerDirection.Receivable ? "receivable" : "payable")">@(row.Direction == LedgerDirection.Receivable ? "应收" : "应付")</span></td><td>@row.LegalEntityName</td><td>@(row.CounterLegalEntityName ?? "未指定对方公司")</td><td>@(row.SettlementState == LedgerSettlementState.Provisional ? "暂估" : "正式")</td><td class="numeric-cell"><strong class="ledger-amount @amountClass">@row.Metrics.ActualAmount.ToString("N2")</strong></td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--transfer">@row.Metrics.CashAmount.ToString("N2")</strong></td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--balance">@row.Metrics.UncollectedOrUnpaid.ToString("N2")</strong></td><td class="numeric-cell"><span class="table-secondary">应开 @row.Metrics.ShouldInvoiceAmount.ToString("N2")</span><strong class="ledger-amount ledger-amount--invoice">已开 @row.Metrics.InvoicedAmount.ToString("N2")</strong></td><td><span class="ledger-source-pill @(row.SourceType == LedgerSourceType.CentralLedger ? "is-direct" : "is-source")">@(row.SourceType == LedgerSourceType.CentralLedger ? "中央录入" : "来源记录")</span></td><td><div class="table-action-buttons table-action-buttons--compact ledger-row-actions"><button class="action-button action-button--view" type="button" data-ledger-details-open data-ledger-record-type="Settlement" data-ledger-record-id="@row.SettlementId" data-ledger-record-stamp="@row.ConcurrencyStamp" data-ledger-details-url="@detailsUrl">查看</button>@if (canEdit) { <a class="action-button action-button--edit" asp-page="/Ledger/Entries/Edit" asp-route-scope="Internal" asp-route-recordType="Settlement" asp-route-recordId="@row.SettlementId" asp-route-view="@Model.ActiveTab">编辑</a> } </div></td></tr> }</tbody></table></div>
+                    @if (Model.Result.Rows.Count == 0) { <div class="empty-state"><strong>暂无内部往来</strong><p>新增自有公司之间的应收、应付、收付款或内部发票后在此统一查看。</p></div> }
+                </section>
+            }
+
+            @if (Model.ActiveTab == "transfer")
+            {
+                var cashEntries = Model.Result.CashEntries ?? [];
+                <section class="panel ledger-tab-panel"><div class="panel-heading"><div><p class="eyebrow">资金记录</p><h2>内部转账</h2><p>内部转账不会复制为外部收付款，双方账户和分摊关系均可追踪。</p></div><span class="result-count">共 @cashEntries.Count 笔</span></div><div class="table-wrap ledger-table-wrap"><table class="data-table ledger-workspace-table ledger-header-table"><thead><tr><th>日期</th><th>本方公司/账户</th><th>对方公司/账户</th><th>方向</th><th>金额</th><th>已分摊</th><th>待分摊</th><th>状态</th><th>操作</th></tr></thead><tbody>@foreach (var cash in cashEntries) { var canEdit = Model.CanManage && cash.SourceType == LedgerSourceType.CentralLedger && cash.AllocatedAmount == 0m; <tr><td>@cash.BusinessDate</td><td>@cash.LegalEntityName<span class="table-secondary">@(cash.AccountName ?? "未指定账户")</span></td><td>@(cash.CounterLegalEntityName ?? "未指定公司")<span class="table-secondary">@(cash.CounterAccountName ?? "未指定账户")</span></td><td>@(cash.Direction == LedgerDirection.Receivable ? "转入" : "转出")</td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--transfer">@cash.Amount.ToString("N2")</strong></td><td class="numeric-cell">@cash.AllocatedAmount.ToString("N2")</td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--pending @(cash.UnallocatedAmount > 0m ? "is-pending" : null)">@cash.UnallocatedAmount.ToString("N2")</strong></td><td><span class="ledger-source-pill @(cash.SourceType == LedgerSourceType.CentralLedger ? "is-direct" : "is-source")">@(cash.SourceType == LedgerSourceType.CentralLedger ? "中央录入" : "来源记录")</span></td><td><div class="table-action-buttons table-action-buttons--compact ledger-row-actions"><button class="action-button action-button--view" type="button" data-ledger-details-open data-ledger-record-type="Cash" data-ledger-record-id="@cash.Id" data-ledger-record-stamp="@cash.ConcurrencyStamp" data-ledger-details-url="@detailsUrl">查看</button>@if (canEdit) { <a class="action-button action-button--edit" asp-page="/Ledger/Entries/Edit" asp-route-scope="Internal" asp-route-recordType="Cash" asp-route-recordId="@cash.Id" asp-route-view="@Model.ActiveTab">编辑</a> }</div></td></tr> }</tbody></table></div>@if (cashEntries.Count == 0) { <div class="empty-state"><strong>暂无内部转账</strong><p>可以在统一录入弹窗登记内部资金转入或转出。</p></div> }</section>
+            }
+
+            @if (Model.ActiveTab == "invoice")
+            {
+                var invoices = Model.Result.Invoices ?? [];
+                <section class="panel ledger-tab-panel"><div class="panel-heading"><div><p class="eyebrow">发票记录</p><h2>内部发票</h2><p>内部发票必须选择两家不同的自有公司。</p></div><span class="result-count">共 @invoices.Count 张</span></div><div class="table-wrap ledger-table-wrap"><table class="data-table ledger-workspace-table ledger-header-table"><thead><tr><th>日期</th><th>发票号</th><th>本方公司</th><th>对方公司</th><th>金额</th><th>已分摊</th><th>待分摊</th><th>状态</th><th>操作</th></tr></thead><tbody>@foreach (var invoice in invoices) { var canEdit = Model.CanManage && invoice.SourceType == LedgerSourceType.CentralLedger && invoice.AllocatedAmount == 0m; <tr><td>@invoice.InvoiceDate</td><td><strong>@invoice.InvoiceNumber</strong><span class="table-secondary">@(invoice.InvoiceType ?? "-")</span></td><td>@invoice.LegalEntityName</td><td>@(invoice.CounterLegalEntityName ?? "未指定对方公司")</td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--invoice">@invoice.Amount.ToString("N2")</strong></td><td class="numeric-cell">@invoice.AllocatedAmount.ToString("N2")</td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--pending @(invoice.UnallocatedAmount > 0m ? "is-pending" : null)">@invoice.UnallocatedAmount.ToString("N2")</strong></td><td><span class="ledger-source-pill @(invoice.SourceType == LedgerSourceType.CentralLedger ? "is-direct" : "is-source")">@(invoice.SourceType == LedgerSourceType.CentralLedger ? "中央录入" : "来源记录")</span></td><td><div class="table-action-buttons table-action-buttons--compact ledger-row-actions"><button class="action-button action-button--view" type="button" data-ledger-details-open data-ledger-record-type="Invoice" data-ledger-record-id="@invoice.Id" data-ledger-record-stamp="@invoice.ConcurrencyStamp" data-ledger-details-url="@detailsUrl">查看</button>@if (canEdit) { <a class="action-button action-button--edit" asp-page="/Ledger/Entries/Edit" asp-route-scope="Internal" asp-route-recordType="Invoice" asp-route-recordId="@invoice.Id" asp-route-view="@Model.ActiveTab">编辑</a> }</div></td></tr> }</tbody></table></div>@if (invoices.Count == 0) { <div class="empty-state"><strong>暂无内部发票</strong><p>可以在统一录入弹窗登记内部发票并选择分摊方式。</p></div> }</section>
+            }
+
+            @if (Model.ActiveTab == "pending")
+            {
+                var pendingCash = (Model.Result.UnallocatedCash ?? []).Where(item => item.UnallocatedAmount > 0m).ToArray();
+                var pendingInvoices = (Model.Result.Invoices ?? []).Where(item => item.UnallocatedAmount > 0m).ToArray();
+                <section class="ledger-pending-grid"><section class="panel ledger-tab-panel"><div class="panel-heading"><div><p class="eyebrow">内部资金</p><h2>待分摊转账</h2></div><span class="result-count">@pendingCash.Length 笔</span></div><div class="table-wrap ledger-table-wrap"><table class="data-table ledger-header-table"><thead><tr><th>日期</th><th>本方公司</th><th>对方公司</th><th>待分摊</th><th>操作</th></tr></thead><tbody>@foreach (var cash in pendingCash) { <tr><td>@cash.BusinessDate</td><td>@cash.LegalEntityName</td><td>@(cash.CounterLegalEntityName ?? "未指定对方公司")</td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--pending is-pending">@cash.UnallocatedAmount.ToString("N2")</strong></td><td><button class="action-button action-button--view" type="button" data-ledger-details-open data-ledger-record-type="Cash" data-ledger-record-id="@cash.CashEntryId" data-ledger-record-stamp="@cash.ConcurrencyStamp" data-ledger-details-url="@detailsUrl">查看并分摊</button></td></tr> }</tbody></table></div>@if (pendingCash.Length == 0) { <div class="empty-state"><strong>没有待分摊转账</strong></div> }</section><section class="panel ledger-tab-panel"><div class="panel-heading"><div><p class="eyebrow">内部发票</p><h2>待分摊发票</h2></div><span class="result-count">@pendingInvoices.Length 张</span></div><div class="table-wrap ledger-table-wrap"><table class="data-table ledger-header-table"><thead><tr><th>日期</th><th>发票号</th><th>对方公司</th><th>待分摊</th><th>操作</th></tr></thead><tbody>@foreach (var invoice in pendingInvoices) { <tr><td>@invoice.InvoiceDate</td><td>@invoice.InvoiceNumber</td><td>@(invoice.CounterLegalEntityName ?? "未指定对方公司")</td><td class="numeric-cell"><strong class="ledger-amount ledger-amount--pending is-pending">@invoice.UnallocatedAmount.ToString("N2")</strong></td><td><button class="action-button action-button--view" type="button" data-ledger-details-open data-ledger-record-type="Invoice" data-ledger-record-id="@invoice.Id" data-ledger-record-stamp="@invoice.ConcurrencyStamp" data-ledger-details-url="@detailsUrl">查看并分摊</button></td></tr> }</tbody></table></div>@if (pendingInvoices.Length == 0) { <div class="empty-state"><strong>没有待分摊发票</strong></div> }</section></section>
+            }
+
+            @if (Model.ActiveTab is "years" or "reconciliation" or "audit")
+            {
+                <section class="ledger-summary-panel panel"><div class="panel-heading"><div><p class="eyebrow">中央账本工作区</p><h2>@Model.Tabs.First(item => item.Key == Model.ActiveTab).Label</h2><p>该业务区保留独立页面作为事实来源，中央账本提供范围摘要与入口。</p></div></div>@if (Model.ActiveTab == "years") { <div class="ledger-utility-card"><strong>财务业务年度</strong><span>财务年度独立于员工年度，仅控制中央账本统计和对账。</span><a class="button button--secondary" asp-page="/Admin/FinanceYears/Index">打开财务年度设置</a></div> }@if (Model.ActiveTab == "reconciliation") { <div class="ledger-utility-card"><strong>内部账对账</strong><span>对账不锁定历史；修改后在详情中显示快照值、当前值和差异。</span><a class="button button--secondary" asp-page="/Ledger/Reconciliations/Index" asp-route-scope="Internal">打开内部账对账</a></div> }@if (Model.ActiveTab == "audit") { var audits = Model.Result.AuditEntries ?? []; if (audits.Count == 0) { <div class="empty-state"><strong>当前筛选范围没有修改记录</strong></div> } else { <div class="ledger-audit-list">@foreach (var audit in audits) { <article><div><strong>@audit.Action</strong><span>@audit.EntityType · @audit.RecordId</span></div><div><span>@(audit.UserName ?? "系统") · @audit.OccurredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span><small>@(audit.Reason ?? "未填写原因")</small></div></article> }</div> } }</section>
+            }
+        </main>
+    </section>
+</div>
+
+<dialog class="workbench-dialog ledger-details-dialog" data-ledger-details-dialog>
+    <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-ledger-details-title>财务记录详情</strong><span data-ledger-details-subtitle>中央账本记录</span></div><button type="button" class="dialog-close" aria-label="关闭财务记录详情" data-ledger-dialog-close>×</button></div>
+    <div class="entity-details-body" data-ledger-details-body><div class="empty-state" data-ledger-details-loading><strong>正在加载详情…</strong></div><div data-ledger-details-content hidden><div class="entity-detail-sections"><section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">基本信息</h3><dl class="entity-detail-field-grid" data-ledger-basic-fields></dl></section><section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">金额汇总</h3><div class="ledger-details-metrics" data-ledger-metrics></div></section><section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">分摊明细</h3><div class="table-wrap ledger-details-allocation-wrap"><table class="data-table"><thead><tr><th>结算 ID</th><th>项目</th><th>合同</th><th>金额</th><th>顺序</th></tr></thead><tbody data-ledger-allocations></tbody></table></div></section><section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">来源与操作</h3><div class="ledger-details-source" data-ledger-source></div></section></div></div></div>
+    <div class="quick-edit-actions"><span class="equipment-dialog-action-spacer"></span><button type="button" class="button button--secondary" data-ledger-dialog-close>关闭</button><a class="button button--primary" data-ledger-detail-edit hidden>编辑</a><button type="button" class="button button--danger" data-ledger-delete-open hidden>删除</button></div>
+</dialog>
+
+<dialog class="workbench-dialog ledger-delete-dialog" data-ledger-delete-dialog>
+    <form method="post" asp-page="/Ledger/Entries/Edit" asp-page-handler="Delete">
+        @Html.AntiForgeryToken()
+        <div class="workbench-dialog-heading"><div><strong>确认删除财务记录</strong><span>删除会解除当前分摊并写入不可变删除日志。</span></div><button type="button" class="dialog-close" aria-label="关闭删除确认" data-ledger-delete-close>×</button></div>
+        <div class="quick-edit-body"><div class="ledger-danger-note">仅允许删除中央账本直接录入且未发生核心分摊的记录。来源记录、已分摊记录请返回来源模块或使用调整/冲销。</div><label>删除原因<textarea name="DeleteReason" rows="4" required placeholder="请填写可追溯的删除原因"></textarea></label><input type="hidden" name="DeleteRecordType" data-ledger-delete-type /><input type="hidden" name="DeleteRecordId" data-ledger-delete-id /><input type="hidden" name="DeleteConcurrencyStamp" data-ledger-delete-stamp /></div>
+        <div class="workbench-dialog-actions"><button type="button" class="button button--secondary" data-ledger-delete-close>取消</button><button type="submit" class="button button--danger">确认删除</button></div>
+    </form>
+</dialog>
+
+@section Scripts {
+    <script type="module" src="~/js/pages/central-ledger-workspace.js" asp-append-version="true"></script>
+}

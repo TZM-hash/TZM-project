@@ -48,4 +48,4 @@ Questions to answer:
 
 <!-- Database-related mistakes your team has made -->
 
-(To be filled by the team)
+- SQLite does not translate `DateTimeOffset` expressions in `ORDER BY` clauses. When a query must run against the SQLite test provider, filter in SQL first, materialize the bounded candidate set, and then sort/take by `DateTimeOffset` in memory. Keep the pre-materialization filter narrow so this compatibility fallback does not become an unbounded table scan.

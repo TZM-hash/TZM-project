@@ -159,7 +159,12 @@ public sealed record CentralLedgerRowDto(
     CentralLedgerMetrics Metrics,
     LedgerAllocationStatus InvoiceAllocationStatus,
     LedgerAllocationStatus CashAllocationStatus,
-    Guid ConcurrencyStamp);
+    Guid ConcurrencyStamp)
+{
+    public LedgerSourceType SourceType { get; init; } = LedgerSourceType.CentralLedger;
+    public Guid? SourceId { get; init; }
+    public string? SourceUrl { get; init; }
+}
 
 public sealed record CentralLedgerOverviewPageDto(
     IReadOnlyList<CentralLedgerRowDto> Rows,
@@ -171,7 +176,13 @@ public sealed record CentralLedgerOverviewPageDto(
     IReadOnlyList<Guid> MatchingSettlementIds,
     IReadOnlyList<CentralLedgerUnallocatedCashDto>? UnallocatedCash = null,
     IReadOnlyList<CentralLedgerPayrollPaymentDto>? PayrollPayments = null,
-    decimal PayrollPaymentTotal = 0m);
+    decimal PayrollPaymentTotal = 0m,
+    IReadOnlyList<CentralLedgerInvoiceDto>? Invoices = null,
+    IReadOnlyList<CentralLedgerCashEntryDto>? CashEntries = null,
+    IReadOnlyList<CentralLedgerDeductionDto>? Deductions = null,
+    IReadOnlyList<CentralLedgerAuditDto>? AuditEntries = null,
+    CentralLedgerMetrics? ReceivableTotals = null,
+    CentralLedgerMetrics? PayableTotals = null);
 
 public sealed record PartnerLedgerSummaryDto(
     Guid BusinessPartnerId,
@@ -200,7 +211,9 @@ public sealed record CentralLedgerUnallocatedCashDto(
     decimal AllocatedAmount,
     decimal UnallocatedAmount,
     string? PaymentMethod,
-    Guid ConcurrencyStamp);
+    Guid ConcurrencyStamp,
+    Guid? CounterLegalEntityId = null,
+    string? CounterLegalEntityName = null);
 
 public sealed record CentralLedgerPayrollPaymentDto(
     Guid BatchId,
@@ -218,6 +231,99 @@ public sealed record CentralLedgerPayrollPaymentDto(
     decimal ActualAmount,
     PayrollBatchStatus Status);
 
+public sealed record CentralLedgerInvoiceDto(
+    Guid Id,
+    LedgerScope Scope,
+    LedgerDirection Direction,
+    DateOnly InvoiceDate,
+    Guid LegalEntityId,
+    string LegalEntityName,
+    Guid? BusinessPartnerId,
+    string? BusinessPartnerName,
+    Guid? CounterLegalEntityId,
+    string? CounterLegalEntityName,
+    Guid? ProjectId,
+    string? ProjectName,
+    Guid? ContractId,
+    string? ContractName,
+    string InvoiceNumber,
+    string? InvoiceType,
+    decimal Amount,
+    decimal? NetAmount,
+    decimal? TaxAmount,
+    decimal? TaxRate,
+    decimal AllocatedAmount,
+    decimal UnallocatedAmount,
+    LedgerRecordStatus Status,
+    LedgerSourceType SourceType,
+    Guid? SourceId,
+    string? SourceUrl,
+    string? Notes,
+    Guid ConcurrencyStamp);
+
+public sealed record CentralLedgerCashEntryDto(
+    Guid Id,
+    LedgerScope Scope,
+    LedgerDirection Direction,
+    LedgerCashType CashType,
+    bool IsReversal,
+    DateOnly BusinessDate,
+    Guid LegalEntityId,
+    string LegalEntityName,
+    Guid? BusinessPartnerId,
+    string? BusinessPartnerName,
+    Guid? CounterLegalEntityId,
+    string? CounterLegalEntityName,
+    Guid? ProjectId,
+    string? ProjectName,
+    Guid? ContractId,
+    string? ContractName,
+    Guid? AccountId,
+    string? AccountName,
+    Guid? CounterAccountId,
+    string? CounterAccountName,
+    decimal Amount,
+    decimal AllocatedAmount,
+    decimal UnallocatedAmount,
+    string? PaymentMethod,
+    LedgerRecordStatus Status,
+    LedgerSourceType SourceType,
+    Guid? SourceId,
+    string? SourceUrl,
+    string? Notes,
+    Guid ConcurrencyStamp);
+
+public sealed record CentralLedgerDeductionDto(
+    Guid Id,
+    Guid SettlementId,
+    LedgerScope Scope,
+    LedgerDirection Direction,
+    DateOnly BusinessDate,
+    Guid LegalEntityId,
+    string LegalEntityName,
+    Guid? BusinessPartnerId,
+    string? BusinessPartnerName,
+    Guid? CounterLegalEntityId,
+    string? CounterLegalEntityName,
+    Guid? ProjectId,
+    string? ProjectName,
+    decimal Amount,
+    bool ReduceInvoiceAmount,
+    string Reason,
+    LedgerRecordStatus Status,
+    LedgerSourceType SourceType,
+    Guid? SourceId,
+    Guid ConcurrencyStamp);
+
+public sealed record CentralLedgerAuditDto(
+    string RecordId,
+    string EntityType,
+    string Action,
+    DateTimeOffset OccurredAt,
+    string? UserName,
+    string? Reason,
+    bool IsDeletion);
+
 public sealed record CentralLedgerDetailsDto(
     FinanceRecordType RecordType,
     Guid Id,
@@ -226,6 +332,69 @@ public sealed record CentralLedgerDetailsDto(
     string HeaderJson,
     CentralLedgerMetrics Metrics,
     IReadOnlyList<FinanceAllocationDto> Allocations,
+    Guid ConcurrencyStamp)
+{
+    public LedgerSourceType SourceType { get; init; } = LedgerSourceType.CentralLedger;
+    public Guid? SourceId { get; init; }
+    public string? SourceUrl { get; init; }
+    public string? SourceLabel { get; init; }
+}
+
+public sealed record UpdateSettlementRequest(
+    Guid SettlementId,
+    LedgerScope Scope,
+    LedgerDirection Direction,
+    LedgerSettlementState SettlementState,
+    Guid LegalEntityId,
+    Guid? BusinessPartnerId,
+    Guid? CounterLegalEntityId,
+    Guid? ProjectId,
+    Guid? ContractId,
+    DateOnly BusinessDate,
+    decimal OriginalAmount,
+    decimal OriginalInvoiceAmount,
+    string? Notes,
+    string Reason,
+    Guid ConcurrencyStamp,
+    DateOnly? DueDate = null);
+
+public sealed record UpdateFinanceInvoiceRequest(
+    Guid InvoiceId,
+    LedgerScope Scope,
+    LedgerDirection Direction,
+    Guid LegalEntityId,
+    Guid? BusinessPartnerId,
+    Guid? CounterLegalEntityId,
+    Guid? ProjectId,
+    Guid? ContractId,
+    string InvoiceNumber,
+    DateOnly InvoiceDate,
+    decimal Amount,
+    decimal? NetAmount,
+    decimal? TaxAmount,
+    decimal? TaxRate,
+    string? InvoiceType,
+    string? Notes,
+    string Reason,
+    Guid ConcurrencyStamp);
+
+public sealed record UpdateFinanceCashRequest(
+    Guid CashEntryId,
+    LedgerScope Scope,
+    LedgerDirection Direction,
+    LedgerCashType CashType,
+    Guid LegalEntityId,
+    Guid? BusinessPartnerId,
+    Guid? CounterLegalEntityId,
+    Guid? ProjectId,
+    Guid? ContractId,
+    Guid? AccountId,
+    Guid? CounterAccountId,
+    DateOnly BusinessDate,
+    decimal Amount,
+    string? PaymentMethod,
+    string? Notes,
+    string Reason,
     Guid ConcurrencyStamp);
 
 public sealed record FinanceAllocationDto(

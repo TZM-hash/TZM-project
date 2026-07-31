@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "EF Core query and persistence conventions for new central ledger projections."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Razor/service error handling boundary for detail and save handlers."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend test and code-quality gate."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Existing workspace shell, tokens, table wrapping and detail dialog styling."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "DTO/service/page/JS boundary checklist."}
+{"file": "EngineeringManager/docs/superpowers/specs/2026-07-19-central-ledger-multi-entry-design.md", "reason": "Existing central ledger multi-entry business invariants."}
+{"file": "EngineeringManager/docs/superpowers/specs/2026-07-23-employee-management-workspace-design.md", "reason": "Reference employee workspace layout and interactions."}
