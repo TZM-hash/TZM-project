@@ -63,6 +63,7 @@ if (page) {
             const value = Number(payload[target.dataset.employeeMoney]);
             target.textContent = Number.isFinite(value) ? money.format(value) : "0.00";
         });
+        detailsDialog?.querySelector(".employee-dialog-metric--balance")?.classList.toggle("is-danger", Boolean(payload.isOverpaid));
         setDetail("settlementProgressLabel", `${Number(payload.settlementProgressPercent || 0).toFixed(2)}%`);
         const missing = [];
         if (!payload.phone) missing.push("联系电话未填写");

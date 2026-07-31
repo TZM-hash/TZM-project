@@ -1,5 +1,6 @@
 using EngineeringManager.Application.EmployeeAnnualLedger;
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -37,11 +38,15 @@ public sealed class LedgerModel(
         foreach (var employee in employees)
         {
             var ledger = await annualLedgerService.GetAnnualLedgerAsync(employee.Id, SelectedYear.Id, cancellationToken);
-            rows.Add(new EmployeeLedgerRow(employee, ledger));
+            var penalties = await annualLedgerService.GetWageEntriesAsync(employee.Id, SelectedYear.Id, cancellationToken);
+            var penaltyAmount = Math.Abs(penalties
+                .Where(entry => entry.EntryType == EmployeeWageEntryType.Penalty)
+                .Sum(entry => entry.FinalAmount));
+            rows.Add(new EmployeeLedgerRow(employee, ledger, penaltyAmount));
         }
 
         Rows = rows;
     }
 
-    public sealed record EmployeeLedgerRow(EmployeeDto Employee, EmployeeAnnualLedgerDto Ledger);
+    public sealed record EmployeeLedgerRow(EmployeeDto Employee, EmployeeAnnualLedgerDto Ledger, decimal PenaltyAmount);
 }

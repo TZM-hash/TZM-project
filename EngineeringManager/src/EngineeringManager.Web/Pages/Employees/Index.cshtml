@@ -55,10 +55,10 @@
                 var paid = summary?.ReceivedAmount ?? 0m;
                 var payload = JsonSerializer.Serialize(new
                 {
-                    id = item.Id, item.EmployeeNumber, item.Name, employeeType = item.EmployeeType.ToString(), employeeTypeLabel = item.EmployeeType.ToChinese(),
-                    item.Phone, item.PositionTitle, item.IdentityNumber, item.BankAccountNumber, item.BankName, item.HireDate, item.LeaveDate,
-                    item.DefaultLegalEntityId, item.DefaultMonthlySalary, item.DefaultDailyRate, item.DefaultHourlyRate, item.DefaultPieceworkRate,
-                    item.IsActive, item.ConcurrencyStamp, item.Notes,
+                    id = item.Id, employeeNumber = item.EmployeeNumber, name = item.Name, employeeType = item.EmployeeType.ToString(), employeeTypeLabel = item.EmployeeType.ToChinese(),
+                    phone = item.Phone, positionTitle = item.PositionTitle, identityNumber = item.IdentityNumber, bankAccountNumber = item.BankAccountNumber, bankName = item.BankName, hireDate = item.HireDate, leaveDate = item.LeaveDate,
+                    defaultLegalEntityId = item.DefaultLegalEntityId, defaultMonthlySalary = item.DefaultMonthlySalary, defaultDailyRate = item.DefaultDailyRate, defaultHourlyRate = item.DefaultHourlyRate, defaultPieceworkRate = item.DefaultPieceworkRate,
+                    isActive = item.IsActive, concurrencyStamp = item.ConcurrencyStamp, notes = item.Notes,
                     company = affiliation?.LegalEntityName, department = affiliation?.DepartmentName, project = affiliation?.ProjectName,
                     crew = affiliation?.CrewBusinessPartnerName, affiliationPosition = affiliation?.PositionTitle,
                     priorYearCarryForward = summary?.PriorYearCarryForward ?? 0m,

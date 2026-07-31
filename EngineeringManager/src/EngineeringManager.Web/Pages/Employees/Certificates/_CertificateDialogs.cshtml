@@ -1,0 +1,30 @@
+@model EngineeringManager.Web.Pages.Employees.Certificates.IndexModel
+
+<dialog class="workbench-dialog employee-dialog employee-details-dialog mac-window-dialog" data-certificate-details-dialog>
+    <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-certificate-detail="certificateType">证书详情</strong><span data-certificate-detail="employeeLabel">员工证照台账</span></div><button type="button" class="dialog-close" aria-label="关闭证书详情窗口" data-certificate-dialog-close>×</button></div>
+    <div class="entity-details-body"><div class="entity-detail-sections">
+        <section class="entity-detail-section"><h3 class="entity-detail-section-heading">持证员工</h3><dl class="entity-detail-field-grid"><div><dt>员工姓名</dt><dd data-certificate-detail="employeeName"></dd></div><div><dt>员工编号</dt><dd data-certificate-detail="employeeNumber"></dd></div></dl></section>
+        <section class="entity-detail-section"><h3 class="entity-detail-section-heading">有效状态</h3><dl class="entity-detail-field-grid"><div><dt>状态</dt><dd data-certificate-detail="stateLabel"></dd></div><div><dt>到期日期</dt><dd data-certificate-detail="expiresOn"></dd></div></dl></section>
+        <section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">证书资料</h3><dl class="entity-detail-field-grid"><div><dt>证书类型</dt><dd data-certificate-detail="certificateType"></dd></div><div><dt>证书编号</dt><dd data-certificate-detail="certificateNumber"></dd></div><div><dt>专业/等级/范围</dt><dd data-certificate-detail="specialtyLevelScope"></dd></div><div><dt>发证机关</dt><dd data-certificate-detail="issuingAuthority"></dd></div><div><dt>签发日期</dt><dd data-certificate-detail="issuedOn"></dd></div><div><dt>附件</dt><dd data-certificate-detail="attachmentFileName"></dd></div></dl></section>
+        <section class="entity-detail-section entity-detail-section--wide"><h3 class="entity-detail-section-heading">备注</h3><div class="entity-detail-note"><p data-certificate-detail="notes"></p></div></section>
+    </div></div>
+    <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-certificate-dialog-close>关闭</button><span class="equipment-dialog-action-spacer"></span>@if (Model.CanManage) { <button type="button" class="button button--primary" data-certificate-detail-edit>编辑证书</button> }</div>
+</dialog>
+
+@if (Model.CanManage)
+{
+    <dialog class="workbench-dialog employee-dialog mac-window-dialog" data-certificate-editor-dialog>
+        <form method="post" enctype="multipart/form-data" asp-page="Edit" data-certificate-editor-form>
+            <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-certificate-editor-title>编辑员工证书</strong><span>员工证照台账</span></div><button type="button" class="dialog-close" aria-label="关闭证书编辑窗口" data-certificate-dialog-close>×</button></div>
+            <input type="hidden" name="Input.Id" /><input type="hidden" name="Input.ConcurrencyStamp" /><input type="hidden" name="Input.ExistingAttachmentFileName" />
+            <div class="employee-dialog-form-grid"><section><h3>证书资料</h3><label>所属员工<select name="Input.EmployeeId" required>@foreach (var employee in Model.Employees) { <option value="@employee.Id">@employee.EmployeeNumber · @employee.Name</option> }</select></label><label>证书类型<input name="Input.CertificateType" list="employee-certificate-dialog-types" required /></label><label>证书编号<input name="Input.CertificateNumber" /></label><label>专业/等级/资质范围<input name="Input.SpecialtyLevelScope" /></label><label>发证机关<input name="Input.IssuingAuthority" /></label><label>签发日期<input name="Input.IssuedOn" type="date" /></label><label>到期日期<input name="Input.ExpiresOn" type="date" /><small>留空表示长期有效</small></label></section><section><h3>附件与备注</h3><label>附件<input name="Input.Attachment" type="file" /><small data-certificate-existing-attachment>当前：无</small></label><label class="checkbox-row" data-certificate-remove-attachment hidden><input name="Input.RemoveAttachment" type="checkbox" value="true" />删除当前附件</label><label class="employee-dialog-wide">备注<textarea name="Input.Notes" rows="4"></textarea></label><label class="employee-dialog-wide">修改原因<input name="Input.Reason" required /></label></section></div>
+            <div class="quick-edit-actions"><button type="button" class="button button--secondary" data-certificate-dialog-close>取消</button><span class="equipment-dialog-action-spacer"></span><button class="button button--primary" type="submit">保存证书</button></div>
+        </form>
+    </dialog>
+
+    <dialog class="workbench-dialog company-create-dialog equipment-delete-dialog mac-window-dialog" data-certificate-delete-dialog>
+        <form method="post" asp-page-handler="Delete" data-certificate-delete-form><div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>删除员工证书</strong><span data-certificate-delete-label>此操作不可撤销</span></div><button type="button" class="dialog-close" aria-label="关闭删除确认窗口" data-certificate-dialog-close>×</button></div><div class="company-create-dialog-body equipment-delete-body"><p>确认删除这本员工证书？</p><input type="hidden" name="id" /><input type="hidden" name="concurrencyStamp" /></div><div class="quick-edit-actions"><button type="button" class="button button--secondary" data-certificate-dialog-close>取消</button><span class="equipment-dialog-action-spacer"></span><button class="button action-button--delete" type="submit">确认删除</button></div></form>
+    </dialog>
+}
+
+<datalist id="employee-certificate-dialog-types"><option value="建造师证"></option><option value="安全员证"></option><option value="特种作业证"></option><option value="操作员证"></option><option value="职业资格证"></option></datalist>

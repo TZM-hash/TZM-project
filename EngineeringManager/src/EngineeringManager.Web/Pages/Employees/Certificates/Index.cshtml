@@ -1,5 +1,6 @@
 @page
 @model EngineeringManager.Web.Pages.Employees.Certificates.IndexModel
+@using System.Text.Json
 @using EngineeringManager.Domain.Certificates
 @using EngineeringManager.Web.Workbenches
 @{
@@ -26,6 +27,7 @@
     var expiredCount = Model.StateSummaryCertificates.Count(item => item.State == CertificateExpiryState.Expired);
     var longTermCount = Model.StateSummaryCertificates.Count(item => item.State == CertificateExpiryState.LongTerm);
 }
+@section Scripts { <script type="module" src="~/js/pages/employee-certificate-workspace.js" asp-append-version="true"></script> }
 
 <partial name="../_EmployeeSubNavigation.cshtml" />
 
@@ -61,8 +63,14 @@
             <div class="equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar"><div><p class="eyebrow">证书清单</p><h2>@scopeName</h2></div><partial name="_DataWorkbench" model="workbench" /></div>
             @if (Model.Certificates.Count == 0) { <p class="panel-copy">当前筛选范围内没有员工证书。</p> }
             else { <div class="table-wrap employee-table-wrap"><table class="data-table employee-workspace-table employee-certificate-table" id="employee-certificates-table"><thead><tr><th data-column-key="employee">员工</th><th data-column-key="certificate_type">证书类型</th><th data-column-key="certificate_number">证书编号</th><th data-column-key="scope">专业/等级/范围</th><th data-column-key="authority">发证机关</th><th data-column-key="issued_on">签发日期</th><th data-column-key="expires_on">到期日期</th><th data-column-key="status">状态</th><th data-column-key="attachment">附件</th><th data-column-key="actions">操作</th></tr></thead><tbody>
-                @foreach (var item in Model.Certificates) { <tr><td data-column-key="employee"><strong>@item.EmployeeName</strong><span class="table-secondary">@item.EmployeeNumber</span></td><td data-column-key="certificate_type">@item.CertificateType</td><td data-column-key="certificate_number">@(item.CertificateNumber ?? "—")</td><td data-column-key="scope">@(item.SpecialtyLevelScope ?? "—")</td><td data-column-key="authority">@(item.IssuingAuthority ?? "—")</td><td data-column-key="issued_on">@(item.IssuedOn?.ToString("yyyy-MM-dd") ?? "—")</td><td data-column-key="expires_on">@(item.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</td><td data-column-key="status"><span class="certificate-status certificate-status--@IndexModel.StatusClass(item.State)">@IndexModel.StatusLabel(item.State)</span></td><td data-column-key="attachment">@if (item.AttachmentId.HasValue) { <a asp-page-handler="Attachment" asp-route-id="@item.Id">@item.AttachmentFileName</a> } else { <span>—</span> }</td><td data-column-key="actions"><div class="employee-row-actions">@if (Model.CanManage) { <a class="action-button action-button--edit" asp-page="Edit" asp-route-id="@item.Id">编辑</a><form method="post" asp-page-handler="Delete" onsubmit="return confirm('确认删除这本员工证书？');"><input type="hidden" name="id" value="@item.Id" /><input type="hidden" name="concurrencyStamp" value="@item.ConcurrencyStamp" /><button class="action-button action-button--delete" type="submit">删除</button></form> }</div></td></tr> }
+                @foreach (var item in Model.Certificates)
+                {
+                    var payload = JsonSerializer.Serialize(new { id = item.Id, employeeId = item.EmployeeId, employeeNumber = item.EmployeeNumber, employeeName = item.EmployeeName, certificateType = item.CertificateType, certificateNumber = item.CertificateNumber, specialtyLevelScope = item.SpecialtyLevelScope, issuingAuthority = item.IssuingAuthority, issuedOn = item.IssuedOn, expiresOn = item.ExpiresOn, attachmentId = item.AttachmentId, attachmentFileName = item.AttachmentFileName, notes = item.Notes, state = item.State.ToString(), stateLabel = IndexModel.StatusLabel(item.State), concurrencyStamp = item.ConcurrencyStamp });
+                    <tr><td data-column-key="employee"><strong>@item.EmployeeName</strong><span class="table-secondary">@item.EmployeeNumber</span></td><td data-column-key="certificate_type">@item.CertificateType</td><td data-column-key="certificate_number">@(item.CertificateNumber ?? "—")</td><td data-column-key="scope">@(item.SpecialtyLevelScope ?? "—")</td><td data-column-key="authority"><span class="employee-certificate-authority">@(item.IssuingAuthority ?? "—")</span></td><td data-column-key="issued_on">@(item.IssuedOn?.ToString("yyyy-MM-dd") ?? "—")</td><td data-column-key="expires_on">@(item.ExpiresOn?.ToString("yyyy-MM-dd") ?? "长期有效")</td><td data-column-key="status"><span class="certificate-status certificate-status--@IndexModel.StatusClass(item.State)">@IndexModel.StatusLabel(item.State)</span></td><td data-column-key="attachment">@if (item.AttachmentId.HasValue) { <a asp-page-handler="Attachment" asp-route-id="@item.Id">@item.AttachmentFileName</a> } else { <span>—</span> }</td><td data-column-key="actions"><div class="employee-row-actions"><button class="action-button action-button--view" type="button" data-certificate-dialog-open="view" data-certificate-payload="@payload">查看</button>@if (Model.CanManage) { <button class="action-button action-button--edit" type="button" data-certificate-dialog-open="edit" data-certificate-payload="@payload">编辑</button><button class="action-button action-button--delete" type="button" data-certificate-dialog-open="delete" data-certificate-payload="@payload">删除</button> }</div></td></tr>
+                }
             </tbody></table></div> }
         </section>
     </section>
+
+    <partial name="_CertificateDialogs" model="Model" />
 </div>

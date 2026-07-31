@@ -1596,16 +1596,19 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-ledger-table th[data-column-key="carry_forward"], .employee-ledger-table th[data-column-key="new_payable"], .employee-ledger-table th[data-column-key="received"], .employee-ledger-table th[data-column-key="balance"] { width: 8.25rem; }
 .employee-ledger-table th[data-column-key="progress"] { width: 7rem; }
 .employee-ledger-table th[data-column-key="actions"] { width: 7rem; }
-.employee-certificate-table { min-width: 86rem; }
+.employee-ledger-table .employee-row-actions { grid-template-columns: minmax(0, 1fr); }
+.employee-certificate-table { min-width: 95rem; }
 .employee-certificate-table th[data-column-key="employee"] { width: 9rem; }
 .employee-certificate-table th[data-column-key="certificate_type"] { width: 9rem; }
 .employee-certificate-table th[data-column-key="certificate_number"] { width: 10rem; }
-.employee-certificate-table th[data-column-key="scope"], .employee-certificate-table th[data-column-key="authority"] { width: 11rem; }
+.employee-certificate-table th[data-column-key="scope"] { width: 11rem; }
+.employee-certificate-table th[data-column-key="authority"] { width: 13rem; }
 .employee-certificate-table th[data-column-key="issued_on"], .employee-certificate-table th[data-column-key="expires_on"] { width: 7.5rem; }
 .employee-certificate-table th[data-column-key="status"] { width: 7rem; }
 .employee-certificate-table th[data-column-key="attachment"] { width: 9rem; }
-.employee-certificate-table th[data-column-key="actions"] { width: 8rem; }
-.employee-certificate-table .employee-row-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.employee-certificate-table th[data-column-key="actions"] { width: 12rem; }
+.employee-certificate-table .employee-row-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.employee-certificate-authority { display: block; min-width: 0; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
 
 /* Shared read-only details dialogs */
 .entity-details-body, .employee-view-dialog-body.entity-details-body, .company-view-dialog-body.entity-details-body { display: block; min-height: 0; padding: 1rem; background: #f4f7fb; overflow-y: auto; }
@@ -1736,11 +1739,12 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-detail-metric-grid .employee-metric--payable, .employee-dialog-metric--payable { border-top-color: #4f46e5; background: #eef2ff; }
 .employee-detail-metric-grid .employee-metric--paid, .employee-dialog-metric--paid { border-top-color: #059669; background: #ecfdf5; }
 .employee-detail-metric-grid .employee-metric--balance, .employee-dialog-metric--balance { border-top-color: #0f766e; background: #f0fdfa; }
-.employee-detail-metric-grid .employee-metric--balance.is-danger { border-top-color: #dc2626; background: #fef2f2; }
+.employee-detail-metric-grid .employee-metric--balance.is-danger, .employee-dialog-metric--balance.is-danger { border-top-color: #dc2626; background: #fef2f2; }
 .employee-detail-metric-grid .employee-metric--wage strong, .employee-dialog-metric--wage strong { color: #1d4ed8; }
 .employee-detail-metric-grid .employee-metric--penalty strong, .employee-dialog-metric--penalty strong { color: #b45309; }
 .employee-detail-metric-grid .employee-metric--paid strong, .employee-dialog-metric--paid strong { color: #047857; }
 .employee-detail-metric-grid .employee-metric--balance strong, .employee-dialog-metric--balance strong { color: #0f766e; }
+.employee-dialog-metric--balance.is-danger strong { color: #b91c1c; }
 .employee-summary-metric--total { border-top-color: #2563eb !important; background: #eff6ff !important; }
 .employee-summary-metric--active { border-top-color: #059669 !important; background: #ecfdf5 !important; }
 .employee-summary-metric--payable { border-top-color: #7c3aed !important; background: #f5f3ff !important; }
@@ -1757,6 +1761,17 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-workspace-table td[data-column-key="payable"] { color: #6d28d9; }
 .employee-workspace-table td[data-column-key="paid"] { color: #047857; }
 .employee-workspace-table td[data-column-key="unpaid"] { color: #b45309; }
+.ledger-amount--carry { color: #475569; background: #f8fafc; font-weight: 750; font-variant-numeric: tabular-nums; }
+.ledger-amount--payable { color: #6d28d9; background: #f5f3ff; font-weight: 750; font-variant-numeric: tabular-nums; }
+.ledger-amount--paid { color: #047857; background: #ecfdf5; font-weight: 750; font-variant-numeric: tabular-nums; }
+.ledger-amount--balance { color: #0f766e; background: #f0fdfa; font-weight: 750; font-variant-numeric: tabular-nums; }
+.ledger-amount--balance.is-danger { color: #b91c1c; background: #fef2f2; }
+.ledger-amount--progress { color: #1d4ed8; font-weight: 750; font-variant-numeric: tabular-nums; }
+.entity-detail-field-grid dd[data-employee-money] { color: #2563eb; font-variant-numeric: tabular-nums; }
+.employee-dialog-metric--carry strong, .employee-dialog-metric--expense strong, .employee-dialog-metric--other strong, .employee-dialog-metric--payable strong, .employee-dialog-metric--progress strong { color: #475569; }
+.employee-dialog-metric--expense strong { color: #0f7490; }
+.employee-dialog-metric--other strong { color: #6d28d9; }
+.employee-dialog-metric--payable strong { color: #4338ca; }
 
 /* Authentication password visibility control. */
 .password-field { position: relative; display: grid; min-width: 0; }

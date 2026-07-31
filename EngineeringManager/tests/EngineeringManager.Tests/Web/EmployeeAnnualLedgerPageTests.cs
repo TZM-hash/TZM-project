@@ -145,6 +145,49 @@ public sealed class EmployeeAnnualLedgerPageTests
     }
 
     [Fact]
+    public void EmployeeOverviewTablesUseSemanticAmountsAndDialogBasedRowActions()
+    {
+        var employeeIndex = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Index.cshtml");
+        var ledger = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Ledger.cshtml");
+        var certificates = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Certificates", "Index.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var employeeScript = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "employee-workspace.js");
+        var certificateScript = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "employee-certificate-workspace.js");
+
+        employeeIndex.Should().Contain("employeeNumber = item.EmployeeNumber")
+            .And.Contain("name = item.Name");
+        ledger.Should().Contain("data-employee-dialog-open=\"details\"")
+            .And.Contain("data-employee-workspace")
+            .And.Contain("data-employee-payload")
+            .And.Contain("employeeNumber = row.Employee.EmployeeNumber")
+            .And.Contain("name = row.Employee.Name")
+            .And.Contain("_EmployeeReadOnlyDetails")
+            .And.Contain("data-column-key=\"carry_forward\" class=\"numeric-cell ledger-amount--carry\"")
+            .And.Contain("data-column-key=\"new_payable\" class=\"numeric-cell ledger-amount--payable\"")
+            .And.Contain("data-column-key=\"received\" class=\"numeric-cell ledger-amount--paid\"")
+            .And.Contain("ledger-amount--balance");
+        certificates.Should().Contain("data-certificate-dialog-open=\"view\"")
+            .And.Contain("data-certificate-dialog-open=\"edit\"")
+            .And.Contain("data-certificate-dialog-open=\"delete\"")
+            .And.Contain("certificateType = item.CertificateType")
+            .And.Contain("employeeName = item.EmployeeName")
+            .And.Contain("employee-certificate-authority")
+            .And.Contain("employee-certificate-workspace.js");
+        styles.Should().Contain(".employee-ledger-table .employee-row-actions { grid-template-columns: minmax(0, 1fr); }")
+            .And.Contain(".ledger-amount--payable")
+            .And.Contain(".employee-certificate-table { min-width: 95rem; }")
+            .And.Contain(".employee-certificate-authority { display: block;")
+            .And.Contain("white-space: normal;");
+        employeeScript.Should().Contain("data-employee-details-dialog")
+            .And.Contain("employee-dialog-metric--balance")
+            .And.Contain("classList.toggle(\"is-danger\", Boolean(payload.isOverpaid))");
+        ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "_EmployeeReadOnlyDetails.cshtml")
+            .Should().Contain("data-employee-detail=\"affiliationPosition\"");
+        certificateScript.Should().Contain("data-certificate-dialog-open")
+            .And.Contain("payload.expiresOn || \"长期有效\"");
+    }
+
+    [Fact]
     public void EmployeeLedgerRedirectsButPayrollIsRestoredAsUnifiedDisbursementLedger()
     {
         var payroll = ReadFile("src", "EngineeringManager.Web", "Pages", "Payroll", "Index.cshtml.cs");

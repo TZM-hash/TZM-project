@@ -84,6 +84,7 @@ public sealed class EmployeeIndexPageTests
     public void EmployeeListUsesPartnerStyleWorkspaceDialogsAndSemanticActions()
     {
         var razor = ReadPage("Employees", "Index.cshtml");
+        var navigation = ReadPage("Employees", "_EmployeeSubNavigation.cshtml");
 
         razor.Should().Contain("data-employee-workspace")
             .And.Contain("employee-workspace-layout")
@@ -99,8 +100,7 @@ public sealed class EmployeeIndexPageTests
             .And.Contain("mac-window-dialog")
             .And.Contain("employee-workspace.js")
             .And.Contain("人员经营台账")
-            .And.Contain("年度总账")
-            .And.Contain("证书总览")
+            .And.Contain("_EmployeeSubNavigation")
             .And.Contain("当前业务年度应付总额")
             .And.Contain("data-column-key=\"phone\"")
             .And.Contain("data-column-key=\"payable\"")
@@ -108,6 +108,10 @@ public sealed class EmployeeIndexPageTests
             .And.Contain("data-column-key=\"unpaid\"")
             .And.NotContain("data-inline-cell-edit")
             .And.NotContain("QuickEdit");
+
+        navigation.Should().Contain("员工列表")
+            .And.Contain("年度总账总览")
+            .And.Contain("证书总览");
 
         razor.Should().Contain("asp-page=\"/Employees/Details\"")
             .And.Contain("asp-route-edit=\"profile\"")
@@ -146,11 +150,11 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Fact]
-    public void EmployeeSubpagesUseTheSameCompactWorkspaceVocabulary()
+    public void EmployeeSubpagesUseTheSameSharedWorkspaceVocabulary()
     {
         ReadPage("Employees", "Details.cshtml").Should().Contain("employee-detail-workspace").And.Contain("compact-page-heading");
-        ReadPage("Employees", "Ledger.cshtml").Should().Contain("employee-ledger-workspace").And.Contain("employee-list-toolbar");
-        ReadPage("Employees", "Certificates", "Index.cshtml").Should().Contain("employee-certificate-workspace").And.Contain("employee-list-toolbar");
+        ReadPage("Employees", "Ledger.cshtml").Should().Contain("employee-workspace-layout").And.Contain("employee-workspace-list").And.Contain("employee-ledger-table").And.Contain("employee-list-toolbar");
+        ReadPage("Employees", "Certificates", "Index.cshtml").Should().Contain("employee-workspace-layout").And.Contain("employee-workspace-list").And.Contain("employee-certificate-table").And.Contain("employee-list-toolbar");
         ReadPage("Employees", "_EmployeeSubNavigation.cshtml").Should().Contain("employee-sub-navigation");
     }
 
