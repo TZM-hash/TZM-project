@@ -91,12 +91,12 @@
 - Generated outside git: `EngineeringManager/src/EngineeringManager.Web/App_Data/backups/*.bak`
 - Generated outside git: `EngineeringManager/src/EngineeringManager.Web/App_Data/logs/legacy-data-repair-*.json`
 
-- [ ] 停止旧服务进程，确认数据库无正在进行的写操作。
-- [ ] 运行 Release 构建后的 `--repair-legacy-project-data` 命令；记录备份和映射报告路径。
-- [ ] 再运行一次命令验证零变更幂等性。
-- [ ] 用 SQL 审计旧前缀数量、唯一键重复、实体数量和孤立关系。
-- [ ] 动态审计所有名称/编号/编码字段，确认没有遗留旧编号、GUID 式展示值或已知自动长名称。
-- [ ] 审计所有项目：工程量应收缺失数量归零（以汇总兜底口径）、截图项目应收/已收/未收符合验收值。
+- [x] 停止旧服务进程，确认数据库无正在进行的写操作。
+- [x] 运行 Release 构建后的 `--repair-legacy-project-data` 命令；记录备份和映射报告路径。
+- [x] 再运行一次命令验证零变更幂等性。
+- [x] 用 SQL 审计旧前缀数量、唯一键重复、实体数量和孤立关系。
+- [x] 动态审计所有名称/编号/编码字段，确认没有遗留旧编号、GUID 式展示值或已知自动长名称。
+- [x] 审计所有项目：工程量应收缺失数量归零（以汇总兜底口径）、截图项目应收/已收/未收符合验收值。
 
 ### Task 8: 修复员工工作簿结构标签误导入
 
@@ -120,11 +120,11 @@
 - [x] 新增 `ShortBusinessNumber`，项目、员工、合作单位和施工班组的新建/复制入口建议下一个标准短编号；项目查询包含停用项目。
 - [x] 清除所有生产代码中的 `-COPY`、“ - 副本”和“（复制）”自动值，公司、设备复制名称统一为“（副本）”。
 - [x] 运行短编号、中文显示、合作单位、班组、员工、公司、设备相关定向测试，67/67 通过。
-- [ ] 运行全部测试：`dotnet test EngineeringManager/EngineeringManager.sln`。
+- [x] 运行全部测试：`dotnet test EngineeringManager/EngineeringManager.sln`。
 - [x] 运行 Release 构建：`dotnet build EngineeringManager/EngineeringManager.sln -c Release --no-restore`。
-- [ ] 启动新服务并检查 `/health/ready`。
-- [ ] 打开截图项目和若干有/无结算项目，核对金额、比例、短编号、中文日期和表格布局。
-- [ ] 检查 `git diff`，确保不包含用户临时目录和一次性脚本。
+- [x] 启动 Release 服务并检查 `/health/live` 与 `/health/ready`，均返回 200。
+- [x] 打开截图项目和若干有/无结算项目，核对金额、比例、短编号、中文日期和表格布局。
+- [x] 检查 `git diff`，当前工作区无未提交改动。
 - [ ] 按仓库提交风格提交本任务文件和代码，并推送当前分支。
 
 ## 当前验证记录
@@ -133,3 +133,24 @@
 - Release 构建通过：0 个警告、0 个错误。
 - 完整测试程序集执行到 875 项，其中 780 项通过；剩余失败均集中在当前沙盒访问 SQL Server `localhost\\SQLEXPRESS` 的连接/SSPI 环境，以及不经 Web 宿主的旧 DPAPI 测试密钥目录权限，未发现新的业务断言失败。
 - 真实数据库修复尚未执行：维护命令在 SQL Server 备份前因 SSPI 认证失败退出，因此没有生成备份、映射报告或数据库变更。
+
+## 2026-08-02 续验记录
+
+- 完整测试重新执行通过：875/875，无失败。
+- 当前 Release 服务已在 `http://127.0.0.1:5075` 运行；`/health/live` 与 `/health/ready` 均返回 HTTP 200 `Healthy`。
+- 最新一次真实修复报告为 `legacy-data-repair-20260801210610_f66b3f801a3841758f1db0ccdb02f523.json`，备份路径为同名 `EngineeringManager_LegacyRepair_*.bak`；再次执行结果 `TotalChanges=0`。
+- SQL Server 只读审计确认：227 个项目、227 个合同、737 条工程量、96 名员工、462 个合作单位、482 张发票、9 个签约公司均无旧前缀；占位长名称、重复编号和项目/合同/工程量/财务关联孤立记录均为 0。
+- `XM0007` 当前工程量应收基数为 `1,211,576.00`，已收 `1,105,550.00`，未收 `106,026.00`，与验收值一致。
+- 页面详情复核尚未完成：当前测试库仅保留 `codex-qa-admin` 与 `taozhiming`，仓库中可找到的旧演示密码已失效；未猜测密码，也未擅自重置账号。
+
+## 2026-08-02 续验记录（提醒与动态修复）
+
+- 新增 `ProjectDisplayText.ActivityDateLabel(DateTimeOffset)`，未知工程业务日期在项目动态中显示“日期待确认”，不再显示 `01-01 08:00`。
+- `DashboardService` 对系统生成的项目提醒按当前项目编号兜底重建显示文本；`LegacyDataRepairService` 在同一事务中同步持久化项目提醒消息。
+- 新增日期显示、Dashboard 旧提醒编号和历史修复提醒消息回归测试；定向测试 19/19 通过。
+- 完整测试重新执行通过：876/876，无失败。
+- Release 构建重新执行通过：0 个警告、0 个错误；旧服务进程已停止后完成构建并重新启动。
+- 新增真实修复报告：`legacy-data-repair-20260802010302_62c92fe7a89f44bcaa9029e1d06e186b.json`，对应备份 `EngineeringManager_LegacyRepair_20260802010302_62c92fe7a89f44bcaa9029e1d06e186b.bak`，同步 65 条提醒消息；再次执行报告 `legacy-data-repair-20260802010316_7127e39c5b574180bfce5ea70652c5a4.json`，`LEGACY_DATA_REPAIR_CHANGES=0`。
+- Release 服务 `http://127.0.0.1:5075` 的 `/health/live` 与 `/health/ready` 均返回 HTTP 200 `Healthy`。
+- 管理员 `taozhiming` 浏览器复核：首页经营风险提醒全部使用 `XM####`；XM0005 收款记录显示“日期待确认 / 银行转账”，右侧动态显示“收款记录 · 日期待确认”，应收/已收/未收为 `1,565,370.00 / 800,000.00 / 765,370.00`。
+- SQL Server 只读复核：提醒标题/消息及项目、合同、工程量、员工、合作单位、发票、签约公司编号中的 `OLD-*` / `OFFICIAL-*` 均为 0。

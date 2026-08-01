@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Reminders;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Data;
@@ -33,6 +34,7 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
     private const string InvoiceEntity = "FinanceInvoice";
     private const string CompanyEntity = "LegalEntity";
     private const string AccountEntity = "FinancialAccount";
+    private const string ReminderEntity = "ReminderItem";
 
     public async Task<LegacyDataRepairResult> RepairAsync(CancellationToken cancellationToken)
     {
@@ -44,6 +46,7 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
         var allInvoices = await db.FinanceInvoices.ToListAsync(cancellationToken);
         var allCompanies = await db.LegalEntities.ToListAsync(cancellationToken);
         var allAccounts = await db.FinancialAccounts.ToListAsync(cancellationToken);
+        var allReminders = await db.ReminderItems.ToListAsync(cancellationToken);
         var projectNames = allProjects.ToDictionary(item => item.Id, item => item.Name);
 
         var projects = allProjects.Where(item => IsLegacyNumber(item.ProjectNumber))
@@ -71,11 +74,6 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
             .OrderBy(item => item.PartnerNumber, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.Id).ToArray();
         var companiesWithGeneratedNames = allCompanies.Where(item => item.Name == "待确认签约公司（旧资料补导）").ToArray();
         var accountsWithGeneratedNames = allAccounts.Where(item => item.AccountName == "待确认账户（旧资料补导）").ToArray();
-
-        if (projects.Length + contracts.Length + quantities.Length + employees.Length + partners.Length + invoices.Length + companies.Length
-            + contractsWithGeneratedNames.Length + quantitiesWithGeneratedNames.Length + partnersWithGeneratedNames.Length + partnersWithGeneratedSourceNames.Length + companiesWithGeneratedNames.Length
-            + accountsWithGeneratedNames.Length == 0)
-            return new LegacyDataRepairResult([]);
 
         var mappings = new List<LegacyDataRepairMapping>();
         var projectNumbers = BuildGlobalMappings(
@@ -206,6 +204,33 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
         foreach (var account in accountsWithGeneratedNames)
             mappings.Add(new LegacyDataRepairMapping(AccountEntity, account.Id, nameof(FinancialAccount.AccountName), account.AccountName, "待确认账户"));
 
+        var reminderMessages = new Dictionary<Guid, string>();
+        foreach (var reminder in allReminders.Where(item => string.Equals(item.SourceType, "Project", StringComparison.Ordinal)
+                     && item.DeduplicationKey.StartsWith("project-", StringComparison.Ordinal)
+                     && Guid.TryParse(item.SourceId, out _)))
+        {
+            if (!Guid.TryParse(reminder.SourceId, out var projectId) || !projectNames.TryGetValue(projectId, out var projectName))
+                continue;
+
+            var projectNumber = finalProjectNumbers[projectId];
+            var label = $"{projectNumber} · {projectName}";
+            var message = reminder.Type switch
+            {
+                ReminderType.UncollectedReceivable => $"{label} 未收款 {reminder.Amount.GetValueOrDefault():N2}",
+                ReminderType.UnpaidPayable => $"{label} 未付款 {reminder.Amount.GetValueOrDefault():N2}",
+                ReminderType.UninvoicedReceivable => $"{label} 未开票 {reminder.Amount.GetValueOrDefault():N2}",
+                _ => null
+            };
+            if (message is not null && !string.Equals(reminder.Message, message, StringComparison.Ordinal))
+            {
+                reminderMessages[reminder.Id] = message;
+                mappings.Add(new LegacyDataRepairMapping(ReminderEntity, reminder.Id, nameof(ReminderItem.Message), reminder.Message, message));
+            }
+        }
+
+        if (mappings.Count == 0)
+            return new LegacyDataRepairResult([]);
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         foreach (var item in projects) item.ProjectNumber = TemporaryNumber("P", item.Id);
         foreach (var item in contracts) item.ContractNumber = TemporaryNumber("C", item.Id);
@@ -294,6 +319,11 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
         {
             item.AccountName = "待确认账户";
             item.ConcurrencyStamp = Guid.NewGuid();
+        }
+        foreach (var reminder in allReminders)
+        {
+            if (reminderMessages.TryGetValue(reminder.Id, out var message))
+                reminder.Message = message;
         }
 
         db.AuditLogs.Add(new AuditLog

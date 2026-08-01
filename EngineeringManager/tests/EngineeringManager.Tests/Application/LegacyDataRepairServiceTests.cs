@@ -2,6 +2,7 @@ using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
+using EngineeringManager.Domain.Reminders;
 using EngineeringManager.Infrastructure.Data;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
@@ -80,7 +81,18 @@ public sealed class LegacyDataRepairServiceTests
             InvoiceDate = new DateOnly(2026, 1, 2),
             Amount = 20m
         };
-        db.AddRange(reservedCompany, company, account, reservedPartner, partner, reservedProject, project, reservedEmployee, employee, reservedInvoice, invoice);
+        var reminder = new ReminderItem
+        {
+            DeduplicationKey = $"project-uncollected:{project.Id}",
+            Type = ReminderType.UncollectedReceivable,
+            Severity = ReminderSeverity.Warning,
+            Title = "项目存在未收款",
+            Message = $"OLD-2300000000000001 · {project.Name} 未收款 20.00",
+            SourceType = "Project",
+            SourceId = project.Id.ToString(),
+            Amount = 20m
+        };
+        db.AddRange(reservedCompany, company, account, reservedPartner, partner, reservedProject, project, reservedEmployee, employee, reservedInvoice, invoice, reminder);
         await db.SaveChangesAsync();
 
         var projectId = project.Id;
@@ -109,9 +121,10 @@ public sealed class LegacyDataRepairServiceTests
         (await db.BusinessPartners.SingleAsync(item => item.Id == partnerId)).Name.Should().Be("待确认合作单位");
         (await db.LegalEntities.SingleAsync(item => item.Id == companyId)).Name.Should().Be("待确认签约公司");
         (await db.FinancialAccounts.SingleAsync(item => item.Id == accountId)).AccountName.Should().Be("待确认账户");
+        (await db.ReminderItems.SingleAsync(item => item.Id == reminder.Id)).Message.Should().Be("XM0002 · 历史项目 未收款 20.00");
         (await db.Contracts.SingleAsync(item => item.Id == contractId)).ProjectId.Should().Be(projectId);
         (await db.FinanceInvoices.SingleAsync(item => item.Id == invoiceId)).ProjectId.Should().Be(projectId);
-        firstResult.TotalChanges.Should().Be(13);
+        firstResult.TotalChanges.Should().Be(14);
 
         var secondResult = await new LegacyDataRepairService(db).RepairAsync(CancellationToken.None);
 

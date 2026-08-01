@@ -70,6 +70,9 @@ public sealed class ChineseDisplayTests
     {
         ProjectDisplayText.DateLabel(DateOnly.MinValue).Should().Be("日期待确认");
         ProjectDisplayText.DateLabel(new DateOnly(2026, 8, 1)).Should().Be("2026-08-01");
+        var activityDateLabel = typeof(ProjectDisplayText).GetMethod("ActivityDateLabel", [typeof(DateTimeOffset)]);
+        activityDateLabel.Should().NotBeNull();
+        activityDateLabel!.Invoke(null, [DateTimeOffset.MinValue]).Should().Be("日期待确认");
         ProjectDisplayText.PaymentMethodLabel(nameof(PaymentMethod.BankTransfer)).Should().Be("银行转账");
         ProjectDisplayText.InvoiceTypeLabel(nameof(InvoiceDirection.Output)).Should().Be("销项发票");
         ProjectDisplayText.InvoiceTypeLabel(nameof(InvoiceDirection.Input)).Should().Be("进项发票");
@@ -87,6 +90,7 @@ public sealed class ChineseDisplayTests
             .And.Contain("ProjectDisplayText.DateLabel(row.CollectionDate)")
             .And.Contain("ProjectDisplayText.DateLabel(row.InvoiceDate)")
             .And.Contain("ProjectDisplayText.PaymentMethodLabel(row.PaymentMethod)")
+            .And.Contain("ProjectDisplayText.ActivityDateLabel(activity.OccurredAt)")
             .And.Contain("row.CollectionDate == DateOnly.MinValue")
             .And.Contain("row.InvoiceDate == DateOnly.MinValue")
             .And.Contain("row.EntryDate == DateOnly.MinValue")

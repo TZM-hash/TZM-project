@@ -82,6 +82,31 @@ public sealed class DashboardServiceTests
     }
 
     [Fact]
+    public async Task DashboardUsesCurrentProjectNumberWhenPersistedReminderMessageIsStale()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var project = new Project { ProjectNumber = "XM0005", Name = "当前项目", Stage = ProjectStage.UnderConstruction };
+        fixture.Db.Add(project);
+        await fixture.Db.SaveChangesAsync();
+        fixture.Db.ReminderItems.Add(new ReminderItem
+        {
+            DeduplicationKey = $"project-uncollected:{project.Id}",
+            Type = ReminderType.UncollectedReceivable,
+            Severity = ReminderSeverity.Warning,
+            Title = "项目存在未收款",
+            Message = $"OLD-2300000000000001 · {project.Name} 未收款 12.00",
+            SourceType = "Project",
+            SourceId = project.Id.ToString(),
+            Amount = 12m
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var result = await fixture.Service.GetAsync(new DashboardActor("admin", true, true, true), default);
+
+        result.Risks.Should().ContainSingle().Which.Message.Should().Be("XM0005 · 当前项目 未收款 12.00");
+    }
+
+    [Fact]
     public async Task DashboardProvidesTwelveMonthTrendEquipmentAndPayrollSummary()
     {
         await using var fixture = await Fixture.CreateAsync();

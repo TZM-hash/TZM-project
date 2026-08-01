@@ -86,6 +86,10 @@ public static class ProjectDisplayText
         ? "日期待确认"
         : value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
+    public static string ActivityDateLabel(DateTimeOffset value) => value.Year == 1 && value.Month == 1 && value.Day == 1
+        ? "日期待确认"
+        : value.ToLocalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+
     public static string InvoiceTypeLabel(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return "-";

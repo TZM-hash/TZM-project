@@ -1337,7 +1337,7 @@ else
             </div>
         </dialog>
 
-        <aside class="project-activity-panel" aria-label="项目提示与修改记录"><div class="activity-panel-heading"><div><p class="eyebrow">动态</p><h2>提示与记录</h2></div><span>@item.Activities.Count</span></div><div class="activity-feed">@if (item.Activities.Count == 0) { <div class="empty-state"><strong>暂无动态</strong><p>编辑项目或录入业务后会在这里形成记录。</p></div> } @foreach (var activity in item.Activities) { <article class="activity-item activity-item--@activity.Tone"><span class="activity-dot"></span><div><p class="activity-meta">@activity.Category · @activity.OccurredAt.ToLocalTime().ToString("MM-dd HH:mm")</p><h3>@activity.Title</h3>@if (!string.IsNullOrWhiteSpace(activity.Detail)) { <p>@activity.Detail</p> }@if (!string.IsNullOrWhiteSpace(activity.UserName)) { <small>操作人：@activity.UserName</small> }</div></article> }</div></aside>
+        <aside class="project-activity-panel" aria-label="项目提示与修改记录"><div class="activity-panel-heading"><div><p class="eyebrow">动态</p><h2>提示与记录</h2></div><span>@item.Activities.Count</span></div><div class="activity-feed">@if (item.Activities.Count == 0) { <div class="empty-state"><strong>暂无动态</strong><p>编辑项目或录入业务后会在这里形成记录。</p></div> } @foreach (var activity in item.Activities) { <article class="activity-item activity-item--@activity.Tone"><span class="activity-dot"></span><div><p class="activity-meta">@activity.Category · @ProjectDisplayText.ActivityDateLabel(activity.OccurredAt)</p><h3>@activity.Title</h3>@if (!string.IsNullOrWhiteSpace(activity.Detail)) { <p>@activity.Detail</p> }@if (!string.IsNullOrWhiteSpace(activity.UserName)) { <small>操作人：@activity.UserName</small> }</div></article> }</div></aside>
 
     </div>
 

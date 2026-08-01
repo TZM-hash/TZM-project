@@ -63,6 +63,7 @@ public sealed class DashboardService : IDashboardService
         }
         var reminderItems = await reminderQuery.ToListAsync(cancellationToken);
         var reminders = reminderItems.OrderByDescending(item => item.Severity).ThenByDescending(item => item.LastOccurredAt).Take(8).ToArray();
+        var projectLookup = projects.ToDictionary(item => item.Id);
 
         return new DashboardDto(
             projects.Count,
@@ -73,7 +74,7 @@ public sealed class DashboardService : IDashboardService
             actor.CanViewPayroll,
             stageDistribution,
             comparisons,
-            reminders.Select(item => new DashboardRiskDto(item.Id, item.Severity, item.Title, item.Message, item.SourceType, item.SourceId)).ToArray(),
+            reminders.Select(item => new DashboardRiskDto(item.Id, item.Severity, item.Title, ProjectReminderMessage(item, projectLookup), item.SourceType, item.SourceId)).ToArray(),
             DateTimeOffset.UtcNow,
             monthlyTrend,
             equipmentSummary,
@@ -109,6 +110,23 @@ public sealed class DashboardService : IDashboardService
         var payable = Math.Max(items.Where(item => item.Nature == PayrollItemNature.Earning).Sum(item => item.Amount) - items.Where(item => item.Nature == PayrollItemNature.Deduction).Sum(item => item.Amount), 0m);
         var paid = payments.Sum();
         return new DashboardPayrollSummaryDto(payable, paid, Math.Max(payable - paid, 0m));
+    }
+
+    private static string ProjectReminderMessage(ReminderItem item, Dictionary<Guid, Project> projects)
+    {
+        if (!string.Equals(item.SourceType, "Project", StringComparison.Ordinal)
+            || !Guid.TryParse(item.SourceId, out var projectId)
+            || !projects.TryGetValue(projectId, out var project))
+            return item.Message;
+
+        var label = $"{project.ProjectNumber} · {project.Name}";
+        return item.Type switch
+        {
+            ReminderType.UncollectedReceivable => $"{label} 未收款 {item.Amount.GetValueOrDefault():N2}",
+            ReminderType.UnpaidPayable => $"{label} 未付款 {item.Amount.GetValueOrDefault():N2}",
+            ReminderType.UninvoicedReceivable => $"{label} 未开票 {item.Amount.GetValueOrDefault():N2}",
+            _ => item.Message
+        };
     }
 
     private static DashboardProjectCashDto[] BuildCashWatchlist(
