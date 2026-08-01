@@ -4,6 +4,7 @@ if (page) {
     const editorDialog = page.querySelector("[data-employee-editor-dialog]");
     const detailsDialog = page.querySelector("[data-employee-details-dialog]");
     const editorForm = editorDialog?.querySelector("[data-employee-editor-form]");
+    const nextEmployeeNumber = page.dataset.nextEmployeeNumber || "";
     const field = (name) => editorForm?.querySelector(`[name="Editor.${name}"]`);
     const show = (dialog) => { if (dialog && !dialog.open) dialog.showModal(); };
     const payloadFrom = (trigger) => JSON.parse(trigger.dataset.employeePayload || "{}");
@@ -30,8 +31,8 @@ if (page) {
         const copying = mode === "copy";
         setField("Id", editing ? payload.id : "");
         setField("ConcurrencyStamp", editing ? payload.concurrencyStamp : "00000000-0000-0000-0000-000000000000");
-        setField("EmployeeNumber", copying ? `${payload.employeeNumber || ""}-COPY` : payload.employeeNumber);
-        setField("Name", copying ? `${payload.name || ""}（复制）` : payload.name);
+        setField("EmployeeNumber", editing ? payload.employeeNumber : nextEmployeeNumber);
+        setField("Name", copying ? `${payload.name || ""}（副本）` : payload.name);
         setField("EmployeeType", payload.employeeType || "Formal");
         setField("Phone", copying ? "" : payload.phone);
         setField("PositionTitle", payload.positionTitle);

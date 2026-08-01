@@ -103,7 +103,8 @@ public sealed class ProjectQuantityInlineEntryPageTests
     {
         var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
 
-        styles.Should().Contain(".quantity-inline-table { width: 100%; min-width: 74rem; table-layout: fixed; }")
+        styles.Should().Contain(".quantity-inline-table { width: 100%; table-layout: fixed; }")
+            .And.Contain(".table-wrap > table.quantity-inline-table { min-width: 74rem; }")
             .And.Contain(".quantity-inline-table [data-inline-edit-control].inline-cell-control:not([hidden]) { position: static;")
             .And.Contain(".quantity-notes-edit-trigger");
     }

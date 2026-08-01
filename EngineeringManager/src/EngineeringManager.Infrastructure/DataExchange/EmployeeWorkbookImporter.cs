@@ -208,13 +208,20 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
                     continue;
                 }
 
+                var payableAmount = RoundMoney(payable ?? 0m);
+                var paidAmount = RoundMoney(paid ?? 0m);
+                if (payableAmount == 0m && paidAmount == 0m)
+                {
+                    continue;
+                }
+
                 var date = ParseDate(ValueAt(row, paymentDateColumn.Value));
                 candidateRows.Add(new EmployeeWorkbookRawDetail(
                     rowIndex + 1,
                     monthText,
                     noteText,
-                    RoundMoney(payable ?? 0m),
-                    RoundMoney(paid ?? 0m),
+                    payableAmount,
+                    paidAmount,
                     NormalizeDate(date, monthText, paid > 0m ? ImportYearEnd : ImportYearStart)));
             }
 
@@ -269,12 +276,12 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
             {
                 var row = sheet.Rows[index];
                 var name = TextAt(row, nameColumn.Value);
-                var identity = identityColumn.HasValue ? TextAt(row, identityColumn.Value) : string.Empty;
-                if (string.IsNullOrWhiteSpace(name))
+                if (string.IsNullOrWhiteSpace(name) || IsParticipantSectionLabel(name))
                 {
                     continue;
                 }
 
+                var identity = identityColumn.HasValue ? TextAt(row, identityColumn.Value) : string.Empty;
                 var key = EmployeeKey(identity, name);
                 var master = masterByKey.GetValueOrDefault(key);
                 result.Add(new EmployeeWorkbookParticipant(
@@ -680,7 +687,7 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
         var used = employees.Select(item => item.EmployeeNumber).ToHashSet(StringComparer.OrdinalIgnoreCase);
         for (var index = 1; ; index++)
         {
-            var number = $"YG{index}";
+            var number = $"YG{index:0000}";
             if (!used.Contains(number))
             {
                 return number;
@@ -738,6 +745,12 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
             return text.Contains("合计", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("总计", StringComparison.OrdinalIgnoreCase);
         });
+
+    private static bool IsParticipantSectionLabel(string value) => NormalizeHeader(value) switch
+    {
+        "应付款" or "已付款" or "公司付款日期" or "公司已付款" or "月份" or "备注" => true,
+        _ => false
+    };
 
     private static Dictionary<string, int> HeaderMap(IReadOnlyList<object?> row) =>
         row.Select((value, index) => new { Header = NormalizeHeader(TextAt(row, index)), index })

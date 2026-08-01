@@ -9,7 +9,7 @@ from openpyxl import Workbook, load_workbook
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from convert_legacy_project_data import convert_directory
+from convert_legacy_project_data import build_project_rows, convert_directory
 
 
 def write_workbook(path: Path, headers: list[str], rows: list[list[object]]) -> None:
@@ -23,6 +23,19 @@ def write_workbook(path: Path, headers: list[str], rows: list[list[object]]) -> 
 
 
 class LegacyProjectDataConversionTests(unittest.TestCase):
+    def test_project_numbers_are_stable_when_source_rows_are_reordered(self) -> None:
+        headers = ["数据唯一编号", "工程名称", "项目状态"]
+        rows = [
+            {"数据唯一编号": "1002", "工程名称": "项目乙", "项目状态": "施工中"},
+            {"数据唯一编号": "1001", "工程名称": "项目甲", "项目状态": "施工中"},
+        ]
+
+        _, first_mapping, _ = build_project_rows(headers, rows)
+        _, second_mapping, _ = build_project_rows(headers, list(reversed(rows)))
+
+        self.assertEqual({"项目甲": "XM0001", "项目乙": "XM0002"}, first_mapping)
+        self.assertEqual(first_mapping, second_mapping)
+
     def test_conversion_preserves_rows_and_marks_missing_and_unmatched_cells(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)
@@ -38,7 +51,11 @@ class LegacyProjectDataConversionTests(unittest.TestCase):
             write_workbook(
                 source / "quantity.xlsx",
                 ["数据唯一编号", "工程名称", "名称", "工程量", "单位", "单价", "小计", "附件", "备注", "是否不开发票"],
-                [["q1\t", "项目甲", "工程量一", 2, "项", 50, 100, None, None, None], ["q2\t", None, "待补项目", 1, "项", 20, 20, None, None, None]],
+                [
+                    ["q1\t", "项目甲", "工程量一", 2, "项", 50, 100, None, None, None],
+                    ["q2\t", None, "待补项目", 1, "项", 20, 20, None, None, None],
+                    ["q3\t", "项目乙", None, 1, "项", 30, 30, None, None, None],
+                ],
             )
             write_workbook(
                 source / "invoice.xlsx",
@@ -67,7 +84,8 @@ class LegacyProjectDataConversionTests(unittest.TestCase):
                 ["导入说明", "项目导入", "项目余额快照", "工程量导入", "收款导入", "开票导入", "付款导入", "待补项目"],
                 workbook.sheetnames,
             )
-            self.assertEqual("OLD-1001", workbook["项目导入"]["A2"].value)
+            self.assertEqual("XM0001", workbook["项目导入"]["A2"].value)
+            self.assertEqual("XM0002", workbook["项目导入"]["A3"].value)
 
             collection = workbook["收款导入"]
             collection_headers = {cell.value: cell.column for cell in collection[1]}
@@ -78,7 +96,8 @@ class LegacyProjectDataConversionTests(unittest.TestCase):
             quantity_headers = {cell.value: cell.column for cell in quantity[1]}
             missing_project_cell = quantity.cell(3, quantity_headers["项目编号"])
             self.assertEqual("FFFCE4D6", missing_project_cell.fill.fgColor.rgb)
-            self.assertEqual(2, quantity.max_row - 1)
+            self.assertEqual(3, quantity.max_row - 1)
+            self.assertEqual("待确认工程量3", quantity.cell(4, quantity_headers["工程量名称"]).value)
             self.assertEqual(1, workbook["收款导入"].max_row - 1)
             self.assertEqual(1, workbook["开票导入"].max_row - 1)
             self.assertEqual(1, workbook["付款导入"].max_row - 1)

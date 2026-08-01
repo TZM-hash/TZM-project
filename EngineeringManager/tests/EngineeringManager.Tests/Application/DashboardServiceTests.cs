@@ -40,9 +40,9 @@ public sealed class DashboardServiceTests
         result.ActiveProjectCount.Should().Be(1);
         result.CurrentProjectAmount.Should().Be(1000m);
         result.StageDistribution.Single().Count.Should().Be(1);
-        result.MoneyComparisons.Single(item => item.Key == "receivable").Should().Match<DashboardMoneyComparisonDto>(item => item.TotalAmount == 1000m && item.CompletedAmount == 500m && item.RemainingAmount == 500m);
+        result.MoneyComparisons.Single(item => item.Key == "receivable").Should().Match<DashboardMoneyComparisonDto>(item => item.TotalAmount == 2000m && item.CompletedAmount == 500m && item.RemainingAmount == 1500m);
         result.MoneyComparisons.Single(item => item.Key == "payable").Should().Match<DashboardMoneyComparisonDto>(item => item.TotalAmount == 400m && item.CompletedAmount == 200m && item.RemainingAmount == 180m);
-        result.MoneyComparisons.Single(item => item.Key == "invoice").Should().Match<DashboardMoneyComparisonDto>(item => item.TotalAmount == 1000m && item.CompletedAmount == 300m && item.RemainingAmount == 700m);
+        result.MoneyComparisons.Single(item => item.Key == "invoice").Should().Match<DashboardMoneyComparisonDto>(item => item.TotalAmount == 2000m && item.CompletedAmount == 300m && item.RemainingAmount == 1700m);
         result.UnpaidPayrollAmount.Should().Be(150m);
         result.OpenReminderCount.Should().Be(1);
         result.Risks.Should().ContainSingle(item => item.Title == "经营风险");
@@ -50,7 +50,7 @@ public sealed class DashboardServiceTests
             item.ProjectNumber == "P-DASH" &&
             item.CollectedAmount == 500m &&
             item.PaidAmount == 200m &&
-            item.UncollectedAmount == 500m &&
+            item.UncollectedAmount == 1500m &&
             item.UnpaidAmount == 180m &&
             item.CashGap == 300m);
     }
@@ -78,7 +78,7 @@ public sealed class DashboardServiceTests
 
         result.CashWatchlist.Should().ContainSingle(item => item.ProjectId == authorized.Id);
         result.CashWatchlist.Should().NotContain(item => item.ProjectNumber == "P-HIDDEN");
-        result.MoneyComparisons.Single(item => item.Key == "receivable").TotalAmount.Should().Be(1000m);
+        result.MoneyComparisons.Single(item => item.Key == "receivable").TotalAmount.Should().Be(2000m);
     }
 
     [Fact]

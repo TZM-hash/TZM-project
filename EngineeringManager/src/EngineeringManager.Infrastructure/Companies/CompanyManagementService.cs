@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EngineeringManager.Application.Common;
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
@@ -153,9 +154,9 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
     public async Task<SaveCompanyRequest> PrepareCopyAsync(CompanyActor actor, Guid sourceId, CancellationToken cancellationToken)
     {
         var source = await GetAsync(actor, sourceId, cancellationToken);
-        return new SaveCompanyRequest(null, string.Empty, $"{source.Name} - 副本", $"{source.ShortName}副本",
+        return new SaveCompanyRequest(null, string.Empty, ShortDisplayName.Copy(source.Name, 200), ShortDisplayName.Copy(source.ShortName, 100),
             source.CompanyCategoryId, source.LegalRepresentative, null, source.RegisteredAddress,
-            source.BusinessAddress, source.Phone, $"{source.Name} - 副本", source.Notes, true, null, "复制公司档案");
+            source.BusinessAddress, source.Phone, ShortDisplayName.Copy(source.Name, 200), source.Notes, true, null, "复制公司档案");
     }
 
     public async Task<IReadOnlyList<CompanyCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken) =>

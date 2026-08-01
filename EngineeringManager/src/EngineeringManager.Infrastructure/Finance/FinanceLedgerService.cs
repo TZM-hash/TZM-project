@@ -164,6 +164,82 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             accumulator.AddSettlement(settlement.Direction, CalculateSettlementMetrics(settlement));
         }
 
+        if (filter?.CutoffDate is null)
+        {
+            var postedQuantitySourceIds = await db.FinanceSettlements
+                .AsNoTracking()
+                .Where(item => item.Scope == LedgerScope.External
+                    && item.Direction == LedgerDirection.Receivable
+                    && item.Status == LedgerRecordStatus.Active
+                    && item.SourceType == LedgerSourceType.ProjectQuantity
+                    && item.SourceId.HasValue
+                    && item.ProjectId.HasValue
+                    && projectIds.Contains(item.ProjectId.Value))
+                .Select(item => item.SourceId!.Value)
+                .ToArrayAsync(cancellationToken);
+
+            IQueryable<ContractLineItem> quantityQuery = db.ContractLineItems
+                .AsNoTracking()
+                .Where(item => item.Contract.IsActive
+                    && projectIds.Contains(item.Contract.ProjectId)
+                    && !postedQuantitySourceIds.Contains(item.Id));
+            if (filter is not null)
+            {
+                if (filter.ContractId.HasValue) quantityQuery = quantityQuery.Where(item => item.ContractId == filter.ContractId.Value);
+                if (filter.BusinessPartnerId.HasValue) quantityQuery = quantityQuery.Where(item => item.Contract.BusinessPartnerId == filter.BusinessPartnerId.Value);
+            }
+
+            var unpostedQuantities = await quantityQuery
+                .Select(item => new UnpostedQuantitySeed(
+                    item.Id,
+                    item.Contract.ProjectId,
+                    item.ContractId,
+                    item.Quantity,
+                    item.UnitPrice,
+                    item.RequiresInvoice))
+                .ToListAsync(cancellationToken);
+
+            if (filter?.LegalEntityId is Guid legalEntityId && unpostedQuantities.Count > 0)
+            {
+                var contractIds = unpostedQuantities.Select(item => item.ContractId).Distinct().ToArray();
+                var projectQuantityIds = unpostedQuantities.Select(item => item.ProjectId).Distinct().ToArray();
+                var contractLegalEntities = (await db.ContractLegalEntityAllocations.AsNoTracking()
+                        .Where(item => contractIds.Contains(item.ContractId))
+                        .ToListAsync(cancellationToken))
+                    .GroupBy(item => item.ContractId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.OrderByDescending(item => item.Amount ?? 0m)
+                            .ThenByDescending(item => item.Percentage ?? 0m)
+                            .ThenBy(item => item.Id)
+                            .Select(item => (Guid?)item.LegalEntityId)
+                            .FirstOrDefault());
+                var projectLegalEntities = (await db.ProjectLegalEntities.AsNoTracking()
+                        .Where(item => projectQuantityIds.Contains(item.ProjectId))
+                        .ToListAsync(cancellationToken))
+                    .GroupBy(item => item.ProjectId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.OrderByDescending(item => item.IsPrimary)
+                            .ThenBy(item => item.Id)
+                            .Select(item => (Guid?)item.LegalEntityId)
+                            .FirstOrDefault());
+                unpostedQuantities = unpostedQuantities.Where(item =>
+                {
+                    contractLegalEntities.TryGetValue(item.ContractId, out var contractLegalEntityId);
+                    projectLegalEntities.TryGetValue(item.ProjectId, out var projectLegalEntityId);
+                    return (contractLegalEntityId ?? projectLegalEntityId) == legalEntityId;
+                }).ToList();
+            }
+
+            foreach (var quantity in unpostedQuantities)
+            {
+                if (!accumulators.TryGetValue(quantity.ProjectId, out var accumulator)) continue;
+                var amount = (quantity.Quantity ?? 0m) * (quantity.UnitPrice ?? 0m);
+                accumulator.AddQuantityFallback(amount, quantity.RequiresInvoice ? amount : 0m);
+            }
+        }
+
         IQueryable<FinanceCashEntry> cashQuery = db.FinanceCashEntries
             .AsNoTracking()
             .AsSplitQuery()
@@ -187,7 +263,9 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             var sign = cashEntry.IsReversal ? -1m : 1m;
             var signedAmount = cashEntry.Amount * sign;
             var signedAllocatedAmount = cashEntry.Allocations.Sum(item => item.Amount) * sign;
-            if (cashEntry.ProjectId.HasValue && accumulators.TryGetValue(cashEntry.ProjectId.Value, out var directAccumulator))
+            if ((filter?.ContractId is null || cashEntry.ContractId == filter.ContractId)
+                && cashEntry.ProjectId.HasValue
+                && accumulators.TryGetValue(cashEntry.ProjectId.Value, out var directAccumulator))
             {
                 directAccumulator.AddDirectCash(cashEntry.Direction, signedAmount - signedAllocatedAmount);
             }
@@ -197,6 +275,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
                 var allocationProjectId = allocation.ProjectId ?? allocation.Settlement?.ProjectId;
                 if (allocationProjectId.HasValue
                     && accumulators.TryGetValue(allocationProjectId.Value, out var allocationAccumulator)
+                    && MatchesFilter(allocation, filter)
                     && !countedSettlementIds.Contains(allocation.SettlementId))
                 {
                     allocationAccumulator.AddDirectCash(cashEntry.Direction, allocation.Amount * sign);
@@ -225,7 +304,9 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         foreach (var invoice in invoices)
         {
             var unallocatedAmount = invoice.Amount - invoice.Allocations.Sum(item => item.Amount);
-            if (invoice.ProjectId.HasValue && accumulators.TryGetValue(invoice.ProjectId.Value, out var directAccumulator))
+            if ((filter?.ContractId is null || invoice.ContractId == filter.ContractId)
+                && invoice.ProjectId.HasValue
+                && accumulators.TryGetValue(invoice.ProjectId.Value, out var directAccumulator))
             {
                 directAccumulator.AddDirectInvoice(invoice.Direction, unallocatedAmount);
             }
@@ -235,6 +316,7 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
                 var allocationProjectId = allocation.ProjectId ?? allocation.Settlement?.ProjectId;
                 if (allocationProjectId.HasValue
                     && accumulators.TryGetValue(allocationProjectId.Value, out var allocationAccumulator)
+                    && MatchesFilter(allocation, filter)
                     && !countedSettlementIds.Contains(allocation.SettlementId))
                 {
                     allocationAccumulator.AddDirectInvoice(invoice.Direction, allocation.Amount);
@@ -251,6 +333,48 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
 
     private sealed record ProjectSummarySeed(Guid Id, string ProjectNumber, string Name);
 
+    private sealed record UnpostedQuantitySeed(
+        Guid Id,
+        Guid ProjectId,
+        Guid ContractId,
+        decimal? Quantity,
+        decimal? UnitPrice,
+        bool RequiresInvoice);
+
+    private static bool MatchesFilter(FinanceCashAllocation allocation, FinanceSummaryFilter? filter)
+    {
+        if (filter is null) return true;
+        var settlement = allocation.Settlement;
+        if (filter.ContractId is Guid contractId
+            && allocation.ContractId != contractId
+            && settlement?.ContractId != contractId) return false;
+        if (filter.LegalEntityId is Guid legalEntityId
+            && settlement?.LegalEntityId != legalEntityId) return false;
+        if (filter.BusinessPartnerId is Guid businessPartnerId
+            && allocation.BusinessPartnerId != businessPartnerId
+            && settlement?.BusinessPartnerId != businessPartnerId) return false;
+        if (filter.CutoffDate is DateOnly cutoffDate
+            && settlement?.BusinessDate > cutoffDate) return false;
+        return true;
+    }
+
+    private static bool MatchesFilter(FinanceInvoiceAllocation allocation, FinanceSummaryFilter? filter)
+    {
+        if (filter is null) return true;
+        var settlement = allocation.Settlement;
+        if (filter.ContractId is Guid contractId
+            && allocation.ContractId != contractId
+            && settlement?.ContractId != contractId) return false;
+        if (filter.LegalEntityId is Guid legalEntityId
+            && settlement?.LegalEntityId != legalEntityId) return false;
+        if (filter.BusinessPartnerId is Guid businessPartnerId
+            && allocation.BusinessPartnerId != businessPartnerId
+            && settlement?.BusinessPartnerId != businessPartnerId) return false;
+        if (filter.CutoffDate is DateOnly cutoffDate
+            && settlement?.BusinessDate > cutoffDate) return false;
+        return true;
+    }
+
     private sealed class ProjectSummaryAccumulator
     {
         private CentralLedgerMetrics receivable = CentralLedgerMetrics.Zero;
@@ -259,6 +383,8 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
         private decimal directPayableCash;
         private decimal directOutputInvoice;
         private decimal directInputInvoice;
+        private decimal quantityReceivableAdjustment;
+        private decimal quantityInvoiceAdjustment;
 
         public void AddSettlement(LedgerDirection direction, CentralLedgerMetrics metrics)
         {
@@ -279,23 +405,39 @@ public sealed class FinanceLedgerService(ApplicationDbContext db) : IFinanceLedg
             else directInputInvoice += amount;
         }
 
+        public void AddQuantityFallback(decimal receivableAmount, decimal invoiceAmount)
+        {
+            quantityReceivableAdjustment += receivableAmount;
+            quantityInvoiceAdjustment += invoiceAmount;
+        }
+
         public FinanceProjectSummaryDto ToDto(Guid projectId)
         {
-            var collected = receivable.CashAmount + directReceivableCash;
+            var effectiveReceivable = quantityReceivableAdjustment == 0m && quantityInvoiceAdjustment == 0m
+                ? receivable
+                : CentralLedgerCalculator.Calculate(new CentralLedgerCalculationInput(
+                    receivable.GrossSettlementAmount + quantityReceivableAdjustment,
+                    receivable.Deductions,
+                    0m,
+                    receivable.ShouldInvoiceAmount + quantityInvoiceAdjustment,
+                    receivable.InvoicedAmount,
+                    receivable.CashAmount));
+            var collected = effectiveReceivable.CashAmount + directReceivableCash;
             var paid = payable.CashAmount + directPayableCash;
+            var outputInvoice = effectiveReceivable.InvoicedAmount + directOutputInvoice;
             return new FinanceProjectSummaryDto(
                 projectId,
-                receivable.GrossSettlementAmount,
+                effectiveReceivable.GrossSettlementAmount,
                 collected,
-                Math.Max(receivable.UncollectedOrUnpaid - directReceivableCash, 0m),
+                Math.Max(effectiveReceivable.UncollectedOrUnpaid - directReceivableCash, 0m),
                 payable.GrossSettlementAmount,
                 paid,
                 payable.Deductions,
                 Math.Max(payable.UncollectedOrUnpaid - directPayableCash, 0m),
-                receivable.InvoicedAmount + directOutputInvoice,
-                receivable.Uninvoiced,
+                outputInvoice,
+                Math.Max(effectiveReceivable.Uninvoiced - directOutputInvoice, 0m),
                 payable.InvoicedAmount + directInputInvoice,
-                receivable.OverSettlementCash > 0m || collected > receivable.ActualAmount,
+                effectiveReceivable.OverSettlementCash > 0m || collected > effectiveReceivable.ActualAmount,
                 payable.OverSettlementCash > 0m || paid > payable.ActualAmount);
         }
     }

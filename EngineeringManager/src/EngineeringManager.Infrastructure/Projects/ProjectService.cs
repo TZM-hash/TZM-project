@@ -65,7 +65,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         {
             Project = project,
             ContractNumber = BuildProjectContractNumber(projectNumber, 1),
-            Name = name,
+            Name = "主合同",
             ContractType = ContractType.MainContract,
             AllocationMode = ContractAllocationMode.SingleCompany,
             TotalAmount = 0m

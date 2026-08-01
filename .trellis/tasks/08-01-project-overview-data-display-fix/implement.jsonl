@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端分层入口与开发检查清单"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"EF Core 查询、SQLite 测试兼容和数据库修复约束"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端实现质量要求"}
+{"file":".trellis/spec/frontend/index.md","reason":"Razor 页面与样式层入口"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"数据表格换行与项目工作区既有样式约定"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端实现质量要求"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"工程量到财务汇总再到页面的跨层数据流"}
+{"file":".trellis/tasks/08-01-project-overview-data-display-fix/research/root-cause-and-database-audit.md","reason":"已确认根因、全库规模和截图项目验收数据"}

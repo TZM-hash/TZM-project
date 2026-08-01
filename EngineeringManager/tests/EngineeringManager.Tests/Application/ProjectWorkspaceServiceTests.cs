@@ -58,9 +58,9 @@ public sealed class ProjectWorkspaceServiceTests
         workspace!.Overview.AffiliationType.Should().Be(ProjectAffiliationType.ExternalPartyAttachedToUs);
         workspace.ProjectSummary.EstimatedAmount.Should().Be(200m);
         workspace.Contracts.Should().ContainSingle().Which.LineItems.Should().ContainSingle(item => item.EstimatedAmount == 200m);
-        workspace.FinanceSummary.ReceivableAmount.Should().Be(100m);
+        workspace.FinanceSummary.ReceivableAmount.Should().Be(300m);
         workspace.FinanceSummary.CollectedAmount.Should().Be(40m);
-        workspace.FinanceSummary.UncollectedAmount.Should().Be(60m);
+        workspace.FinanceSummary.UncollectedAmount.Should().Be(260m);
         workspace.FinanceSummary.OutputInvoiceAmount.Should().Be(30m);
         workspace.FinanceSummary.PayableAmount.Should().Be(80m);
         workspace.FinanceSummary.PaidAmount.Should().Be(25m);
@@ -72,6 +72,40 @@ public sealed class ProjectWorkspaceServiceTests
         paymentItem.PaymentMethod.Should().Be("电子承兑汇票");
         workspace.Activities.Should().Contain(item => item.Title == "存在未收款");
         workspace.Activities.Should().Contain(item => item.Title == "收款 40.00");
+        workspace.Activities.Should().Contain(item => item.Title == "销项发票 30.00");
+        workspace.Activities.Should().NotContain(item => item.Title.Contains("Output", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WorkspaceTranslatesImportedAndMaintenanceAuditActionsToChinese()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var actions = new[]
+        {
+            (Action: "Create", Label: "新增记录"),
+            (Action: "DataImport", Label: "导入数据"),
+            (Action: "RepairLegacyDataNumbers", Label: "缩短历史编号"),
+            (Action: "RepairLegacyGeneratedData", Label: "修复历史自动数据"),
+            (Action: "SupplementalFinanceImport", Label: "补充导入财务数据"),
+            (Action: "UnexpectedAction", Label: "系统操作")
+        };
+        fixture.Db.AuditLogs.AddRange(actions.Select((item, index) => new AuditLog
+        {
+            Action = item.Action,
+            EntityType = nameof(Project),
+            EntityId = fixture.Project.Id.ToString(),
+            RelatedProjectId = fixture.Project.Id.ToString(),
+            UserId = "system",
+            UserName = "系统维护",
+            OccurredAt = DateTimeOffset.UtcNow.AddMinutes(-index)
+        }));
+        await fixture.Db.SaveChangesAsync();
+
+        var workspace = await fixture.Service.GetAsync(fixture.Project.Id, CancellationToken.None);
+
+        workspace.Should().NotBeNull();
+        workspace!.Activities.Select(item => item.Title).Should().Contain(actions.Select(item => item.Label));
+        workspace.Activities.Select(item => item.Title).Should().NotContain(actions.Select(item => item.Action));
     }
 
     [Fact]

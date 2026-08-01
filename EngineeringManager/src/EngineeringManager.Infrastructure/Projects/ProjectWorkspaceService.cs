@@ -349,7 +349,13 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         var logs = projectLogs.OrderByDescending(item => item.OccurredAt).Take(30);
         items.AddRange(logs.Select(item => new ProjectActivityItemDto(item.OccurredAt, "修改记录", ActionLabel(item.Action), item.Reason, item.UserName, "normal")));
         items.AddRange(collections.Take(8).Select(item => new ProjectActivityItemDto(ToTimestamp(item.CollectionDate), "收款记录", $"收款 {item.Amount:N2}", item.Notes, null, "success")));
-        items.AddRange(invoices.Take(8).Select(item => new ProjectActivityItemDto(ToTimestamp(item.InvoiceDate), "发票记录", $"{item.Direction} {item.GrossAmount:N2}", item.InvoiceNumber, null, "normal")));
+        items.AddRange(invoices.Take(8).Select(item => new ProjectActivityItemDto(
+            ToTimestamp(item.InvoiceDate),
+            "发票记录",
+            $"{(item.Direction == InvoiceDirection.Output ? "销项发票" : "进项发票")} {item.GrossAmount:N2}",
+            item.InvoiceNumber,
+            null,
+            "normal")));
         items.AddRange(payments.Take(8).Select(item => new ProjectActivityItemDto(ToTimestamp(item.PaymentDate), "付款记录", $"付款 {item.Amount:N2}", item.Notes, null, "normal")));
         return items.OrderByDescending(item => item.OccurredAt).Take(35).ToArray();
     }
@@ -539,5 +545,19 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     private static string Required(string value, string parameter) => !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new ArgumentException("值不能为空。", parameter);
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static string ActionLabel(string action) => action switch { "UpdateProject" => "编辑项目资料", "CreateReceivable" => "新增应收", "RecordCollection" => "登记收款", "CreatePayable" => "新增应付", "RecordPayment" => "登记付款", "CreateInvoice" => "登记发票", _ => action };
+    private static string ActionLabel(string action) => action switch
+    {
+        "Create" => "新增记录",
+        "DataImport" => "导入数据",
+        "RepairLegacyDataNumbers" => "缩短历史编号",
+        "RepairLegacyGeneratedData" => "修复历史自动数据",
+        "SupplementalFinanceImport" => "补充导入财务数据",
+        "UpdateProject" => "编辑项目资料",
+        "CreateReceivable" => "新增应收",
+        "RecordCollection" => "登记收款",
+        "CreatePayable" => "新增应付",
+        "RecordPayment" => "登记付款",
+        "CreateInvoice" => "登记发票",
+        _ => "系统操作"
+    };
 }

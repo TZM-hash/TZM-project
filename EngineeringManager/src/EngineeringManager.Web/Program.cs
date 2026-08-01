@@ -49,21 +49,45 @@ using EngineeringManager.Infrastructure.Settings;
 using EngineeringManager.Application.DataViews;
 using EngineeringManager.Infrastructure.DataViews;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text;
+using System.Text.Json;
 
 namespace EngineeringManager.Web;
 
 public sealed class Program
 {
+    private static readonly JsonSerializerOptions MaintenanceReportJsonOptions = new() { WriteIndented = true };
+
     public static async Task Main(string[] args)
     {
+        var maintenanceMode = MaintenanceModeParser.Parse(args);
         var builder = WebApplication.CreateBuilder(args);
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
 
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString));
+
+        var isTestDataProtectionEnabled = string.Equals(
+                Environment.GetEnvironmentVariable("ENGINEERING_MANAGER_TEST_DATAPROTECTION"),
+                "1",
+                StringComparison.Ordinal);
+        if (isTestDataProtectionEnabled)
+        {
+            var testKeyPath = Path.Combine(
+                Path.GetTempPath(),
+                $"EngineeringManager.Tests-{Environment.ProcessId}",
+                "DataProtection");
+            Directory.CreateDirectory(testKeyPath);
+            builder.Services.AddDataProtection()
+                .PersistKeysToFileSystem(new DirectoryInfo(testKeyPath))
+                .SetApplicationName("EngineeringManager.Tests");
+            builder.Logging.ClearProviders();
+            builder.Logging.AddConsole();
+        }
 
         builder.Services
             .AddDefaultIdentity<ApplicationUser>(options =>
@@ -96,6 +120,7 @@ public sealed class Program
         builder.Services.AddScoped<IFinanceBusinessYearService, FinanceBusinessYearService>();
         builder.Services.AddScoped<IFinanceReconciliationService, FinanceReconciliationService>();
         builder.Services.AddScoped<LegacyFinanceMigrationService>();
+        builder.Services.AddScoped<LegacyDataRepairService>();
         builder.Services.AddScoped<IEmployeeService, EmployeeService>();
         builder.Services.AddScoped<IEmployeeCertificateService, EmployeeCertificateService>();
         builder.Services.AddScoped<ICompanyCertificateService, CompanyCertificateService>();
@@ -139,7 +164,7 @@ public sealed class Program
         Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data", "backups"));
         Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data", "logs"));
 
-        if (args.Contains("--migrate-central-ledger", StringComparer.OrdinalIgnoreCase))
+        if (maintenanceMode == MaintenanceMode.CentralLedgerMigration)
         {
             await using var scope = app.Services.CreateAsyncScope();
             var reportPath = app.Configuration["CentralLedgerMigration:PreflightReportPath"]
@@ -150,6 +175,38 @@ public sealed class Program
             Console.WriteLine($"CENTRAL_LEDGER_MIGRATION_ISSUES={result.Exceptions.Count}");
             Console.WriteLine($"CENTRAL_LEDGER_MIGRATION_CONFLICTS={result.QuantityConflicts.Count}");
             Environment.ExitCode = result.CanApply ? 0 : 2;
+            return;
+        }
+
+        if (maintenanceMode == MaintenanceMode.LegacyProjectDataRepair)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var suffix = $"{DateTime.Now:yyyyMMddHHmmss}_{Guid.NewGuid():N}";
+            var backupRoot = Path.Combine(app.Environment.ContentRootPath, "App_Data", "backups");
+            var logRoot = Path.Combine(app.Environment.ContentRootPath, "App_Data", "logs");
+            Directory.CreateDirectory(backupRoot);
+            Directory.CreateDirectory(logRoot);
+            var backupPath = Path.GetFullPath(Path.Combine(backupRoot, $"EngineeringManager_LegacyRepair_{suffix}.bak"));
+            var reportPath = Path.GetFullPath(Path.Combine(logRoot, $"legacy-data-repair-{suffix}.json"));
+            EnsureWritableReportPath(reportPath);
+
+            await scope.ServiceProvider.GetRequiredService<IDatabaseBackupExecutor>()
+                .ExecuteAsync(backupPath, CancellationToken.None);
+            var result = await scope.ServiceProvider.GetRequiredService<LegacyDataRepairService>()
+                .RepairAsync(CancellationToken.None);
+            var report = JsonSerializer.Serialize(new
+            {
+                CompletedAt = DateTimeOffset.Now,
+                BackupPath = backupPath,
+                Result = result
+            }, MaintenanceReportJsonOptions);
+            await File.WriteAllTextAsync(reportPath, report, Encoding.UTF8, CancellationToken.None);
+
+            Console.WriteLine($"LEGACY_DATA_REPAIR_BACKUP={backupPath}");
+            Console.WriteLine($"LEGACY_DATA_REPAIR_REPORT={reportPath}");
+            Console.WriteLine($"LEGACY_DATA_REPAIR_CHANGES={result.TotalChanges}");
+            foreach (var count in result.Counts.OrderBy(item => item.Key, StringComparer.Ordinal))
+                Console.WriteLine($"LEGACY_DATA_REPAIR_{count.Key.ToUpperInvariant()}={count.Value}");
             return;
         }
 
@@ -173,7 +230,10 @@ public sealed class Program
             app.UseHsts();
         }
 
-        app.UseHttpsRedirection();
+        if (!app.Environment.IsEnvironment("Testing"))
+        {
+            app.UseHttpsRedirection();
+        }
         app.UseRouting();
         app.UseAuthentication();
         app.UseAuthorization();
@@ -191,5 +251,23 @@ public sealed class Program
             .WithStaticAssets();
 
         await app.RunAsync();
+    }
+
+    private static void EnsureWritableReportPath(string reportPath)
+    {
+        var directory = Path.GetDirectoryName(reportPath)
+            ?? throw new InvalidOperationException("维护报告目录无效。");
+        Directory.CreateDirectory(directory);
+        var probePath = Path.Combine(directory, $".{Path.GetFileName(reportPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (File.Open(probePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+            }
+        }
+        finally
+        {
+            if (File.Exists(probePath)) File.Delete(probePath);
+        }
     }
 }

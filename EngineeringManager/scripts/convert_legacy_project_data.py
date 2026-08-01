@@ -95,9 +95,8 @@ def simple_tax_rate(value: object) -> Decimal | None:
     return Decimal(match.group(1)) / Decimal("100") if match else None
 
 
-def project_number(source_id: object) -> str:
-    value = clean_text(source_id)
-    return f"OLD-{value}" if value else ""
+def project_number(sequence: int) -> str:
+    return f"XM{sequence:04d}"
 
 
 def source_rows(path: Path) -> tuple[list[str], list[dict[str, object]]]:
@@ -204,10 +203,17 @@ def build_project_rows(
     prepared: list[PreparedRow] = []
     name_to_number: dict[str, str] = {}
     name_to_project: dict[str, dict[str, object]] = {}
-    for row in rows:
+    ordered_rows = sorted(
+        rows,
+        key=lambda row: (
+            clean_text(row.get("数据唯一编号")),
+            normalize_project_name(row.get("工程名称")),
+        ),
+    )
+    for sequence, row in enumerate(ordered_rows, start=1):
         name = normalize_project_name(row.get("工程名称"))
-        number = project_number(row.get("数据唯一编号"))
-        if not name or not number:
+        number = project_number(sequence)
+        if not name or not clean_text(row.get("数据唯一编号")):
             raise ValueError("项目统计表中的项目名称和数据唯一编号不能为空。")
         if name in name_to_number:
             raise ValueError(f"项目统计表中存在重复项目名称：{name}")
@@ -294,12 +300,13 @@ def build_quantity_rows(
     exceptions: list[PreparedRow] = []
     for row_number, row in enumerate(rows, start=2):
         number, name, matched, project_issue = resolve_project(row, name_to_number)
+        quantity_name = clean_text(row.get("名称"))
         quantity = parse_decimal(row.get("工程量"))
         unit_price = parse_decimal(row.get("单价"))
         amount = parse_decimal(row.get("小计"))
         difference = amount - quantity * unit_price
         values: list[object] = [
-            number, name, clean_text(row.get("名称")), numeric_value(row.get("工程量")), clean_text(row.get("单位")),
+            number, name, quantity_name or f"待确认工程量{row_number - 1}", numeric_value(row.get("工程量")), clean_text(row.get("单位")),
             numeric_value(row.get("单价")), numeric_value(row.get("小计")), difference,
             clean_text(row.get("是否不开发票")), clean_text(row.get("附件")), row.get("备注"),
             clean_text(row.get("数据唯一编号")), "", "", *raw_values(headers, row),
@@ -312,6 +319,9 @@ def build_quantity_rows(
             add_mark(marks, target_headers, "项目名称", "review", project_issue)
             prompts.append("补项目")
             exceptions.append(exception_row("工程量导入", row_number, row, amount, project_issue))
+        if not quantity_name:
+            add_mark(marks, target_headers, "工程量名称", "review", "源表工程量名称为空，已使用简短待确认名称，请核实。")
+            prompts.append("核实工程量名称")
         if abs(difference) > Decimal("0.01"):
             add_mark(marks, target_headers, "金额校验差额", "review", "小计不等于工程量乘单价，请确认原始金额。")
             prompts.append("核对金额")
@@ -562,7 +572,7 @@ def build_intro_sheet(workbook: Workbook, summary_values: dict[str, int]) -> Non
     worksheet.append(["项目", "说明"])
     rows = [
         ("转换范围", "已排除用户删除的班组付款表；本工作簿来自项目统计、工程量、收款、开票、付款共 5 个源文件。"),
-        ("项目合并", f"以项目统计表 {summary_values['projects']} 个唯一项目名称为基准；项目编号为 OLD-加原数据唯一编号。"),
+        ("项目合并", f"以项目统计表 {summary_values['projects']} 个唯一项目名称为基准；项目编号按稳定顺序生成 XM0001 起的短编号，原唯一编号保留在来源字段。"),
         ("明细行数", f"工程量 {summary_values['quantities']} 行，收款 {summary_values['collections']} 行，开票 {summary_values['invoices']} 行，付款 {summary_values['payments']} 行。"),
         ("待补项目", f"共有 {summary_values['unmatched']} 行缺少或未匹配项目名称，已集中到“待补项目”工作表，同时保留在原导入表。"),
         ("黄色单元格", "目标系统必填或业务必要字段在源表中缺失，需要手工补充。"),

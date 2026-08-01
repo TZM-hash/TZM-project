@@ -35,9 +35,9 @@ public sealed class FinanceSummaryTests
         projects.Should().ContainSingle(item =>
             item.ProjectId == fixture.Project.Id &&
             item.ProjectNumber == fixture.Project.ProjectNumber &&
-            item.Summary.ReceivableAmount == 50m &&
+            item.Summary.ReceivableAmount == 150m &&
             item.Summary.CollectedAmount == 20m);
-        overview.Total.ReceivableAmount.Should().Be(50m);
+        overview.Total.ReceivableAmount.Should().Be(150m);
         overview.Total.CollectedAmount.Should().Be(20m);
         overview.Projects.Should().HaveCount(1);
         options.Projects.Should().ContainSingle(item => item.Id == fixture.Project.Id);
@@ -85,8 +85,88 @@ public sealed class FinanceSummaryTests
 
         var item = (await fixture.Service.ListProjectSummariesAsync(CancellationToken.None)).Single();
 
+        item.Summary.ReceivableAmount.Should().Be(100m);
         item.Summary.CollectedAmount.Should().Be(35m);
+        item.Summary.UncollectedAmount.Should().Be(65m);
         item.Summary.OutputInvoiceAmount.Should().Be(45m);
+        item.Summary.UninvoicedAmount.Should().Be(55m);
+    }
+
+    [Fact]
+    public async Task ProjectOverviewFallsBackToQuantityLinesWithoutReceivableSettlements()
+    {
+        await using var fixture = await FinanceSummaryFixture.CreateAsync();
+
+        var item = (await fixture.Service.ListProjectSummariesAsync(CancellationToken.None)).Single();
+
+        item.Summary.ReceivableAmount.Should().Be(100m);
+        item.Summary.CollectedAmount.Should().Be(0m);
+        item.Summary.UncollectedAmount.Should().Be(100m);
+        item.Summary.OutputInvoiceAmount.Should().Be(0m);
+        item.Summary.UninvoicedAmount.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task ProjectOverviewIncludesUnpostedQuantityAlongsideContractManualReceivable()
+    {
+        await using var fixture = await FinanceSummaryFixture.CreateAsync();
+        await fixture.Service.AddReceivableAsync(
+            new CreateReceivableRequest(
+                fixture.Project.Id,
+                fixture.Contract.Id,
+                fixture.LegalEntity.Id,
+                fixture.Partner.Id,
+                ReceivableSourceType.Manual,
+                new DateOnly(2026, 7, 16),
+                null,
+                50m,
+                "合同级手工应收"),
+            CancellationToken.None);
+
+        var item = (await fixture.Service.ListProjectSummariesAsync(CancellationToken.None)).Single();
+
+        item.Summary.ReceivableAmount.Should().Be(150m);
+        item.Summary.UncollectedAmount.Should().Be(150m);
+        item.Summary.UninvoicedAmount.Should().Be(150m);
+    }
+
+    [Fact]
+    public async Task ProjectOverviewDoesNotDoubleCountQuantityLinesWithActiveReceivableSettlements()
+    {
+        await using var fixture = await FinanceSummaryFixture.CreateAsync();
+        fixture.Db.FinanceSettlements.Add(QuantityReceivable(
+            fixture,
+            fixture.FirstLine,
+            new DateOnly(2026, 7, 16),
+            60m,
+            "第一笔已入账应收"));
+        await fixture.Db.SaveChangesAsync();
+
+        var item = (await fixture.Service.ListProjectSummariesAsync(CancellationToken.None)).Single();
+
+        item.Summary.ReceivableAmount.Should().Be(100m);
+        item.Summary.UncollectedAmount.Should().Be(100m);
+        item.Summary.UninvoicedAmount.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task ProjectOverviewNetsNegativeUnpostedQuantityLinesAgainstPostedReceivables()
+    {
+        await using var fixture = await FinanceSummaryFixture.CreateAsync();
+        fixture.SecondLine.UnitPrice = -10m;
+        fixture.Db.FinanceSettlements.Add(QuantityReceivable(
+            fixture,
+            fixture.FirstLine,
+            new DateOnly(2026, 7, 16),
+            60m,
+            "第一笔已入账应收"));
+        await fixture.Db.SaveChangesAsync();
+
+        var item = (await fixture.Service.ListProjectSummariesAsync(CancellationToken.None)).Single();
+
+        item.Summary.ReceivableAmount.Should().Be(50m);
+        item.Summary.UncollectedAmount.Should().Be(50m);
+        item.Summary.UninvoicedAmount.Should().Be(50m);
     }
 
     [Fact]
@@ -123,6 +203,121 @@ public sealed class FinanceSummaryTests
         summary.ReceivableAmount.Should().Be(100m);
         summary.OutputInvoiceAmount.Should().Be(70m);
         summary.UninvoicedAmount.Should().Be(30m);
+    }
+
+    [Fact]
+    public async Task ContractSummaryOnlyIncludesCashAndInvoiceAllocationsForTargetContract()
+    {
+        await using var fixture = await FinanceSummaryFixture.CreateAsync();
+        var otherContract = new Contract
+        {
+            ProjectId = fixture.Project.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            ContractNumber = "FIN-SUM-C2",
+            Name = "其他合同",
+            TotalAmount = 40m
+        };
+        await fixture.Db.Contracts.AddAsync(otherContract);
+        await fixture.Db.SaveChangesAsync();
+
+        var firstSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Provisional,
+            SourceType = LedgerSourceType.CentralLedger,
+            ProjectId = fixture.Project.Id,
+            ContractId = fixture.Contract.Id,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            BusinessDate = new DateOnly(2026, 7, 16),
+            OriginalAmount = 100m,
+            OriginalInvoiceAmount = 100m
+        };
+        var secondSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Provisional,
+            SourceType = LedgerSourceType.CentralLedger,
+            ProjectId = fixture.Project.Id,
+            ContractId = otherContract.Id,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            BusinessDate = new DateOnly(2026, 7, 16),
+            OriginalAmount = 100m,
+            OriginalInvoiceAmount = 100m
+        };
+        var cash = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            CashType = LedgerCashType.Collection,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            BusinessDate = new DateOnly(2026, 7, 17),
+            Amount = 70m,
+            PaymentMethod = "银行转账"
+        };
+        cash.Allocations.Add(new FinanceCashAllocation
+        {
+            Settlement = firstSettlement,
+            ProjectId = fixture.Project.Id,
+            ContractId = fixture.Contract.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            Amount = 30m,
+            AllocationOrder = 1
+        });
+        cash.Allocations.Add(new FinanceCashAllocation
+        {
+            Settlement = secondSettlement,
+            ProjectId = fixture.Project.Id,
+            ContractId = otherContract.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            Amount = 40m,
+            AllocationOrder = 2
+        });
+        var invoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            InvoiceNumber = "OUT-MULTI-CONTRACT",
+            InvoiceDate = new DateOnly(2026, 7, 18),
+            Amount = 70m,
+            NetAmount = 67.96m,
+            TaxAmount = 2.04m,
+            TaxRate = 0.03m
+        };
+        invoice.Allocations.Add(new FinanceInvoiceAllocation
+        {
+            Settlement = firstSettlement,
+            ProjectId = fixture.Project.Id,
+            ContractId = fixture.Contract.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            Amount = 30m,
+            AllocationOrder = 1
+        });
+        invoice.Allocations.Add(new FinanceInvoiceAllocation
+        {
+            Settlement = secondSettlement,
+            ProjectId = fixture.Project.Id,
+            ContractId = otherContract.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            Amount = 40m,
+            AllocationOrder = 2
+        });
+        fixture.Db.AddRange(firstSettlement, secondSettlement, cash, invoice);
+        await fixture.Db.SaveChangesAsync();
+
+        var summary = await fixture.Service.GetSummaryAsync(
+            new FinanceSummaryFilter(fixture.Project.Id, fixture.Contract.Id),
+            CancellationToken.None);
+
+        summary.CollectedAmount.Should().Be(30m);
+        summary.OutputInvoiceAmount.Should().Be(30m);
     }
 
     private static FinanceSettlement QuantityReceivable(FinanceSummaryFixture fixture, ContractLineItem line, DateOnly date, decimal amount, string notes) => new()

@@ -227,7 +227,7 @@ public sealed class ProjectCollectionEntryPageTests
         secondRow.IndexOf("PaymentEdit.EntryDate", StringComparison.Ordinal).Should().BeLessThan(secondRow.IndexOf("PaymentEdit.DueDate", StringComparison.Ordinal));
         model.Should().Contain("public string? PaymentMethod { get; set; } = \"银行转账\"");
         styles.Should().Contain(".payment-entry-row--2 { grid-template-columns: repeat(5, minmax(0, 1fr)); }")
-            .And.Contain(".payment-inline-table { min-width: 0; }")
+            .And.Contain(".table-wrap > table.payment-inline-table { min-width: 78rem; }")
             .And.Contain(".payable-inline-table th:nth-child(1), .payable-inline-table td:nth-child(1) { width: 9%; }")
             .And.Contain(".payment-record-inline-table th:nth-child(1), .payment-record-inline-table td:nth-child(1) { width: 8%; }");
     }

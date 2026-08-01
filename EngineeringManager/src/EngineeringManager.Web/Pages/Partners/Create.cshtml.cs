@@ -1,6 +1,8 @@
 using EngineeringManager.Application.Partners;
+using EngineeringManager.Application.Common;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Security;
+using EngineeringManager.Web.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -30,14 +32,24 @@ public sealed class CreateModel(IBusinessPartnerService partnerService) : PageMo
 
     public async Task<IActionResult> OnGetAsync(Guid? id, Guid? copyFrom, CancellationToken token)
     {
+        var suggestedPartnerNumber = string.Empty;
+        if (!id.HasValue || copyFrom.HasValue)
+        {
+            var partners = await partnerService.ListForManagementAsync(null, null, token);
+            suggestedPartnerNumber = ShortBusinessNumber.Next(partners.Select(item => item.PartnerNumber), "HZ");
+        }
         var sourceId = id ?? copyFrom;
-        if (!sourceId.HasValue) return Page();
+        if (!sourceId.HasValue)
+        {
+            PartnerNumber = suggestedPartnerNumber;
+            return Page();
+        }
         var partner = await partnerService.GetAsync(sourceId.Value, token);
         if (partner is null) return NotFound();
         Id = partner.Id; PartnerNumber = partner.PartnerNumber; Name = partner.Name; ShortName = partner.ShortName; UnifiedSocialCreditCode = partner.UnifiedSocialCreditCode; Notes = partner.Notes; IsActive = partner.IsActive; ConcurrencyStamp = partner.ConcurrencyStamp;
         var role = partner.Roles.Count > 0 ? partner.Roles[0] : null; if (role is not null) { RoleType = role.RoleType; TradeCategory = role.TradeCategory; }
         var contact = partner.Contacts.FirstOrDefault(item => item.IsPrimary) ?? (partner.Contacts.Count > 0 ? partner.Contacts[0] : null); if (contact is not null) { ContactName = contact.Name; ContactPhone = contact.Phone; ContactNotes = contact.Notes; }
-        if (copyFrom.HasValue) { Id = null; PartnerNumber += "-COPY"; Name += "（复制）"; ShortName += "副本"; UnifiedSocialCreditCode = null; ContactName = null; ContactPhone = null; ConcurrencyStamp = Guid.Empty; Reason = "复制合作单位"; }
+        if (copyFrom.HasValue) { Id = null; PartnerNumber = suggestedPartnerNumber; Name = ShortDisplayName.Copy(Name, 200); ShortName = ShortDisplayName.Copy(ShortName, 100); UnifiedSocialCreditCode = null; ContactName = null; ContactPhone = null; ConcurrencyStamp = Guid.Empty; Reason = "复制合作单位"; }
         return Page();
     }
 

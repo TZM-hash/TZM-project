@@ -2,6 +2,7 @@ using EngineeringManager.Application.EmployeeAnnualLedger;
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Security;
+using EngineeringManager.Web.Presentation;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +30,7 @@ public sealed class IndexModel(
     public int TemporaryCount { get; private set; }
     public int ActiveCount { get; private set; }
     public string? ActiveDialog { get; private set; }
+    public string NextEmployeeNumber { get; private set; } = "YG0001";
     public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
     public bool CanManage => PageContext?.HttpContext?.User?.IsInRole(SystemRoles.SystemAdministrator) == true
         || PageContext?.HttpContext?.User?.IsInRole(SystemRoles.ApplicationAdministrator) == true;
@@ -101,7 +103,11 @@ public sealed class IndexModel(
     {
         PageSize = PageSize is 10 or 20 or 50 or 100 ? PageSize : 20;
         PageNumber = Math.Max(1, PageNumber);
-        var all = await employeeService.ListAsync(Search, CanManage, cancellationToken);
+        var allEmployees = await employeeService.ListAsync(null, CanManage, cancellationToken);
+        NextEmployeeNumber = ShortBusinessNumber.Next(allEmployees.Select(item => item.EmployeeNumber), "YG");
+        var all = string.IsNullOrWhiteSpace(Search)
+            ? allEmployees
+            : await employeeService.ListAsync(Search, CanManage, cancellationToken);
         all = EmployeeType.HasValue
             ? all.Where(employee => employee.EmployeeType == EmployeeType.Value).ToArray()
             : all;

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EngineeringManager.Domain.Certificates;
 using EngineeringManager.Application.Equipment;
+using EngineeringManager.Application.Common;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Infrastructure.Certificates;
 using EngineeringManager.Infrastructure.Data;
@@ -165,7 +166,7 @@ public sealed class EquipmentService(ApplicationDbContext db, IFileStore? fileSt
     {
         var source = await EquipmentDetailsQuery(actor).AsNoTracking().SingleOrDefaultAsync(item => item.Id == sourceId, token)
             ?? throw new KeyNotFoundException("设备不存在或无权访问。");
-        return new EquipmentDetailsDto(Guid.Empty, string.Empty, $"{source.Name} - 副本", source.Model, source.Category,
+        return new EquipmentDetailsDto(Guid.Empty, string.Empty, ShortDisplayName.Copy(source.Name, 200), source.Model, source.Category,
             source.OwnershipType, EquipmentStatus.Idle, source.OwnerLegalEntityId, source.LessorBusinessPartnerId,
             source.InternalDailyRate, Guid.Empty, source.Notes, source.ManagingLegalEntityId,
             source.ManagingLegalEntity?.Name, source.OwnerLegalEntity?.Name, source.LessorBusinessPartner?.Name,

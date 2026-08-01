@@ -7,6 +7,7 @@ if (page) {
     const financeDialog = page.querySelector("[data-crew-finance-dialog]");
     const editorForm = editorDialog?.querySelector("[data-crew-editor-form]");
     const statusSection = editorDialog?.querySelector("[data-crew-status-section]");
+    const nextPartnerNumber = page.dataset.nextPartnerNumber || "";
     const rosterBody = rosterDialog?.querySelector("[data-crew-roster-table-body]");
     let rosterRequestVersion = 0;
     const money = new Intl.NumberFormat("zh-CN", {
@@ -58,8 +59,8 @@ if (page) {
         if (statusSection) statusSection.hidden = !editing;
         setField("Id", editing ? payload.id : "");
         setField("ConcurrencyStamp", editing ? payload.concurrencyStamp : "00000000-0000-0000-0000-000000000000");
-        setField("PartnerNumber", copy ? `${payload.partnerNumber}-COPY` : payload.partnerNumber);
-        setField("Name", copy ? `${payload.name}（复制）` : payload.name);
+        setField("PartnerNumber", editing ? payload.partnerNumber : nextPartnerNumber);
+        setField("Name", copy ? `${payload.name}（副本）` : payload.name);
         setField("ShortName", copy ? `${payload.shortName}副本` : payload.shortName);
         setField("UnifiedSocialCreditCode", copy ? "" : payload.unifiedSocialCreditCode);
         setField("TradeCategory", payload.tradeCategory);

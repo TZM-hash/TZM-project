@@ -59,7 +59,7 @@
 }
 @section Scripts { <script type="module" src="~/js/pages/crew-workspace.js" asp-append-version="true"></script> }
 
-<div class="crew-workspace-page" data-crew-workspace data-active-dialog="@Model.ActiveDialog">
+<div class="crew-workspace-page" data-crew-workspace data-active-dialog="@Model.ActiveDialog" data-next-partner-number="@Model.NextPartnerNumber">
     <section class="page-heading compact-page-heading crew-workspace-heading">
         <div><p class="eyebrow">合作单位专属视图</p><h1>施工班组</h1><p class="page-lead">集中维护班组角色、主要联系人、项目参与及财务状态</p></div>
         @if (Model.CanManage) { <button class="button button--primary" type="button" data-crew-dialog-open="create">新增施工班组</button> }

@@ -1,6 +1,8 @@
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Application.Common;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Security;
+using EngineeringManager.Web.Presentation;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -35,14 +37,24 @@ public sealed class CreateModel(IEmployeeService employeeService) : PageModel
 
     public async Task<IActionResult> OnGetAsync(Guid? id, Guid? copyFrom, CancellationToken token)
     {
+        var suggestedEmployeeNumber = string.Empty;
+        if (!id.HasValue || copyFrom.HasValue)
+        {
+            var employees = await employeeService.ListAsync(null, true, token);
+            suggestedEmployeeNumber = ShortBusinessNumber.Next(employees.Select(item => item.EmployeeNumber), "YG");
+        }
         var sourceId = id ?? copyFrom;
-        if (!sourceId.HasValue) return Page();
+        if (!sourceId.HasValue)
+        {
+            EmployeeNumber = suggestedEmployeeNumber;
+            return Page();
+        }
         var employee = await employeeService.GetAsync(sourceId.Value, token);
         if (employee is null) return NotFound();
         Populate(employee);
         if (copyFrom.HasValue)
         {
-            Id = null; EmployeeNumber += "-COPY"; Name += "（复制）"; Phone = null; IdentityNumber = null; BankAccountNumber = null; BankName = null; HireDate = null; LeaveDate = null; ConcurrencyStamp = Guid.Empty; Reason = "复制员工档案";
+            Id = null; EmployeeNumber = suggestedEmployeeNumber; Name = ShortDisplayName.Copy(Name, 100); Phone = null; IdentityNumber = null; BankAccountNumber = null; BankName = null; HireDate = null; LeaveDate = null; ConcurrencyStamp = Guid.Empty; Reason = "复制员工档案";
         }
         return Page();
     }

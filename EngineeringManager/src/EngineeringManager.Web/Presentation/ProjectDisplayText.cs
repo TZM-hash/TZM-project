@@ -4,6 +4,7 @@ using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.StageResults;
+using System.Globalization;
 
 namespace EngineeringManager.Web.Presentation;
 
@@ -80,6 +81,19 @@ public static class ProjectDisplayText
         null or "" => "-",
         _ => value
     };
+
+    public static string DateLabel(DateOnly value) => value == DateOnly.MinValue
+        ? "日期待确认"
+        : value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    public static string InvoiceTypeLabel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "-";
+        if (Enum.TryParse<ProjectInvoiceType>(value, true, out var invoiceType)) return invoiceType.ToChinese();
+        return Enum.TryParse<InvoiceDirection>(value, true, out var direction)
+            ? direction.ToChinese()
+            : value.Trim();
+    }
 
     public static string ToChinese(this ProjectStage value) => value switch
     {

@@ -65,6 +65,71 @@ public sealed class ChineseDisplayTests
         equipmentUsage.Should().NotContain("GetEnumSelectList").And.Contain("日租").And.Contain("阶段包干");
     }
 
+    [Fact]
+    public void ProjectDisplayFormatsUnknownDatesAndImportedPaymentMethodsInChinese()
+    {
+        ProjectDisplayText.DateLabel(DateOnly.MinValue).Should().Be("日期待确认");
+        ProjectDisplayText.DateLabel(new DateOnly(2026, 8, 1)).Should().Be("2026-08-01");
+        ProjectDisplayText.PaymentMethodLabel(nameof(PaymentMethod.BankTransfer)).Should().Be("银行转账");
+        ProjectDisplayText.InvoiceTypeLabel(nameof(InvoiceDirection.Output)).Should().Be("销项发票");
+        ProjectDisplayText.InvoiceTypeLabel(nameof(InvoiceDirection.Input)).Should().Be("进项发票");
+    }
+
+    [Fact]
+    public void ProjectDetailsShowCompleteFinanceAmountsAndContainLongTableValues()
+    {
+        var root = RepositoryRoot();
+        var details = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml"));
+        var pagesCss = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "css", "pages.css"));
+
+        details.Should().Contain("<span>应收金额</span>")
+            .And.Contain("<span>未开票</span>")
+            .And.Contain("ProjectDisplayText.DateLabel(row.CollectionDate)")
+            .And.Contain("ProjectDisplayText.DateLabel(row.InvoiceDate)")
+            .And.Contain("ProjectDisplayText.PaymentMethodLabel(row.PaymentMethod)")
+            .And.Contain("row.CollectionDate == DateOnly.MinValue")
+            .And.Contain("row.InvoiceDate == DateOnly.MinValue")
+            .And.Contain("row.EntryDate == DateOnly.MinValue")
+            .And.Contain("row.PaymentDate == DateOnly.MinValue")
+            .And.Contain("project-detail-inline-table");
+        pagesCss.Should().Contain(".table-wrap > table.project-detail-inline-table th, .table-wrap > table.project-detail-inline-table td")
+            .And.Contain("white-space: normal")
+            .And.Contain(".table-wrap > table.quantity-inline-table { min-width: 74rem; }")
+            .And.Contain(".table-wrap > table.collection-inline-table { min-width: 78rem; }")
+            .And.Contain(".table-wrap > table.invoice-inline-table { min-width: 86rem; }")
+            .And.Contain(".table-wrap > table.payment-inline-table { min-width: 78rem; }")
+            .And.Contain(".table-wrap > table.construction-inline-table { min-width: 90rem; }")
+            .And.Contain(".table-wrap > table.invoice-inline-table :is(th, td):nth-child(1)")
+            .And.Contain(".table-wrap > table.payment-record-inline-table :is(th, td):nth-child(1)");
+    }
+
+    [Fact]
+    public void CopyEntryPointsUseStandardShortNumbersAndCompactChineseNames()
+    {
+        var root = RepositoryRoot();
+        var projectEdit = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Edit.cshtml.cs"));
+        var sources = new[]
+        {
+            Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Employees", "Create.cshtml.cs"),
+            Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Partners", "Create.cshtml.cs"),
+            Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "pages", "employee-workspace.js"),
+            Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "pages", "partner-workspace.js"),
+            Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "pages", "crew-workspace.js"),
+            Path.Combine(root, "src", "EngineeringManager.Infrastructure", "Companies", "CompanyManagementService.cs"),
+            Path.Combine(root, "src", "EngineeringManager.Infrastructure", "Equipment", "EquipmentService.cs"),
+            Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Equipment", "EquipmentEditorInput.cs"),
+            Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "pages", "company-workspace.js"),
+            Path.Combine(root, "src", "EngineeringManager.Web", "wwwroot", "js", "pages", "equipment-workspace.js")
+        }.Select(File.ReadAllText).Prepend(projectEdit).ToArray();
+
+        sources.Should().OnlyContain(source => !source.Contains("-COPY", StringComparison.Ordinal));
+        sources.Should().OnlyContain(source => !source.Contains(" - 副本", StringComparison.Ordinal));
+        sources.Should().Contain(source => source.Contains("ShortBusinessNumber.Next", StringComparison.Ordinal));
+        sources.Should().Contain(source => source.Contains("nextEmployeeNumber", StringComparison.Ordinal));
+        sources.Should().Contain(source => source.Contains("nextPartnerNumber", StringComparison.Ordinal));
+        projectEdit.Should().Contain("db.Projects.AsNoTracking()");
+    }
+
     private static string RepositoryRoot() => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     private static string InvokeDisplay(Type enumType, object value)

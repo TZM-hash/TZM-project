@@ -138,7 +138,7 @@ public sealed class ProjectServiceTests
 
         var contract = await fixture.Db.Contracts.SingleAsync(item => item.ProjectId == project.Id);
         contract.ContractNumber.Should().Be("P-DEFAULT-CONTRACT-C01");
-        contract.Name.Should().Be("默认主合同项目");
+        contract.Name.Should().Be("主合同");
         contract.ContractType.Should().Be(ContractType.MainContract);
         contract.TotalAmount.Should().Be(0m);
     }

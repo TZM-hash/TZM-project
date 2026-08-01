@@ -88,7 +88,7 @@ if (page) {
         setField("Id", mode === "edit" ? payload.id : "");
         setField("ConcurrencyStamp", mode === "edit" ? payload.concurrencyStamp : "");
         setField("EquipmentNumber", copy ? "" : payload.equipmentNumber);
-        setField("Name", copy ? `${payload.name || ""} - 副本` : payload.name);
+        setField("Name", copy ? `${payload.name || ""}（副本）` : payload.name);
         setField("Model", payload.model);
         setField("Category", payload.category);
         setField("OwnershipType", payload.ownershipType || "SelfOwned");

@@ -1,8 +1,11 @@
 using System.Security.Claims;
 using System.Globalization;
 using EngineeringManager.Application.Projects;
+using EngineeringManager.Application.Common;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Security;
+using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Web.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -11,7 +14,10 @@ using Microsoft.EntityFrameworkCore;
 namespace EngineeringManager.Web.Pages.Projects;
 
 [Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.ProjectManager)]
-public sealed class EditModel(IProjectService projectService, IProjectWorkspaceService workspaceService) : PageModel
+public sealed class EditModel(
+    IProjectService projectService,
+    IProjectWorkspaceService workspaceService,
+    ApplicationDbContext? db = null) : PageModel
 {
     public ProjectEditOptionsDto Options { get; private set; } = new([], [], [], []);
     public bool IsEditing => Id.HasValue;
@@ -40,16 +46,28 @@ public sealed class EditModel(IProjectService projectService, IProjectWorkspaceS
     public async Task<IActionResult> OnGetAsync(Guid? id, Guid? copyFrom, CancellationToken token)
     {
         Options = await workspaceService.GetEditOptionsAsync(token);
+        var suggestedProjectNumber = string.Empty;
+        if (!id.HasValue || copyFrom.HasValue)
+        {
+            var existingProjectNumbers = db is null
+                ? (await projectService.ListProjectsAsync(null, null, token)).Select(item => item.Project.ProjectNumber).ToArray()
+                : await db.Projects.AsNoTracking().Select(item => item.ProjectNumber).ToArrayAsync(token);
+            suggestedProjectNumber = ShortBusinessNumber.Next(existingProjectNumbers, "XM");
+        }
         var sourceId = id ?? copyFrom;
-        if (!sourceId.HasValue) return Page();
+        if (!sourceId.HasValue)
+        {
+            ProjectNumber = suggestedProjectNumber;
+            return Page();
+        }
         var workspace = await workspaceService.GetAsync(sourceId.Value, token);
         if (workspace is null) return NotFound();
         Populate(workspace.Overview);
         if (copyFrom.HasValue)
         {
             Id = null;
-            ProjectNumber = ProjectNumber + "-COPY";
-            Name = Name + "（复制）";
+            ProjectNumber = suggestedProjectNumber;
+            Name = ShortDisplayName.Copy(Name, 200);
             ConcurrencyStamp = Guid.Empty;
             Reason = "复制项目档案";
         }

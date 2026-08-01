@@ -494,7 +494,103 @@ public sealed class StandardImportTests
         await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
 
         (await fixture.Db.Employees.OrderBy(item => item.EmployeeNumber).Select(item => item.EmployeeNumber).ToListAsync())
-            .Should().Equal("YG1", "YG2");
+            .Should().Equal("YG0001", "YG0002");
+    }
+
+    [Fact]
+    public async Task CompleteEmployeeWorkbookSkipsAllExistingCompactNumbers()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        fixture.Db.Employees.AddRange(
+            new Employee { EmployeeNumber = "YG0001", Name = "已存在甲", EmployeeType = EmployeeType.Formal },
+            new Employee { EmployeeNumber = "YG0002", Name = "已存在乙", EmployeeType = EmployeeType.Formal });
+        await fixture.Db.SaveChangesAsync();
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工总表",
+            ["姓名", "身份证号", "实际应付工资", "已付", "未付"],
+            [["新增员工甲", "SHORT-003", 0m, 0m, 0m], ["新增员工乙", "SHORT-004", 0m, 0m, 0m]]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("compact-number-collision", ExportDataset.Employees, "短编号碰撞.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+
+        (await fixture.Db.Employees.OrderBy(item => item.EmployeeNumber).Select(item => item.EmployeeNumber).ToListAsync())
+            .Should().Equal("YG0001", "YG0002", "YG0003", "YG0004");
+    }
+
+    [Fact]
+    public async Task CompleteEmployeeWorkbookIgnoresBlankDetailSheetPlaceholderRows()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工总表",
+            ["姓名", "身份证号", "实际应付工资", "已付", "未付"],
+            [["有效员工", "VALID-001", 0m, 0m, 0m]]);
+        workbook.AddWorksheet(
+            "空白模板",
+            ["机器", "工种", "姓名", "身份证号", "联系电话"],
+            [
+                [null, null, null, null, null],
+                [null, null, null, null, null],
+                ["应付款", null, "已付款", null, null],
+                ["月份", "应付报销款", "公司付款日期", "公司已付款", "备注"],
+                [null, 0m, null, null, null]
+            ]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("blank-detail", ExportDataset.Employees, "员工空白模板.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        (await fixture.Db.Employees.Select(item => item.Name).ToListAsync()).Should().Equal("有效员工");
+    }
+
+    [Fact]
+    public async Task CompleteEmployeeWorkbookDoesNotTreatPaymentSectionLabelAsEmployee()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new EngineeringManager.Domain.Organization.LegalEntity
+        {
+            Code = "LABEL-LE",
+            Name = "标签测试公司",
+            ShortName = "标签公司"
+        };
+        fixture.Db.FinancialAccounts.Add(new FinancialAccount
+        {
+            LegalEntity = company,
+            AccountName = "标签测试账户",
+            AccountType = EngineeringManager.Domain.Finance.FinancialAccountType.Bank,
+            IsDefaultPayment = true
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工总表",
+            ["姓名", "身份证号", "实际应付工资", "已付", "未付"],
+            [["有效员工", "VALID-001", 0m, 0m, 0m]]);
+        workbook.AddWorksheet(
+            "无人员资料",
+            ["机器", "工种", "姓名", "身份证号", "联系电话"],
+            [
+                [null, null, null, null, null],
+                [null, null, null, null, null],
+                ["应付款", null, "已付款", null, null],
+                ["月份", "应付报销款", "公司付款日期", "公司已付款", "备注"],
+                ["2026.04", 100m, null, 0m, "缺少员工归属"]
+            ]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("section-label", ExportDataset.Employees, "员工标签.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+
+        preview.Errors.Should().ContainSingle(error => error.Message.Contains("无法从员工明细工作表确定归属员工", StringComparison.Ordinal));
     }
 
     [Fact]

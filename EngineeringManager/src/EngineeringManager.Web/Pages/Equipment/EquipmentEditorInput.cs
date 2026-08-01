@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using EngineeringManager.Application.Certificates;
 using EngineeringManager.Application.Equipment;
+using EngineeringManager.Application.Common;
 using EngineeringManager.Domain.Equipment;
 
 namespace EngineeringManager.Web.Pages.Equipment;
@@ -69,7 +70,7 @@ public sealed class EquipmentEditorInput
     {
         Id = copy || item.Id == Guid.Empty ? null : item.Id,
         EquipmentNumber = copy ? string.Empty : item.EquipmentNumber,
-        Name = copy ? $"{item.Name} - 副本" : item.Name,
+        Name = copy ? ShortDisplayName.Copy(item.Name, 200) : item.Name,
         Model = item.Model,
         Category = item.Category,
         OwnershipType = item.OwnershipType,

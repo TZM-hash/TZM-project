@@ -15,7 +15,7 @@ const openEditor = (button, copy) => {
   value("Id", copy ? "" : item.Id);
   value("ConcurrencyStamp", copy ? "" : item.ConcurrencyStamp);
   value("Code", copy ? "" : item.Code);
-  value("Name", copy ? `${item.Name} - 副本` : item.Name);
+  value("Name", copy ? `${item.Name}（副本）` : item.Name);
   value("ShortName", copy ? `${item.ShortName}副本` : item.ShortName);
   value("CompanyCategoryId", item.CompanyCategoryId);
   value("IsActive", copy ? "true" : String(item.IsActive).toLowerCase());
@@ -24,7 +24,7 @@ const openEditor = (button, copy) => {
   value("RegisteredAddress", item.RegisteredAddress);
   value("BusinessAddress", item.BusinessAddress);
   value("Phone", item.Phone);
-  value("InvoiceTitle", copy ? `${item.Name} - 副本` : item.InvoiceTitle);
+  value("InvoiceTitle", copy ? `${item.Name}（副本）` : item.InvoiceTitle);
   value("Notes", item.Notes);
   value("Reason", copy ? "复制公司档案" : "修改公司档案");
   const title = editDialog?.querySelector("[data-company-dialog-title]");

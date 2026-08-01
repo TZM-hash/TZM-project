@@ -195,7 +195,7 @@ public sealed class CompanyManagementServiceTests
         copy.Id.Should().BeNull();
         copy.Code.Should().BeEmpty();
         copy.UnifiedSocialCreditCode.Should().BeNull();
-        copy.Name.Should().Be("测试工程有限公司 - 副本");
+        copy.Name.Should().Be("测试工程有限公司（副本）");
         copy.IsActive.Should().BeTrue();
     }
 

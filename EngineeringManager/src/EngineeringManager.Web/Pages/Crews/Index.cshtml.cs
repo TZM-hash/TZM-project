@@ -8,6 +8,7 @@ using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Web.Pages.Ledger;
+using EngineeringManager.Web.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -37,6 +38,7 @@ public sealed class IndexModel(
     public bool CanViewSensitive => User.IsInRole(SystemRoles.SystemAdministrator)
         || User.IsInRole(SystemRoles.ApplicationAdministrator);
     public string? ActiveDialog { get; private set; }
+    public string NextPartnerNumber { get; private set; } = "HZ0001";
 
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public string? Trade { get; set; }
@@ -135,10 +137,10 @@ public sealed class IndexModel(
         var filteredMetrics = string.IsNullOrWhiteSpace(Search)
             ? allMetrics
             : await crewService.ListAsync(true, Search, CanViewSensitive, cancellationToken);
-        var partnerMap = (await partnerService.ListForManagementAsync(
-                null,
-                BusinessPartnerRoleType.ConstructionCrew,
-                cancellationToken))
+        var allPartners = await partnerService.ListForManagementAsync(null, null, cancellationToken);
+        NextPartnerNumber = ShortBusinessNumber.Next(allPartners.Select(item => item.PartnerNumber), "HZ");
+        var partnerMap = allPartners
+            .Where(item => item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew))
             .ToDictionary(item => item.Id);
 
         AllCrews = Merge(allMetrics, partnerMap);

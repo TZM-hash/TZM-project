@@ -6,6 +6,7 @@ if (page) {
     const financeDialog = page.querySelector("[data-partner-finance-dialog]");
     const editorForm = editorDialog?.querySelector("[data-partner-editor-form]");
     const statusSection = editorDialog?.querySelector("[data-partner-status-section]");
+    const nextPartnerNumber = page.dataset.nextPartnerNumber || "";
     const defaultRole = Number.parseInt(page.dataset.defaultRole ?? "2", 10);
     const entityLabel = page.dataset.entityLabel || "合作单位";
     const money = new Intl.NumberFormat("zh-CN", {
@@ -57,8 +58,8 @@ if (page) {
         if (statusSection) statusSection.hidden = !editing;
         setField("Id", editing ? payload.id : "");
         setField("ConcurrencyStamp", editing ? payload.concurrencyStamp : "00000000-0000-0000-0000-000000000000");
-        setField("PartnerNumber", copy ? `${payload.partnerNumber}-COPY` : payload.partnerNumber);
-        setField("Name", copy ? `${payload.name}（复制）` : payload.name);
+        setField("PartnerNumber", editing ? payload.partnerNumber : nextPartnerNumber);
+        setField("Name", copy ? `${payload.name}（副本）` : payload.name);
         setField("ShortName", copy ? `${payload.shortName}副本` : payload.shortName);
         setField("UnifiedSocialCreditCode", copy ? "" : payload.unifiedSocialCreditCode);
         setField("RoleType", payload.roleType ?? defaultRole);

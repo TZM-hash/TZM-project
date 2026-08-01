@@ -6,6 +6,7 @@ using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Web.Pages.Ledger;
+using EngineeringManager.Web.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -30,6 +31,7 @@ public sealed class IndexModel(
     public bool CanManageFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
     public bool CanViewFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance) || User.IsInRole(SystemRoles.QueryOnly);
     public string? ActiveDialog { get; private set; }
+    public string NextPartnerNumber { get; private set; } = "HZ0001";
     public bool IsCustomerScope => string.Equals(Scope, CustomerScope, StringComparison.OrdinalIgnoreCase);
     public string EntityLabel => IsCustomerScope ? "甲方/总包" : "合作单位";
     public BusinessPartnerRoleType DefaultRole => IsCustomerScope
@@ -135,6 +137,7 @@ public sealed class IndexModel(
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         var allPartners = await partnerService.ListForManagementAsync(null, null, cancellationToken);
+        NextPartnerNumber = ShortBusinessNumber.Next(allPartners.Select(item => item.PartnerNumber), "HZ");
         AllPartners = ApplyScope(allPartners).ToArray();
         var filtered = await partnerService.ListForManagementAsync(
             Search,
