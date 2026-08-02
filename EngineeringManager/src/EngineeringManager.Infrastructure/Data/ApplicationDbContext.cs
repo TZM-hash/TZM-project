@@ -374,8 +374,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(item => item.UsageId).IsUnique();
             entity.HasIndex(item => item.PayableEntryId).IsUnique();
+            entity.HasIndex(item => item.FinanceSettlementId).IsUnique();
             entity.HasOne(item => item.Usage).WithOne(item => item.Settlement).HasForeignKey<EquipmentSettlement>(item => item.UsageId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.PayableEntry).WithMany().HasForeignKey(item => item.PayableEntryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.FinanceSettlement).WithMany().HasForeignKey(item => item.FinanceSettlementId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<EquipmentSettlementAdjustment>(entity =>
@@ -772,6 +774,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(item => item.CrewBusinessPartner).WithMany().HasForeignKey(item => item.CrewBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Contract).WithMany().HasForeignKey(item => item.ContractId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.PayableEntry).WithMany().HasForeignKey(item => item.PayableEntryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.FinanceSettlement).WithMany().HasForeignKey(item => item.FinanceSettlementId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

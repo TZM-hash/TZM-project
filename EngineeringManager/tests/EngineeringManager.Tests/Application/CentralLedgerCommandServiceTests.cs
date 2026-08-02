@@ -1,5 +1,7 @@
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Finance;
 using FluentAssertions;
@@ -178,7 +180,7 @@ public sealed class CentralLedgerCommandServiceTests
     {
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();
         var service = new CentralLedgerCommandService(fixture.Db);
-        var settlementId = await CreateSettlementAsync(service, fixture, LedgerDirection.Receivable, 1_000m);
+        var settlementId = await CreateSettlementAsync(service, fixture, LedgerDirection.Receivable, 1_000m, sourceType: LedgerSourceType.CentralLedger);
         var invoiceId = await service.CreateInvoiceAsync(
             fixture.ExternalActor(),
             new CreateFinanceInvoiceRequest(
@@ -232,11 +234,703 @@ public sealed class CentralLedgerCommandServiceTests
     }
 
     [Fact]
+    public async Task UpdatingCentralLedgerCashKeepsAccountTransactionProjectionInSync()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+        var actor = fixture.ExternalActor();
+        var cashId = await service.CreateCashAsync(
+            actor,
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.CollectionAccount.Id,
+                null,
+                new DateOnly(2026, 7, 1),
+                100m,
+                "银行转账",
+                "原收款",
+                []),
+            CancellationToken.None);
+        var stamp = (await fixture.Db.FinanceCashEntries.SingleAsync(item => item.Id == cashId)).ConcurrencyStamp;
+
+        await service.UpdateCashAsync(
+            actor,
+            new UpdateFinanceCashRequest(
+                cashId,
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                null,
+                null,
+                fixture.PaymentAccount.Id,
+                null,
+                new DateOnly(2026, 7, 2),
+                250m,
+                "现金",
+                "更新收款",
+                "更正收款信息",
+                stamp),
+            CancellationToken.None);
+
+        var transaction = await fixture.Db.AccountTransactions.SingleAsync(item => item.SourceId == cashId);
+        transaction.AccountId.Should().Be(fixture.PaymentAccount.Id);
+        transaction.TransactionDate.Should().Be(new DateOnly(2026, 7, 2));
+        transaction.Amount.Should().Be(250m);
+        transaction.Description.Should().Be("更新收款");
+        transaction.SourceType.Should().Be(AccountTransactionSourceType.Collection);
+        transaction.Direction.Should().Be(AccountTransactionDirection.Inflow);
+    }
+
+    [Fact]
+    public async Task DeletingCentralLedgerCashRemovesAccountTransactionProjection()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+        var cashId = await service.CreateCashAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Payable,
+                LedgerCashType.Payment,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Supplier.Id,
+                null,
+                fixture.PaymentAccount.Id,
+                null,
+                new DateOnly(2026, 7, 3),
+                125m,
+                "银行转账",
+                "付款",
+                []),
+            CancellationToken.None);
+        var stamp = (await fixture.Db.FinanceCashEntries.SingleAsync(item => item.Id == cashId)).ConcurrencyStamp;
+
+        await service.DeleteAsync(
+            fixture.ExternalActor(),
+            new DeleteFinanceRecordRequest(FinanceRecordType.Cash, cashId, stamp, "删除重复付款", "中央账本"),
+            CancellationToken.None);
+
+        (await fixture.Db.FinanceCashEntries.AnyAsync(item => item.Id == cashId)).Should().BeFalse();
+        (await fixture.Db.AccountTransactions.AnyAsync(item => item.SourceId == cashId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task InternalTransferProjectsBothAccountMovementsFromOneCentralCashRecord()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var counterAccount = new FinancialAccount
+        {
+            LegalEntity = fixture.CounterLegalEntity,
+            AccountName = "对方账户",
+            AccountType = FinancialAccountType.Bank
+        };
+        fixture.Db.Add(counterAccount);
+        await fixture.Db.SaveChangesAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+        var actor = fixture.InternalActor();
+        var cashId = await service.CreateCashAsync(
+            actor,
+            new CreateFinanceCashRequest(
+                LedgerScope.Internal,
+                LedgerDirection.Payable,
+                LedgerCashType.InternalTransfer,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                null,
+                fixture.CounterLegalEntity.Id,
+                fixture.PaymentAccount.Id,
+                counterAccount.Id,
+                new DateOnly(2026, 7, 4),
+                500m,
+                "内部转账",
+                "公司间调拨",
+                []),
+            CancellationToken.None);
+
+        var transactions = await fixture.Db.AccountTransactions.Where(item => item.SourceId == cashId).ToListAsync();
+        transactions.Should().HaveCount(2);
+        transactions.Should().ContainSingle(item => item.AccountId == fixture.PaymentAccount.Id && item.Direction == AccountTransactionDirection.Outflow && item.SourceType == AccountTransactionSourceType.TransferOut && item.Amount == 500m);
+        transactions.Should().ContainSingle(item => item.AccountId == counterAccount.Id && item.Direction == AccountTransactionDirection.Inflow && item.SourceType == AccountTransactionSourceType.TransferIn && item.Amount == 500m);
+    }
+
+    [Fact]
+    public async Task CreatingCashValidatesProjectAndContractRelationship()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+
+        var action = () => service.CreateCashAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.CollectionAccount.Id,
+                null,
+                new DateOnly(2026, 7, 5),
+                100m,
+                "银行转账",
+                "项目收款",
+                [],
+                ProjectId: fixture.Project.Id,
+                ContractId: Guid.NewGuid()),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*合同不属于所选项目*");
+    }
+
+    [Fact]
+    public async Task CreatingInvoiceValidatesProjectAndContractRelationship()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+
+        var action = () => service.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "OUT-CONTEXT-001",
+                new DateOnly(2026, 7, 5),
+                100m,
+                null,
+                null,
+                null,
+                "项目发票",
+                [],
+                ProjectId: fixture.Project.Id,
+                ContractId: Guid.NewGuid()),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*合同不属于所选项目*");
+    }
+
+    [Fact]
+    public async Task CreatingCashRejectsDirectionAndCashTypeMismatch()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+
+        var action = () => service.CreateCashAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Payment,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.CollectionAccount.Id,
+                null,
+                new DateOnly(2026, 7, 5),
+                100m,
+                "银行转账",
+                "错误方向",
+                []),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*外部账本收款必须使用 Collection，付款必须使用 Payment*");
+    }
+
+    [Fact]
+    public async Task CreatingInvoiceRejectsDuplicateNumberWithinLegalEntityAndDirection()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+        var request = new CreateFinanceInvoiceRequest(
+            LedgerScope.External,
+            LedgerDirection.Receivable,
+            LedgerSourceType.CentralLedger,
+            null,
+            fixture.LegalEntity.Id,
+            fixture.Client.Id,
+            null,
+            "OUT-DUPLICATE-001",
+            new DateOnly(2026, 7, 5),
+            100m,
+            null,
+            null,
+            null,
+            "首张发票",
+            []);
+
+        await service.CreateInvoiceAsync(fixture.ExternalActor(), request, CancellationToken.None);
+
+        var action = () => service.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            request with { InvoiceDate = new DateOnly(2026, 7, 6), Notes = "重复发票" },
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*发票号码已存在*");
+    }
+
+    [Fact]
+    public async Task CreatingInvoiceRejectsUndefinedStatus()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+        var action = () => service.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "OUT-INVALID-STATUS",
+                new DateOnly(2026, 7, 5),
+                100m,
+                null,
+                null,
+                null,
+                null,
+                [],
+                Status: (LedgerRecordStatus)999),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<ArgumentOutOfRangeException>()
+            .WithMessage("*发票状态无效*");
+        (await fixture.Db.FinanceInvoices.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CreatingLedgerRecordRejectsLegalEntityNotLinkedToProject()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var unrelatedLegalEntity = new LegalEntity { Code = "UNLINKED", Name = "未关联公司" };
+        var unrelatedAccount = new FinancialAccount
+        {
+            LegalEntity = unrelatedLegalEntity,
+            AccountName = "未关联账户",
+            AccountType = FinancialAccountType.Bank
+        };
+        fixture.Db.AddRange(unrelatedLegalEntity, unrelatedAccount);
+        await fixture.Db.SaveChangesAsync();
+        var actor = new CentralLedgerActor(
+            "external-user",
+            "外部账用户",
+            new HashSet<Guid> { fixture.LegalEntity.Id, unrelatedLegalEntity.Id },
+            new HashSet<Guid> { fixture.Project.Id },
+            true,
+            false,
+            false,
+            false);
+
+        var action = () => new CentralLedgerCommandService(fixture.Db).CreateCashAsync(
+            actor,
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.CentralLedger,
+                null,
+                unrelatedLegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                unrelatedAccount.Id,
+                null,
+                new DateOnly(2026, 7, 7),
+                100m,
+                "银行转账",
+                "未关联项目公司",
+                [],
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*签约公司*");
+    }
+
+    [Fact]
+    public async Task CreatingSettlementRejectsInactiveContract()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        fixture.Contract.IsActive = false;
+        await fixture.Db.SaveChangesAsync();
+
+        var action = () => new CentralLedgerCommandService(fixture.Db).CreateSettlementAsync(
+            fixture.ExternalActor(),
+            CreateSettlementRequest(fixture, LedgerDirection.Receivable, LedgerSettlementState.Final, 100m),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*已停用*");
+    }
+
+    [Fact]
+    public async Task AutomaticAllocationHonorsInvoiceProjectScope()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var command = new CentralLedgerCommandService(fixture.Db);
+        var sameProject = await CreateSettlementAsync(command, fixture, LedgerDirection.Receivable, 200m);
+        var (otherProject, otherContract) = await AddProjectAsync(fixture, "AUTO-SCOPE");
+        var otherProjectSettlement = await command.CreateSettlementAsync(
+            fixture.ExternalActor(),
+            new CreateSettlementRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSettlementState.Final,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                otherProject.Id,
+                otherContract.Id,
+                null,
+                new DateOnly(2026, 7, 2),
+                900m,
+                900m,
+                null),
+            CancellationToken.None);
+
+        var invoiceId = await command.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "SCOPED-AUTO-001",
+                new DateOnly(2026, 7, 3),
+                500m,
+                null,
+                null,
+                null,
+                null,
+                [],
+                AutoAllocate: true,
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+
+        var allocations = await fixture.Db.FinanceInvoiceAllocations.AsNoTracking()
+            .Where(item => item.InvoiceId == invoiceId)
+            .ToListAsync();
+        allocations.Should().ContainSingle().Which.SettlementId.Should().Be(sameProject);
+        allocations.Should().NotContain(item => item.SettlementId == otherProjectSettlement);
+    }
+
+    [Fact]
+    public async Task ManualAllocationMustMatchInvoiceProjectAndCannotRepeatSettlement()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var command = new CentralLedgerCommandService(fixture.Db);
+        var settlementId = await CreateSettlementAsync(command, fixture, LedgerDirection.Receivable, 500m);
+
+        var wrongProject = await AddProjectAsync(fixture, "MANUAL-SCOPE");
+        var wrongProjectSettlement = await command.CreateSettlementAsync(
+            fixture.ExternalActor(),
+            new CreateSettlementRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSettlementState.Final,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                wrongProject.Project.Id,
+                wrongProject.Contract.Id,
+                null,
+                new DateOnly(2026, 7, 2),
+                500m,
+                500m,
+                null),
+            CancellationToken.None);
+
+        var wrongProjectAction = () => command.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "MANUAL-SCOPE-001",
+                new DateOnly(2026, 7, 3),
+                100m,
+                null,
+                null,
+                null,
+                null,
+                [new FinanceAllocationRequest(wrongProjectSettlement, 100m, 1)],
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+        await wrongProjectAction.Should().ThrowAsync<InvalidOperationException>().WithMessage("*项目*");
+
+        var duplicateAction = () => command.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "MANUAL-SCOPE-002",
+                new DateOnly(2026, 7, 3),
+                200m,
+                null,
+                null,
+                null,
+                null,
+                [new FinanceAllocationRequest(settlementId, 100m, 1), new FinanceAllocationRequest(settlementId, 100m, 2)],
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+        await duplicateAction.Should().ThrowAsync<ArgumentException>().WithMessage("*分摊目标不能重复*");
+    }
+
+    [Fact]
+    public async Task CreatingInvoiceValidatesTaxConfigurationAndAmounts()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var otherProject = new Project { ProjectNumber = "TAX-OTHER", Name = "税务配置其他项目", Stage = ProjectStage.UnderConstruction };
+        var foreignTax = new ProjectTaxConfiguration { Project = otherProject, TaxRate = 0.06m, InvoiceType = ProjectInvoiceType.Ordinary };
+        fixture.Db.AddRange(otherProject, foreignTax);
+        await fixture.Db.SaveChangesAsync();
+
+        var foreignTaxAction = () => new CentralLedgerCommandService(fixture.Db).CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "TAX-CONFIG-001",
+                new DateOnly(2026, 7, 3),
+                106m,
+                100m,
+                6m,
+                0.06m,
+                null,
+                [],
+                ProjectTaxConfigurationId: foreignTax.Id,
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+        await foreignTaxAction.Should().ThrowAsync<InvalidOperationException>().WithMessage("*税务配置*");
+
+        var amountAction = () => new CentralLedgerCommandService(fixture.Db).CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "TAX-CONFIG-002",
+                new DateOnly(2026, 7, 3),
+                106m,
+                100m,
+                5m,
+                0.06m,
+                null,
+                [],
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+        await amountAction.Should().ThrowAsync<ArgumentException>().WithMessage("*不含税金额加税额*");
+    }
+
+    [Fact]
+    public async Task DeletingSourceSettlementIsRejectedByCentralLedger()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+        var settlementId = await service.CreateSettlementAsync(
+            fixture.ExternalActor(),
+            new CreateSettlementRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSettlementState.Final,
+                LedgerSourceType.ProjectQuantity,
+                fixture.LineItem.Id,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.Project.Id,
+                fixture.Contract.Id,
+                fixture.LineItem.Id,
+                new DateOnly(2026, 7, 3),
+                100m,
+                100m,
+                null),
+            CancellationToken.None);
+        var stamp = (await fixture.Db.FinanceSettlements.SingleAsync(item => item.Id == settlementId)).ConcurrencyStamp;
+
+        var action = () => service.DeleteAsync(
+            fixture.ExternalActor(),
+            new DeleteFinanceRecordRequest(FinanceRecordType.Settlement, settlementId, stamp, "误删来源记录", "中央账本"),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*来源模块*");
+    }
+
+    [Fact]
+    public async Task CentralCashProjectionDoesNotDeleteOtherAccountTransactionSources()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var entryId = Guid.NewGuid();
+        var unrelated = new AccountTransaction
+        {
+            Account = fixture.CollectionAccount,
+            Direction = AccountTransactionDirection.Outflow,
+            SourceType = AccountTransactionSourceType.PayrollPayment,
+            SourceId = entryId,
+            TransactionDate = new DateOnly(2026, 7, 1),
+            Amount = 999m,
+            Description = "其他模块流水"
+        };
+        fixture.Db.AccountTransactions.Add(unrelated);
+        await fixture.Db.SaveChangesAsync();
+
+        var cashId = await new CentralLedgerCommandService(fixture.Db).CreateCashAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.CollectionAccount.Id,
+                null,
+                new DateOnly(2026, 7, 2),
+                100m,
+                "银行转账",
+                "中央流水",
+                [],
+                EntryId: entryId),
+            CancellationToken.None);
+        var stamp = (await fixture.Db.FinanceCashEntries.SingleAsync(item => item.Id == cashId)).ConcurrencyStamp;
+
+        await new CentralLedgerCommandService(fixture.Db).DeleteAsync(
+            fixture.ExternalActor(),
+            new DeleteFinanceRecordRequest(FinanceRecordType.Cash, cashId, stamp, "删除测试流水", "中央账本"),
+            CancellationToken.None);
+
+        (await fixture.Db.AccountTransactions.AnyAsync(item => item.Id == unrelated.Id)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpdatingInvoiceRejectsDuplicateNumberWithinLegalEntityAndDirection()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var service = new CentralLedgerCommandService(fixture.Db);
+        var firstId = await service.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "OUT-DUPLICATE-002",
+                new DateOnly(2026, 7, 5),
+                100m,
+                null,
+                null,
+                null,
+                null,
+                []),
+            CancellationToken.None);
+        var secondId = await service.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "OUT-DUPLICATE-003",
+                new DateOnly(2026, 7, 5),
+                100m,
+                null,
+                null,
+                null,
+                null,
+                []),
+            CancellationToken.None);
+        var stamp = (await fixture.Db.FinanceInvoices.SingleAsync(item => item.Id == secondId)).ConcurrencyStamp;
+
+        var action = () => service.UpdateInvoiceAsync(
+            fixture.ExternalActor(),
+            new UpdateFinanceInvoiceRequest(
+                secondId,
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                null,
+                null,
+                "OUT-DUPLICATE-002",
+                new DateOnly(2026, 7, 6),
+                100m,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "改为重复号码",
+                stamp),
+            CancellationToken.None);
+
+        firstId.Should().NotBe(secondId);
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*发票号码已存在*");
+    }
+
+    [Fact]
     public async Task DeletingDeductionRestoresActualAndInvoiceMetrics()
     {
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();
         var service = new CentralLedgerCommandService(fixture.Db);
-        var settlementId = await CreateSettlementAsync(service, fixture, LedgerDirection.Payable, 1_000m);
+        var settlementId = await CreateSettlementAsync(service, fixture, LedgerDirection.Payable, 1_000m, sourceType: LedgerSourceType.CentralLedger);
         var settlementStamp = (await fixture.Db.FinanceSettlements.SingleAsync(item => item.Id == settlementId)).ConcurrencyStamp;
         var deductionId = await service.AddDeductionAsync(
             fixture.ExternalActor(),
@@ -259,7 +953,7 @@ public sealed class CentralLedgerCommandServiceTests
     {
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();
         var service = new CentralLedgerCommandService(fixture.Db);
-        var settlementId = await CreateSettlementAsync(service, fixture, LedgerDirection.Payable, 1_000m);
+        var settlementId = await CreateSettlementAsync(service, fixture, LedgerDirection.Payable, 1_000m, sourceType: LedgerSourceType.CentralLedger);
         var stamp = (await fixture.Db.FinanceSettlements.SingleAsync(item => item.Id == settlementId)).ConcurrencyStamp;
 
         var invalid = () => service.DeleteAsync(
@@ -339,12 +1033,38 @@ public sealed class CentralLedgerCommandServiceTests
         CentralLedgerTestFixture fixture,
         LedgerDirection direction,
         decimal amount,
-        Guid? businessPartnerId = null)
+        Guid? businessPartnerId = null,
+        LedgerSourceType? sourceType = null)
     {
         return service.CreateSettlementAsync(
             fixture.ExternalActor(),
-            CreateSettlementRequest(fixture, direction, LedgerSettlementState.Final, amount, businessPartnerId),
+            sourceType.HasValue
+                ? CreateSettlementRequest(fixture, direction, LedgerSettlementState.Final, amount, businessPartnerId) with
+                {
+                    SourceType = sourceType.Value,
+                    SourceId = null
+                }
+                : CreateSettlementRequest(fixture, direction, LedgerSettlementState.Final, amount, businessPartnerId),
             CancellationToken.None);
+    }
+
+    private static async Task<(Project Project, Contract Contract)> AddProjectAsync(CentralLedgerTestFixture fixture, string number)
+    {
+        var project = new Project { ProjectNumber = number, Name = $"项目 {number}", Stage = ProjectStage.UnderConstruction };
+        var contract = new Contract
+        {
+            Project = project,
+            ContractNumber = $"C-{number}",
+            Name = $"合同 {number}",
+            BusinessPartner = fixture.Client,
+            TotalAmount = 1_000m
+        };
+        project.Contracts.Add(contract);
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = fixture.LegalEntity, IsPrimary = true });
+        fixture.Db.Projects.Add(project);
+        await fixture.Db.SaveChangesAsync();
+        fixture.GrantProjectAccess(project.Id);
+        return (project, contract);
     }
 
     private static async Task<CentralLedgerMetrics> CalculateAsync(ApplicationDbContext db, Guid settlementId)

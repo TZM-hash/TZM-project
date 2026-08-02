@@ -797,6 +797,247 @@ public sealed class ProjectWorkbookImportTests
     }
 
     [Fact]
+    public async Task FinanceImportRejectsAllocationWithDifferentBusinessPartner()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "ALLOC-C", Name = "分摊公司", ShortName = "分摊" };
+        var requestedPartner = new BusinessPartner { PartnerNumber = "ALLOC-P1", Name = "导入单位", ShortName = "导入单位" };
+        var settlementPartner = new BusinessPartner { PartnerNumber = "ALLOC-P2", Name = "结算单位", ShortName = "结算单位" };
+        var project = new Project { ProjectNumber = "ALLOC-WB", Name = "分摊校验项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        var account = new FinancialAccount { LegalEntity = company, AccountName = "分摊账户", AccountType = FinancialAccountType.Bank };
+        var settlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            Project = project,
+            LegalEntity = company,
+            BusinessPartner = settlementPartner,
+            BusinessDate = new DateOnly(2026, 7, 1),
+            OriginalAmount = 100m,
+            OriginalInvoiceAmount = 100m
+        };
+        fixture.Db.AddRange(company, requestedPartner, settlementPartner, project, account, settlement);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.Collections, [Row(ProjectWorkbookSheet.Collections, new Dictionary<string, object?>
+        {
+            ["project_number"] = project.ProjectNumber,
+            ["legal_entity_code"] = company.Code,
+            ["partner_number"] = requestedPartner.PartnerNumber,
+            ["receivable_id"] = settlement.Id.ToString(),
+            ["collection_date"] = new DateOnly(2026, 7, 2),
+            ["account_id"] = account.Id.ToString(),
+            ["amount"] = 50m,
+            ["payment_method"] = "BankTransfer"
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ProjectWorkbookImportRequest("admin", "分摊维度.xlsx", workbook, Actor: ProjectWorkbookActor.Administrator("admin")),
+            CancellationToken.None);
+
+        preview.Errors.Should().Contain(item =>
+            item.Message.Contains("往来单位", StringComparison.Ordinal) ||
+            item.Message.Contains("合作单位", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InvoiceImportPreservesProjectTaxConfiguration()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "TAX-C", Name = "税务公司", ShortName = "税务" };
+        var partner = new BusinessPartner { PartnerNumber = "TAX-P", Name = "税务客户", ShortName = "税务客户" };
+        var project = new Project { ProjectNumber = "TAX-WB", Name = "税务项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        var configuration = new ProjectTaxConfiguration { Project = project, TaxRate = 0.06m, InvoiceType = ProjectInvoiceType.Special };
+        var settlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            Project = project,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            BusinessDate = new DateOnly(2026, 7, 1),
+            OriginalAmount = 106m,
+            OriginalInvoiceAmount = 106m
+        };
+        fixture.Db.AddRange(company, partner, project, configuration, settlement);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.Invoices, [Row(ProjectWorkbookSheet.Invoices, new Dictionary<string, object?>
+        {
+            ["project_number"] = project.ProjectNumber,
+            ["legal_entity_code"] = company.Code,
+            ["partner_number"] = partner.PartnerNumber,
+            ["invoice_number"] = "TAX-INV-001",
+            ["invoice_date"] = new DateOnly(2026, 7, 2),
+            ["invoice_type"] = "Special",
+            ["project_tax_configuration_id"] = configuration.Id.ToString(),
+            ["tax_rate"] = 0.06m,
+            ["net_amount"] = 100m,
+            ["tax_amount"] = 6m,
+            ["gross_amount"] = 106m,
+            ["settlement_id"] = settlement.Id.ToString(),
+            ["status"] = "Active"
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ProjectWorkbookImportRequest("admin", "税务配置.xlsx", workbook, Actor: ProjectWorkbookActor.Administrator("admin")),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+
+        var invoice = await fixture.Db.FinanceInvoices.AsNoTracking().SingleAsync();
+        invoice.ProjectTaxConfigurationId.Should().Be(configuration.Id);
+    }
+
+    [Fact]
+    public async Task InvoiceImportRejectsTaxConfigurationFromAnotherProject()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "TAX-OWN-C", Name = "税务归属公司", ShortName = "税务归属" };
+        var partner = new BusinessPartner { PartnerNumber = "TAX-OWN-P", Name = "税务归属客户", ShortName = "税务归属客户" };
+        var project = new Project { ProjectNumber = "TAX-OWN-P1", Name = "税务归属项目一", Stage = ProjectStage.UnderConstruction };
+        var otherProject = new Project { ProjectNumber = "TAX-OWN-P2", Name = "税务归属项目二", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        otherProject.LegalEntities.Add(new ProjectLegalEntity { Project = otherProject, LegalEntity = company, IsPrimary = true });
+        var configuration = new ProjectTaxConfiguration { Project = otherProject, TaxRate = 0.06m, InvoiceType = ProjectInvoiceType.Special };
+        fixture.Db.AddRange(company, partner, project, otherProject, configuration);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.Invoices, [Row(ProjectWorkbookSheet.Invoices, new Dictionary<string, object?>
+        {
+            ["project_number"] = project.ProjectNumber,
+            ["legal_entity_code"] = company.Code,
+            ["partner_number"] = partner.PartnerNumber,
+            ["invoice_number"] = "TAX-OWN-INV",
+            ["invoice_date"] = new DateOnly(2026, 7, 2),
+            ["invoice_type"] = "Special",
+            ["project_tax_configuration_id"] = configuration.Id.ToString(),
+            ["tax_rate"] = 0.06m,
+            ["net_amount"] = 100m,
+            ["tax_amount"] = 6m,
+            ["gross_amount"] = 106m,
+            ["status"] = "Active"
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ProjectWorkbookImportRequest("admin", "税务归属.xlsx", workbook, Actor: ProjectWorkbookActor.Administrator("admin")),
+            CancellationToken.None);
+
+        preview.Errors.Should().Contain(item => item.Message.Contains("税务配置", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FinanceImportRejectsUpdatingSourceGeneratedRecord()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "SOURCE-C", Name = "来源公司", ShortName = "来源" };
+        var partner = new BusinessPartner { PartnerNumber = "SOURCE-P", Name = "来源单位", ShortName = "来源单位" };
+        var project = new Project { ProjectNumber = "SOURCE-WB", Name = "来源项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        var account = new FinancialAccount { LegalEntity = company, AccountName = "来源账户", AccountType = FinancialAccountType.Bank };
+        var settlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            Project = project,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            BusinessDate = new DateOnly(2026, 7, 1),
+            OriginalAmount = 50m,
+            OriginalInvoiceAmount = 50m
+        };
+        var cash = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            CashType = LedgerCashType.Collection,
+            SourceType = LedgerSourceType.ProjectCollection,
+            SourceId = Guid.NewGuid(),
+            Project = project,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Account = account,
+            BusinessDate = new DateOnly(2026, 7, 1),
+            Amount = 50m
+        };
+        cash.Allocations.Add(new FinanceCashAllocation
+        {
+            CashEntry = cash,
+            Settlement = settlement,
+            Project = project,
+            BusinessPartnerId = partner.Id,
+            Amount = 50m,
+            AllocationOrder = 1
+        });
+        fixture.Db.AddRange(company, partner, project, account, settlement, cash);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.Collections, [Row(ProjectWorkbookSheet.Collections, new Dictionary<string, object?>
+        {
+            ["project_number"] = project.ProjectNumber,
+            ["legal_entity_code"] = company.Code,
+            ["partner_number"] = partner.PartnerNumber,
+            ["collection_date"] = new DateOnly(2026, 7, 2),
+            ["account_id"] = account.Id.ToString(),
+            ["amount"] = 60m,
+            ["payment_method"] = "BankTransfer",
+            ["_system_id"] = cash.Id.ToString(),
+            ["_project_system_id"] = project.Id.ToString(),
+            ["_concurrency_stamp"] = cash.ConcurrencyStamp.ToString(),
+            ["_dataset_version"] = ProjectWorkbookVersions.Dataset
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ProjectWorkbookImportRequest("admin", "来源记录.xlsx", workbook, ImportMode.Update, Actor: ProjectWorkbookActor.Administrator("admin")),
+            CancellationToken.None);
+
+        preview.Errors.Should().Contain(item => item.Message.Contains("来源模块", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PayableImportRejectsInvoiceAmountAboveSettlementAmount()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "PAYABLE-C", Name = "应付校验公司", ShortName = "应付校验" };
+        var partner = new BusinessPartner { PartnerNumber = "PAYABLE-P", Name = "应付校验单位", ShortName = "应付校验单位" };
+        var project = new Project { ProjectNumber = "PAYABLE-WB", Name = "应付校验项目", Stage = ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        fixture.Db.AddRange(company, partner, project);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.Payables, [Row(ProjectWorkbookSheet.Payables, new Dictionary<string, object?>
+        {
+            ["project_number"] = project.ProjectNumber,
+            ["legal_entity_code"] = company.Code,
+            ["partner_number"] = partner.PartnerNumber,
+            ["source_type"] = "CentralLedger",
+            ["settlement_state"] = "Final",
+            ["entry_date"] = new DateOnly(2026, 8, 2),
+            ["original_amount"] = 100m,
+            ["original_invoice_amount"] = 101m,
+            ["amount"] = 100m,
+            ["description"] = "应付金额校验"
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ProjectWorkbookImportRequest("admin", "应付金额校验.xlsx", workbook, Actor: ProjectWorkbookActor.Administrator("admin")),
+            CancellationToken.None);
+        var confirm = () => fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+
+        preview.Errors.Should().BeEmpty();
+        await confirm.Should().ThrowAsync<ArgumentException>().WithMessage("*应开票金额不能超过结算金额*");
+        (await fixture.Db.FinanceSettlements.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task AttachmentArchiveUsesBusinessKeysInsteadOfSourceDatabaseIds()
     {
         await using var fixture = await ImportFixture.CreateAsync(includeFileStore: true);

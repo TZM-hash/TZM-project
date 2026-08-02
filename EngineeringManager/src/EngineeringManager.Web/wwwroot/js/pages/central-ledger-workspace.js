@@ -32,7 +32,11 @@ if (workspace) {
         .replaceAll("'", "&#039;");
 
     const formatMoney = (value) => Number(value || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const formatDate = (value) => value ? String(value).slice(0, 10) : "-";
+    const formatDate = (value) => {
+        if (!value) return "-";
+        const date = String(value).slice(0, 10);
+        return date === "0001-01-01" ? "日期待确认" : date;
+    };
     const recordLabel = (type) => ({ Settlement: "结算", Invoice: "发票", Cash: "资金", Deduction: "扣款", Adjustment: "调整" }[type] || type);
     const sourceLabel = (type) => ({ CentralLedger: "中央账本直接录入", ProjectQuantity: "项目工程量", Crew: "施工班组", Partner: "合作商", ProjectCollection: "项目收款", LegacyMigration: "历史迁移" }[type] || type || "未知来源");
 

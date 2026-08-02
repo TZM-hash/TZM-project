@@ -477,6 +477,29 @@ public sealed class ProjectAuthorizationTests
     }
 
     [Fact]
+    public async Task ProjectManagerCannotOpenKnownProjectWithoutAssignment()
+    {
+        await using var factory = CreateFactory("ProjectManager", hasProjectAccess: false);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync($"/Projects/Details/{FakeProjectWorkspaceService.ProjectId}");
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task ProjectManagerCannotDownloadKnownAttachmentWithoutAssignment()
+    {
+        await using var factory = CreateFactory("ProjectManager", hasProjectAccess: false);
+        using var client = factory.CreateClient();
+        var attachmentId = Guid.Parse("71000000-0000-0000-0000-000000000099");
+
+        using var response = await client.GetAsync($"/Projects/Details/{FakeProjectWorkspaceService.ProjectId}?handler=QuantityAttachment&attachmentId={attachmentId}");
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task ProjectListIncludesAffiliationFilter()
     {
         await using var factory = CreateFactory("ProjectManager");
@@ -594,7 +617,7 @@ public sealed class ProjectAuthorizationTests
             .Should().BeGreaterThan(styles.IndexOf(generalSelector, StringComparison.Ordinal));
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(string? role) =>
+    private static WebApplicationFactory<Program> CreateFactory(string? role, bool hasProjectAccess = true) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
@@ -622,6 +645,7 @@ public sealed class ProjectAuthorizationTests
                 services.AddSingleton<IProjectRecordAttachmentService, FakeProjectRecordAttachmentService>();
             });
             builder.UseSetting(ProjectTestAuthenticationHandler.RoleSetting, role ?? string.Empty);
+            builder.UseSetting(ProjectTestAuthenticationHandler.ProjectAccessSetting, hasProjectAccess.ToString());
         });
 
     private static DetailsModel CreateDetailsModel(
@@ -659,7 +683,7 @@ public sealed class ProjectAuthorizationTests
         return directory?.FullName ?? throw new DirectoryNotFoundException("Cannot locate EngineeringManager.sln.");
     }
 
-    private sealed class FakeProjectService : IProjectService
+    private sealed class FakeProjectService(IConfiguration? configuration = null) : IProjectService
     {
         public Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ContractDto> AddContractAsync(CreateContractRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -685,12 +709,25 @@ public sealed class ProjectAuthorizationTests
         public Task<ContractLineItemDto> UpdateLineItemAsync(UpdateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProjectListItemDto>> ListProjectsAsync(string? search, ProjectStage? stage, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ProjectListItemDto>>([]);
-        public Task<ProjectListPageDto> SearchProjectsAsync(ProjectListActor actor, ProjectListQuery query, CancellationToken cancellationToken) =>
-            Task.FromResult(new ProjectListPageDto(
-                [new ProjectListItemDto(
+        public Task<ProjectListPageDto> SearchProjectsAsync(ProjectListActor actor, ProjectListQuery query, CancellationToken cancellationToken)
+        {
+            var hasProjectAccess = actor.CanAccessAllProjects
+                || !string.Equals(configuration?[ProjectTestAuthenticationHandler.ProjectAccessSetting], bool.FalseString, StringComparison.OrdinalIgnoreCase);
+            IReadOnlyList<ProjectListItemDto> items = hasProjectAccess
+                ? [new ProjectListItemDto(
                     new ProjectDto(FakeProjectWorkspaceService.ProjectId, "P-WEB-001", "项目工作台页面测试", "测试总包单位", ProjectStage.UnderConstruction, ProjectAffiliationType.ExternalPartyAttachedToUs),
-                    new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1))],
-                new ProjectListAggregateDto(1, 300m, 200m, 0), 1, 20, 1, 1, [FakeProjectWorkspaceService.ProjectId]));
+                    new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1))]
+                : [];
+            IReadOnlyList<Guid> projectIds = hasProjectAccess ? [FakeProjectWorkspaceService.ProjectId] : [];
+            return Task.FromResult(new ProjectListPageDto(
+                items,
+                new ProjectListAggregateDto(items.Count, hasProjectAccess ? 300m : 0m, hasProjectAccess ? 200m : 0m, 0),
+                1,
+                20,
+                items.Count,
+                1,
+                projectIds));
+        }
         public Task<ProjectListOptionsDto> GetListOptionsAsync(ProjectListActor actor, CancellationToken cancellationToken) =>
             Task.FromResult(new ProjectListOptionsDto([], []));
         public Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<ProjectDetailsDto?>(null);
@@ -873,6 +910,7 @@ public sealed class ProjectAuthorizationTests
     {
         public new const string Scheme = "ProjectTest";
         public const string RoleSetting = "ProjectTestAuth:Role";
+        public const string ProjectAccessSetting = "ProjectTestAuth:HasProjectAccess";
 
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {

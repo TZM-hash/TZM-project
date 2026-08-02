@@ -376,6 +376,119 @@ public sealed class CentralLedgerQueryServiceTests
         result.UnallocatedCash.Single().UnallocatedAmount.Should().Be(250m);
     }
 
+    [Fact]
+    public async Task HeaderDetailsRequireProjectAccessForInvoiceAndCash()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var command = new CentralLedgerCommandService(fixture.Db);
+        var invoiceId = await command.CreateInvoiceAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                "QUERY-AUTH-001",
+                new DateOnly(2026, 7, 8),
+                100m,
+                null,
+                null,
+                null,
+                null,
+                [],
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+        var cashId = await command.CreateCashAsync(
+            fixture.ExternalActor(),
+            new CreateFinanceCashRequest(
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                LedgerCashType.Collection,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                fixture.Client.Id,
+                null,
+                fixture.CollectionAccount.Id,
+                null,
+                new DateOnly(2026, 7, 8),
+                100m,
+                "银行转账",
+                null,
+                [],
+                ProjectId: fixture.Project.Id),
+            CancellationToken.None);
+        var unauthorizedActor = new CentralLedgerActor(
+            "no-project",
+            "无项目权限",
+            new HashSet<Guid> { fixture.LegalEntity.Id },
+            new HashSet<Guid>(),
+            false,
+            false,
+            false,
+            false);
+        var query = new CentralLedgerQueryService(fixture.Db);
+
+        Func<Task> invoiceAction = async () => await query.GetAsync(unauthorizedActor, FinanceRecordType.Invoice, invoiceId, CancellationToken.None);
+        Func<Task> cashAction = async () => await query.GetAsync(unauthorizedActor, FinanceRecordType.Cash, cashId, CancellationToken.None);
+
+        await invoiceAction.Should().ThrowAsync<UnauthorizedAccessException>();
+        await cashAction.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task InternalUnallocatedCashDoesNotLeakToActorWithoutCounterCompanyAccess()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var counterAccount = new FinancialAccount
+        {
+            LegalEntity = fixture.CounterLegalEntity,
+            AccountName = "对方账户",
+            AccountType = FinancialAccountType.Bank
+        };
+        fixture.Db.Add(counterAccount);
+        await fixture.Db.SaveChangesAsync();
+        var internalActor = fixture.InternalActor();
+        await new CentralLedgerCommandService(fixture.Db).CreateCashAsync(
+            internalActor,
+            new CreateFinanceCashRequest(
+                LedgerScope.Internal,
+                LedgerDirection.Payable,
+                LedgerCashType.InternalTransfer,
+                LedgerSourceType.CentralLedger,
+                null,
+                fixture.LegalEntity.Id,
+                null,
+                fixture.CounterLegalEntity.Id,
+                fixture.PaymentAccount.Id,
+                counterAccount.Id,
+                new DateOnly(2026, 7, 9),
+                300m,
+                "内部转账",
+                null,
+                []),
+            CancellationToken.None);
+        var actorWithoutCounterCompany = new CentralLedgerActor(
+            "one-company",
+            "单公司用户",
+            new HashSet<Guid> { fixture.LegalEntity.Id },
+            new HashSet<Guid>(),
+            false,
+            false,
+            false,
+            false);
+
+        var result = await new CentralLedgerQueryService(fixture.Db).SearchAsync(
+            actorWithoutCounterCompany,
+            new CentralLedgerQuery(LedgerScope.Internal),
+            CancellationToken.None);
+
+        result.UnallocatedCash.Should().BeEmpty();
+    }
+
     private static CreateSettlementRequest SettlementRequest(
         CentralLedgerTestFixture fixture,
         LedgerSettlementState state,

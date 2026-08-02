@@ -64,6 +64,7 @@ public sealed class StandardImportTests
         var company = new EngineeringManager.Domain.Organization.LegalEntity { Code = "IO-LE", Name = "导入公司", ShortName = "导入公司" };
         var partner = new BusinessPartner { PartnerNumber = "IO-BP", Name = "导入单位", ShortName = "导入单位" };
         var project = new EngineeringManager.Infrastructure.Data.Project { ProjectNumber = "IO-P", Name = "导入项目", Stage = EngineeringManager.Domain.Projects.ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
         var account = new FinancialAccount { LegalEntity = company, AccountName = "导入账户", AccountNumber = "IO-ACCT", AccountType = EngineeringManager.Domain.Finance.FinancialAccountType.Bank };
         fixture.Db.AddRange(company, partner, project, account);
         await fixture.Db.SaveChangesAsync();
@@ -89,6 +90,36 @@ public sealed class StandardImportTests
         (await fixture.Db.FinanceCashEntries.CountAsync()).Should().Be(2);
         (await fixture.Db.FinanceInvoices.CountAsync()).Should().Be(1);
         (await fixture.Db.AccountTransactions.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task InvoiceImportRejectsDuplicateNumbersWithinOneUnsavedBatch()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var company = new EngineeringManager.Domain.Organization.LegalEntity { Code = "DUP-LE", Name = "重复发票公司", ShortName = "重复发票" };
+        var partner = new BusinessPartner { PartnerNumber = "DUP-BP", Name = "重复发票单位", ShortName = "重复发票单位" };
+        var project = new EngineeringManager.Infrastructure.Data.Project { ProjectNumber = "DUP-P", Name = "重复发票项目", Stage = EngineeringManager.Domain.Projects.ProjectStage.UnderConstruction };
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+        fixture.Db.AddRange(company, partner, project);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "发票导入",
+            ["项目编号", "发票号码", "发票日期", "发票方向", "签约公司编码", "合作单位编号", "含税金额", "状态", "备注"],
+            [
+                ["DUP-P", "DUP-INV-001", "2026-08-03", "应收", "DUP-LE", "DUP-BP", 100m, "有效", "第一张"],
+                ["DUP-P", "DUP-INV-001", "2026-08-04", "应收", "DUP-LE", "DUP-BP", 200m, "有效", "第二张"]
+            ]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("duplicate-invoice", ExportDataset.Invoices, "重复发票.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+        var confirm = () => fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+
+        preview.Errors.Should().BeEmpty();
+        await confirm.Should().ThrowAsync<InvalidOperationException>().WithMessage("*发票号码已存在：DUP-INV-001*");
+        (await fixture.Db.FinanceInvoices.CountAsync()).Should().Be(0);
     }
 
     [Fact]

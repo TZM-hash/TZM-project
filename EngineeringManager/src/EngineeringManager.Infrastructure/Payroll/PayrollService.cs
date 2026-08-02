@@ -109,7 +109,7 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             ToDisbursementBatchDto(batch),
             summary,
             lines,
-            batch.CrewAllocations.Select(item => new PayrollCrewAllocationDto(item.Id, item.CrewBusinessPartnerId, item.ContractId, item.PayableEntryId, item.Notes, item.ConcurrencyStamp)).ToArray());
+            batch.CrewAllocations.Select(item => new PayrollCrewAllocationDto(item.Id, item.CrewBusinessPartnerId, item.ContractId, item.FinanceSettlementId ?? item.PayableEntryId, item.Notes, item.ConcurrencyStamp)).ToArray());
     }
 
     public Task<PayrollDisbursementOverviewDto> GetDisbursementOverviewAsync(CancellationToken cancellationToken) =>
@@ -644,8 +644,39 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
             var request = requestMap.GetValueOrDefault(crewId) ?? new PayrollCrewAllocationRequest(crewId, null, null, null);
             if (request.ContractId.HasValue && !await db.Contracts.AnyAsync(item => item.Id == request.ContractId && item.ProjectId == batch.ProjectId && item.BusinessPartnerId == crewId, cancellationToken))
                 throw new InvalidOperationException("班组施工合同与工资批次项目或班组不匹配。");
-            if (request.PayableEntryId.HasValue && !await db.PayableEntries.AnyAsync(item => item.Id == request.PayableEntryId && item.ProjectId == batch.ProjectId && item.BusinessPartnerId == crewId && !item.IsVoided, cancellationToken))
-                throw new InvalidOperationException("班组应付记录与工资批次项目或班组不匹配。");
+            Guid? financeSettlementId = null;
+            Guid? legacyPayableEntryId = null;
+            if (request.PayableEntryId.HasValue)
+            {
+                var isCentralPayable = await db.FinanceSettlements.AnyAsync(item =>
+                    item.Id == request.PayableEntryId.Value &&
+                    item.ProjectId == batch.ProjectId &&
+                    item.LegalEntityId == batch.LegalEntityId &&
+                    item.BusinessPartnerId == crewId &&
+                    item.Direction == LedgerDirection.Payable &&
+                    item.Status == LedgerRecordStatus.Active &&
+                    (!request.ContractId.HasValue || item.ContractId == request.ContractId),
+                    cancellationToken);
+                if (isCentralPayable)
+                {
+                    financeSettlementId = request.PayableEntryId.Value;
+                }
+                else if (await db.PayableEntries.AnyAsync(item =>
+                    item.Id == request.PayableEntryId.Value &&
+                    item.ProjectId == batch.ProjectId &&
+                    item.LegalEntityId == batch.LegalEntityId &&
+                    item.BusinessPartnerId == crewId &&
+                    !item.IsVoided &&
+                    (!request.ContractId.HasValue || item.ContractId == request.ContractId),
+                    cancellationToken))
+                {
+                    legacyPayableEntryId = request.PayableEntryId.Value;
+                }
+                else
+                {
+                    throw new InvalidOperationException("班组应付记录与工资批次项目、公司、合同或班组不匹配。");
+                }
+            }
             var allocation = batch.CrewAllocations.SingleOrDefault(item => item.CrewBusinessPartnerId == crewId);
             if (allocation is null)
             {
@@ -654,7 +685,8 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
                 db.PayrollCrewAllocations.Add(allocation);
             }
             allocation.ContractId = request.ContractId;
-            allocation.PayableEntryId = request.PayableEntryId;
+            allocation.PayableEntryId = legacyPayableEntryId;
+            allocation.FinanceSettlementId = financeSettlementId;
             allocation.Notes = NormalizeOptional(request.Notes);
             allocation.ConcurrencyStamp = Guid.NewGuid();
         }
@@ -836,7 +868,7 @@ public sealed class PayrollService(ApplicationDbContext db) : IPayrollService
         batch.Status,
         batch.Notes,
         Lines = batch.Payments.Select(item => new { item.Id, item.RecipientType, item.EmployeeId, item.ConstructionWorkerId, item.CrewBusinessPartnerId, item.Amount, item.RecipientNameSnapshot, item.Notes }),
-        CrewAllocations = batch.CrewAllocations.Select(item => new { item.CrewBusinessPartnerId, item.ContractId, item.PayableEntryId, item.Notes })
+        CrewAllocations = batch.CrewAllocations.Select(item => new { item.CrewBusinessPartnerId, item.ContractId, item.PayableEntryId, item.FinanceSettlementId, item.Notes })
     };
 
     private sealed record ResolvedDisbursementLine(

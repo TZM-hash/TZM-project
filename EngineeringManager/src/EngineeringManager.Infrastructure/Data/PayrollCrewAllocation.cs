@@ -11,6 +11,8 @@ public sealed class PayrollCrewAllocation
     public Contract? Contract { get; set; }
     public Guid? PayableEntryId { get; set; }
     public PayableEntry? PayableEntry { get; set; }
+    public Guid? FinanceSettlementId { get; set; }
+    public FinanceSettlement? FinanceSettlement { get; set; }
     public string? Notes { get; set; }
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();
 }

@@ -57,7 +57,14 @@ public sealed class EquipmentSettlementServiceTests
         result.PayableAmount.Should().Be(850m);
         result.PayableEntryId.Should().NotBeNull();
         secondId.Should().Be(result.PayableEntryId!.Value);
-        (await scope.Db.PayableEntries.CountAsync()).Should().Be(1);
+        (await scope.Db.PayableEntries.CountAsync()).Should().Be(0);
+        var centralPayable = await scope.Db.FinanceSettlements.SingleAsync();
+        centralPayable.Id.Should().Be(result.PayableEntryId!.Value);
+        centralPayable.Direction.Should().Be(EngineeringManager.Domain.Finance.LedgerDirection.Payable);
+        centralPayable.ProjectId.Should().Be(project.Id);
+        centralPayable.LegalEntityId.Should().Be(company.Id);
+        centralPayable.BusinessPartnerId.Should().Be(partner.Id);
+        centralPayable.OriginalAmount.Should().Be(850m);
     }
 
     [Fact]

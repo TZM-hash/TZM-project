@@ -154,3 +154,14 @@
 - Release 服务 `http://127.0.0.1:5075` 的 `/health/live` 与 `/health/ready` 均返回 HTTP 200 `Healthy`。
 - 管理员 `taozhiming` 浏览器复核：首页经营风险提醒全部使用 `XM####`；XM0005 收款记录显示“日期待确认 / 银行转账”，右侧动态显示“收款记录 · 日期待确认”，应收/已收/未收为 `1,565,370.00 / 800,000.00 / 765,370.00`。
 - SQL Server 只读复核：提醒标题/消息及项目、合同、工程量、员工、合作单位、发票、签约公司编号中的 `OLD-*` / `OFFICIAL-*` 均为 0。
+
+## 2026-08-02 续验记录（中央账本统一化）
+
+- 财务导入按单头与分摊行分组后统一委托 `CentralLedgerCommandService` 校验和写入；来源模块生成的设备结算、工资付款记录仍只能从来源模块修改或冲销。
+- 公司财务列表、项目工作簿导入导出、中央账本查询与项目详情统一支持多项目分摊，并保留旧财务链接的兼容回退。
+- 设备结算和工资班组分摊新增中央应付链接迁移 `20260802005033_CentralFinanceLinksForEquipmentAndPayroll`；本轮只读查询确认测试库尚无两个 `FinanceSettlementId` 列，未擅自应用迁移。
+- 公共发票创建拒绝未定义的 `LedgerRecordStatus`，发票编号唯一性同时检查数据库和当前 `DbContext` 中尚未保存的本地实体。
+- 资金冲销可同时处理原记录的已分摊金额和单头未分摊余额，并扣除既有有效冲销，禁止超过剩余可冲销额度。
+- 新增回归测试 `CreatingInvoiceRejectsUndefinedStatus` 与 `RefundCanReverseAllocatedAndUnallocatedCollectionAmounts`，均完成先失败后修复通过；中央账本分摊测试 8/8、扩大财务测试组 210/210 通过。
+- 完整测试重新执行通过：909/909；Release 构建通过：0 个警告、0 个错误。
+- Release 服务运行于 `http://127.0.0.1:5075`，`/health/live` 与 `/health/ready` 均返回 HTTP 200 `Healthy`。

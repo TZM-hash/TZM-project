@@ -70,11 +70,12 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .Select(item =>
             {
                 var allocations = item.Allocations.Where(allocation => allocation.ProjectId == projectId).ToArray();
-                var first = allocations[0];
-                return new ProjectPaymentItemDto(item.Id, item.BusinessDate, first.Settlement.Contract?.ContractNumber,
+                var first = allocations.FirstOrDefault();
+                var headerOwned = item.ProjectId == projectId;
+                return new ProjectPaymentItemDto(item.Id, item.BusinessDate, item.Contract?.ContractNumber ?? first?.Settlement.Contract?.ContractNumber,
                     item.LegalEntity.ShortName, item.BusinessPartner?.Name ?? "未填写合作单位", item.Account?.AccountName ?? "未填写账户",
-                    allocations.Sum(allocation => allocation.Amount), item.PaymentMethod, item.Notes,
-                    allocations.Length == 1 ? first.SettlementId : null, first.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp);
+                    headerOwned ? item.Amount : allocations.Sum(allocation => allocation.Amount), item.PaymentMethod, item.Notes,
+                    allocations.Length == 1 ? first!.SettlementId : null, item.ContractId ?? first?.ContractId, item.LegalEntityId, item.BusinessPartnerId, item.AccountId, item.ConcurrencyStamp);
             })
             .ToList();
 
@@ -142,7 +143,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
                     group.Sum(item => item.Amount),
                     first.PaymentMethod.ToString(),
                     $"民工工资代发 · {first.BatchNumber}",
-                    allocation?.PayableEntryId,
+                    allocation?.FinanceSettlementId ?? allocation?.PayableEntryId,
                     allocation?.ContractId,
                     first.LegalEntityId,
                     group.Key.CrewId,

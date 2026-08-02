@@ -266,7 +266,7 @@ public sealed class ProjectWorkbookExporter(
                 return Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["project_number"] = project.ProjectNumber, ["contract_number"] = contractNumber, ["legal_entity_code"] = item.LegalEntity.Code, ["partner_number"] = item.BusinessPartner?.PartnerNumber,
-                    ["invoice_number"] = item.InvoiceNumber, ["invoice_date"] = item.InvoiceDate, ["invoice_type"] = DataExchangeValueLabels.LabelInvoiceType(item.InvoiceType), ["tax_rate"] = item.TaxRate,
+                    ["invoice_number"] = item.InvoiceNumber, ["invoice_date"] = item.InvoiceDate, ["invoice_type"] = DataExchangeValueLabels.LabelInvoiceType(item.InvoiceType), ["project_tax_configuration_id"] = item.ProjectTaxConfigurationId?.ToString(), ["tax_rate"] = item.TaxRate,
                     ["net_amount"] = (item.NetAmount ?? 0m) * ratio, ["tax_amount"] = (item.TaxAmount ?? 0m) * ratio, ["gross_amount"] = allocation.Amount, ["source_amount"] = item.Amount, ["allocation_amount"] = allocation.Amount, ["settlement_id"] = allocation.Allocation?.SettlementId.ToString(),
                     ["status"] = DataExchangeValueLabels.LabelLedgerRecordStatus(item.Status), ["_system_id"] = item.Id.ToString(), ["_project_system_id"] = allocation.ProjectId.ToString(),
                     ["_contract_system_id"] = contractId?.ToString(), ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset

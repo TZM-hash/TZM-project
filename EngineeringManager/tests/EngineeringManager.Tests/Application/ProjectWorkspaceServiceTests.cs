@@ -77,6 +77,33 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task WorkspaceHandlesProjectOwnedPaymentWithoutAllocation()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var payment = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Payable,
+            CashType = LedgerCashType.Payment,
+            LegalEntity = fixture.LegalEntity,
+            BusinessPartner = await fixture.Db.BusinessPartners.SingleAsync(),
+            Account = await fixture.Db.FinancialAccounts.SingleAsync(),
+            Project = fixture.Project,
+            Contract = await fixture.Db.Contracts.SingleAsync(),
+            BusinessDate = new DateOnly(2026, 7, 10),
+            Amount = 42m,
+            Notes = "无分摊项目付款"
+        };
+        fixture.Db.FinanceCashEntries.Add(payment);
+        await fixture.Db.SaveChangesAsync();
+
+        var workspace = await fixture.Service.GetAsync(fixture.Project.Id, CancellationToken.None);
+
+        workspace.Should().NotBeNull();
+        workspace!.Payments.Should().Contain(item => item.Amount == 42m && item.ContractId == payment.ContractId);
+    }
+
+    [Fact]
     public async Task WorkspaceTranslatesImportedAndMaintenanceAuditActionsToChinese()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();

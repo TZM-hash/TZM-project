@@ -36,6 +36,7 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
         var exceptions = new List<LegacyFinanceMigrationIssue>();
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         var maps = await db.FinanceLegacyMaps.ToDictionaryAsync(item => MapKey(item.LegacyEntityType, Guid.Parse(item.LegacyId)), token);
+        await RepairExistingCashAccountTransactionsAsync(maps, token);
 
         var receivables = await db.ReceivableEntries.AsNoTracking().OrderBy(item => item.Id).ToListAsync(token);
         foreach (var legacy in receivables)
@@ -107,6 +108,8 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 CashType = LedgerCashType.Collection,
                 LegalEntityId = legacy.LegalEntityId,
                 BusinessPartnerId = legacy.BusinessPartnerId,
+                ProjectId = legacy.ProjectId,
+                ContractId = legacy.ContractId,
                 AccountId = legacy.AccountId,
                 BusinessDate = legacy.CollectionDate,
                 Amount = legacy.Amount,
@@ -129,6 +132,7 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 });
             }
             db.FinanceCashEntries.Add(cash);
+            await ReconcileAccountTransactionProjectionsAsync(cash, legacy.Id, token);
             AddMap(maps, nameof(CollectionEntry), legacy.Id, FinanceRecordType.Cash, id);
         }
 
@@ -145,6 +149,8 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 CashType = LedgerCashType.Payment,
                 LegalEntityId = legacy.LegalEntityId,
                 BusinessPartnerId = legacy.BusinessPartnerId,
+                ProjectId = legacy.ProjectId,
+                ContractId = legacy.ContractId,
                 AccountId = legacy.AccountId,
                 BusinessDate = legacy.PaymentDate,
                 Amount = legacy.Amount,
@@ -167,6 +173,7 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 });
             }
             db.FinanceCashEntries.Add(cash);
+            await ReconcileAccountTransactionProjectionsAsync(cash, legacy.Id, token);
             AddMap(maps, nameof(PaymentEntry), legacy.Id, FinanceRecordType.Cash, id);
         }
 
@@ -192,6 +199,8 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 CashType = LedgerCashType.Collection,
                 LegalEntityId = sourceReceivable.LegalEntityId,
                 BusinessPartnerId = sourceReceivable.BusinessPartnerId,
+                ProjectId = sourceReceivable.ProjectId,
+                ContractId = sourceReceivable.ContractId,
                 AccountId = legacy.AccountId,
                 IsReversal = true,
                 ReversesCashEntryId = reversedCashId,
@@ -212,6 +221,7 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 AllocationOrder = 1
             });
             db.FinanceCashEntries.Add(cash);
+            await ReconcileAccountTransactionProjectionsAsync(cash, legacy.Id, token);
             AddMap(maps, nameof(RefundOrReversalEntry), legacy.Id, FinanceRecordType.Cash, id);
         }
 
@@ -236,6 +246,8 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 CashType = LedgerCashType.Payment,
                 LegalEntityId = sourcePayable.LegalEntityId,
                 BusinessPartnerId = sourcePayable.BusinessPartnerId,
+                ProjectId = sourcePayable.ProjectId,
+                ContractId = sourcePayable.ContractId,
                 AccountId = legacy.AccountId,
                 IsReversal = true,
                 ReversesCashEntryId = reversedCashId,
@@ -256,6 +268,7 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 AllocationOrder = 1
             });
             db.FinanceCashEntries.Add(cash);
+            await ReconcileAccountTransactionProjectionsAsync(cash, legacy.Id, token);
             AddMap(maps, nameof(PaymentReversalEntry), legacy.Id, FinanceRecordType.Cash, id);
         }
 
@@ -273,7 +286,7 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 continue;
             }
             var id = DeterministicGuid($"central:cash:internal-transfer:{legacy.Id:D}");
-            db.FinanceCashEntries.Add(new FinanceCashEntry
+            var cash = new FinanceCashEntry
             {
                 Id = id,
                 Scope = LedgerScope.Internal,
@@ -288,7 +301,9 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 SourceType = LedgerSourceType.LegacyMigration,
                 SourceId = DeterministicGuid($"source:internal-transfer:{legacy.Id:D}"),
                 Notes = legacy.Description
-            });
+            };
+            db.FinanceCashEntries.Add(cash);
+            await ReconcileAccountTransactionProjectionsAsync(cash, legacy.Id, token);
             AddMap(maps, nameof(AccountTransfer), legacy.Id, FinanceRecordType.Cash, id);
         }
 
@@ -335,6 +350,8 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
                 Direction = legacy.Direction == InvoiceDirection.Output ? LedgerDirection.Receivable : LedgerDirection.Payable,
                 LegalEntityId = legacy.LegalEntityId,
                 BusinessPartnerId = legacy.BusinessPartnerId,
+                ProjectId = legacy.ProjectId,
+                ContractId = legacy.ContractId,
                 InvoiceNumber = legacy.InvoiceNumber,
                 InvoiceDate = legacy.InvoiceDate,
                 ProjectTaxConfigurationId = legacy.ProjectTaxConfigurationId,
@@ -407,6 +424,117 @@ public sealed class LegacyFinanceMigrationService(ApplicationDbContext db)
         }
         return conflicts;
     }
+
+    private async Task RepairExistingCashAccountTransactionsAsync(
+        IReadOnlyDictionary<string, FinanceLegacyMap> maps,
+        CancellationToken token)
+    {
+        var cashEntries = await db.FinanceCashEntries.AsNoTracking()
+            .Where(item => item.SourceType == LedgerSourceType.LegacyMigration)
+            .ToListAsync(token);
+        if (cashEntries.Count == 0) return;
+
+        foreach (var cash in cashEntries)
+        {
+            var legacySourceId = maps.Values
+                .Where(item => item.CentralRecordType == FinanceRecordType.Cash && item.CentralRecordId == cash.Id)
+                .Select(item => Guid.TryParse(item.LegacyId, out var legacyId) ? (Guid?)legacyId : null)
+                .FirstOrDefault();
+            await ReconcileAccountTransactionProjectionsAsync(cash, legacySourceId, token);
+        }
+    }
+
+    private async Task ReconcileAccountTransactionProjectionsAsync(
+        FinanceCashEntry cash,
+        Guid? legacySourceId,
+        CancellationToken token)
+    {
+        var expected = BuildAccountTransactionProjections(cash);
+        var sourceIds = legacySourceId.HasValue && legacySourceId.Value != cash.Id
+            ? new[] { cash.Id, legacySourceId.Value }
+            : new[] { cash.Id };
+        var sourceTypes = expected.Select(item => item.SourceType).Distinct().ToArray();
+        var existing = sourceTypes.Length == 0
+            ? await db.AccountTransactions.Where(item => sourceIds.Contains(item.SourceId)).ToListAsync(token)
+            : await db.AccountTransactions
+                .Where(item => sourceIds.Contains(item.SourceId) && sourceTypes.Contains(item.SourceType))
+                .ToListAsync(token);
+        var remaining = existing.ToList();
+
+        foreach (var projection in expected)
+        {
+            var transaction = remaining.FirstOrDefault(item =>
+                item.SourceId == cash.Id &&
+                item.SourceType == projection.SourceType &&
+                item.AccountId == projection.AccountId)
+                ?? remaining.FirstOrDefault(item =>
+                    item.SourceType == projection.SourceType &&
+                    item.AccountId == projection.AccountId);
+            if (transaction is null)
+            {
+                transaction = new AccountTransaction
+                {
+                    SourceId = cash.Id,
+                    SourceType = projection.SourceType
+                };
+                db.AccountTransactions.Add(transaction);
+            }
+            else
+            {
+                remaining.Remove(transaction);
+            }
+
+            transaction.SourceId = cash.Id;
+            transaction.SourceType = projection.SourceType;
+            transaction.AccountId = projection.AccountId;
+            transaction.Direction = projection.Direction;
+            transaction.TransactionDate = cash.BusinessDate;
+            transaction.Amount = cash.Amount;
+            transaction.Description = cash.Notes;
+        }
+
+        if (remaining.Count > 0)
+        {
+            db.AccountTransactions.RemoveRange(remaining);
+        }
+    }
+
+    private static List<LegacyAccountTransactionProjection> BuildAccountTransactionProjections(FinanceCashEntry cash)
+    {
+        if (cash.CashType == LedgerCashType.InternalTransfer)
+        {
+            var projections = new List<LegacyAccountTransactionProjection>();
+            if (cash.AccountId.HasValue)
+            {
+                projections.Add(cash.Direction == LedgerDirection.Payable
+                    ? new(cash.AccountId.Value, AccountTransactionDirection.Outflow, AccountTransactionSourceType.TransferOut)
+                    : new(cash.AccountId.Value, AccountTransactionDirection.Inflow, AccountTransactionSourceType.TransferIn));
+            }
+            if (cash.CounterAccountId.HasValue)
+            {
+                projections.Add(cash.Direction == LedgerDirection.Payable
+                    ? new(cash.CounterAccountId.Value, AccountTransactionDirection.Inflow, AccountTransactionSourceType.TransferIn)
+                    : new(cash.CounterAccountId.Value, AccountTransactionDirection.Outflow, AccountTransactionSourceType.TransferOut));
+            }
+            return projections;
+        }
+
+        if (!cash.AccountId.HasValue) return [];
+        var isCollection = cash.CashType == LedgerCashType.Collection;
+        return [new(
+            cash.AccountId.Value,
+            isCollection
+                ? (cash.IsReversal ? AccountTransactionDirection.Outflow : AccountTransactionDirection.Inflow)
+                : (cash.IsReversal ? AccountTransactionDirection.Inflow : AccountTransactionDirection.Outflow),
+            isCollection
+                ? (cash.IsReversal ? AccountTransactionSourceType.Refund : AccountTransactionSourceType.Collection)
+                : (cash.IsReversal ? AccountTransactionSourceType.PaymentReversal : AccountTransactionSourceType.Payment))];
+    }
+
+    private sealed record LegacyAccountTransactionProjection(
+        Guid AccountId,
+        AccountTransactionDirection Direction,
+        AccountTransactionSourceType SourceType);
 
     private void AddMap(Dictionary<string, FinanceLegacyMap> maps, string legacyType, Guid legacyId, FinanceRecordType recordType, Guid centralId)
     {

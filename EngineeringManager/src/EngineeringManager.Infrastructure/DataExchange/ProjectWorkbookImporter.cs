@@ -18,6 +18,7 @@ namespace EngineeringManager.Infrastructure.DataExchange;
 
 public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore? fileStore = null)
 {
+    private readonly CentralLedgerCommandService centralLedgerCommands = new(db);
     private sealed record ParsedRow(ProjectWorkbookSheet Sheet, int RowNumber, Dictionary<string, string?> Values, HashSet<string> PresentKeys);
     private sealed record ParsedSheet(ProjectWorkbookSheet Sheet, string WorksheetName, List<ParsedRow> Rows);
     private sealed record ParsedWorkbook(IReadOnlyList<ParsedSheet> Sheets, List<ImportErrorDto> Errors);
@@ -504,7 +505,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         }
     }
 
-    private static bool IsGuidField(string key) => key is "department_id" or "branch_id" or "account_id" or "receivable_id" or "payable_id" or "settlement_id" or "stage_result_id"
+    private static bool IsGuidField(string key) => key is "department_id" or "branch_id" or "account_id" or "receivable_id" or "payable_id" or "settlement_id" or "project_tax_configuration_id" or "stage_result_id"
         or "_system_id" or "_project_system_id" or "_contract_system_id" or "_concurrency_stamp";
 
     private static bool IsEnumField(ProjectWorkbookSheet sheet, string key) => (sheet, key) switch
@@ -669,6 +670,23 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/账户ID", "资金账户不存在、已停用或不属于当前签约公司。", row.Values.GetValueOrDefault("account_id")));
         }
 
+        var projectIdForNumber = string.IsNullOrWhiteSpace(projectNumber)
+            ? (Guid?)null
+            : await db.Projects.Where(item => item.ProjectNumber == projectNumber).Select(item => (Guid?)item.Id).SingleOrDefaultAsync(cancellationToken);
+        if (!projectIdForNumber.HasValue && projectInFile is not null && Guid.TryParse(projectInFile.Values.GetValueOrDefault("_system_id"), out var requestedProjectId))
+            projectIdForNumber = requestedProjectId;
+        var partnerIdForNumber = string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("partner_number"))
+            ? (Guid?)null
+            : await db.BusinessPartners.Where(item => item.PartnerNumber == row.Values["partner_number"]).Select(item => (Guid?)item.Id).SingleOrDefaultAsync(cancellationToken);
+        Guid? contractIdForNumber = null;
+        if (projectIdForNumber.HasValue && !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("contract_number")))
+        {
+            contractIdForNumber = await db.Contracts
+                .Where(item => item.ProjectId == projectIdForNumber && item.ContractNumber == row.Values["contract_number"])
+                .Select(item => (Guid?)item.Id)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
         var payableInFile = workbook.Sheets.FirstOrDefault(item => item.Sheet == ProjectWorkbookSheet.Payables)?.Rows.Any(item => item.Values.GetValueOrDefault("_system_id") == row.Values.GetValueOrDefault("payable_id") && item.Values.GetValueOrDefault("project_number") == projectNumber) == true;
         var receivableInFile = workbook.Sheets.FirstOrDefault(item => item.Sheet == ProjectWorkbookSheet.Receivables)?.Rows.Any(item => item.Values.GetValueOrDefault("_system_id") == row.Values.GetValueOrDefault("receivable_id") && item.Values.GetValueOrDefault("project_number") == projectNumber) == true;
         if (sheet.Sheet == ProjectWorkbookSheet.Collections && row.PresentKeys.Contains("receivable_id") && !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("receivable_id"))
@@ -685,6 +703,50 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             && (!Guid.TryParse(row.Values.GetValueOrDefault("settlement_id"), out var settlementId)
                 || !await db.FinanceSettlements.AnyAsync(item => item.Id == settlementId && item.Project!.ProjectNumber == projectNumber && item.Status == LedgerRecordStatus.Active, cancellationToken)))
             errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/结算系统ID", "结算记录不存在、已作废或不属于当前项目。", row.Values.GetValueOrDefault("settlement_id")));
+
+        var allocationDescriptor = sheet.Sheet switch
+        {
+            ProjectWorkbookSheet.Collections when !receivableInFile => (Key: "receivable_id", AmountKey: "amount", Direction: LedgerDirection.Receivable, Header: "应收系统ID"),
+            ProjectWorkbookSheet.Payments when !payableInFile => (Key: "payable_id", AmountKey: "amount", Direction: LedgerDirection.Payable, Header: "应付系统ID"),
+            ProjectWorkbookSheet.Invoices => (Key: "settlement_id", AmountKey: "gross_amount", Direction: LedgerDirection.Receivable, Header: "应收系统ID"),
+            _ => default
+        };
+        if (!string.IsNullOrEmpty(allocationDescriptor.Key) && companyIdForCode != Guid.Empty && projectIdForNumber.HasValue &&
+            Guid.TryParse(row.Values.GetValueOrDefault(allocationDescriptor.Key), out var allocationSettlementId))
+        {
+            try
+            {
+                await centralLedgerCommands.ValidateImportedAllocationAsync(
+                    allocationDescriptor.Direction,
+                    companyIdForCode,
+                    partnerIdForNumber,
+                    projectIdForNumber,
+                    contractIdForNumber,
+                    new FinanceAllocationRequest(allocationSettlementId, ImportedAllocationAmount(row, allocationDescriptor.AmountKey), 1),
+                    cancellationToken);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+            {
+                errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/{allocationDescriptor.Header}", exception.Message, row.Values.GetValueOrDefault(allocationDescriptor.Key)));
+            }
+        }
+
+        if (sheet.Sheet == ProjectWorkbookSheet.Invoices && row.PresentKeys.Contains("project_tax_configuration_id") &&
+            Guid.TryParse(row.Values.GetValueOrDefault("project_tax_configuration_id"), out var configurationId))
+        {
+            try
+            {
+                await centralLedgerCommands.ValidateImportedProjectTaxConfigurationAsync(
+                    projectIdForNumber,
+                    configurationId,
+                    ParseDecimal(row.Values.GetValueOrDefault("tax_rate")),
+                    cancellationToken);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+            {
+                errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/项目税务配置ID", exception.Message, row.Values.GetValueOrDefault("project_tax_configuration_id")));
+            }
+        }
     }
 
     private async Task ValidateExistingAsync(ParsedSheet sheet, ParsedRow row, ImportMode mode, List<ImportErrorDto> errors, CancellationToken cancellationToken)
@@ -692,6 +754,25 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         var existing = await FindExistingAsync(sheet, row, cancellationToken);
         if (existing is not null && mode == ImportMode.New) errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/系统ID", "仅新增模式不能覆盖已有记录。", row.Values.GetValueOrDefault("_system_id")));
         if (existing is null && mode == ImportMode.Update) errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/系统ID", "仅更新模式找不到已有记录。", row.Values.GetValueOrDefault("_system_id")));
+        var sourceType = existing switch
+        {
+            FinanceSettlement item => item.SourceType,
+            FinanceCashEntry item => item.SourceType,
+            FinanceInvoice item => item.SourceType,
+            FinanceDeduction item => item.SourceType,
+            _ => (LedgerSourceType?)null
+        };
+        if (sourceType.HasValue)
+        {
+            try
+            {
+                CentralLedgerCommandService.EnsureImportedRecordEditable(sourceType.Value, "财务记录");
+            }
+            catch (InvalidOperationException exception)
+            {
+                errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/系统ID", exception.Message, row.Values.GetValueOrDefault("_system_id")));
+            }
+        }
         if (existing is not null && !await ExistingMatchesBusinessKeysAsync(sheet.Sheet, row, existing, cancellationToken))
             errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/系统ID", "系统 ID 与项目或父级业务键不一致。", row.Values.GetValueOrDefault("_system_id")));
         if (existing is not null && row.Values.TryGetValue("_concurrency_stamp", out var stamp) && Guid.TryParse(stamp, out var expected) && existing switch
@@ -877,9 +958,9 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             ? invoice.Allocations.FirstOrDefault() ?? await db.FinanceInvoiceAllocations.FirstOrDefaultAsync(item => item.InvoiceId == invoice.Id, cancellationToken)
             : null;
         var deductionSettlement = existing is FinanceDeduction deduction ? deduction.Settlement : null;
-        var projectId = existing switch { ReceivableEntry item => item.ProjectId, CollectionEntry item => item.ProjectId, PayableEntry item => item.ProjectId, PaymentEntry item => item.ProjectId, InvoiceEntry item => item.ProjectId, FinanceSettlement item => item.ProjectId ?? Guid.Empty, FinanceCashEntry => cashAllocation?.ProjectId ?? Guid.Empty, FinanceInvoice => invoiceAllocation?.ProjectId ?? Guid.Empty, FinanceDeduction => deductionSettlement?.ProjectId ?? Guid.Empty, _ => Guid.Empty };
+        var projectId = existing switch { ReceivableEntry item => item.ProjectId, CollectionEntry item => item.ProjectId, PayableEntry item => item.ProjectId, PaymentEntry item => item.ProjectId, InvoiceEntry item => item.ProjectId, FinanceSettlement item => item.ProjectId ?? Guid.Empty, FinanceCashEntry item => item.ProjectId ?? cashAllocation?.ProjectId ?? Guid.Empty, FinanceInvoice item => item.ProjectId ?? invoiceAllocation?.ProjectId ?? Guid.Empty, FinanceDeduction => deductionSettlement?.ProjectId ?? Guid.Empty, _ => Guid.Empty };
         var values = new Dictionary<string, object?>(StringComparer.Ordinal) { ["project_number"] = await db.Projects.Where(item => item.Id == projectId).Select(item => item.ProjectNumber).SingleAsync(cancellationToken) };
-        var contractId = existing switch { ReceivableEntry item => item.ContractId, CollectionEntry item => item.ContractId, PayableEntry item => item.ContractId, PaymentEntry item => item.ContractId, InvoiceEntry item => item.ContractId, FinanceSettlement item => item.ContractId, FinanceCashEntry => cashAllocation?.ContractId, FinanceInvoice => invoiceAllocation?.ContractId, FinanceDeduction => deductionSettlement?.ContractId, _ => null };
+        var contractId = existing switch { ReceivableEntry item => item.ContractId, CollectionEntry item => item.ContractId, PayableEntry item => item.ContractId, PaymentEntry item => item.ContractId, InvoiceEntry item => item.ContractId, FinanceSettlement item => item.ContractId, FinanceCashEntry item => item.ContractId ?? cashAllocation?.ContractId, FinanceInvoice item => item.ContractId ?? invoiceAllocation?.ContractId, FinanceDeduction => deductionSettlement?.ContractId, _ => null };
         values["contract_number"] = contractId.HasValue ? await db.Contracts.Where(item => item.Id == contractId.Value).Select(item => item.ContractNumber).SingleAsync(cancellationToken) : null;
         var companyId = existing switch { ReceivableEntry item => item.LegalEntityId, CollectionEntry item => item.LegalEntityId, PayableEntry item => item.LegalEntityId, PaymentEntry item => item.LegalEntityId, InvoiceEntry item => item.LegalEntityId, FinanceSettlement item => item.LegalEntityId, FinanceCashEntry item => item.LegalEntityId, FinanceInvoice item => item.LegalEntityId, FinanceDeduction => deductionSettlement?.LegalEntityId ?? Guid.Empty, _ => Guid.Empty };
         values["legal_entity_code"] = await db.LegalEntities.Where(item => item.Id == companyId).Select(item => item.Code).SingleAsync(cancellationToken);
@@ -899,7 +980,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             case FinanceCashEntry item:
                 values["payable_id"] = cashAllocation?.SettlementId.ToString(); values["payment_date"] = item.BusinessDate; values["account_id"] = item.AccountId?.ToString(); values["amount"] = cashAllocation?.Amount ?? item.Amount; values["payment_method"] = item.PaymentMethod; values["notes"] = item.Notes; break;
             case FinanceInvoice item:
-                values["direction"] = item.Direction == LedgerDirection.Receivable ? InvoiceDirection.Output.ToString() : InvoiceDirection.Input.ToString(); values["invoice_number"] = item.InvoiceNumber; values["invoice_date"] = item.InvoiceDate; values["invoice_type"] = item.InvoiceType; values["tax_rate"] = item.TaxRate; values["net_amount"] = item.NetAmount; values["tax_amount"] = item.TaxAmount; values["gross_amount"] = invoiceAllocation?.Amount ?? item.Amount; values["status"] = item.Status.ToString(); break;
+                values["direction"] = item.Direction == LedgerDirection.Receivable ? InvoiceDirection.Output.ToString() : InvoiceDirection.Input.ToString(); values["invoice_number"] = item.InvoiceNumber; values["invoice_date"] = item.InvoiceDate; values["invoice_type"] = item.InvoiceType; values["project_tax_configuration_id"] = item.ProjectTaxConfigurationId?.ToString(); values["tax_rate"] = item.TaxRate; values["net_amount"] = item.NetAmount; values["tax_amount"] = item.TaxAmount; values["gross_amount"] = invoiceAllocation?.Amount ?? item.Amount; values["status"] = item.Status.ToString(); break;
             case FinanceDeduction item:
                 values["settlement_id"] = item.SettlementId.ToString(); values["deduction_date"] = item.BusinessDate; values["amount"] = item.Amount; values["reduce_invoice_amount"] = item.ReduceInvoiceAmount; values["reason"] = item.Reason; values["status"] = item.Status.ToString(); break;
         }
@@ -1182,6 +1263,52 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 {
                     case ProjectWorkbookSheet.Payables:
                         if (partner is null) throw new InvalidOperationException("应付必须指定合作单位。");
+                        var existingCentralPayable = existing as FinanceSettlement;
+                        if (existing is null || existingCentralPayable is not null)
+                        {
+                            var amount = Has(row, "original_amount", blankMeansNoChange)
+                                ? ParseDecimal(row.Values.GetValueOrDefault("original_amount")) ?? 0m
+                                : Has(row, "amount", blankMeansNoChange)
+                                    ? ParseDecimal(row.Values.GetValueOrDefault("amount")) ?? 0m
+                                    : existingCentralPayable?.OriginalAmount ?? 0m;
+                            var invoiceAmount = Has(row, "original_invoice_amount", blankMeansNoChange)
+                                ? ParseDecimal(row.Values.GetValueOrDefault("original_invoice_amount")) ?? 0m
+                                : existingCentralPayable?.OriginalInvoiceAmount ?? amount;
+                            var sourceType = Has(row, "source_type", blankMeansNoChange)
+                                ? ParseLedgerSourceType(row.Values.GetValueOrDefault("source_type"))
+                                : existingCentralPayable?.SourceType ?? LedgerSourceType.CentralLedger;
+                            var settlementState = Has(row, "settlement_state", blankMeansNoChange) &&
+                                Enum.TryParse<LedgerSettlementState>(row.Values.GetValueOrDefault("settlement_state"), true, out var importedState)
+                                    ? importedState
+                                    : existingCentralPayable?.SettlementState ?? LedgerSettlementState.Final;
+                            var businessDate = Has(row, "entry_date", blankMeansNoChange)
+                                ? ParseDate(Required(row, "entry_date"))!.Value
+                                : existingCentralPayable?.BusinessDate ?? throw new InvalidOperationException("缺少必填字段：entry_date");
+                            var notes = Has(row, "description", blankMeansNoChange)
+                                ? row.Values.GetValueOrDefault("description")
+                                : existingCentralPayable?.Notes;
+
+                            await centralLedgerCommands.ValidateImportedSettlementAsync(
+                                new CreateSettlementRequest(
+                                    LedgerScope.External,
+                                    LedgerDirection.Payable,
+                                    settlementState,
+                                    sourceType,
+                                    existingCentralPayable?.SourceId,
+                                    company.Id,
+                                    partner.Id,
+                                    null,
+                                    project.Id,
+                                    contract?.Id,
+                                    existingCentralPayable?.ContractLineItemId,
+                                    businessDate,
+                                    amount,
+                                    invoiceAmount,
+                                    notes,
+                                    existingCentralPayable?.DueDate),
+                                existingCentralPayable,
+                                cancellationToken);
+                        }
                         if (existing is null)
                         {
                             var amount = ParseDecimal(row.Values.GetValueOrDefault("original_amount")) ?? ParseDecimal(row.Values.GetValueOrDefault("amount")) ?? 0m;
@@ -1283,34 +1410,28 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         var account = await db.FinancialAccounts.SingleAsync(item => item.Id == accountId, cancellationToken);
         var amount = ImportedParentAmount(rows, "amount") ?? existingCash?.Amount ?? (existing as CollectionEntry)?.Amount ?? 0m;
         var allocations = await BuildImportedAllocationsAsync(rows, "receivable_id", "amount", LedgerDirection.Receivable, cancellationToken);
-
-        if (allocations.Count == 0)
+        if (allocations.Count == 0 && existingCash is not null && rows.Count == 1 && existingCash.Allocations.Count == 1)
         {
-            if (rows.Count != 1) throw new InvalidOperationException("多项目收款分摊必须提供应收系统ID。");
-            if (existing is not null and not FinanceCashEntry)
-                throw new InvalidOperationException("历史收款记录不是中央账本记录，不能按新规则导入。");
-            var finance = new FinanceLedgerService(db);
-            var collectionDate = Has(row, "collection_date", blankMeansNoChange)
-                ? ParseDate(Required(row, "collection_date"))!.Value
-                : existingCash?.BusinessDate ?? throw new InvalidOperationException("缺少必填字段：collection_date");
-            var paymentMethod = Has(row, "payment_method", blankMeansNoChange) ? row.Values.GetValueOrDefault("payment_method") : existingCash?.PaymentMethod;
-            var notes = Has(row, "notes", blankMeansNoChange) ? row.Values.GetValueOrDefault("notes") : existingCash?.Notes;
-            if (existingCash is null)
-            {
-                await finance.RecordCollectionAsync(new RecordCollectionRequest(
-                    null, project.Id, contract?.Id, company.Id, partner.Id, accountId,
-                    collectionDate, amount, paymentMethod, notes, RequestedId(row)), cancellationToken);
-            }
-            else
-            {
-                await finance.UpdateCollectionAsync(
-                    new FinanceRecordActor(actorUserId, actorUserId),
-                    new UpdateCollectionRequest(
-                        existingCash.Id, null, project.Id, contract?.Id, company.Id, partner.Id, accountId,
-                        collectionDate, amount, paymentMethod, notes,
-                        existingCash.ConcurrencyStamp, "项目工作簿收款更新"), cancellationToken);
-            }
-            return;
+            allocations = [new FinanceAllocationRequest(existingCash.Allocations.Single().SettlementId, amount, 1)];
+        }
+        if (allocations.Count == 0 && rows.Count != 1)
+        {
+            throw new InvalidOperationException("多项目收款分摊必须提供应收系统ID。");
+        }
+        if (allocations.Count == 0 && existingCash is null)
+        {
+            var actor = new CentralLedgerActor(actorUserId, actorUserId, new HashSet<Guid> { company.Id }, new HashSet<Guid> { project.Id }, true, true, true, true);
+            allocations = await new CentralLedgerAllocationService(db).BuildAutomaticCashAllocationsAsync(
+                actor,
+                LedgerScope.External,
+                LedgerDirection.Receivable,
+                company.Id,
+                partner.Id,
+                null,
+                amount,
+                project.Id,
+                contract?.Id,
+                cancellationToken);
         }
 
         if (allocations.Sum(item => item.Amount) > amount)
@@ -1324,6 +1445,13 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             : existingCash?.BusinessDate ?? throw new InvalidOperationException("缺少必填字段：collection_date");
         var paymentMethodForWrite = Has(row, "payment_method", blankMeansNoChange) ? row.Values.GetValueOrDefault("payment_method") : existingCash?.PaymentMethod;
         var notesForWrite = Has(row, "notes", blankMeansNoChange) ? row.Values.GetValueOrDefault("notes") : existingCash?.Notes;
+        await centralLedgerCommands.ValidateImportedCashAsync(
+            new CreateFinanceCashRequest(
+                LedgerScope.External, LedgerDirection.Receivable, LedgerCashType.Collection, LedgerSourceType.CentralLedger, null,
+                company.Id, partner.Id, null, account.Id, null, collectionDateForWrite, amount, paymentMethodForWrite, notesForWrite, allocations,
+                ProjectId: parentProjectId, ContractId: parentContractId, EntryId: existingCash?.Id ?? RequestedId(row)),
+            existingCash,
+            cancellationToken);
 
         if (existingCash is null)
         {
@@ -1408,6 +1536,16 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             : existingCash?.BusinessDate ?? throw new InvalidOperationException("缺少必填字段：payment_date");
         var paymentMethodForWrite = Has(row, "payment_method", blankMeansNoChange) ? row.Values.GetValueOrDefault("payment_method") : existingCash?.PaymentMethod;
         var notesForWrite = Has(row, "notes", blankMeansNoChange) ? row.Values.GetValueOrDefault("notes") : existingCash?.Notes;
+        var hasMultipleProjects = HasMultipleProjects(rows);
+        var parentProjectId = hasMultipleProjects ? (Guid?)null : existingCash?.ProjectId ?? project.Id;
+        var parentContractId = hasMultipleProjects ? null : existingCash?.ContractId ?? contract?.Id;
+        await centralLedgerCommands.ValidateImportedCashAsync(
+            new CreateFinanceCashRequest(
+                LedgerScope.External, LedgerDirection.Payable, LedgerCashType.Payment, LedgerSourceType.CentralLedger, null,
+                company.Id, partner.Id, null, paymentAccount.Id, null, paymentDate, amount, paymentMethodForWrite, notesForWrite, allocations,
+                ProjectId: parentProjectId, ContractId: parentContractId, EntryId: existingCash?.Id ?? RequestedId(row)),
+            existingCash,
+            cancellationToken);
         if (existingCash is null)
         {
             if (existing is not null) throw new InvalidOperationException("历史付款记录不是中央账本记录，不能按新规则导入。");
@@ -1415,7 +1553,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             {
                 Id = RequestedId(row), Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment,
                 SourceType = LedgerSourceType.CentralLedger, LegalEntity = company, LegalEntityId = company.Id, BusinessPartner = partner, BusinessPartnerId = partner.Id,
-                Account = paymentAccount, AccountId = paymentAccount.Id, BusinessDate = paymentDate, Amount = amount,
+                ProjectId = parentProjectId, ContractId = parentContractId, Account = paymentAccount, AccountId = paymentAccount.Id, BusinessDate = paymentDate, Amount = amount,
                 PaymentMethod = paymentMethodForWrite, Notes = notesForWrite
             };
             db.FinanceCashEntries.Add(existingCash);
@@ -1425,7 +1563,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             if (existingCash.CashType != LedgerCashType.Payment || existingCash.IsReversal)
                 throw new InvalidOperationException("导入记录不是有效的付款记录。");
             existingCash.LegalEntity = company; existingCash.LegalEntityId = company.Id; existingCash.BusinessPartner = partner; existingCash.BusinessPartnerId = partner.Id;
-            existingCash.Account = paymentAccount; existingCash.AccountId = paymentAccount.Id; existingCash.BusinessDate = paymentDate; existingCash.Amount = amount;
+            existingCash.ProjectId = parentProjectId; existingCash.ContractId = parentContractId; existingCash.Account = paymentAccount; existingCash.AccountId = paymentAccount.Id; existingCash.BusinessDate = paymentDate; existingCash.Amount = amount;
             existingCash.PaymentMethod = paymentMethodForWrite; existingCash.Notes = notesForWrite; existingCash.UpdatedAt = DateTimeOffset.UtcNow; existingCash.ConcurrencyStamp = Guid.NewGuid();
             db.FinanceCashAllocations.RemoveRange(existingCash.Allocations);
             existingCash.Allocations.Clear();
@@ -1470,6 +1608,9 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         var netAmount = SumPresentDecimal(rows, "net_amount") ?? existingInvoice?.NetAmount;
         var taxAmount = SumPresentDecimal(rows, "tax_amount") ?? existingInvoice?.TaxAmount;
         var taxRate = FirstPresentDecimal(rows, "tax_rate") ?? existingInvoice?.TaxRate;
+        var taxConfigurationId = rows.Any(item => Has(item, "project_tax_configuration_id", blankMeansNoChange))
+            ? FirstPresentGuid(rows, "project_tax_configuration_id")
+            : existingInvoice?.ProjectTaxConfigurationId;
         var allocations = await BuildImportedAllocationsAsync(rows, "settlement_id", "gross_amount", LedgerDirection.Receivable, cancellationToken);
         if (allocations.Count == 0)
         {
@@ -1489,6 +1630,14 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         var invoiceNumber = Has(row, "invoice_number", blankMeansNoChange) ? Required(row, "invoice_number") : existingInvoice?.InvoiceNumber ?? throw new InvalidOperationException("缺少必填字段：invoice_number");
         var invoiceType = Has(row, "invoice_type", blankMeansNoChange) ? row.Values.GetValueOrDefault("invoice_type") : existingInvoice?.InvoiceType;
         var status = Has(row, "status", blankMeansNoChange) ? ParseInvoiceRecordStatus(row.Values.GetValueOrDefault("status")) : existingInvoice?.Status ?? LedgerRecordStatus.Active;
+        await centralLedgerCommands.ValidateImportedInvoiceAsync(
+            new CreateFinanceInvoiceRequest(
+                LedgerScope.External, LedgerDirection.Receivable, LedgerSourceType.CentralLedger, null,
+                company.Id, partner.Id, null, invoiceNumber, invoiceDate, amount, netAmount, taxAmount, taxRate, existingInvoice?.Notes,
+                allocations, ProjectTaxConfigurationId: taxConfigurationId, InvoiceType: invoiceType, Status: status,
+                ProjectId: parentProjectId, ContractId: parentContractId),
+            existingInvoice,
+            cancellationToken);
 
         if (existingInvoice is null)
         {
@@ -1497,7 +1646,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             {
                 Id = RequestedId(row), Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, LegalEntity = company, LegalEntityId = company.Id,
                 BusinessPartner = partner, BusinessPartnerId = partner.Id, ProjectId = parentProjectId, ContractId = parentContractId,
-                InvoiceNumber = invoiceNumber, InvoiceDate = invoiceDate, InvoiceType = invoiceType, TaxRate = taxRate, NetAmount = netAmount, TaxAmount = taxAmount,
+                InvoiceNumber = invoiceNumber, InvoiceDate = invoiceDate, ProjectTaxConfigurationId = taxConfigurationId, InvoiceType = invoiceType, TaxRate = taxRate, NetAmount = netAmount, TaxAmount = taxAmount,
                 Amount = amount, Status = status
             };
             db.FinanceInvoices.Add(existingInvoice);
@@ -1506,7 +1655,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         {
             existingInvoice.LegalEntity = company; existingInvoice.LegalEntityId = company.Id; existingInvoice.BusinessPartner = partner; existingInvoice.BusinessPartnerId = partner.Id;
             existingInvoice.ProjectId = parentProjectId; existingInvoice.ContractId = parentContractId; existingInvoice.Direction = LedgerDirection.Receivable;
-            existingInvoice.InvoiceNumber = invoiceNumber; existingInvoice.InvoiceDate = invoiceDate; existingInvoice.InvoiceType = invoiceType; existingInvoice.TaxRate = taxRate; existingInvoice.NetAmount = netAmount; existingInvoice.TaxAmount = taxAmount; existingInvoice.Amount = amount; existingInvoice.Status = status;
+            existingInvoice.InvoiceNumber = invoiceNumber; existingInvoice.InvoiceDate = invoiceDate; existingInvoice.ProjectTaxConfigurationId = taxConfigurationId; existingInvoice.InvoiceType = invoiceType; existingInvoice.TaxRate = taxRate; existingInvoice.NetAmount = netAmount; existingInvoice.TaxAmount = taxAmount; existingInvoice.Amount = amount; existingInvoice.Status = status;
             existingInvoice.UpdatedAt = DateTimeOffset.UtcNow; existingInvoice.ConcurrencyStamp = Guid.NewGuid();
             db.FinanceInvoiceAllocations.RemoveRange(existingInvoice.Allocations);
             existingInvoice.Allocations.Clear();
@@ -1625,6 +1774,9 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
 
     private static decimal? FirstPresentDecimal(IReadOnlyList<ParsedRow> rows, string key) =>
         rows.Select(row => ParseDecimal(row.Values.GetValueOrDefault(key))).FirstOrDefault(value => value.HasValue);
+
+    private static Guid? FirstPresentGuid(IReadOnlyList<ParsedRow> rows, string key) =>
+        rows.Select(row => Guid.TryParse(row.Values.GetValueOrDefault(key), out var value) ? (Guid?)value : null).FirstOrDefault(value => value.HasValue);
 
     private static decimal? SumPresentDecimal(IReadOnlyList<ParsedRow> rows, string key)
     {

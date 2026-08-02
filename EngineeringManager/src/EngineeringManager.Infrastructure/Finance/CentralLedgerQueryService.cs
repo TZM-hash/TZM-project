@@ -244,6 +244,7 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
             .Include(item => item.Allocations)
             .Where(item => item.Scope == query.Scope && item.Status == (query.RecordStatus ?? LedgerRecordStatus.Active) && !item.IsReversal
                 && actor.LegalEntityIds.Contains(item.LegalEntityId)
+                && (query.Scope != LedgerScope.Internal || (item.CounterLegalEntityId.HasValue && actor.LegalEntityIds.Contains(item.CounterLegalEntityId.Value)))
                 && (item.ProjectId.HasValue ? projectIds.Contains(item.ProjectId.Value) : item.Allocations.Any(allocation => allocation.ProjectId.HasValue && projectIds.Contains(allocation.ProjectId.Value))));
         if (query.Direction.HasValue) cashQuery = cashQuery.Where(item => item.Direction == query.Direction);
         if (startDate.HasValue) cashQuery = cashQuery.Where(item => item.BusinessDate >= startDate);
@@ -498,6 +499,8 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
             .ToListAsync(token);
         var deletionLogs = await db.FinanceDeletionLogs.AsNoTracking()
             .Where(item => item.LegalEntityId.HasValue && actor.LegalEntityIds.Contains(item.LegalEntityId.Value))
+            .Where(item => !item.CounterLegalEntityId.HasValue || actor.LegalEntityIds.Contains(item.CounterLegalEntityId.Value))
+            .Where(item => !item.ProjectId.HasValue || actor.ProjectIds.Contains(item.ProjectId.Value))
             .ToListAsync(token);
         var result = audits
             .Where(item => allowedIds.Contains(item.EntityId))
@@ -713,7 +716,7 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                 .Include(item => item.Contract)
                 .SingleOrDefaultAsync(item => item.Id == id, token);
             if (invoice is null) return null;
-            EnsureCanRead(actor, invoice.LegalEntityId, invoice.CounterLegalEntityId, null);
+            EnsureCanRead(actor, invoice.LegalEntityId, invoice.CounterLegalEntityId, invoice.ProjectId);
             var allocated = invoice.Allocations.Sum(item => item.Amount);
             return new CentralLedgerDetailsDto(
                 type,
@@ -766,7 +769,7 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                 .Include(item => item.CounterAccount)
                 .SingleOrDefaultAsync(item => item.Id == id, token);
             if (cash is null) return null;
-            EnsureCanRead(actor, cash.LegalEntityId, cash.CounterLegalEntityId, null);
+            EnsureCanRead(actor, cash.LegalEntityId, cash.CounterLegalEntityId, cash.ProjectId);
             var allocated = cash.Allocations.Sum(item => item.Amount);
             return new CentralLedgerDetailsDto(
                 type,

@@ -1,8 +1,10 @@
 using System.Text.Json;
 using EngineeringManager.Application.Equipment;
+using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Equipment;
@@ -61,19 +63,40 @@ public sealed class EquipmentSettlementService(ApplicationDbContext db) : IEquip
         if (!actor.CanSettle) throw new UnauthorizedAccessException("当前用户没有设备结算权限。");
         var settlement = await db.EquipmentSettlements.Include(item => item.Usage).ThenInclude(item => item.Equipment).SingleOrDefaultAsync(item => item.Id == settlementId, token)
             ?? throw new KeyNotFoundException("设备结算不存在。");
+        if (settlement.FinanceSettlementId.HasValue) return settlement.FinanceSettlementId.Value;
         if (settlement.PayableEntryId.HasValue) return settlement.PayableEntryId.Value;
         var partnerId = settlement.Usage.Equipment.LessorBusinessPartnerId ?? throw new InvalidOperationException("自有设备不生成对外应付。");
         var amount = settlement.TotalAmount - settlement.OffsetAmount;
         if (amount <= 0m) throw new InvalidOperationException("抵扣后应付金额必须大于零。");
-        var payable = new PayableEntry { ProjectId = settlement.Usage.ProjectId, LegalEntityId = settlement.Usage.LegalEntityId, BusinessPartnerId = partnerId, SourceType = PayableSourceType.Settlement, EntryDate = settlement.SettlementDate, Amount = amount, Description = $"设备结算：{settlement.Usage.Equipment.Name}" };
-        db.PayableEntries.Add(payable);
-        settlement.PayableEntryId = payable.Id;
+        var ledgerActor = new CentralLedgerActor(
+            actor.UserId,
+            null,
+            new HashSet<Guid> { settlement.Usage.LegalEntityId },
+            new HashSet<Guid> { settlement.Usage.ProjectId },
+            true,
+            false,
+            false,
+            false);
+        var payableId = await new FinancePostingService(db).CreatePartnerPayableAsync(
+            ledgerActor,
+            new CreatePartnerPayableRequest(
+                partnerId,
+                settlement.Usage.LegalEntityId,
+                settlement.Usage.ProjectId,
+                null,
+                settlement.SettlementDate,
+                LedgerSettlementState.Final,
+                amount,
+                amount,
+                $"设备结算：{settlement.Usage.Equipment.Name}"),
+            token);
+        settlement.FinanceSettlementId = payableId;
         await db.SaveChangesAsync(token);
-        return payable.Id;
+        return payableId;
     }
 
-    private static EquipmentSettlementDto ToDto(EquipmentSettlement item) => new(item.Id, item.UsageId, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.TotalAmount - item.OffsetAmount, item.PayableEntryId, item.ConcurrencyStamp, item.Notes);
-    private static object Snapshot(EquipmentSettlement item) => new { item.SettlementDate, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.PayableEntryId, item.Notes, item.ModificationReason, item.ConcurrencyStamp, Adjustments = item.Adjustments.Select(adjustment => new { adjustment.Direction, adjustment.AdjustmentType, adjustment.Amount, adjustment.Reason }) };
+    private static EquipmentSettlementDto ToDto(EquipmentSettlement item) => new(item.Id, item.UsageId, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.TotalAmount - item.OffsetAmount, item.FinanceSettlementId ?? item.PayableEntryId, item.ConcurrencyStamp, item.Notes);
+    private static object Snapshot(EquipmentSettlement item) => new { item.SettlementDate, item.BaseAmount, item.TotalAmount, item.OffsetAmount, item.PayableEntryId, item.FinanceSettlementId, item.Notes, item.ModificationReason, item.ConcurrencyStamp, Adjustments = item.Adjustments.Select(adjustment => new { adjustment.Direction, adjustment.AdjustmentType, adjustment.Amount, adjustment.Reason }) };
     private static string Required(string? value) => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("值不能为空。") : value.Trim();
     private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

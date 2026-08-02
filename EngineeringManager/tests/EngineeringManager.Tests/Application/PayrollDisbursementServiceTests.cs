@@ -44,6 +44,37 @@ public sealed class PayrollDisbursementServiceTests
     }
 
     [Fact]
+    public async Task CrewAllocationAcceptsActiveCentralLedgerPayable()
+    {
+        await using var fixture = await PayrollDisbursementFixture.CreateAsync();
+        var payable = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Payable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.Crew,
+            Project = fixture.Project,
+            LegalEntity = fixture.Company,
+            BusinessPartner = fixture.Crew,
+            BusinessDate = new DateOnly(2026, 7, 17),
+            OriginalAmount = 4_000m,
+            OriginalInvoiceAmount = 4_000m
+        };
+        fixture.Db.FinanceSettlements.Add(payable);
+        await fixture.Db.SaveChangesAsync();
+
+        var saved = await fixture.Service.SaveDisbursementBatchAsync(
+            "admin",
+            fixture.CreateRequest(10_000m, PayrollBatchStatus.Confirmed) with
+            {
+                CrewAllocations = [new PayrollCrewAllocationRequest(fixture.Crew.Id, null, payable.Id, "关联中央应付")]
+            },
+            CancellationToken.None);
+
+        saved.CrewAllocations.Should().ContainSingle().Which.PayableEntryId.Should().Be(payable.Id);
+    }
+
+    [Fact]
     public async Task UpdatingReviewedBatchReusesAccountTransactionAndWritesAudit()
     {
         await using var fixture = await PayrollDisbursementFixture.CreateAsync();

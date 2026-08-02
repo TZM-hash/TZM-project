@@ -322,6 +322,103 @@ public sealed class FinanceLedgerServiceTests
     }
 
     [Fact]
+    public async Task ReversalCannotExceedOriginalCashAcrossMultipleAttempts()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        var receivableId = await fixture.Service.AddReceivableAsync(
+            new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+                ReceivableSourceType.Manual, new DateOnly(2026, 7, 16), null, 100m, null),
+            CancellationToken.None);
+        var collectionId = await fixture.Service.RecordCollectionAsync(
+            new RecordCollectionRequest(receivableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id,
+                fixture.Partner.Id, fixture.Bank.Id, new DateOnly(2026, 7, 17), 60m, PaymentMethod.BankTransfer, null),
+            CancellationToken.None);
+
+        await fixture.Service.RecordRefundAsync(
+            new RecordRefundRequest(collectionId, receivableId, fixture.Bank.Id, new DateOnly(2026, 7, 18), 40m,
+                FinancialAdjustmentType.Refund, "首次退款"),
+            CancellationToken.None);
+        var action = () => fixture.Service.RecordRefundAsync(
+            new RecordRefundRequest(collectionId, receivableId, fixture.Bank.Id, new DateOnly(2026, 7, 19), 30m,
+                FinancialAdjustmentType.Refund, "超额退款"),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*尚未冲销*");
+        var reversals = await fixture.Db.FinanceCashEntries.AsNoTracking()
+            .Where(item => item.ReversesCashEntryId == collectionId && item.Status == LedgerRecordStatus.Active)
+            .ToListAsync();
+        reversals.Should().ContainSingle().Which.Amount.Should().Be(40m);
+    }
+
+    [Fact]
+    public async Task RefundCanReverseAllocatedAndUnallocatedCollectionAmounts()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        fixture.Db.FinanceSettlements.Add(QuantitySettlement(
+            fixture,
+            fixture.Project,
+            fixture.Contract,
+            new DateOnly(2026, 7, 16),
+            60m));
+        await fixture.Db.SaveChangesAsync();
+        var collectionId = await fixture.Service.RecordCollectionAsync(
+            new RecordCollectionRequest(null, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id,
+                fixture.Partner.Id, fixture.Bank.Id, new DateOnly(2026, 7, 17), 100m, PaymentMethod.BankTransfer, null),
+            CancellationToken.None);
+
+        var refundId = await fixture.Service.RecordRefundAsync(
+            new RecordRefundRequest(collectionId, null, fixture.Bank.Id, new DateOnly(2026, 7, 18), 80m,
+                FinancialAdjustmentType.Refund, "冲销已分摊和未分摊收款"),
+            CancellationToken.None);
+
+        var refund = await fixture.Db.FinanceCashEntries.AsNoTracking()
+            .Include(item => item.Allocations)
+            .SingleAsync(item => item.Id == refundId);
+        refund.Amount.Should().Be(80m);
+        refund.Allocations.Should().ContainSingle().Which.Amount.Should().Be(60m);
+        var summary = await fixture.Service.GetProjectSummaryAsync(fixture.Project.Id, CancellationToken.None);
+        summary.CollectedAmount.Should().Be(20m);
+    }
+
+    [Fact]
+    public async Task RefundRejectsSettlementOutsideOriginalCollectionAllocations()
+    {
+        await using var fixture = await FinanceFixture.CreateAsync();
+        var receivableId = await fixture.Service.AddReceivableAsync(
+            new CreateReceivableRequest(fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id, fixture.Partner.Id,
+                ReceivableSourceType.Manual, new DateOnly(2026, 7, 16), null, 100m, null),
+            CancellationToken.None);
+        var collectionId = await fixture.Service.RecordCollectionAsync(
+            new RecordCollectionRequest(receivableId, fixture.Project.Id, fixture.Contract.Id, fixture.LegalEntity.Id,
+                fixture.Partner.Id, fixture.Bank.Id, new DateOnly(2026, 7, 17), 60m, PaymentMethod.BankTransfer, null),
+            CancellationToken.None);
+        var unrelated = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntityId = fixture.LegalEntity.Id,
+            BusinessPartnerId = fixture.Partner.Id,
+            ProjectId = fixture.Project.Id,
+            ContractId = fixture.Contract.Id,
+            BusinessDate = new DateOnly(2026, 7, 16),
+            OriginalAmount = 50m,
+            OriginalInvoiceAmount = 50m
+        };
+        fixture.Db.FinanceSettlements.Add(unrelated);
+        await fixture.Db.SaveChangesAsync();
+
+        var action = () => fixture.Service.RecordRefundAsync(
+            new RecordRefundRequest(collectionId, unrelated.Id, fixture.Bank.Id, new DateOnly(2026, 7, 18), 10m,
+                FinancialAdjustmentType.Refund, "错误关联"),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*分摊范围*");
+        (await fixture.Db.FinanceCashEntries.CountAsync(item => item.ReversesCashEntryId == collectionId)).Should().Be(0);
+    }
+
+    [Fact]
     public async Task InternalTransferCreatesLinkedOutflowAndInflow()
     {
         await using var fixture = await FinanceFixture.CreateAsync();

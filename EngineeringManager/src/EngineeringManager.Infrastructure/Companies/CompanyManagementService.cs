@@ -5,6 +5,7 @@ using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Finance;
 using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
@@ -548,74 +549,32 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             item.ProjectId,
             item.ContractId)));
 
-        var collections = await db.CollectionEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId)
-            .OrderByDescending(item => item.CollectionDate)
-            .Take(take)
-            .Select(item => new
-            {
-                item.Id,
-                item.ProjectId,
-                item.Project.ProjectNumber,
-                item.Project.Name,
-                item.Amount,
-                item.CollectionDate,
-                item.Notes
-            })
-            .ToListAsync(cancellationToken);
+        var collections = await LoadCompanyCashRowsAsync(companyId, LedgerDirection.Receivable, take, cancellationToken);
         activities.AddRange(collections.Select(item => new CompanyActivityItemDto(
             "collection",
-            item.ProjectNumber + " 收款",
-            string.IsNullOrWhiteSpace(item.Notes) ? item.Name : item.Notes,
+            item.ProjectNumber + (item.IsReversal ? " 退款" : " 收款"),
+            string.IsNullOrWhiteSpace(item.Notes) ? item.ProjectName : item.Notes,
             item.Amount,
-            item.CollectionDate,
+            item.Date,
             item.ProjectId,
             item.Id)));
 
-        var payments = await db.PaymentEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId)
-            .OrderByDescending(item => item.PaymentDate)
-            .Take(take)
-            .Select(item => new
-            {
-                item.Id,
-                item.ProjectId,
-                item.Project.ProjectNumber,
-                item.Project.Name,
-                item.Amount,
-                item.PaymentDate,
-                item.Notes
-            })
-            .ToListAsync(cancellationToken);
+        var payments = await LoadCompanyCashRowsAsync(companyId, LedgerDirection.Payable, take, cancellationToken);
         activities.AddRange(payments.Select(item => new CompanyActivityItemDto(
             "payment",
-            item.ProjectNumber + " 付款",
-            string.IsNullOrWhiteSpace(item.Notes) ? item.Name : item.Notes,
+            item.ProjectNumber + (item.IsReversal ? " 付款冲销" : " 付款"),
+            string.IsNullOrWhiteSpace(item.Notes) ? item.ProjectName : item.Notes,
             item.Amount,
-            item.PaymentDate,
+            item.Date,
             item.ProjectId,
             item.Id)));
 
-        var invoices = await db.InvoiceEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId)
-            .OrderByDescending(item => item.InvoiceDate)
-            .Take(take)
-            .Select(item => new
-            {
-                item.Id,
-                item.ProjectId,
-                item.Project.ProjectNumber,
-                item.InvoiceNumber,
-                item.GrossAmount,
-                item.InvoiceDate,
-                item.Direction
-            })
-            .ToListAsync(cancellationToken);
+        var invoices = await LoadCompanyInvoiceRowsAsync(companyId, take, cancellationToken);
         activities.AddRange(invoices.Select(item => new CompanyActivityItemDto(
             "invoice",
             item.InvoiceNumber,
-            item.ProjectNumber + " " + (item.Direction == InvoiceDirection.Output ? "销项发票" : "进项发票"),
-            item.GrossAmount,
+            item.ProjectNumber + " " + (item.Direction == LedgerDirection.Receivable ? "销项发票" : "进项发票"),
+            item.Amount,
             item.InvoiceDate,
             item.ProjectId,
             item.Id)));
@@ -663,65 +622,25 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             .GroupBy(item => item.ProjectId)
             .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount ?? item.TotalAmount * (item.Percentage ?? 0m) / 100m));
 
-        var receivables = await db.ReceivableEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId && !item.IsVoided && selectedIds.Contains(item.ProjectId))
-            .GroupBy(item => item.ProjectId)
-            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToListAsync(cancellationToken);
-        var collections = await db.CollectionEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId && selectedIds.Contains(item.ProjectId))
-            .GroupBy(item => item.ProjectId)
-            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToListAsync(cancellationToken);
-        var refunds = await db.RefundOrReversalEntries.AsNoTracking()
-            .Where(item =>
-                ((item.Receivable != null && item.Receivable.LegalEntityId == companyId) ||
-                 (item.Collection != null && item.Collection.LegalEntityId == companyId)) &&
-                ((item.Receivable != null && selectedIds.Contains(item.Receivable.ProjectId)) ||
-                 (item.Collection != null && selectedIds.Contains(item.Collection.ProjectId))))
-            .Select(item => new
-            {
-                ProjectId = item.Receivable != null ? item.Receivable.ProjectId : item.Collection!.ProjectId,
-                item.Amount
-            })
-            .ToListAsync(cancellationToken);
-        var payables = await db.PayableEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId && !item.IsVoided && selectedIds.Contains(item.ProjectId))
-            .GroupBy(item => item.ProjectId)
-            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToListAsync(cancellationToken);
-        var payments = await db.PaymentEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId && selectedIds.Contains(item.ProjectId))
-            .GroupBy(item => item.ProjectId)
-            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToListAsync(cancellationToken);
-        var reversals = await db.PaymentReversalEntries.AsNoTracking()
-            .Where(item => item.Payment.LegalEntityId == companyId && selectedIds.Contains(item.Payment.ProjectId))
-            .GroupBy(item => item.Payment.ProjectId)
-            .Select(group => new { ProjectId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToListAsync(cancellationToken);
-
-        var receivableMap = receivables.ToDictionary(item => item.ProjectId, item => item.Amount);
-        var collectedMap = collections.ToDictionary(item => item.ProjectId, item => item.Amount);
-        var refundMap = refunds.GroupBy(item => item.ProjectId).ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
-        var payableMap = payables.ToDictionary(item => item.ProjectId, item => item.Amount);
-        var paidMap = payments.ToDictionary(item => item.ProjectId, item => item.Amount);
-        var reversalMap = reversals.ToDictionary(item => item.ProjectId, item => item.Amount);
+        var financeByProject = (await new FinanceLedgerService(db).ListProjectSummariesForLegalEntityAsync(
+                selectedIds,
+                companyId,
+                cancellationToken))
+            .ToDictionary(item => item.ProjectId, item => item.Summary);
 
         return projects.Select(item =>
         {
-            var collected = collectedMap.GetValueOrDefault(item.Id) - refundMap.GetValueOrDefault(item.Id);
-            var paid = paidMap.GetValueOrDefault(item.Id) - reversalMap.GetValueOrDefault(item.Id);
+            financeByProject.TryGetValue(item.Id, out var finance);
             return new CompanyProjectRowDto(
                 item.Id,
                 item.ProjectNumber,
                 item.Name,
                 StageLabel(item.Stage),
                 shareByProject.GetValueOrDefault(item.Id),
-                receivableMap.GetValueOrDefault(item.Id),
-                collected,
-                payableMap.GetValueOrDefault(item.Id),
-                paid);
+                finance?.ReceivableAmount ?? 0m,
+                finance?.CollectedAmount ?? 0m,
+                finance?.PayableAmount ?? 0m,
+                finance?.PaidAmount ?? 0m);
         }).ToArray();
     }
 
@@ -771,68 +690,53 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
     {
         await EnsureAccessAsync(actor, companyId, cancellationToken);
         take = NormalizeTake(take, 50);
-        return await db.CollectionEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId)
-            .OrderByDescending(item => item.CollectionDate)
-            .ThenByDescending(item => item.Id)
-            .Take(take)
-            .Select(item => new CompanyCollectionRowDto(
-                item.Id,
-                item.CollectionDate,
-                item.ProjectId,
-                item.Project.ProjectNumber,
-                item.Project.Name,
-                item.Notes ?? item.Project.Name,
-                item.AccountId,
-                item.Account.AccountName,
-                item.Account.IsActive,
-                item.Amount))
-            .ToListAsync(cancellationToken);
+        var rows = await LoadCompanyCashRowsAsync(companyId, LedgerDirection.Receivable, take, cancellationToken);
+        return rows.Select(item => new CompanyCollectionRowDto(
+            item.Id,
+            item.Date,
+            item.ProjectId,
+            item.ProjectNumber,
+            item.ProjectName,
+            item.Notes ?? item.ProjectName,
+            item.AccountId,
+            item.AccountName,
+            item.AccountIsActive,
+            item.Amount)).ToArray();
     }
 
     public async Task<IReadOnlyList<CompanyPaymentRowDto>> ListCompanyPaymentsAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken)
     {
         await EnsureAccessAsync(actor, companyId, cancellationToken);
         take = NormalizeTake(take, 50);
-        return await db.PaymentEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId)
-            .OrderByDescending(item => item.PaymentDate)
-            .ThenByDescending(item => item.Id)
-            .Take(take)
-            .Select(item => new CompanyPaymentRowDto(
-                item.Id,
-                item.PaymentDate,
-                item.ProjectId,
-                item.Project.ProjectNumber,
-                item.Project.Name,
-                item.Notes ?? item.Project.Name,
-                item.AccountId,
-                item.Account.AccountName,
-                item.Account.IsActive,
-                item.Amount))
-            .ToListAsync(cancellationToken);
+        var rows = await LoadCompanyCashRowsAsync(companyId, LedgerDirection.Payable, take, cancellationToken);
+        return rows.Select(item => new CompanyPaymentRowDto(
+            item.Id,
+            item.Date,
+            item.ProjectId,
+            item.ProjectNumber,
+            item.ProjectName,
+            item.Notes ?? item.ProjectName,
+            item.AccountId,
+            item.AccountName,
+            item.AccountIsActive,
+            item.Amount)).ToArray();
     }
 
     public async Task<IReadOnlyList<CompanyInvoiceRowDto>> ListCompanyInvoicesAsync(CompanyActor actor, Guid companyId, int take, CancellationToken cancellationToken)
     {
         await EnsureAccessAsync(actor, companyId, cancellationToken);
         take = NormalizeTake(take, 50);
-        return await db.InvoiceEntries.AsNoTracking()
-            .Where(item => item.LegalEntityId == companyId)
-            .OrderByDescending(item => item.InvoiceDate)
-            .ThenByDescending(item => item.Id)
-            .Take(take)
-            .Select(item => new CompanyInvoiceRowDto(
-                item.Id,
-                item.Direction == InvoiceDirection.Output ? "销项" : "进项",
-                item.InvoiceNumber,
-                item.InvoiceDate,
-                item.ProjectId,
-                item.Project.ProjectNumber,
-                item.Project.Name,
-                item.LegalEntity.Name,
-                item.GrossAmount))
-            .ToListAsync(cancellationToken);
+        var rows = await LoadCompanyInvoiceRowsAsync(companyId, take, cancellationToken);
+        return rows.Select(item => new CompanyInvoiceRowDto(
+            item.Id,
+            item.Direction == LedgerDirection.Receivable ? "销项" : "进项",
+            item.InvoiceNumber,
+            item.InvoiceDate,
+            item.ProjectId,
+            item.ProjectNumber,
+            item.ProjectName,
+            item.LegalEntityName,
+            item.Amount)).ToArray();
     }
     public async Task<CompanyDashboardDto> GetDashboardAsync(CompanyActor actor, Guid? companyId, CancellationToken cancellationToken)
     {
@@ -847,17 +751,20 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             .Select(item => new { item.Amount, item.Percentage, item.Contract.TotalAmount }).ToListAsync(cancellationToken);
         var lineRows = await db.ContractLineItemLegalEntityAllocations.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId))
             .Select(item => new { item.Amount, item.ContractLineItem.Contract.Project.Stage }).ToListAsync(cancellationToken);
-        var receivables = await db.ReceivableEntries.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId) && !item.IsVoided).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var collections = await db.CollectionEntries.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var refunds = await db.RefundOrReversalEntries.AsNoTracking().Where(item =>
-                (item.Receivable != null && ids.Contains(item.Receivable.LegalEntityId)) ||
-                (item.Collection != null && ids.Contains(item.Collection.LegalEntityId)))
-            .Select(item => item.Amount).ToListAsync(cancellationToken);
-        var payables = await db.PayableEntries.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId) && !item.IsVoided).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var payments = await db.PaymentEntries.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var reversals = await db.PaymentReversalEntries.AsNoTracking().Where(item => ids.Contains(item.Payment.LegalEntityId)).Select(item => item.Amount).ToListAsync(cancellationToken);
-        var invoices = await db.InvoiceEntries.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId) && item.Status == InvoiceStatus.IssuedOrReceived)
-            .Select(item => new { item.Direction, item.GrossAmount }).ToListAsync(cancellationToken);
+        var settlements = await db.FinanceSettlements.AsNoTracking()
+            .Include(item => item.Adjustments)
+            .Where(item => item.Scope == LedgerScope.External && item.Status == LedgerRecordStatus.Active && ids.Contains(item.LegalEntityId))
+            .ToListAsync(cancellationToken);
+        var cashEntries = await db.FinanceCashEntries.AsNoTracking()
+            .Where(item => item.Scope == LedgerScope.External && item.Status == LedgerRecordStatus.Active && ids.Contains(item.LegalEntityId)
+                && ((item.Direction == LedgerDirection.Receivable && item.CashType == LedgerCashType.Collection)
+                    || (item.Direction == LedgerDirection.Payable && item.CashType == LedgerCashType.Payment)))
+            .Select(item => new { item.Direction, item.IsReversal, item.Amount })
+            .ToListAsync(cancellationToken);
+        var invoices = await db.FinanceInvoices.AsNoTracking()
+            .Where(item => item.Scope == LedgerScope.External && item.Status == LedgerRecordStatus.Active && ids.Contains(item.LegalEntityId))
+            .Select(item => new { item.Direction, item.Amount })
+            .ToListAsync(cancellationToken);
         var payroll = await db.PayrollCostAllocations.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId)).Select(item => item.Amount).ToListAsync(cancellationToken);
         var accounts = await db.FinancialAccounts.AsNoTracking().Where(item => ids.Contains(item.LegalEntityId) && item.IsActive)
             .Select(item => new { item.Id, item.OpeningBalance }).ToListAsync(cancellationToken);
@@ -868,22 +775,220 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         var accountBalance = accounts.Sum(item => item.OpeningBalance)
             + transactions.Where(item => item.Direction == AccountTransactionDirection.Inflow).Sum(item => item.Amount)
             - transactions.Where(item => item.Direction == AccountTransactionDirection.Outflow).Sum(item => item.Amount);
+        var settlementAmounts = settlements.Select(item => new
+        {
+            item.Direction,
+            Amount = item.OriginalAmount + item.Adjustments
+                .Where(adjustment => adjustment.Status == LedgerRecordStatus.Active)
+                .Sum(adjustment => adjustment.AmountDelta)
+        }).ToArray();
+        var collectedAmount = cashEntries
+            .Where(item => item.Direction == LedgerDirection.Receivable)
+            .Sum(item => item.IsReversal ? -item.Amount : item.Amount);
+        var paidAmount = cashEntries
+            .Where(item => item.Direction == LedgerDirection.Payable)
+            .Sum(item => item.IsReversal ? -item.Amount : item.Amount);
         return new CompanyDashboardDto(
             ids.Count,
             contractAmount,
             lineRows.Where(item => item.Stage != ProjectStage.PartiallySettled && item.Stage != ProjectStage.SettledArchived).Sum(item => item.Amount),
             lineRows.Where(item => item.Stage == ProjectStage.PartiallySettled || item.Stage == ProjectStage.SettledArchived).Sum(item => item.Amount),
-            receivables.Sum(),
-            collections.Sum() - refunds.Sum(),
-            payables.Sum(),
-            payments.Sum() - reversals.Sum(),
-            invoices.Where(item => item.Direction == InvoiceDirection.Output).Sum(item => item.GrossAmount),
-            invoices.Where(item => item.Direction == InvoiceDirection.Input).Sum(item => item.GrossAmount),
+            settlementAmounts.Where(item => item.Direction == LedgerDirection.Receivable).Sum(item => item.Amount),
+            collectedAmount,
+            settlementAmounts.Where(item => item.Direction == LedgerDirection.Payable).Sum(item => item.Amount),
+            paidAmount,
+            invoices.Where(item => item.Direction == LedgerDirection.Receivable).Sum(item => item.Amount),
+            invoices.Where(item => item.Direction == LedgerDirection.Payable).Sum(item => item.Amount),
             payroll.Sum(),
             0m,
             accountBalance,
             DateTimeOffset.UtcNow);
     }
+
+    private async Task<IReadOnlyList<CompanyCashProjection>> LoadCompanyCashRowsAsync(
+        Guid companyId,
+        LedgerDirection direction,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        var cashType = direction == LedgerDirection.Receivable ? LedgerCashType.Collection : LedgerCashType.Payment;
+        var entries = await db.FinanceCashEntries
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(item => item.Scope == LedgerScope.External
+                && item.Direction == direction
+                && item.CashType == cashType
+                && item.LegalEntityId == companyId
+                && item.Status == LedgerRecordStatus.Active
+                && item.AccountId.HasValue
+                && (item.ProjectId.HasValue || item.Allocations.Any(allocation => allocation.ProjectId.HasValue || allocation.Settlement.ProjectId.HasValue)))
+            .Include(item => item.Account)
+            .Include(item => item.Allocations)
+                .ThenInclude(item => item.Settlement)
+            .OrderByDescending(item => item.BusinessDate)
+            .ThenByDescending(item => item.Id)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        var projectIds = entries
+            .SelectMany(item => item.Allocations.Select(allocation => allocation.ProjectId ?? allocation.Settlement.ProjectId)
+                .Append(item.ProjectId))
+            .Where(item => item.HasValue)
+            .Select(item => item!.Value)
+            .Distinct()
+            .ToArray();
+        var projects = await db.Projects.AsNoTracking()
+            .Where(item => projectIds.Contains(item.Id))
+            .Select(item => new { item.Id, item.ProjectNumber, item.Name })
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+
+        var rows = new List<CompanyCashProjection>();
+        foreach (var entry in entries)
+        {
+            if (!entry.AccountId.HasValue || entry.Account is null) continue;
+            var projectAmounts = new Dictionary<Guid, decimal>();
+            foreach (var allocation in entry.Allocations)
+            {
+                var projectId = allocation.ProjectId ?? allocation.Settlement.ProjectId;
+                if (!projectId.HasValue) continue;
+                projectAmounts[projectId.Value] = projectAmounts.GetValueOrDefault(projectId.Value) + allocation.Amount;
+            }
+
+            if (entry.ProjectId.HasValue)
+            {
+                var unallocated = Math.Max(entry.Amount - entry.Allocations.Sum(item => item.Amount), 0m);
+                if (unallocated > 0m || projectAmounts.Count == 0)
+                {
+                    projectAmounts[entry.ProjectId.Value] = projectAmounts.GetValueOrDefault(entry.ProjectId.Value)
+                        + (projectAmounts.Count == 0 ? entry.Amount : unallocated);
+                }
+            }
+
+            var sign = entry.IsReversal ? -1m : 1m;
+            foreach (var (projectId, amount) in projectAmounts)
+            {
+                if (!projects.TryGetValue(projectId, out var project)) continue;
+                rows.Add(new CompanyCashProjection(
+                    entry.Id,
+                    entry.BusinessDate,
+                    projectId,
+                    project.ProjectNumber,
+                    project.Name,
+                    entry.Notes,
+                    entry.AccountId.Value,
+                    entry.Account.AccountName,
+                    entry.Account.IsActive,
+                    amount * sign,
+                    entry.IsReversal));
+            }
+        }
+
+        return rows
+            .OrderByDescending(item => item.Date)
+            .ThenByDescending(item => item.Id)
+            .Take(take)
+            .ToArray();
+    }
+
+    private async Task<IReadOnlyList<CompanyInvoiceProjection>> LoadCompanyInvoiceRowsAsync(
+        Guid companyId,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        var entries = await db.FinanceInvoices
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(item => item.Scope == LedgerScope.External
+                && item.LegalEntityId == companyId
+                && item.Status == LedgerRecordStatus.Active
+                && (item.ProjectId.HasValue || item.Allocations.Any(allocation => allocation.ProjectId.HasValue || allocation.Settlement.ProjectId.HasValue)))
+            .Include(item => item.LegalEntity)
+            .Include(item => item.Allocations)
+                .ThenInclude(item => item.Settlement)
+            .OrderByDescending(item => item.InvoiceDate)
+            .ThenByDescending(item => item.Id)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        var projectIds = entries
+            .SelectMany(item => item.Allocations.Select(allocation => allocation.ProjectId ?? allocation.Settlement.ProjectId)
+                .Append(item.ProjectId))
+            .Where(item => item.HasValue)
+            .Select(item => item!.Value)
+            .Distinct()
+            .ToArray();
+        var projects = await db.Projects.AsNoTracking()
+            .Where(item => projectIds.Contains(item.Id))
+            .Select(item => new { item.Id, item.ProjectNumber, item.Name })
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+
+        var rows = new List<CompanyInvoiceProjection>();
+        foreach (var entry in entries)
+        {
+            var projectAmounts = new Dictionary<Guid, decimal>();
+            foreach (var allocation in entry.Allocations)
+            {
+                var projectId = allocation.ProjectId ?? allocation.Settlement.ProjectId;
+                if (!projectId.HasValue) continue;
+                projectAmounts[projectId.Value] = projectAmounts.GetValueOrDefault(projectId.Value) + allocation.Amount;
+            }
+
+            if (entry.ProjectId.HasValue)
+            {
+                var unallocated = Math.Max(entry.Amount - entry.Allocations.Sum(item => item.Amount), 0m);
+                if (unallocated > 0m || projectAmounts.Count == 0)
+                {
+                    projectAmounts[entry.ProjectId.Value] = projectAmounts.GetValueOrDefault(entry.ProjectId.Value)
+                        + (projectAmounts.Count == 0 ? entry.Amount : unallocated);
+                }
+            }
+
+            foreach (var (projectId, amount) in projectAmounts)
+            {
+                if (!projects.TryGetValue(projectId, out var project)) continue;
+                rows.Add(new CompanyInvoiceProjection(
+                    entry.Id,
+                    entry.Direction,
+                    entry.InvoiceNumber,
+                    entry.InvoiceDate,
+                    projectId,
+                    project.ProjectNumber,
+                    project.Name,
+                    entry.LegalEntity.Name,
+                    amount));
+            }
+        }
+
+        return rows
+            .OrderByDescending(item => item.InvoiceDate)
+            .ThenByDescending(item => item.Id)
+            .Take(take)
+            .ToArray();
+    }
+
+    private sealed record CompanyCashProjection(
+        Guid Id,
+        DateOnly Date,
+        Guid ProjectId,
+        string ProjectNumber,
+        string ProjectName,
+        string? Notes,
+        Guid AccountId,
+        string AccountName,
+        bool AccountIsActive,
+        decimal Amount,
+        bool IsReversal);
+
+    private sealed record CompanyInvoiceProjection(
+        Guid Id,
+        LedgerDirection Direction,
+        string InvoiceNumber,
+        DateOnly InvoiceDate,
+        Guid ProjectId,
+        string ProjectNumber,
+        string ProjectName,
+        string LegalEntityName,
+        decimal Amount);
 
     private async Task<HashSet<Guid>> GetCompanyProjectIdsAsync(Guid companyId, CancellationToken cancellationToken)
     {

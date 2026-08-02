@@ -281,6 +281,197 @@ public sealed class ModuleExportTests
     }
 
     [Fact]
+    public async Task FinanceRoundTripRestoresParentAmountsAllocationsAndInvoiceTaxDetails()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        var company = new LegalEntity { Code = "ROUND-LE", Name = "往返公司", ShortName = "往返" };
+        var partner = new BusinessPartner { PartnerNumber = "ROUND-BP", Name = "往返单位", ShortName = "往返单位" };
+        var account = new FinancialAccount { LegalEntity = company, AccountName = "往返账户", AccountNumber = "ROUND-ACCT", AccountType = FinancialAccountType.Bank };
+        var firstProject = new Project { ProjectNumber = "ROUND-P1", Name = "往返项目一", Stage = ProjectStage.UnderConstruction };
+        var secondProject = new Project { ProjectNumber = "ROUND-P2", Name = "往返项目二", Stage = ProjectStage.UnderConstruction };
+        firstProject.LegalEntities.Add(new ProjectLegalEntity { Project = firstProject, LegalEntity = company, IsPrimary = true });
+        secondProject.LegalEntities.Add(new ProjectLegalEntity { Project = secondProject, LegalEntity = company, IsPrimary = true });
+        var firstContract = new Contract { Project = firstProject, BusinessPartner = partner, ContractNumber = "ROUND-C1", Name = "往返合同一" };
+        var secondContract = new Contract { Project = secondProject, BusinessPartner = partner, ContractNumber = "ROUND-C2", Name = "往返合同二" };
+        firstProject.Contracts.Add(firstContract);
+        secondProject.Contracts.Add(secondContract);
+        var firstSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = firstProject,
+            Contract = firstContract,
+            BusinessDate = new DateOnly(2026, 8, 1),
+            OriginalAmount = 400m,
+            OriginalInvoiceAmount = 400m
+        };
+        var secondSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = secondProject,
+            Contract = secondContract,
+            BusinessDate = new DateOnly(2026, 8, 1),
+            OriginalAmount = 600m,
+            OriginalInvoiceAmount = 600m
+        };
+        var taxSettlement = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = firstProject,
+            Contract = firstContract,
+            BusinessDate = new DateOnly(2026, 8, 1),
+            OriginalAmount = 106m,
+            OriginalInvoiceAmount = 106m
+        };
+        var taxConfiguration = new ProjectTaxConfiguration { Project = firstProject, TaxRate = 0.06m, InvoiceType = ProjectInvoiceType.Special };
+        var cash = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            CashType = LedgerCashType.Collection,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Account = account,
+            BusinessDate = new DateOnly(2026, 8, 2),
+            Amount = 1_000m,
+            PaymentMethod = PaymentMethod.BankTransfer.ToString(),
+            Notes = "往返多项目收款"
+        };
+        cash.Allocations.Add(new FinanceCashAllocation { CashEntry = cash, Settlement = firstSettlement, Project = firstProject, Contract = firstContract, BusinessPartnerId = partner.Id, Amount = 400m, AllocationOrder = 1 });
+        cash.Allocations.Add(new FinanceCashAllocation { CashEntry = cash, Settlement = secondSettlement, Project = secondProject, Contract = secondContract, BusinessPartnerId = partner.Id, Amount = 600m, AllocationOrder = 2 });
+        var multiInvoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            InvoiceNumber = "ROUND-INV-MULTI",
+            InvoiceDate = new DateOnly(2026, 8, 3),
+            InvoiceType = "Special",
+            Amount = 1_000m,
+            NetAmount = 970m,
+            TaxAmount = 30m,
+            TaxRate = 0.03m,
+            Notes = "往返多项目发票"
+        };
+        multiInvoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = multiInvoice, Settlement = firstSettlement, Project = firstProject, Contract = firstContract, BusinessPartnerId = partner.Id, Amount = 400m, AllocationOrder = 1 });
+        multiInvoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = multiInvoice, Settlement = secondSettlement, Project = secondProject, Contract = secondContract, BusinessPartnerId = partner.Id, Amount = 600m, AllocationOrder = 2 });
+        var configuredInvoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = firstProject,
+            Contract = firstContract,
+            ProjectTaxConfiguration = taxConfiguration,
+            InvoiceNumber = "ROUND-INV-TAX",
+            InvoiceDate = new DateOnly(2026, 8, 4),
+            InvoiceType = "Special",
+            Amount = 106m,
+            NetAmount = 100m,
+            TaxAmount = 6m,
+            TaxRate = 0.06m,
+            Notes = "往返税务发票"
+        };
+        configuredInvoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = configuredInvoice, Settlement = taxSettlement, Project = firstProject, Contract = firstContract, BusinessPartnerId = partner.Id, Amount = 106m, AllocationOrder = 1 });
+        var cashTransaction = new AccountTransaction
+        {
+            Account = account,
+            Direction = AccountTransactionDirection.Inflow,
+            SourceType = AccountTransactionSourceType.Collection,
+            SourceId = cash.Id,
+            TransactionDate = cash.BusinessDate,
+            Amount = cash.Amount,
+            Description = cash.Notes
+        };
+        fixture.Db.AddRange(company, partner, account, firstProject, secondProject, firstSettlement, secondSettlement, taxSettlement, taxConfiguration, cash, multiInvoice, configuredInvoice, cashTransaction);
+        await fixture.Db.SaveChangesAsync();
+
+        var cashFields = new[] { "_system_id", "project_number", "contract_number", "collection_date", "legal_entity_code", "partner_number", "account_number", "amount", "source_amount", "allocation_amount", "settlement_id", "payment_method", "notes" };
+        var invoiceFields = new[] { "_system_id", "project_number", "contract_number", "invoice_number", "invoice_date", "direction", "legal_entity_code", "partner_number", "invoice_type", "project_tax_configuration_id", "tax_rate", "net_amount", "tax_amount", "gross_amount", "source_amount", "allocation_amount", "settlement_id", "status", "notes" };
+        var cashExport = await fixture.Service.ExportAsync(new ExportRequest(ExportDataset.Collections, "round-trip", cashFields, null), CancellationToken.None);
+        var invoiceExport = await fixture.Service.ExportAsync(new ExportRequest(ExportDataset.Invoices, "round-trip", invoiceFields, null), CancellationToken.None);
+        var cashSheet = SimpleXlsxReader.Read(cashExport.Content).Single();
+        var invoiceSheet = SimpleXlsxReader.Read(invoiceExport.Content).Single();
+        var cashHeaders = cashSheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+        var invoiceHeaders = invoiceSheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+        var cashIdIndex = cashHeaders.ToList().IndexOf("系统ID");
+        var invoiceIdIndex = invoiceHeaders.ToList().IndexOf("系统ID");
+        var cashWorkbook = new SimpleXlsxWorkbook();
+        cashWorkbook.AddWorksheet("收款导入", cashHeaders, cashSheet.Rows.Skip(1).Where(row => row[cashIdIndex]?.ToString() == cash.Id.ToString()).ToArray());
+        var invoiceWorkbook = new SimpleXlsxWorkbook();
+        invoiceWorkbook.AddWorksheet("发票导入", invoiceHeaders, invoiceSheet.Rows.Skip(1).Where(row => row[invoiceIdIndex]?.ToString() == multiInvoice.Id.ToString() || row[invoiceIdIndex]?.ToString() == configuredInvoice.Id.ToString()).ToArray());
+
+        fixture.Db.FinanceCashAllocations.RemoveRange(cash.Allocations);
+        fixture.Db.FinanceInvoiceAllocations.RemoveRange(multiInvoice.Allocations.Concat(configuredInvoice.Allocations));
+        cash.Allocations.Clear();
+        multiInvoice.Allocations.Clear();
+        configuredInvoice.Allocations.Clear();
+        cash.Amount = 1m;
+        cashTransaction.Amount = 1m;
+        multiInvoice.Amount = 1m;
+        multiInvoice.NetAmount = null;
+        multiInvoice.TaxAmount = null;
+        multiInvoice.TaxRate = null;
+        multiInvoice.InvoiceType = null;
+        configuredInvoice.Amount = 1m;
+        configuredInvoice.NetAmount = null;
+        configuredInvoice.TaxAmount = null;
+        configuredInvoice.TaxRate = null;
+        configuredInvoice.InvoiceType = null;
+        configuredInvoice.ProjectTaxConfigurationId = null;
+        await fixture.Db.SaveChangesAsync();
+
+        var importService = new ImportService(fixture.Db);
+        var cashPreview = await importService.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Collections, "收款往返.xlsx", cashWorkbook.ToArray(), null, ImportMode.Update), CancellationToken.None);
+        var invoicePreview = await importService.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Invoices, "发票往返.xlsx", invoiceWorkbook.ToArray(), null, ImportMode.Update), CancellationToken.None);
+        cashPreview.Errors.Should().BeEmpty();
+        invoicePreview.Errors.Should().BeEmpty();
+        await importService.ConfirmAsync(cashPreview.BatchId, CancellationToken.None);
+        await importService.ConfirmAsync(invoicePreview.BatchId, CancellationToken.None);
+
+        var restoredCash = await fixture.Db.FinanceCashEntries.AsNoTracking().Include(item => item.Allocations).SingleAsync(item => item.Id == cash.Id);
+        restoredCash.Amount.Should().Be(1_000m);
+        restoredCash.Allocations.OrderBy(item => item.AllocationOrder).Select(item => (item.SettlementId, item.Amount)).Should().Equal((firstSettlement.Id, 400m), (secondSettlement.Id, 600m));
+        (await fixture.Db.AccountTransactions.AsNoTracking().SingleAsync(item => item.SourceType == AccountTransactionSourceType.Collection && item.SourceId == cash.Id)).Amount.Should().Be(1_000m);
+
+        var restoredMultiInvoice = await fixture.Db.FinanceInvoices.AsNoTracking().Include(item => item.Allocations).SingleAsync(item => item.Id == multiInvoice.Id);
+        restoredMultiInvoice.Amount.Should().Be(1_000m);
+        restoredMultiInvoice.NetAmount.Should().Be(970m);
+        restoredMultiInvoice.TaxAmount.Should().Be(30m);
+        restoredMultiInvoice.TaxRate.Should().Be(0.03m);
+        restoredMultiInvoice.InvoiceType.Should().Be("Special");
+        restoredMultiInvoice.Allocations.OrderBy(item => item.AllocationOrder).Select(item => (item.SettlementId, item.Amount)).Should().Equal((firstSettlement.Id, 400m), (secondSettlement.Id, 600m));
+
+        var restoredConfiguredInvoice = await fixture.Db.FinanceInvoices.AsNoTracking().Include(item => item.Allocations).SingleAsync(item => item.Id == configuredInvoice.Id);
+        restoredConfiguredInvoice.Amount.Should().Be(106m);
+        restoredConfiguredInvoice.NetAmount.Should().Be(100m);
+        restoredConfiguredInvoice.TaxAmount.Should().Be(6m);
+        restoredConfiguredInvoice.TaxRate.Should().Be(0.06m);
+        restoredConfiguredInvoice.InvoiceType.Should().Be("Special");
+        restoredConfiguredInvoice.ProjectTaxConfigurationId.Should().Be(taxConfiguration.Id);
+        restoredConfiguredInvoice.Allocations.Should().ContainSingle().Which.SettlementId.Should().Be(taxSettlement.Id);
+    }
+
+    [Fact]
     public async Task EmployeeLedgerExportsIncludeWagesAndReceiptsWithChineseLabels()
     {
         await using var fixture = await ModuleExportFixture.CreateAsync();

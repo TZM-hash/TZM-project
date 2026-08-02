@@ -122,7 +122,7 @@ public sealed class CentralLedgerAllocationServiceTests
                 fixture.Supplier.Id,
                 null,
                 fixture.Project.Id,
-                fixture.Contract.Id,
+                null,
                 null,
                 new DateOnly(2026, 6, 1),
                 1_000m,
@@ -287,6 +287,7 @@ public sealed class CentralLedgerAllocationServiceTests
         var project = new Project { ProjectNumber = number, Name = $"项目 {number}", Stage = ProjectStage.UnderConstruction };
         var contract = new Contract { Project = project, ContractNumber = $"C-{number}", Name = $"合同 {number}", BusinessPartner = fixture.Client, TotalAmount = 1_000m };
         project.Contracts.Add(contract);
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = fixture.LegalEntity, IsPrimary = true });
         fixture.Db.Projects.Add(project);
         await fixture.Db.SaveChangesAsync();
         fixture.GrantProjectAccess(project.Id);

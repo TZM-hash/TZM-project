@@ -15,6 +15,8 @@ public sealed class CentralLedgerAllocationService(ApplicationDbContext db)
         Guid? businessPartnerId,
         Guid? counterLegalEntityId,
         decimal headerAmount,
+        Guid? projectId,
+        Guid? contractId,
         CancellationToken token)
     {
         return BuildAutomaticAllocationsAsync(
@@ -25,6 +27,8 @@ public sealed class CentralLedgerAllocationService(ApplicationDbContext db)
             businessPartnerId,
             counterLegalEntityId,
             headerAmount,
+            projectId,
+            contractId,
             forInvoice: true,
             token);
     }
@@ -37,6 +41,8 @@ public sealed class CentralLedgerAllocationService(ApplicationDbContext db)
         Guid? businessPartnerId,
         Guid? counterLegalEntityId,
         decimal headerAmount,
+        Guid? projectId,
+        Guid? contractId,
         CancellationToken token)
     {
         return BuildAutomaticAllocationsAsync(
@@ -47,6 +53,8 @@ public sealed class CentralLedgerAllocationService(ApplicationDbContext db)
             businessPartnerId,
             counterLegalEntityId,
             headerAmount,
+            projectId,
+            contractId,
             forInvoice: false,
             token);
     }
@@ -59,6 +67,8 @@ public sealed class CentralLedgerAllocationService(ApplicationDbContext db)
         Guid? businessPartnerId,
         Guid? counterLegalEntityId,
         decimal headerAmount,
+        Guid? projectId,
+        Guid? contractId,
         bool forInvoice,
         CancellationToken token)
     {
@@ -72,6 +82,8 @@ public sealed class CentralLedgerAllocationService(ApplicationDbContext db)
                 item.LegalEntityId == legalEntityId &&
                 item.BusinessPartnerId == businessPartnerId &&
                 item.CounterLegalEntityId == counterLegalEntityId &&
+                (!projectId.HasValue || item.ProjectId == projectId) &&
+                (!contractId.HasValue || item.ContractId == contractId) &&
                 (!item.ProjectId.HasValue || actor.ProjectIds.Contains(item.ProjectId.Value)))
             .Include(item => item.Adjustments)
             .Include(item => item.Deductions)

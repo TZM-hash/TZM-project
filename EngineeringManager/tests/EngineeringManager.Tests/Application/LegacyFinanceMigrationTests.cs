@@ -44,7 +44,33 @@ public sealed class LegacyFinanceMigrationTests
             NetAmount = 60m, TaxAmount = 3.6m, GrossAmount = 63.6m, TaxRate = 0.06m, Status = InvoiceStatus.IssuedOrReceived
         };
         invoice.ReceivableLinks.Add(new InvoiceReceivableLink { Invoice = invoice, Receivable = receivable, AllocatedAmount = 63.6m });
-        fixture.Db.AddRange(receivable, payable, collection, payment, deduction, invoice);
+        fixture.Db.AddRange(
+            receivable,
+            payable,
+            collection,
+            payment,
+            deduction,
+            invoice,
+            new AccountTransaction
+            {
+                Account = fixture.CollectionAccount,
+                Direction = AccountTransactionDirection.Inflow,
+                SourceType = AccountTransactionSourceType.Collection,
+                SourceId = collection.Id,
+                TransactionDate = collection.CollectionDate,
+                Amount = collection.Amount,
+                Description = collection.Notes
+            },
+            new AccountTransaction
+            {
+                Account = fixture.PaymentAccount,
+                Direction = AccountTransactionDirection.Outflow,
+                SourceType = AccountTransactionSourceType.Payment,
+                SourceId = payment.Id,
+                TransactionDate = payment.PaymentDate,
+                Amount = payment.Amount,
+                Description = payment.Notes
+            });
         await fixture.Db.SaveChangesAsync();
 
         var service = new LegacyFinanceMigrationService(fixture.Db);
@@ -58,8 +84,14 @@ public sealed class LegacyFinanceMigrationTests
         (await fixture.Db.FinanceLegacyMaps.CountAsync()).Should().Be(6);
         var centralReceivable = await fixture.Db.FinanceSettlements.SingleAsync(item => item.Direction == LedgerDirection.Receivable);
         var centralPayable = await fixture.Db.FinanceSettlements.SingleAsync(item => item.Direction == LedgerDirection.Payable);
-        (await fixture.Db.FinanceCashEntries.Include(item => item.Allocations).SingleAsync(item => item.Direction == LedgerDirection.Receivable)).Allocations.Single().SettlementId.Should().Be(centralReceivable.Id);
-        (await fixture.Db.FinanceCashEntries.Include(item => item.Allocations).SingleAsync(item => item.Direction == LedgerDirection.Payable)).Allocations.Single().SettlementId.Should().Be(centralPayable.Id);
+        var collectionCash = await fixture.Db.FinanceCashEntries.Include(item => item.Allocations).SingleAsync(item => item.Direction == LedgerDirection.Receivable);
+        var paymentCash = await fixture.Db.FinanceCashEntries.Include(item => item.Allocations).SingleAsync(item => item.Direction == LedgerDirection.Payable);
+        collectionCash.Allocations.Single().SettlementId.Should().Be(centralReceivable.Id);
+        paymentCash.Allocations.Single().SettlementId.Should().Be(centralPayable.Id);
+        var movements = await fixture.Db.AccountTransactions.AsNoTracking().ToListAsync();
+        movements.Should().HaveCount(2);
+        movements.Should().ContainSingle(item => item.SourceId == collectionCash.Id && item.AccountId == fixture.CollectionAccount.Id && item.Direction == AccountTransactionDirection.Inflow && item.SourceType == AccountTransactionSourceType.Collection && item.Amount == 40m);
+        movements.Should().ContainSingle(item => item.SourceId == paymentCash.Id && item.AccountId == fixture.PaymentAccount.Id && item.Direction == AccountTransactionDirection.Outflow && item.SourceType == AccountTransactionSourceType.Payment && item.Amount == 30m);
         (await fixture.Db.FinanceInvoices.Include(item => item.Allocations).SingleAsync()).Allocations.Single().SettlementId.Should().Be(centralReceivable.Id);
         var centralDeduction = await fixture.Db.FinanceDeductions.SingleAsync();
         centralDeduction.SettlementId.Should().Be(centralPayable.Id);
@@ -73,6 +105,7 @@ public sealed class LegacyFinanceMigrationTests
         (await fixture.Db.FinanceInvoices.CountAsync()).Should().Be(1);
         (await fixture.Db.FinanceDeductions.CountAsync()).Should().Be(1);
         (await fixture.Db.FinanceLegacyMaps.CountAsync()).Should().Be(6);
+        (await fixture.Db.AccountTransactions.CountAsync()).Should().Be(2);
     }
 
     [Fact]
@@ -142,7 +175,29 @@ public sealed class LegacyFinanceMigrationTests
         {
             FromAccount = fixture.PaymentAccount, ToAccount = counterAccount, TransferDate = new DateOnly(2026, 7, 4), Amount = 20m, Description = "内部调拨"
         };
-        fixture.Db.AddRange(counterAccount, receivable, collection, refund, payable, payment, reversal, transfer);
+        var transferOut = new AccountTransaction
+        {
+            Account = fixture.PaymentAccount,
+            Direction = AccountTransactionDirection.Outflow,
+            SourceType = AccountTransactionSourceType.TransferOut,
+            SourceId = transfer.Id,
+            TransactionDate = transfer.TransferDate,
+            Amount = transfer.Amount,
+            Description = transfer.Description
+        };
+        var transferIn = new AccountTransaction
+        {
+            Account = counterAccount,
+            Direction = AccountTransactionDirection.Inflow,
+            SourceType = AccountTransactionSourceType.TransferIn,
+            SourceId = transfer.Id,
+            TransactionDate = transfer.TransferDate,
+            Amount = transfer.Amount,
+            Description = transfer.Description
+        };
+        transfer.OutTransactionId = transferOut.Id;
+        transfer.InTransactionId = transferIn.Id;
+        fixture.Db.AddRange(counterAccount, receivable, collection, refund, payable, payment, reversal, transfer, transferOut, transferIn);
         await fixture.Db.SaveChangesAsync();
 
         var result = await new LegacyFinanceMigrationService(fixture.Db).MigrateAsync(new LegacyFinanceMigrationOptions(), CancellationToken.None);
@@ -169,5 +224,13 @@ public sealed class LegacyFinanceMigrationTests
         (await fixture.Db.PaymentReversalEntries.CountAsync()).Should().Be(1);
         (await fixture.Db.AccountTransfers.CountAsync()).Should().Be(1);
         (await fixture.Db.FinanceLegacyMaps.CountAsync()).Should().Be(7);
+        var movements = await fixture.Db.AccountTransactions.AsNoTracking().ToListAsync();
+        movements.Should().HaveCount(6);
+        movements.Should().ContainSingle(item => item.SourceId == collectionCash.Id && item.AccountId == fixture.CollectionAccount.Id && item.Direction == AccountTransactionDirection.Inflow && item.SourceType == AccountTransactionSourceType.Collection && item.Amount == 40m);
+        movements.Should().ContainSingle(item => item.SourceId == refundCash.Id && item.AccountId == fixture.CollectionAccount.Id && item.Direction == AccountTransactionDirection.Outflow && item.SourceType == AccountTransactionSourceType.Refund && item.Amount == 10m);
+        movements.Should().ContainSingle(item => item.SourceId == paymentCash.Id && item.AccountId == fixture.PaymentAccount.Id && item.Direction == AccountTransactionDirection.Outflow && item.SourceType == AccountTransactionSourceType.Payment && item.Amount == 30m);
+        movements.Should().ContainSingle(item => item.SourceId == reversalCash.Id && item.AccountId == fixture.PaymentAccount.Id && item.Direction == AccountTransactionDirection.Inflow && item.SourceType == AccountTransactionSourceType.PaymentReversal && item.Amount == 5m);
+        movements.Should().ContainSingle(item => item.SourceId == internalTransfer.Id && item.AccountId == fixture.PaymentAccount.Id && item.Direction == AccountTransactionDirection.Outflow && item.SourceType == AccountTransactionSourceType.TransferOut && item.Amount == 20m);
+        movements.Should().ContainSingle(item => item.SourceId == internalTransfer.Id && item.AccountId == counterAccount.Id && item.Direction == AccountTransactionDirection.Inflow && item.SourceType == AccountTransactionSourceType.TransferIn && item.Amount == 20m);
     }
 }

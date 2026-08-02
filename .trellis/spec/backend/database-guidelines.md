@@ -24,7 +24,10 @@ Questions to answer:
 
 <!-- How should queries be written? Batch operations? -->
 
-(To be filled by the team)
+- Finance workbook imports must first group each logical ledger header with all of its allocation rows, then delegate validation and persistence to `CentralLedgerCommandService`. Importers must not reimplement central-ledger ownership, allocation-total, project-scope, or status rules.
+- Records owned by a source module (for example equipment settlement or payroll) may be projected into the central ledger, but they must only be modified or reversed through that source module. Central-ledger pages and workbook imports must reject direct mutation of source-owned records.
+- Invoice-number uniqueness checks must inspect both persisted rows and `FinanceInvoices.Local`. This prevents duplicate numbers when multiple invoices are added to the same `DbContext` before `SaveChangesAsync`.
+- Refund and reversal capacity must be calculated from the original record's allocations plus any unallocated header balance, less all active prior reversals. A reversal must preserve the original allocation semantics and must never exceed the remaining reversible amount.
 
 ---
 
@@ -32,7 +35,8 @@ Questions to answer:
 
 <!-- How to create and run migrations -->
 
-(To be filled by the team)
+- During staged finance-link migrations, keep the legacy source-link fallback until the new foreign-key columns have been deployed and existing rows have been backfilled. Reads and ownership checks must remain compatible with both link shapes throughout the transition.
+- Do not infer that a generated migration has been applied. Confirm the target schema separately before relying on new columns, and apply migrations only through an explicitly authorized deployment or maintenance step.
 
 ---
 

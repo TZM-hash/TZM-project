@@ -11,6 +11,8 @@ public sealed class EquipmentSettlement
     public decimal OffsetAmount { get; set; }
     public Guid? PayableEntryId { get; set; }
     public PayableEntry? PayableEntry { get; set; }
+    public Guid? FinanceSettlementId { get; set; }
+    public FinanceSettlement? FinanceSettlement { get; set; }
     public string ModificationReason { get; set; } = string.Empty;
     public string? Notes { get; set; }
     public string? PreviousSnapshotJson { get; set; }

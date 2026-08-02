@@ -47,6 +47,28 @@ public sealed class CentralLedgerPageTests
     }
 
     [Fact]
+    public void LedgerDateColumnsUseTheUnknownDateDisplayFallback()
+    {
+        var external = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml");
+        var internalLedger = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Internal", "Index.cshtml");
+        var workspaceScript = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "central-ledger-workspace.js");
+
+        external.Should().ContainAll(
+                "ProjectDisplayText.DateLabel(row.BusinessDate)",
+                "ProjectDisplayText.DateLabel(cash.BusinessDate)",
+                "ProjectDisplayText.DateLabel(invoice.InvoiceDate)",
+                "ProjectDisplayText.DateLabel(deduction.BusinessDate)",
+                "ProjectDisplayText.DateLabel(payment.PaymentDate)")
+            .And.NotContain("<strong>@row.BusinessDate</strong>");
+        internalLedger.Should().ContainAll(
+                "ProjectDisplayText.DateLabel(row.BusinessDate)",
+                "ProjectDisplayText.DateLabel(cash.BusinessDate)",
+                "ProjectDisplayText.DateLabel(invoice.InvoiceDate)")
+            .And.NotContain("<strong>@row.BusinessDate</strong>");
+        workspaceScript.Should().Contain("日期待确认");
+    }
+
+    [Fact]
     public void ExternalAnomalyCheckboxesUseNonNullablePagePropertiesAndPreserveNoFilterSemantics()
     {
         var pageModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml.cs");

@@ -10,6 +10,7 @@ using EngineeringManager.Domain.Security;
 using EngineeringManager.Web.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,7 +23,7 @@ public sealed class DetailsModel(
     IFinanceLedgerService financeService,
     IProjectConstructionService constructionService,
     IProjectWorkbookService projectWorkbookService,
-    IProjectRecordAttachmentService attachmentService) : PageModel
+    IProjectRecordAttachmentService attachmentService) : PageModel, IAsyncPageFilter
 {
     public ProjectWorkspaceDto? Workspace { get; private set; }
     public ProjectEditOptionsDto Options { get; private set; } = new([], [], [], []);
@@ -58,6 +59,22 @@ public sealed class DetailsModel(
     [BindProperty] public NewCrewInput NewCrew { get; set; } = new();
     [BindProperty] public List<ProjectWorkbookSheet> SelectedWorkbookSheets { get; set; } = [];
     [BindProperty] public bool IncludeWorkbookAttachments { get; set; }
+
+    public override Task OnPageHandlerSelectionAsync(PageHandlerSelectedContext context) => Task.CompletedTask;
+
+    public override async Task OnPageHandlerExecutionAsync(PageHandlerExecutingContext context, PageHandlerExecutionDelegate next)
+    {
+        if (context.HandlerArguments.TryGetValue("id", out var value)
+            && value is Guid projectId
+            && projectId != Guid.Empty
+            && !await CanAccessProjectAsync(projectId, context.HttpContext.RequestAborted))
+        {
+            context.Result = NotFound();
+            return;
+        }
+
+        await next();
+    }
 
     public async Task<IActionResult> OnGetAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -747,6 +764,16 @@ public sealed class DetailsModel(
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
         var canAccessAll = User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance) || User.IsInRole(SystemRoles.QueryOnly) || User.IsInRole(SystemRoles.EquipmentManager);
         return new ProjectListActor(userId, canAccessAll);
+    }
+    private async Task<bool> CanAccessProjectAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var actor = WorkbookProjectActor();
+        if (actor.CanAccessAllProjects) return true;
+        var accessible = await projectService.SearchProjectsAsync(
+            actor,
+            new ProjectListQuery(null, [], null, null, null, null, null, false, PageSize: 1, IncludeInactive: true),
+            cancellationToken);
+        return accessible.MatchingProjectIds.Contains(projectId);
     }
     private ProjectWorkbookActor WorkbookActor() =>
         new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", User.FindAll(ClaimTypes.Role).Select(item => item.Value).Distinct(StringComparer.Ordinal).ToArray());

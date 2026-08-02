@@ -234,13 +234,20 @@ public sealed class CompanyManagementServiceTests
         project.Contracts.Add(contract);
         var bank = new FinancialAccount { LegalEntity = company, AccountName = "基本户", AccountType = FinancialAccountType.Bank, OpeningBalance = 20m };
         var cash = new FinancialAccount { LegalEntity = company, AccountName = "现金", AccountType = FinancialAccountType.Cash };
-        var receivable = new ReceivableEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, SourceType = ReceivableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 17), Amount = 800m };
-        var collection = new CollectionEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, CollectionDate = new DateOnly(2026, 7, 17), Amount = 500m };
-        var payable = new PayableEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, SourceType = PayableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 17), Amount = 300m };
-        var payment = new PaymentEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, PaymentDate = new DateOnly(2026, 7, 17), Amount = 100m };
-        var invoice = new InvoiceEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Direction = InvoiceDirection.Output, InvoiceNumber = "INV-01", InvoiceDate = new DateOnly(2026, 7, 17), GrossAmount = 400m, Status = InvoiceStatus.IssuedOrReceived };
+        var receivable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 17), OriginalAmount = 800m, OriginalInvoiceAmount = 800m };
+        var collection = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, BusinessDate = new DateOnly(2026, 7, 17), Amount = 500m };
+        collection.Allocations.Add(new FinanceCashAllocation { CashEntry = collection, Settlement = receivable, Project = project, Contract = contract, Amount = 500m, AllocationOrder = 1 });
+        var payable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 17), OriginalAmount = 300m, OriginalInvoiceAmount = 300m };
+        var payment = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, BusinessDate = new DateOnly(2026, 7, 17), Amount = 100m };
+        payment.Allocations.Add(new FinanceCashAllocation { CashEntry = payment, Settlement = payable, Project = project, Contract = contract, Amount = 100m, AllocationOrder = 1 });
+        var invoice = new FinanceInvoice { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, InvoiceNumber = "INV-01", InvoiceDate = new DateOnly(2026, 7, 17), Amount = 400m };
+        invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = receivable, Project = project, Contract = contract, Amount = 400m, AllocationOrder = 1 });
         var transfer = new AccountTransfer { FromAccount = bank, ToAccount = cash, TransferDate = new DateOnly(2026, 7, 17), Amount = 50m };
-        scope.Db.AddRange(company, partner, project, bank, cash, receivable, collection, payable, payment, invoice, transfer);
+        scope.Db.AddRange(company, partner, project, bank, cash, receivable, collection, payable, payment, invoice, transfer,
+            new AccountTransaction { Account = bank, Direction = AccountTransactionDirection.Inflow, SourceType = AccountTransactionSourceType.Collection, SourceId = collection.Id, TransactionDate = collection.BusinessDate, Amount = collection.Amount },
+            new AccountTransaction { Account = bank, Direction = AccountTransactionDirection.Outflow, SourceType = AccountTransactionSourceType.Payment, SourceId = payment.Id, TransactionDate = payment.BusinessDate, Amount = payment.Amount },
+            new AccountTransaction { Account = bank, Direction = AccountTransactionDirection.Outflow, SourceType = AccountTransactionSourceType.TransferOut, SourceId = transfer.Id, TransactionDate = transfer.TransferDate, Amount = transfer.Amount },
+            new AccountTransaction { Account = cash, Direction = AccountTransactionDirection.Inflow, SourceType = AccountTransactionSourceType.TransferIn, SourceId = transfer.Id, TransactionDate = transfer.TransferDate, Amount = transfer.Amount });
         await scope.Db.SaveChangesAsync();
 
         var dashboard = await scope.Service.GetDashboardAsync(CompanyActor.Administrator("admin"), company.Id, default);
@@ -251,7 +258,7 @@ public sealed class CompanyManagementServiceTests
         dashboard.PayableAmount.Should().Be(300m);
         dashboard.PaidAmount.Should().Be(100m);
         dashboard.OutputInvoiceAmount.Should().Be(400m);
-        dashboard.AccountBalance.Should().Be(20m);
+        dashboard.AccountBalance.Should().Be(420m);
     }
 
     [Fact]
@@ -325,16 +332,23 @@ public sealed class CompanyManagementServiceTests
         project.LegalEntities.Add(new ProjectLegalEntity { LegalEntity = company, IsPrimary = true });
         var bank = new FinancialAccount { LegalEntity = company, AccountName = "工作台户", AccountType = FinancialAccountType.Bank, IsActive = true };
         var inactive = new FinancialAccount { LegalEntity = company, AccountName = "停用户", AccountType = FinancialAccountType.Cash, IsActive = false };
-        var receivable = new ReceivableEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, SourceType = ReceivableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 20), Amount = 600m };
-        var collection = new CollectionEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, CollectionDate = new DateOnly(2026, 7, 21), Amount = 200m, Notes = "首笔收款" };
-        var payable = new PayableEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, SourceType = PayableSourceType.Manual, EntryDate = new DateOnly(2026, 7, 20), Amount = 150m };
-        var payment = new PaymentEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, PaymentDate = new DateOnly(2026, 7, 22), Amount = 50m, Notes = "首笔付款" };
-        var invoice = new InvoiceEntry { Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Direction = InvoiceDirection.Output, InvoiceNumber = "INV-WS-01", InvoiceDate = new DateOnly(2026, 7, 23), GrossAmount = 300m, Status = InvoiceStatus.IssuedOrReceived };
+        var receivable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 20), OriginalAmount = 600m, OriginalInvoiceAmount = 600m };
+        var collection = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, BusinessDate = new DateOnly(2026, 7, 21), Amount = 200m, Notes = "首笔收款" };
+        collection.Allocations.Add(new FinanceCashAllocation { CashEntry = collection, Settlement = receivable, Project = project, Contract = contract, Amount = 200m, AllocationOrder = 1 });
+        var refund = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, BusinessDate = new DateOnly(2026, 7, 22), Amount = 50m, Notes = "退款", IsReversal = true, ReversesCashEntry = collection };
+        refund.Allocations.Add(new FinanceCashAllocation { CashEntry = refund, Settlement = receivable, Project = project, Contract = contract, Amount = 50m, AllocationOrder = 1 });
+        var payable = new FinanceSettlement { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, SettlementState = LedgerSettlementState.Final, SourceType = LedgerSourceType.CentralLedger, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, BusinessDate = new DateOnly(2026, 7, 20), OriginalAmount = 150m, OriginalInvoiceAmount = 150m };
+        var payment = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, BusinessDate = new DateOnly(2026, 7, 22), Amount = 50m, Notes = "首笔付款" };
+        payment.Allocations.Add(new FinanceCashAllocation { CashEntry = payment, Settlement = payable, Project = project, Contract = contract, Amount = 50m, AllocationOrder = 1 });
+        var paymentReversal = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Payable, CashType = LedgerCashType.Payment, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, Account = bank, BusinessDate = new DateOnly(2026, 7, 23), Amount = 10m, Notes = "付款冲销", IsReversal = true, ReversesCashEntry = payment };
+        paymentReversal.Allocations.Add(new FinanceCashAllocation { CashEntry = paymentReversal, Settlement = payable, Project = project, Contract = contract, Amount = 10m, AllocationOrder = 1 });
+        var invoice = new FinanceInvoice { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, Project = project, Contract = contract, LegalEntity = company, BusinessPartner = partner, InvoiceNumber = "INV-WS-01", InvoiceDate = new DateOnly(2026, 7, 23), Amount = 300m };
+        invoice.Allocations.Add(new FinanceInvoiceAllocation { Invoice = invoice, Settlement = receivable, Project = project, Contract = contract, Amount = 300m, AllocationOrder = 1 });
         var otherBank = new FinancialAccount { LegalEntity = other, AccountName = "其他户", AccountType = FinancialAccountType.Bank, IsActive = true };
-        var otherCollection = new CollectionEntry { Project = project, Contract = contract, LegalEntity = other, BusinessPartner = partner, Account = otherBank, CollectionDate = new DateOnly(2026, 7, 21), Amount = 999m };
+        var otherCollection = new FinanceCashEntry { Scope = LedgerScope.External, Direction = LedgerDirection.Receivable, CashType = LedgerCashType.Collection, Project = project, Contract = contract, LegalEntity = other, BusinessPartner = partner, Account = otherBank, BusinessDate = new DateOnly(2026, 7, 21), Amount = 999m };
         var certValid = new CompanyCertificate { LegalEntity = company, CertificateType = "营业执照", CertificateNumber = "CERT-1", ExpiresOn = new DateOnly(2027, 1, 1) };
         var certExpired = new CompanyCertificate { LegalEntity = company, CertificateType = "资质", CertificateNumber = "CERT-2", ExpiresOn = new DateOnly(2020, 1, 1) };
-        scope.Db.AddRange(company, other, partner, project, contract, bank, inactive, otherBank, receivable, collection, payable, payment, invoice, otherCollection, certValid, certExpired);
+        scope.Db.AddRange(company, other, partner, project, contract, bank, inactive, otherBank, receivable, collection, refund, payable, payment, paymentReversal, invoice, otherCollection, certValid, certExpired);
         await scope.Db.SaveChangesAsync();
 
         var actor = CompanyActor.Administrator("admin");
@@ -351,16 +365,18 @@ public sealed class CompanyManagementServiceTests
         projects.Should().ContainSingle();
         projects[0].CompanyContractAmount.Should().Be(800m);
         projects[0].ReceivableAmount.Should().Be(600m);
-        projects[0].CollectedAmount.Should().Be(200m);
+        projects[0].CollectedAmount.Should().Be(150m);
         projects[0].PayableAmount.Should().Be(150m);
-        projects[0].PaidAmount.Should().Be(50m);
+        projects[0].PaidAmount.Should().Be(40m);
 
         var collections = await scope.Service.ListCompanyCollectionsAsync(actor, company.Id, 50, default);
         collections.Should().ContainSingle(item => item.Amount == 200m);
+        collections.Should().ContainSingle(item => item.Amount == -50m);
         collections.Should().NotContain(item => item.Amount == 999m);
 
         var payments = await scope.Service.ListCompanyPaymentsAsync(actor, company.Id, 50, default);
         payments.Should().ContainSingle(item => item.Amount == 50m);
+        payments.Should().ContainSingle(item => item.Amount == -10m);
 
         var invoices = await scope.Service.ListCompanyInvoicesAsync(actor, company.Id, 50, default);
         invoices.Should().ContainSingle(item => item.InvoiceNumber == "INV-WS-01" && item.Direction == "销项");
@@ -368,6 +384,8 @@ public sealed class CompanyManagementServiceTests
         var activity = await scope.Service.ListRecentActivityAsync(actor, company.Id, 10, default);
         activity.Count.Should().BeLessThanOrEqualTo(10);
         activity.Should().NotBeEmpty();
+        activity.Should().Contain(item => item.Kind == "collection" && item.Amount == -50m);
+        activity.Should().Contain(item => item.Kind == "payment" && item.Amount == -10m);
         activity.Select(item => item.Date).Should().BeInDescendingOrder();
     }
     private static async Task<TestScope> CreateScopeAsync()
