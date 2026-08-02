@@ -136,7 +136,7 @@ public sealed record CentralLedgerQuery(
     bool? HasOverInvoiced = null,
     string? Search = null,
     string? SortKey = null,
-    bool SortDescending = false,
+    bool SortDescending = true,
     int Page = 1,
     int PageSize = 20);
 

@@ -23,6 +23,11 @@ public sealed class ProjectWorkbookExporter(
         ProjectWorkbookExportRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.ProjectListColumns is not null)
+        {
+            return await ExportProjectListAsync(request, cancellationToken);
+        }
+
         var projectIds = await ResolveProjectIdsAsync(request.Scope, cancellationToken);
         var selectedSheets = ResolveSheets(request.Sheets, request.IncludeAttachments);
         var projects = await db.Projects
@@ -36,7 +41,9 @@ public sealed class ProjectWorkbookExporter(
             .Where(item => projectIds.Contains(item.Id))
             .OrderBy(item => item.ProjectNumber)
             .ToListAsync(cancellationToken);
-        var attachments = request.IncludeAttachments ? await AttachmentQuery(projectIds, cancellationToken) : [];
+        var attachments = selectedSheets.Contains(ProjectWorkbookSheet.Attachments)
+            ? await AttachmentQuery(projectIds, cancellationToken)
+            : [];
         var attachmentHashes = request.IncludeAttachments ? await ComputeAttachmentHashesAsync(attachments, cancellationToken) : new Dictionary<Guid, string>();
 
         var workbook = new SimpleXlsxWorkbook();
@@ -86,6 +93,51 @@ public sealed class ProjectWorkbookExporter(
         return (workbookBytes, projects.Count, rowCount, projectIds, false);
     }
 
+    private async Task<(byte[] Content, int ProjectCount, int RowCount, IReadOnlyList<Guid> ProjectIds, bool IsArchive)> ExportProjectListAsync(
+        ProjectWorkbookExportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var page = await new ProjectListWorkbookExporter(projectService, financeService)
+            .BuildAsync(request.Scope, request.ProjectListColumns, cancellationToken);
+        var attachments = request.IncludeAttachments
+            ? await AttachmentQuery(page.ProjectIds, cancellationToken)
+            : [];
+        var attachmentHashes = request.IncludeAttachments
+            ? await ComputeAttachmentHashesAsync(attachments, cancellationToken)
+            : new Dictionary<Guid, string>();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "项目清单",
+            page.Headers,
+            page.Rows,
+            new XlsxWorksheetOptions([], ProtectSheet: true));
+
+        var attachmentRowCount = 0;
+        if (request.IncludeAttachments)
+        {
+            var fields = ProjectWorkbookCatalog.Get(ProjectWorkbookSheet.Attachments).Fields
+                .Where(item => item.CanExport)
+                .ToArray();
+            var rows = AttachmentRows(attachments, fields, attachmentHashes).ToArray();
+            attachmentRowCount = rows.Length;
+            workbook.AddWorksheet(
+                "附件清单",
+                fields.Select(item => item.Header).ToArray(),
+                rows,
+                new XlsxWorksheetOptions(fields.Select((field, index) => (field, index)).Where(item => item.field.IsHidden).Select(item => item.index).ToArray(), ProtectSheet: true));
+        }
+
+        var workbookBytes = workbook.ToArray();
+        if (request.IncludeAttachments)
+        {
+            if (fileStore is null) throw new InvalidOperationException("导出附件需要文件存储。");
+            return (await new ProjectWorkbookArchive(fileStore).CreateAsync(workbookBytes, attachments, cancellationToken), page.ProjectIds.Count, page.Rows.Count + attachmentRowCount, page.ProjectIds, true);
+        }
+
+        return (workbookBytes, page.ProjectIds.Count, page.Rows.Count, page.ProjectIds, false);
+    }
+
     private async Task<IReadOnlyList<Guid>> ResolveProjectIdsAsync(ProjectWorkbookScope scope, CancellationToken cancellationToken)
     {
         var result = await projectService.SearchProjectsAsync(scope.Actor, scope.Query with { Page = 1, PageSize = 100 }, cancellationToken);
@@ -94,7 +146,7 @@ public sealed class ProjectWorkbookExporter(
             ? matching
             : (scope.SelectedProjectIds ?? []).Where(matching.Contains).ToHashSet();
         if (ids.Count == 0) throw new InvalidOperationException("没有可导出的项目。");
-        return ids.OrderBy(item => item).ToArray();
+        return result.MatchingProjectIds.Where(ids.Contains).ToArray();
     }
 
     private static ProjectWorkbookSheet[] ResolveSheets(IReadOnlyCollection<ProjectWorkbookSheet> requested, bool includeAttachments)

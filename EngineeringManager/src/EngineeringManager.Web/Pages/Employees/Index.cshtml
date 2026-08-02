@@ -8,6 +8,28 @@
     ViewData["Title"] = "员工管理";
     var workbench = DataWorkbenchPresets.Employees with
     {
+        CurrentSortKey = Model.SortKey,
+        SortDescending = Model.SortDescending,
+        DefaultSortKey = "EmployeeNumber",
+        DefaultSortDescending = true,
+        SortOnServer = true,
+        SortOptions =
+        [
+            new("EmployeeNumber", "最新员工在前", true),
+            new("EmployeeNumber", "最早员工在前", false),
+            new("Name", "姓名：升序", false),
+            new("Name", "姓名：降序", true),
+            new("EmployeeType", "员工类型：升序", false),
+            new("EmployeeType", "员工类型：降序", true),
+            new("Payable", "应付金额：高到低", true),
+            new("Payable", "应付金额：低到高", false),
+            new("Paid", "已付金额：高到低", true),
+            new("Paid", "已付金额：低到高", false),
+            new("Unpaid", "未付金额：高到低", true),
+            new("Unpaid", "未付金额：低到高", false),
+            new("Status", "状态：启用优先", true),
+            new("Status", "状态：停用优先", false)
+        ],
         InlineFilters = new DataWorkbenchFilterField[]
         {
             new("Search", "搜索", Model.Search, Placeholder: "搜索员工、公司、项目、备注"),
@@ -34,11 +56,11 @@
             <section class="employee-type-summary" aria-label="员工类型筛选">
                 <div class="equipment-company-summary-heading"><div><span>人员分类</span><strong>按类型筛选</strong></div><small>3 类</small></div>
                 <div class="employee-type-summary-list">
-                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Formal ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Formal" asp-route-pageSize="@Model.PageSize"><span>正式员工</span><strong>@Model.FormalCount</strong></a>
-                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Labor ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Labor" asp-route-pageSize="@Model.PageSize"><span>劳务员工</span><strong>@Model.LaborCount</strong></a>
-                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Temporary ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Temporary" asp-route-pageSize="@Model.PageSize"><span>特殊临时人员</span><strong>@Model.TemporaryCount</strong></a>
+                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Formal ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Formal" asp-route-sortKey="@Model.SortKey" asp-route-sortDescending="@Model.SortDescending" asp-route-pageSize="@Model.PageSize"><span>正式员工</span><strong>@Model.FormalCount</strong></a>
+                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Labor ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Labor" asp-route-sortKey="@Model.SortKey" asp-route-sortDescending="@Model.SortDescending" asp-route-pageSize="@Model.PageSize"><span>劳务员工</span><strong>@Model.LaborCount</strong></a>
+                    <a class="employee-type-summary-row @(Model.EmployeeType == EmployeeType.Temporary ? "is-active" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-employeeType="Temporary" asp-route-sortKey="@Model.SortKey" asp-route-sortDescending="@Model.SortDescending" asp-route-pageSize="@Model.PageSize"><span>特殊临时人员</span><strong>@Model.TemporaryCount</strong></a>
                 </div>
-                @if (Model.EmployeeType.HasValue) { <a class="button button--secondary employee-type-clear" asp-page="Index" asp-route-search="@Model.Search" asp-route-pageSize="@Model.PageSize">显示全部类型</a> }
+                @if (Model.EmployeeType.HasValue) { <a class="button button--secondary employee-type-clear" asp-page="Index" asp-route-search="@Model.Search" asp-route-sortKey="@Model.SortKey" asp-route-sortDescending="@Model.SortDescending" asp-route-pageSize="@Model.PageSize">显示全部类型</a> }
             </section>
         </aside>
 

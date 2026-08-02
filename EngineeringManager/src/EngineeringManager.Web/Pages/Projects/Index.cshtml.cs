@@ -45,14 +45,14 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public decimal? MinimumCurrentAmount { get; set; }
     [BindProperty(SupportsGet = true)] public decimal? MaximumCurrentAmount { get; set; }
     [BindProperty(SupportsGet = true)] public string SortKey { get; set; } = "ProjectNumber";
-    [BindProperty(SupportsGet = true)] public bool SortDescending { get; set; }
+    [BindProperty(SupportsGet = true)] public bool SortDescending { get; set; } = true;
     [BindProperty(SupportsGet = true)] public int PageNumber { get; set; } = 1;
     [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 20;
     [BindProperty(SupportsGet = true)] public Guid? SavedViewId { get; set; }
     [BindProperty] public SavedDataViewInput SavedView { get; set; } = new();
     [BindProperty] public List<Guid> SelectedProjectIds { get; set; } = [];
     [BindProperty] public bool SelectAllMatching { get; set; }
-    [BindProperty] public List<ProjectWorkbookSheet> SelectedWorkbookSheets { get; set; } = [];
+    [BindProperty] public List<string> ExportColumns { get; set; } = [];
     [BindProperty] public bool IncludeWorkbookAttachments { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
@@ -82,9 +82,10 @@ public sealed class IndexModel(
         }
         var request = new ProjectWorkbookExportRequest(
             new ProjectWorkbookScope(Actor(), Query(), SelectAllMatching, SelectedProjectIds),
-            SelectedWorkbookSheets,
+            [ProjectWorkbookSheet.ProjectMaster],
             IncludeAttachments: IncludeWorkbookAttachments,
-            Actor: WorkbookActor());
+            Actor: WorkbookActor(),
+            ProjectListColumns: ExportColumns);
         var file = await projectWorkbookService.ExportAsync(request, cancellationToken);
         return File(file.Content, file.ContentType, file.FileName);
     }
@@ -99,6 +100,8 @@ public sealed class IndexModel(
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
+        PageSize = NormalizePageSize(PageSize);
+        PageNumber = Math.Max(1, PageNumber);
         var views = await savedViewService.ListAsync(UserId(), ViewDefinition, cancellationToken);
         var selected = SavedViewId.HasValue ? views.FirstOrDefault(item => item.Id == SavedViewId) : Request.Query.Count == 0 ? views.FirstOrDefault(item => item.IsDefault) : null;
         if (selected is not null)
@@ -131,6 +134,8 @@ public sealed class IndexModel(
         PageNumber,
         PageSize,
         AffiliationType);
+
+    private static int NormalizePageSize(int pageSize) => pageSize is 20 or 50 or 100 ? pageSize : 20;
 
     private ProjectListActor Actor()
     {
@@ -210,7 +215,25 @@ public sealed class IndexModel(
             false,
             InlineFilters: [filters[0]],
             ToolbarActionsPartial: CanExportWorkbook ? "_ProjectWorkbookExport" : null,
-            ToolbarActionsModel: CanExportWorkbook ? this : null);
+            ToolbarActionsModel: CanExportWorkbook ? this : null,
+            SortOptions:
+            [
+                new("ProjectNumber", "最新项目在前", true),
+                new("ProjectNumber", "最早项目在前", false),
+                new("Name", "项目名称：升序", false),
+                new("Name", "项目名称：降序", true),
+                new("Stage", "项目阶段：升序", false),
+                new("Stage", "项目阶段：降序", true),
+                new("ContractAmount", "合同金额：高到低", true),
+                new("ContractAmount", "合同金额：低到高", false),
+                new("CurrentAmount", "当前金额：高到低", true),
+                new("CurrentAmount", "当前金额：低到高", false),
+                new("SettlementStatus", "结算状态：降序", true),
+                new("SettlementStatus", "结算状态：升序", false)
+            ],
+            DefaultSortKey: "ProjectNumber",
+            DefaultSortDescending: true,
+            SortOnServer: true);
     }
 
     private void ApplySavedView(SavedDataViewDto view)
@@ -223,8 +246,11 @@ public sealed class IndexModel(
         if (int.TryParse(ReadString(filters, "AffiliationType"), out var affiliation) && Enum.IsDefined(typeof(ProjectAffiliationType), affiliation)) AffiliationType = (ProjectAffiliationType)affiliation;
         if (decimal.TryParse(ReadString(filters, "MinimumCurrentAmount"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var minimum)) MinimumCurrentAmount = minimum;
         if (decimal.TryParse(ReadString(filters, "MaximumCurrentAmount"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var maximum)) MaximumCurrentAmount = maximum;
-        SortKey = view.SortKey ?? SortKey;
-        SortDescending = view.SortDescending;
+        if (!string.IsNullOrWhiteSpace(view.SortKey))
+        {
+            SortKey = view.SortKey;
+            SortDescending = view.SortDescending;
+        }
         PageSize = view.PageSize;
     }
 

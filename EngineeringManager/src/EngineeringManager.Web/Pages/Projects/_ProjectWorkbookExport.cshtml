@@ -41,22 +41,18 @@
 
             <section class="project-workbook-export-section" aria-labelledby="project-export-content-title">
                 <div class="project-workbook-export-section-title" id="project-export-content-title">导出内容</div>
-                <details class="project-workbook-export-sheet-picker">
-                    <summary><span>选择项目工作簿细项</span><small>默认全部</small></summary>
-                    <div class="project-workbook-export-sheet-grid">
-                        @foreach (var sheet in Enum.GetValues<ProjectWorkbookSheet>().Where(sheet => Model.CanExportFullWorkbook || sheet != ProjectWorkbookSheet.ProjectSummary && sheet != ProjectWorkbookSheet.Attachments))
-                        {
-                            <label><input type="checkbox" name="SelectedWorkbookSheets" value="@sheet" checked="@(Model.SelectedWorkbookSheets.Count == 0 || Model.SelectedWorkbookSheets.Contains(sheet) ? "checked" : null)" data-project-workbook-sheet="@sheet" /> <span>@DataExchangeLabels.ProjectSheet(sheet)</span></label>
-                        }
-                    </div>
-                </details>
+                <div class="project-workbook-export-page-format"><strong>项目清单</strong><small>按当前页面筛选、排序和列管理结果生成 Excel</small></div>
+                @foreach (var column in Model.Workbench.Columns.Where(column => column.Key != "actions"))
+                {
+                    <input type="hidden" name="ExportColumns" value="@column.Key" data-export-column-key="@column.Key" />
+                }
             </section>
 
             @if (Model.CanExportWorkbookAttachments)
             {
                 <label class="project-workbook-export-option project-workbook-export-attachment">
                     <input asp-for="IncludeWorkbookAttachments" data-project-export-attachments />
-                    <span><strong>包含附件</strong><small>同时打包附件并生成 ZIP</small></span>
+                    <span><strong>包含附件文件</strong><small>勾选后同时打包附件并生成 ZIP；不勾选时只导出项目清单 Excel</small></span>
                 </label>
             }
 

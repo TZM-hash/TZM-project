@@ -165,3 +165,89 @@
 - 新增回归测试 `CreatingInvoiceRejectsUndefinedStatus` 与 `RefundCanReverseAllocatedAndUnallocatedCollectionAmounts`，均完成先失败后修复通过；中央账本分摊测试 8/8、扩大财务测试组 210/210 通过。
 - 完整测试重新执行通过：909/909；Release 构建通过：0 个警告、0 个错误。
 - Release 服务运行于 `http://127.0.0.1:5075`，`/health/live` 与 `/health/ready` 均返回 HTTP 200 `Healthy`。
+
+### Task 10: 建立全系统排序 UI 失败测试
+
+**Files:**
+- Create: `EngineeringManager/tests/EngineeringManager.Tests/Web/ListSortingAssetTests.cs`
+- Modify: `EngineeringManager/tests/EngineeringManager.Tests/Web/DataWorkbenchAssetTests.cs`
+
+- [x] 新增断言：DataWorkbench 必须显示 `data-list-sort-menu` 和“排序”标签。
+- [x] 新增断言：站点在存在 `.data-table` 时加载 `list-sorting.js`。
+- [x] 新增断言：共享脚本必须覆盖独立表格、中文自然数字、日期/金额解析、本地记忆、服务端 URL 参数和动态表格。
+- [x] 新增扫描断言：所有可见 `.data-table` 都由共享选择器覆盖，`sr-only` 图表表格被排除。
+- [x] 运行 `dotnet test EngineeringManager/tests/EngineeringManager.Tests/EngineeringManager.Tests.csproj --filter FullyQualifiedName~ListSortingAssetTests|FullyQualifiedName~DataWorkbenchAssetTests`，确认因功能尚不存在而失败。
+
+### Task 11: 实现共享排序菜单和小列表自动增强
+
+**Files:**
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Shared/DataWorkbenchViewModel.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Shared/DataWorkbenchPresets.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Shared/_DataWorkbench.cshtml`
+- Create: `EngineeringManager/src/EngineeringManager.Web/wwwroot/js/components/list-sorting.js`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/wwwroot/js/site.js`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/wwwroot/css/components.css`
+
+- [x] 为 DataWorkbench 增加排序选项、默认键、默认方向和服务端/客户端模式。
+- [x] 在共享工具栏渲染排序选择器，并统一使用 `sortKey` / `sortDescending` 参数名。
+- [x] 实现独立表格自动菜单、稳定比较、日期/数值/中文短编号解析、固定行处理和本地保存。
+- [x] 用 `MutationObserver` 处理动态弹窗表格，并阻止脚本重复插入菜单或监听器。
+- [x] 重新运行 Task 10 测试并确认通过。
+
+### Task 12: 项目与员工在分页前默认最新排序
+
+**Files:**
+- Modify: `EngineeringManager/tests/EngineeringManager.Tests/Application/ProjectServiceTests.cs`
+- Create: `EngineeringManager/tests/EngineeringManager.Tests/Web/EmployeeListSortingTests.cs`
+- Modify: `EngineeringManager/tests/EngineeringManager.Tests/Web/DataWorkbenchPageTests.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Projects/Index.cshtml.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Employees/Index.cshtml.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Employees/Index.cshtml`
+
+- [x] 先写项目与员工失败测试：默认项目编号/员工编号降序，且排序发生在分页前。
+- [x] 项目默认 `SortDescending=true`，提供编号、名称、阶段、金额和结算状态选项。
+- [x] 员工增加 `SortKey` / `SortDescending`，在 `Skip/Take` 前按编号、姓名、类型、金额或状态排序。
+- [x] 员工筛选链接、保存返回和分页链接保留排序参数。
+- [x] 定向测试通过，并确认 `XM0227` 的排序契约受测试保护。
+
+### Task 13: 中央账本主表默认业务日期降序
+
+**Files:**
+- Modify: `EngineeringManager/tests/EngineeringManager.Tests/Application/CentralLedgerQueryServiceTests.cs`
+- Modify: `EngineeringManager/tests/EngineeringManager.Tests/Web/CentralLedgerPageTests.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Application/Finance/CentralLedgerDtos.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Ledger/External/Index.cshtml.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Ledger/Internal/Index.cshtml.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Ledger/External/Index.cshtml`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Pages/Ledger/Internal/Index.cshtml`
+
+- [x] 先写失败测试：未传排序参数时，较新的业务日期必须位于第一行。
+- [x] 两个账本 PageModel 绑定并传递排序键/方向，默认 `BusinessDate DESC`。
+- [x] 主表标记为服务端排序，菜单提供日期、金额、项目和往来单位选项；子表继续由共享客户端排序覆盖。
+- [x] 页签、重置与筛选 URL 保留排序参数。
+- [x] 定向测试通过。
+
+### Task 14: 全量验证与真实页面复核
+
+**Files:**
+- Modify if regression requires: affected Razor page or service query only.
+
+- [x] 运行排序相关 Web、项目、员工、中央账本定向测试。
+- [x] 运行 `dotnet test EngineeringManager/EngineeringManager.sln`。
+- [x] 运行 `dotnet build EngineeringManager/EngineeringManager.sln -c Release --no-restore`。
+- [x] 重启 `http://127.0.0.1:5075` 服务并检查 `/health/live`、`/health/ready`。
+- [ ] 浏览器验证项目首条 `XM0227`，切换编号/名称排序并刷新。
+- [ ] 抽查员工、中央账本、项目详情、公司详情、工资弹窗和数据导入小表的排序菜单与交互。
+- [ ] 检查控制台错误、桌面与移动宽度布局、表格横向滚动和排序菜单不遮挡。
+- [x] 对照 `research/list-sorting-inventory.md` 完成覆盖复核并记录剩余风险。
+
+## 2026-08-02 续验记录（全系统列表统一排序）
+
+- 项目、员工、项目经营台账、外部中央账本和内部中央账本均在分页前执行服务端排序；默认分别使用业务编号或业务日期降序。
+- DataWorkbench、详情页、弹窗和其他小表由共享 `list-sorting.js` 提供“最新在前 / 最早在前”及按列排序，并按 URL 或浏览器本地状态保存选择。
+- 修复无实际表格或不足两条业务行的工作台仍显示排序菜单的问题；独立动态表格从多行缩减到零至一行时也会自动隐藏菜单。相关回归测试均完成先失败后最小修复通过。
+- 服务端排序、页码与保存视图参数现在按大小写不敏感方式清除旧值，再统一写入 `sortKey` / `sortDescending`；切换排序会回到第一页并退出旧保存视图，避免旧值覆盖新选择。
+- 排序定向回归通过：46/46；四个相关 JavaScript 模块的 `node --check` 和 URL 清理行为检查通过；完整测试通过：918/918。
+- Release 构建通过：0 个警告、0 个错误；服务已重新启动为 PID 27756，`/health/live` 与 `/health/ready` 均返回 HTTP 200 `Healthy`。
+- SQL Server 只读查询确认按 `ProjectNumber DESC` 的首条为 `XM0227 | （宏达）临政工出【2026】2号年产5000吨紧固件生产线项目`，本轮未执行数据库写入。
+- 内置浏览器确认登录页可加载、非空白、无控制台警告或错误，密码显示切换可正常交互；当前保存的登录信息被系统拒绝，未猜测或重置密码，因此受保护列表的真实页面排序、刷新记忆和响应式布局复核仍待用户登录后完成。

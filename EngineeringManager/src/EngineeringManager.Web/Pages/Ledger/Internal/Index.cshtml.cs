@@ -31,6 +31,8 @@ public sealed class IndexModel(ICentralLedgerQueryService ledger, IFinanceBusine
     [BindProperty(SupportsGet = true)] public Guid? CounterLegalEntityId { get; set; }
     [BindProperty(SupportsGet = true)] public LedgerDirection? Direction { get; set; }
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
+    [BindProperty(SupportsGet = true)] public string SortKey { get; set; } = "BusinessDate";
+    [BindProperty(SupportsGet = true)] public bool SortDescending { get; set; } = true;
     [BindProperty(SupportsGet = true)] public int PageNumber { get; set; } = 1;
     [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 20;
 
@@ -49,6 +51,8 @@ public sealed class IndexModel(ICentralLedgerQueryService ledger, IFinanceBusine
 
     public async Task OnGetAsync(CancellationToken token)
     {
+        PageSize = NormalizePageSize(PageSize);
+        PageNumber = Math.Max(1, PageNumber);
         ActiveTab = NormalizeTab(ActiveTab);
         var actor = await LedgerPageSupport.CreateActorAsync(User, db, token);
         CanManage = actor.CanManageInternal;
@@ -77,6 +81,8 @@ public sealed class IndexModel(ICentralLedgerQueryService ledger, IFinanceBusine
             ["CounterLegalEntityId"] = CounterLegalEntityId?.ToString(),
             ["Direction"] = Direction?.ToString(),
             ["Search"] = Search,
+            ["sortKey"] = SortKey,
+            ["sortDescending"] = SortDescending.ToString().ToLowerInvariant(),
             ["PageNumber"] = PageNumber > 1 ? PageNumber.ToString(CultureInfo.InvariantCulture) : null,
             ["PageSize"] = PageSize != 20 ? PageSize.ToString(CultureInfo.InvariantCulture) : null
         };
@@ -98,11 +104,15 @@ public sealed class IndexModel(ICentralLedgerQueryService ledger, IFinanceBusine
             LegalEntityId,
             CounterLegalEntityId: CounterLegalEntityId,
             Search: Search,
+            SortKey: SortKey,
+            SortDescending: SortDescending,
             Page: PageNumber,
             PageSize: PageSize);
     }
 
     private static string NormalizeTab(string? tab) => AllowedTabs.Contains(tab ?? string.Empty) ? tab!.ToLowerInvariant() : "overview";
+
+    private static int NormalizePageSize(int pageSize) => pageSize is 20 or 50 or 100 ? pageSize : 20;
 
     private static CentralLedgerOverviewPageDto Empty() => new([], CentralLedgerMetrics.Zero, 1, 20, 0, 0, [], [], [], 0m, [], [], [], []);
 

@@ -37,6 +37,8 @@ public sealed class IndexModel(
 
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public EmployeeType? EmployeeType { get; set; }
+    [BindProperty(SupportsGet = true)] public string SortKey { get; set; } = "EmployeeNumber";
+    [BindProperty(SupportsGet = true)] public bool SortDescending { get; set; } = true;
     [BindProperty(SupportsGet = true)] public int PageNumber { get; set; } = 1;
     [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 20;
     [BindProperty] public EmployeeEditorInput Editor { get; set; } = new();
@@ -86,6 +88,8 @@ public sealed class IndexModel(
             {
                 Search,
                 EmployeeType,
+                SortKey,
+                SortDescending,
                 PageNumber,
                 PageSize
             });
@@ -101,7 +105,7 @@ public sealed class IndexModel(
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
-        PageSize = PageSize is 10 or 20 or 50 or 100 ? PageSize : 20;
+        PageSize = NormalizePageSize(PageSize);
         PageNumber = Math.Max(1, PageNumber);
         var allEmployees = await employeeService.ListAsync(null, CanManage, cancellationToken);
         NextEmployeeNumber = ShortBusinessNumber.Next(allEmployees.Select(item => item.EmployeeNumber), "YG");
@@ -142,6 +146,7 @@ public sealed class IndexModel(
             }
         }
 
+        all = ApplySort(all);
         var skip = (PageNumber - 1) * PageSize;
         Employees = all.Skip(skip).Take(PageSize).ToArray();
         if (PageNumber > TotalPages)
@@ -174,6 +179,28 @@ public sealed class IndexModel(
         public string Reason { get; set; } = "维护员工资料";
         public string? Notes { get; set; }
     }
+
+    private EmployeeDto[] ApplySort(IEnumerable<EmployeeDto> employees)
+    {
+        Func<EmployeeDto, object> selector = SortKey switch
+        {
+            "Name" => employee => employee.Name,
+            "EmployeeType" => employee => employee.EmployeeType,
+            "Payable" => employee => AnnualSummaries.GetValueOrDefault(employee.Id)?.CurrentYearNewPayable ?? 0m,
+            "Paid" => employee => AnnualSummaries.GetValueOrDefault(employee.Id)?.ReceivedAmount ?? 0m,
+            "Unpaid" => employee =>
+                (AnnualSummaries.GetValueOrDefault(employee.Id)?.CurrentYearNewPayable ?? 0m)
+                - (AnnualSummaries.GetValueOrDefault(employee.Id)?.ReceivedAmount ?? 0m),
+            "Status" => employee => employee.IsActive,
+            _ => employee => employee.EmployeeNumber
+        };
+
+        return SortDescending
+            ? employees.OrderByDescending(selector).ThenByDescending(employee => employee.EmployeeNumber).ToArray()
+            : employees.OrderBy(selector).ThenBy(employee => employee.EmployeeNumber).ToArray();
+    }
+
+    private static int NormalizePageSize(int pageSize) => pageSize is 20 or 50 or 100 ? pageSize : 20;
 
     public string PageUrl(int page)
     {

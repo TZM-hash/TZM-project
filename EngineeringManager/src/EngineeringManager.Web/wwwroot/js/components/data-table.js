@@ -1,3 +1,5 @@
+import { deleteSearchParamsIgnoreCase } from "./url-search-params.js";
+
 const rowSpacingClasses = ["row-spacing-compact", "row-spacing-standard", "row-spacing-spacious"];
 
 function safeParse(value, fallback) {
@@ -58,9 +60,12 @@ function applyColumns(root, columns) {
     });
   });
   applyColumnControls(root, columns);
-  const exportForm = document.getElementById(`${root.dataset.tableId}-export-form`);
-  exportForm?.querySelectorAll("[data-export-column-key]").forEach((input) => {
+  const exportForm = document.getElementById(`${root.dataset.tableId}-export-form`) ?? root.querySelector("[data-project-export-scope]");
+  const exportInputs = Array.from(exportForm?.querySelectorAll("[data-export-column-key]") ?? []);
+  exportInputs.sort((left, right) => (byKey.get(left.dataset.exportColumnKey)?.order ?? 999) - (byKey.get(right.dataset.exportColumnKey)?.order ?? 999));
+  exportInputs.forEach((input) => {
     input.disabled = byKey.get(input.dataset.exportColumnKey)?.visible === false;
+    exportForm.appendChild(input);
   });
 }
 
@@ -172,6 +177,9 @@ function initColumnManager(root) {
 
 function initDialogs(root) {
   root.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog")?.close()));
+  root.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  }));
 }
 
 function initRowSpacing(root) {
@@ -183,10 +191,13 @@ function initRowSpacing(root) {
 
 function initPageSize(root) {
   root.querySelector("[data-current-page-size]")?.addEventListener("change", (event) => {
+    if (root.dataset.listPaginationServer !== "true") {
+      root.dispatchEvent(new CustomEvent("list-pagination-page-size-change", { detail: { pageSize: event.target.value } }));
+      return;
+    }
     const url = new URL(window.location.href);
+    deleteSearchParamsIgnoreCase(url.searchParams, ["page", "pageNumber", "savedViewId"]);
     url.searchParams.set("pageSize", event.target.value);
-    url.searchParams.delete("page");
-    url.searchParams.delete("pageNumber");
     persist(root);
     window.location.assign(url);
   });
@@ -197,10 +208,9 @@ function initSorting(root) {
     const url = new URL(window.location.href);
     const currentKey = root.dataset.currentSortKey;
     const descending = currentKey === button.dataset.sortKey ? root.dataset.currentSortDescending !== "true" : false;
+    deleteSearchParamsIgnoreCase(url.searchParams, ["sortKey", "sortDescending", "sort", "descending", "page", "pageNumber", "savedViewId"]);
     url.searchParams.set("sortKey", button.dataset.sortKey);
     url.searchParams.set("sortDescending", String(descending));
-    url.searchParams.delete("page");
-    url.searchParams.delete("pageNumber");
     window.location.assign(url);
   }));
 }

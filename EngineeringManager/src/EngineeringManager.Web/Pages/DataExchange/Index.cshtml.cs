@@ -92,7 +92,7 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
             await LoadAsync(cancellationToken);
             return Page();
         }
-        var query = new ProjectListQuery(ProjectSearch, ProjectStages, ProjectLegalEntityId, ProjectResponsibleUserId, ProjectMinimumCurrentAmount, ProjectMaximumCurrentAmount, null, false, AffiliationType: ProjectAffiliationType, IncludeInactive: true);
+        var query = new ProjectListQuery(ProjectSearch, ProjectStages, ProjectLegalEntityId, ProjectResponsibleUserId, ProjectMinimumCurrentAmount, ProjectMaximumCurrentAmount, "ProjectNumber", true, AffiliationType: ProjectAffiliationType, IncludeInactive: true);
         var file = await projectWorkbookService.ExportAsync(new ProjectWorkbookExportRequest(
             new ProjectWorkbookScope(ProjectActor(), query, SelectAllMatchingProjects, SelectedProjectIds),
             SelectedProjectSheets,
@@ -191,7 +191,7 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
         MappingTemplates = await importService.ListMappingTemplatesAsync(UserId(), ImportDataset, cancellationToken);
         ProjectWorkbookSheets = projectWorkbookService.GetSheets();
         var projectActor = ProjectActor();
-        var projectQuery = new ProjectListQuery(ProjectSearch, ProjectStages, ProjectLegalEntityId, ProjectResponsibleUserId, ProjectMinimumCurrentAmount, ProjectMaximumCurrentAmount, null, false, PageSize: 100, AffiliationType: ProjectAffiliationType, IncludeInactive: true);
+        var projectQuery = new ProjectListQuery(ProjectSearch, ProjectStages, ProjectLegalEntityId, ProjectResponsibleUserId, ProjectMinimumCurrentAmount, ProjectMaximumCurrentAmount, "ProjectNumber", true, PageSize: 100, AffiliationType: ProjectAffiliationType, IncludeInactive: true);
         ProjectWorkbookProjects = await projectService.SearchProjectsAsync(projectActor, projectQuery, cancellationToken);
         ProjectWorkbookOptions = await projectService.GetListOptionsAsync(projectActor, cancellationToken);
         var last = await exportService.GetLastSelectionAsync(UserId(), Dataset, cancellationToken);

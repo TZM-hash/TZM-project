@@ -42,10 +42,7 @@ export function initCheckSelectors() {
       updateProjectSelectionCount(form);
     });
     attachmentToggle?.addEventListener("change", () => {
-      if (attachmentSheet) attachmentSheet.checked = attachmentToggle.checked;
-    });
-    attachmentSheet?.addEventListener("change", () => {
-      if (attachmentToggle) attachmentToggle.checked = attachmentSheet.checked;
+      if (attachmentToggle.checked && attachmentSheet) attachmentSheet.checked = true;
     });
     updateProjectSelectionCount(form);
   });

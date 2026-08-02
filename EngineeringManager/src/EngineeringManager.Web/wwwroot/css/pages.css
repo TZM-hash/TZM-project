@@ -1563,6 +1563,10 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-workspace-summary, .employee-workspace-list { border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); box-shadow: var(--app-shadow-soft); }
 .employee-workspace-summary { position: sticky; top: 5rem; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: .72rem; min-height: 0; max-height: none; padding: .9rem; overflow: hidden; }
 .employee-workspace-list { min-width: 0; overflow: hidden; }
+/* Integrated workbench menus must escape the horizontal toolbar scroller while open. */
+:is(.company-list-panel, .equipment-workspace-list, .partner-workspace-list, .crew-workspace-list, .employee-workspace-list, .company-certificate-workspace-list, .payroll-workspace-list):has(.column-manager-dropdown[open]) { overflow: visible; }
+.equipment-list-toolbar--integrated:has(.column-manager-dropdown[open]) { position: relative; z-index: 5; overflow: visible; }
+.equipment-list-toolbar--integrated > .data-workbench:has(.column-manager-dropdown[open]) { overflow: visible; }
 .employee-summary-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
 .employee-summary-metrics article { display: grid; gap: .15rem; min-width: 0; min-height: 4.25rem; padding: .6rem; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-raised); }
 .employee-summary-metrics span { color: var(--app-muted); font-size: .72rem; }

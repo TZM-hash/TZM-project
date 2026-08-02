@@ -101,6 +101,29 @@ public sealed class CentralLedgerQueryServiceTests
     }
 
     [Fact]
+    public async Task DefaultQueryPlacesTheNewestBusinessDateOnTheFirstPage()
+    {
+        await using var fixture = await CentralLedgerTestFixture.CreateAsync();
+        var command = new CentralLedgerCommandService(fixture.Db);
+        await command.CreateSettlementAsync(
+            fixture.ExternalActor(),
+            SettlementRequest(fixture, LedgerSettlementState.Final, new DateOnly(2026, 7, 1), 100m, "较早结算"),
+            CancellationToken.None);
+        await command.CreateSettlementAsync(
+            fixture.ExternalActor(),
+            SettlementRequest(fixture, LedgerSettlementState.Final, new DateOnly(2026, 8, 1), 200m, "最新结算"),
+            CancellationToken.None);
+
+        var result = await new CentralLedgerQueryService(fixture.Db).SearchAsync(
+            fixture.ExternalActor(),
+            new CentralLedgerQuery(LedgerScope.External, PageSize: 1),
+            CancellationToken.None);
+
+        result.Rows.Should().ContainSingle();
+        result.Rows[0].BusinessDate.Should().Be(new DateOnly(2026, 8, 1));
+    }
+
+    [Fact]
     public async Task AdvanceInvoiceCashAndOverSettlementCashRemainIndependentFilters()
     {
         await using var fixture = await CentralLedgerTestFixture.CreateAsync();

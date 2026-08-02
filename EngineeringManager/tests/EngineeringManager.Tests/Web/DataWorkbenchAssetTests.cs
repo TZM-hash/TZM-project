@@ -8,10 +8,14 @@ public sealed class DataWorkbenchAssetTests
     public void WorkbenchSupportsConfirmedInteractionSet()
     {
         var js = ReadJavaScript();
+        var dataTable = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "data-table.js");
         var razor = ReadRazor();
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
+        var savedViews = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "saved-views.js");
 
         js.Should().Contain("data-column-key");
+        dataTable.Should().Contain("event.target === dialog")
+            .And.Contain("dialog.close()");
         js.Should().Contain("data-column-order");
         js.Should().Contain("row-spacing-compact");
         js.Should().Contain("table.classList.remove(...rowSpacingClasses)");
@@ -27,6 +31,8 @@ public sealed class DataWorkbenchAssetTests
         js.Should().Contain("restoreColumnDraft");
 
         razor.Should().Contain("data-workbench")
+            .And.Contain("data-list-sort-menu")
+            .And.Contain("排序")
             .And.Contain("data-column-manager-table")
             .And.Contain("column-manager-dropdown")
             .And.Contain("data-show-all-columns")
@@ -34,12 +40,24 @@ public sealed class DataWorkbenchAssetTests
             .And.Contain("调整后点击确认生效")
             .And.NotContain("column-manager-dialog")
             .And.Contain("data-filter-drawer")
-            .And.Contain("data-save-view-dialog");
+            .And.Contain("filter-dialog")
+            .And.Contain("data-save-view-dialog")
+            .And.Contain("name=\"sortKey\"")
+            .And.Contain("name=\"sortDescending\"");
+
+        savedViews.Should().Contain("url.searchParams.set(\"sortKey\"")
+            .And.Contain("url.searchParams.set(\"sortDescending\"")
+            .And.NotContain("url.searchParams.set(\"sort\"")
+            .And.NotContain("url.searchParams.set(\"descending\"");
 
         css.Should().Contain(".data-workbench-toolbar")
             .And.Contain(".column-manager-list")
             .And.Contain(".filter-chip-list")
-            .And.Contain(".workbench-drawer");
+            .And.Contain(".filter-dialog")
+            .And.Contain("max-height: min(85dvh, 56rem)")
+            .And.Contain("grid-template-rows: auto minmax(0, 1fr) auto")
+            .And.Contain(".workbench-dialog::backdrop")
+            .And.NotContain(".workbench-drawer");
     }
 
     [Fact]
@@ -49,6 +67,7 @@ public sealed class DataWorkbenchAssetTests
 
         site.Should().Contain("document.querySelector(\"[data-workbench]\")");
         site.Should().Contain("./components/data-table.js");
+        site.Should().Contain("./components/list-sorting.js");
         site.Should().Contain("./components/saved-views.js");
         site.Should().Contain("./components/filter-drawer.js");
     }

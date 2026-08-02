@@ -33,7 +33,7 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public decimal? MinimumUncollected { get; set; }
     [BindProperty(SupportsGet = true)] public bool RiskOnly { get; set; }
     [BindProperty(SupportsGet = true)] public string SortKey { get; set; } = "ProjectNumber";
-    [BindProperty(SupportsGet = true)] public bool SortDescending { get; set; }
+    [BindProperty(SupportsGet = true)] public bool SortDescending { get; set; } = true;
     [BindProperty(SupportsGet = true)] public int PageNumber { get; set; } = 1;
     [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 20;
     [BindProperty(SupportsGet = true)] public Guid? SavedViewId { get; set; }
@@ -70,6 +70,8 @@ public sealed class IndexModel(
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
+        PageSize = NormalizePageSize(PageSize);
+        PageNumber = Math.Max(1, PageNumber);
         var views = await savedViewService.ListAsync(UserId(), ViewDefinition, cancellationToken);
         var selected = SavedViewId.HasValue ? views.FirstOrDefault(item => item.Id == SavedViewId) : Request.Query.Count == 0 ? views.FirstOrDefault(item => item.IsDefault) : null;
         if (selected is not null)
@@ -82,6 +84,8 @@ public sealed class IndexModel(
     }
 
     private FinanceOverviewQuery Query() => new(Search, MinimumReceivable, MinimumUncollected, RiskOnly, SortKey, SortDescending, PageNumber, PageSize);
+
+    private static int NormalizePageSize(int pageSize) => pageSize is 20 or 50 or 100 ? pageSize : 20;
 
     private DataWorkbenchViewModel BuildWorkbench(IReadOnlyList<SavedDataViewDto> views, SavedDataViewDto? selected)
     {
@@ -117,7 +121,23 @@ public sealed class IndexModel(
             SortDescending,
             selected?.Id,
             true,
-            InlineFilters: [filters[0]]);
+            InlineFilters: [filters[0]],
+            SortOptions:
+            [
+                new("ProjectNumber", "最新项目在前", true),
+                new("ProjectNumber", "最早项目在前", false),
+                new("ProjectName", "项目名称：升序", false),
+                new("ProjectName", "项目名称：降序", true),
+                new("ReceivableAmount", "应收金额：高到低", true),
+                new("ReceivableAmount", "应收金额：低到高", false),
+                new("UncollectedAmount", "未收金额：高到低", true),
+                new("UncollectedAmount", "未收金额：低到高", false),
+                new("PayableAmount", "应付金额：高到低", true),
+                new("PayableAmount", "应付金额：低到高", false)
+            ],
+            DefaultSortKey: "ProjectNumber",
+            DefaultSortDescending: true,
+            SortOnServer: true);
     }
 
     private void ApplySavedView(SavedDataViewDto view)
@@ -127,8 +147,11 @@ public sealed class IndexModel(
         if (decimal.TryParse(ReadString(filters, "MinimumReceivable"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var receivable)) MinimumReceivable = receivable;
         if (decimal.TryParse(ReadString(filters, "MinimumUncollected"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var uncollected)) MinimumUncollected = uncollected;
         if (bool.TryParse(ReadString(filters, "RiskOnly"), out var riskOnly)) RiskOnly = riskOnly;
-        SortKey = view.SortKey ?? SortKey;
-        SortDescending = view.SortDescending;
+        if (!string.IsNullOrWhiteSpace(view.SortKey))
+        {
+            SortKey = view.SortKey;
+            SortDescending = view.SortDescending;
+        }
         PageSize = view.PageSize;
     }
 

@@ -1,4 +1,5 @@
 import { getWorkbenchTableState } from "./data-table.js";
+import { deleteSearchParamsIgnoreCase } from "./url-search-params.js";
 
 function safeParse(value) {
   try { return JSON.parse(value || "{}") || {}; } catch { return {}; }
@@ -7,8 +8,7 @@ function safeParse(value) {
 function applySavedView(root, option) {
   const url = new URL(window.location.href);
   if (!option?.value) {
-    url.searchParams.delete("savedViewId");
-    url.searchParams.delete("page");
+    deleteSearchParamsIgnoreCase(url.searchParams, ["savedViewId", "page", "pageNumber"]);
     window.location.assign(url);
     return;
   }
@@ -22,11 +22,11 @@ function applySavedView(root, option) {
       url.searchParams.set(key, String(value));
     }
   });
-  if (option.dataset.savedViewSortKey) url.searchParams.set("sort", option.dataset.savedViewSortKey);
-  url.searchParams.set("descending", option.dataset.savedViewSortDescending || "false");
+  deleteSearchParamsIgnoreCase(url.searchParams, ["sortKey", "sortDescending", "sort", "descending", "page", "pageNumber", "savedViewId"]);
+  if (option.dataset.savedViewSortKey) url.searchParams.set("sortKey", option.dataset.savedViewSortKey);
+  url.searchParams.set("sortDescending", option.dataset.savedViewSortDescending || "false");
   url.searchParams.set("pageSize", option.dataset.savedViewPageSize || "20");
   url.searchParams.set("savedViewId", option.value);
-  url.searchParams.delete("page");
   window.location.assign(url);
 }
 

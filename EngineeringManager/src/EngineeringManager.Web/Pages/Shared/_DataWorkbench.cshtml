@@ -16,11 +16,19 @@
     var inlineKeys = inlineFilters.Select(field => field.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
     var advancedFilters = Model.Filters.Where(field => !inlineKeys.Contains(field.Key)).ToArray();
     var hasInlineValue = inlineFilters.Any(field => !string.IsNullOrWhiteSpace(field.Value) || !string.IsNullOrWhiteSpace(Context.Request.Query[field.Key].ToString()));
+    var currentSortKey = Model.EffectiveSortKey;
+    var currentSortDescending = Model.EffectiveSortDescending;
+    var currentSortValue = $"{currentSortKey}|{currentSortDescending.ToString().ToLowerInvariant()}";
+    var sortOptions = Model.SortMenuOptions;
 }
 
 <section class="data-workbench" data-workbench data-page-key="@Model.PageKey" data-table-id="@Model.TableId"
-         data-row-density="@densityValue" data-current-sort-key="@Model.CurrentSortKey"
-         data-current-sort-descending="@Model.SortDescending.ToString().ToLowerInvariant()"
+          data-row-density="@densityValue" data-current-sort-key="@currentSortKey"
+          data-current-sort-descending="@currentSortDescending.ToString().ToLowerInvariant()"
+          data-list-sort-server="@Model.SortOnServer.ToString().ToLowerInvariant()"
+          data-list-pagination-server="@Model.SortOnServer.ToString().ToLowerInvariant()"
+          data-list-sort-default-key="@Model.EffectiveSortKey"
+         data-list-sort-default-descending="@Model.EffectiveSortDescending.ToString().ToLowerInvariant()"
          data-default-columns="@defaultColumns" data-saved-view-columns="@initialColumns">
     <div class="data-workbench-toolbar" aria-label="数据视图工具栏">
         <form method="get" class="workbench-inline-filters" role="search" aria-label="快速搜索">
@@ -63,8 +71,8 @@
                     <input type="hidden" name="@field.Key" value="@value" />
                 }
             }
-            @if (!string.IsNullOrWhiteSpace(Model.CurrentSortKey)) { <input type="hidden" name="sort" value="@Model.CurrentSortKey" /> }
-            <input type="hidden" name="descending" value="@Model.SortDescending.ToString().ToLowerInvariant()" />
+            @if (!string.IsNullOrWhiteSpace(currentSortKey)) { <input type="hidden" name="sortKey" value="@currentSortKey" /> }
+            <input type="hidden" name="sortDescending" value="@currentSortDescending.ToString().ToLowerInvariant()" />
             <input type="hidden" name="pageSize" value="@Model.CurrentPageSize" />
             @if (inlineFilters.Count > 0)
             {
@@ -74,6 +82,19 @@
         </form>
 
         <div class="workbench-toolbar-actions">
+            @if (sortOptions.Count > 0)
+            {
+            <label class="list-sort-picker workbench-sort-picker">
+                <span>排序</span>
+                <select data-list-sort-menu aria-label="选择列表排序方式">
+                    @foreach (var option in sortOptions)
+                    {
+                        var value = $"{option.Key}|{option.Descending.ToString().ToLowerInvariant()}";
+                        <option value="@value" selected="@(value == currentSortValue)">@option.Label</option>
+                    }
+                </select>
+            </label>
+            }
             @if (Model.CanSaveViews || Model.SavedViews.Count > 0)
             {
             <label class="workbench-view-picker">
@@ -172,7 +193,7 @@
 
             @if (advancedFilters.Length > 0)
             {
-    <dialog class="workbench-dialog workbench-drawer" data-filter-drawer>
+    <dialog class="workbench-dialog filter-dialog" data-filter-drawer>
         <form method="get" data-filter-form>
             <div class="workbench-dialog-heading">
                 <div><strong>高级筛选</strong><span>组合多个条件后应用，筛选会同步到地址栏和导出范围。</span></div>
@@ -214,10 +235,10 @@
                     <input type="hidden" name="@field.Key" value="@value" data-inline-filter-preserve />
                 }
             }
-            @if (!string.IsNullOrWhiteSpace(Model.CurrentSortKey))
+            @if (!string.IsNullOrWhiteSpace(currentSortKey))
             {
-                <input type="hidden" name="sort" value="@Model.CurrentSortKey" />
-                <input type="hidden" name="descending" value="@Model.SortDescending.ToString().ToLowerInvariant()" />
+                <input type="hidden" name="sortKey" value="@currentSortKey" />
+                <input type="hidden" name="sortDescending" value="@currentSortDescending.ToString().ToLowerInvariant()" />
             }
             <input type="hidden" name="pageSize" value="@Model.CurrentPageSize" />
             <div class="workbench-dialog-actions">
@@ -241,8 +262,8 @@
             <input type="hidden" name="SavedView.PageKey" value="@Model.PageKey" />
             <input type="hidden" name="SavedView.FilterJson" data-saved-view-filter-json />
             <input type="hidden" name="SavedView.ColumnJson" data-saved-view-column-json />
-            <input type="hidden" name="SavedView.SortKey" value="@Model.CurrentSortKey" />
-            <input type="hidden" name="SavedView.SortDescending" value="@Model.SortDescending.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="SavedView.SortKey" value="@currentSortKey" />
+            <input type="hidden" name="SavedView.SortDescending" value="@currentSortDescending.ToString().ToLowerInvariant()" />
             <input type="hidden" name="SavedView.RowDensity" value="@Model.RowDensity" data-saved-view-row-density />
             <input type="hidden" name="SavedView.PageSize" value="@Model.CurrentPageSize" data-saved-view-page-size />
             <div class="workbench-dialog-actions">

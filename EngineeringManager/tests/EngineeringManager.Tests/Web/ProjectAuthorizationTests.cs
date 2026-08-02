@@ -536,13 +536,13 @@ public sealed class ProjectAuthorizationTests
         managerHtml.Should().Contain("ExportWorkbook")
             .And.Contain("data-project-workbook-export-menu")
             .And.Contain("导出项目清单")
-            .And.Contain("选择项目工作簿细项")
+            .And.Contain("按当前页面筛选、排序和列管理结果生成 Excel")
             .And.NotContain("导出当前视图")
             .And.NotContain("project-workbook-export-form panel compact-form-grid");
         staffHtml.Should().NotContain("ExportWorkbook")
             .And.NotContain("data-project-workbook-export-menu")
             .And.NotContain("导出项目清单")
-            .And.NotContain("选择项目工作簿细项");
+            .And.NotContain("按当前页面筛选、排序和列管理结果生成 Excel");
     }
 
     [Fact]
@@ -559,10 +559,15 @@ public sealed class ProjectAuthorizationTests
         page.Should().Contain("data-project-export-item");
         exportPartial.Should().Contain("data-project-export-all-matching")
             .And.Contain("data-project-workbook-export-menu")
-            .And.Contain("导出项目清单");
+            .And.Contain("导出项目清单")
+            .And.Contain("name=\"ExportColumns\"")
+            .And.Contain("column.Key != \"actions\"")
+            .And.Contain("不勾选时只导出项目清单 Excel");
         script.Should().Contain("data-project-export-all-matching")
             .And.Contain("data-project-export-item")
-            .And.Contain("form.elements");
+            .And.Contain("form.elements")
+            .And.Contain("attachmentToggle.checked && attachmentSheet")
+            .And.NotContain("attachmentToggle.checked = attachmentSheet.checked");
         labels.Should().Contain("ProjectWorkbookSheet.Deductions => \"扣款\"");
     }
 

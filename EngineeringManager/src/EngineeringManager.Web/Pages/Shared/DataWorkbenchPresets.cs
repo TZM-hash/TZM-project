@@ -4,23 +4,39 @@ public static class DataWorkbenchPresets
 {
     public static DataWorkbenchViewModel Employees => Create("employees", "employees-table", [
         ("employee_number", "员工编号"), ("name", "姓名"), ("employee_type", "类型"), ("position", "岗位"), ("phone", "电话"),
-        ("current_company", "当前公司"), ("current_department", "当前部门"), ("payable", "应付合计"), ("paid", "已付款"), ("unpaid", "未付款"), ("status", "状态"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel EmployeeCertificates => Create("employee-certificates", "employee-certificates-table", [("employee", "员工"), ("certificate_type", "证书类型"), ("certificate_number", "证书编号"), ("scope", "专业/等级/范围"), ("authority", "发证机关"), ("issued_on", "签发日期"), ("expires_on", "到期日期"), ("status", "状态"), ("attachment", "附件"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel Payroll => Create("payroll", "payroll-disbursement-table", [("batch", "批次"), ("payment_date", "发放日期"), ("recipients", "人数"), ("actual", "实际总额"), ("employee", "员工"), ("temporary", "临时人员"), ("crew", "班组"), ("difference", "差额"), ("status", "状态"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel EmployeeLedger => Create("employee-ledger", "employee-ledger-table", [("employee", "员工"), ("expense_payable", "报销应付"), ("expense_paid", "报销已付"), ("expense_unpaid", "报销未付"), ("advance", "借支未清"), ("other_payable", "其他应付"), ("other_paid", "其他已付"), ("other_unpaid", "其他未付"), ("risk", "风险")]);
-    public static DataWorkbenchViewModel EmployeeAnnualLedger => Create("employee-annual-ledger", "employee-annual-ledger-table", [("employee", "员工"), ("carry_forward", "往年结转"), ("new_payable", "本年新增应付"), ("received", "已领总额"), ("balance", "当前余额"), ("progress", "结算进度"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel Partners => Create("partners", "partners-table", [("partner", "单位"), ("role_trade", "角色 / 专业"), ("contact", "主要联系人"), ("projects", "参与项目"), ("receipts", "应收"), ("payments", "应付"), ("invoices", "开票"), ("status", "状态"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel StageResults => Create("stage-results", "stage-results-table", [("date", "日期"), ("name", "名称"), ("type", "类型"), ("status", "状态"), ("quality", "质量"), ("lines", "工程量项"), ("attachments", "附件")]);
-    public static DataWorkbenchViewModel Companies => Create("companies", "companies-table", [("code", "编码"), ("company", "公司"), ("category", "分类"), ("representative", "法人/经营者"), ("notes", "备注摘要"), ("status", "状态")]);
-    public static DataWorkbenchViewModel CompanyCertificates => Create("company-certificates", "company-certificates-table", [("company", "公司"), ("certificate", "证书 / 编号"), ("scope", "专业 / 等级 / 范围"), ("authority", "发证机关"), ("validity", "签发 / 到期"), ("status", "提醒等级"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel Equipment => Create("equipment", "equipment-table", [("equipment", "设备"), ("model_category", "型号 / 分类"), ("managing_company", "管理公司"), ("ownership_type", "设备归属"), ("ownership_party", "产权方 / 出租方"), ("status", "状态"), ("qualification", "合格证"), ("rate", "参考价"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel Crews => Create("crews", "crews-table", [("crew", "班组"), ("role_trade", "角色 / 专业"), ("contact", "主要联系人"), ("projects", "参与项目"), ("receipts", "应收"), ("payments", "应付"), ("invoices", "开票"), ("status", "状态"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel Reminders => Create("reminders", "reminders-table", [("severity", "级别"), ("type", "类型"), ("title", "标题"), ("message", "说明"), ("actions", "操作")]);
-    public static DataWorkbenchViewModel Users => Create("users", "users-table", [("display_name", "姓名"), ("user_name", "账号"), ("status", "状态"), ("roles", "角色"), ("department", "主部门"), ("companies", "签约公司范围")]);
-    public static DataWorkbenchViewModel Organizations => Create("organizations", "organizations-table", [("code", "编码"), ("name", "名称"), ("type", "类型"), ("status", "状态")]);
-    public static DataWorkbenchViewModel DataExchange => Create("data-exchange", "data-exchange-table", [("key", "字段键"), ("label", "字段名称"), ("type", "数据类型"), ("default", "默认导出")]);
-    public static DataWorkbenchViewModel Backups => Create("backups", "backups-table", [("created", "时间"), ("status", "状态"), ("database", "数据库文件"), ("attachments", "附件文件"), ("error", "错误")]);
+        ("current_company", "当前公司"), ("current_department", "当前部门"), ("payable", "应付合计"), ("paid", "已付款"), ("unpaid", "未付款"), ("status", "状态"), ("actions", "操作")], "employee_number");
+    public static DataWorkbenchViewModel EmployeeCertificates => Create("employee-certificates", "employee-certificates-table", [("employee", "员工"), ("certificate_type", "证书类型"), ("certificate_number", "证书编号"), ("scope", "专业/等级/范围"), ("authority", "发证机关"), ("issued_on", "签发日期"), ("expires_on", "到期日期"), ("status", "状态"), ("attachment", "附件"), ("actions", "操作")], "issued_on");
+    public static DataWorkbenchViewModel Payroll => Create("payroll", "payroll-disbursement-table", [("batch", "批次"), ("payment_date", "发放日期"), ("recipients", "人数"), ("actual", "实际总额"), ("employee", "员工"), ("temporary", "临时人员"), ("crew", "班组"), ("difference", "差额"), ("status", "状态"), ("actions", "操作")], "payment_date");
+    public static DataWorkbenchViewModel EmployeeLedger => Create("employee-ledger", "employee-ledger-table", [("employee", "员工"), ("expense_payable", "报销应付"), ("expense_paid", "报销已付"), ("expense_unpaid", "报销未付"), ("advance", "借支未清"), ("other_payable", "其他应付"), ("other_paid", "其他已付"), ("other_unpaid", "其他未付"), ("risk", "风险")], "employee");
+    public static DataWorkbenchViewModel EmployeeAnnualLedger => Create("employee-annual-ledger", "employee-annual-ledger-table", [("employee", "员工"), ("carry_forward", "往年结转"), ("new_payable", "本年新增应付"), ("received", "已领总额"), ("balance", "当前余额"), ("progress", "结算进度"), ("actions", "操作")], "employee");
+    public static DataWorkbenchViewModel Partners => Create("partners", "partners-table", [("partner", "单位"), ("role_trade", "角色 / 专业"), ("contact", "主要联系人"), ("projects", "参与项目"), ("receipts", "应收"), ("payments", "应付"), ("invoices", "开票"), ("status", "状态"), ("actions", "操作")], "partner");
+    public static DataWorkbenchViewModel StageResults => Create("stage-results", "stage-results-table", [("date", "日期"), ("name", "名称"), ("type", "类型"), ("status", "状态"), ("quality", "质量"), ("lines", "工程量项"), ("attachments", "附件")], "date");
+    public static DataWorkbenchViewModel Companies => Create("companies", "companies-table", [("code", "编码"), ("company", "公司"), ("category", "分类"), ("representative", "法人/经营者"), ("notes", "备注摘要"), ("status", "状态")], "code");
+    public static DataWorkbenchViewModel CompanyCertificates => Create("company-certificates", "company-certificates-table", [("company", "公司"), ("certificate", "证书 / 编号"), ("scope", "专业 / 等级 / 范围"), ("authority", "发证机关"), ("validity", "签发 / 到期"), ("status", "提醒等级"), ("actions", "操作")], "validity");
+    public static DataWorkbenchViewModel Equipment => Create("equipment", "equipment-table", [("equipment", "设备"), ("model_category", "型号 / 分类"), ("managing_company", "管理公司"), ("ownership_type", "设备归属"), ("ownership_party", "产权方 / 出租方"), ("status", "状态"), ("qualification", "合格证"), ("rate", "参考价"), ("actions", "操作")], "equipment");
+    public static DataWorkbenchViewModel Crews => Create("crews", "crews-table", [("crew", "班组"), ("role_trade", "角色 / 专业"), ("contact", "主要联系人"), ("projects", "参与项目"), ("receipts", "应收"), ("payments", "应付"), ("invoices", "开票"), ("status", "状态"), ("actions", "操作")], "crew");
+    public static DataWorkbenchViewModel Reminders => Create("reminders", "reminders-table", [("severity", "级别"), ("type", "类型"), ("title", "标题"), ("message", "说明"), ("actions", "操作")], "__original", false);
+    public static DataWorkbenchViewModel Users => Create("users", "users-table", [("display_name", "姓名"), ("user_name", "账号"), ("status", "状态"), ("roles", "角色"), ("department", "主部门"), ("companies", "签约公司范围")], "user_name");
+    public static DataWorkbenchViewModel Organizations => Create("organizations", "organizations-table", [("code", "编码"), ("name", "名称"), ("type", "类型"), ("status", "状态")], "code");
+    public static DataWorkbenchViewModel DataExchange => Create("data-exchange", "data-exchange-table", [("key", "字段键"), ("label", "字段名称"), ("type", "数据类型"), ("default", "默认导出")], "key");
+    public static DataWorkbenchViewModel Backups => Create("backups", "backups-table", [("created", "时间"), ("status", "状态"), ("database", "数据库文件"), ("attachments", "附件文件"), ("error", "错误")], "created");
 
-    private static DataWorkbenchViewModel Create(string pageKey, string tableId, IReadOnlyList<(string Key, string Label)> columns) =>
-        new(pageKey, tableId, columns.Select((item, index) => new DataWorkbenchColumn(item.Key, item.Label, true, index == 0)).ToArray(), [], [], [], CanExport: false, CanSaveViews: false, CanChangePageSize: false);
+    private static DataWorkbenchViewModel Create(
+        string pageKey,
+        string tableId,
+        IReadOnlyList<(string Key, string Label)> columns,
+        string defaultSortKey,
+        bool defaultSortDescending = true) =>
+        new(
+            pageKey,
+            tableId,
+            columns.Select((item, index) => new DataWorkbenchColumn(item.Key, item.Label, true, index == 0)).ToArray(),
+            [],
+            [],
+            [],
+            CanExport: false,
+            CanSaveViews: false,
+            CanChangePageSize: true,
+            DefaultSortKey: defaultSortKey,
+            DefaultSortDescending: defaultSortDescending);
 }

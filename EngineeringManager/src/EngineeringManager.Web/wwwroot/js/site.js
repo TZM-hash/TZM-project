@@ -31,6 +31,15 @@ if (document.querySelector("[data-workbench]")) {
     filters.initFilterDrawers();
   }));
 }
+if (document.querySelector(".data-table, [data-workbench]")) {
+  scheduleIdle(() => Promise.all([
+    import("./components/list-sorting.js"),
+    import("./components/list-pagination.js")
+  ]).then(([sorting, pagination]) => {
+    sorting.initListSorting();
+    pagination.initListPagination();
+  }));
+}
 if (document.querySelector("[data-chart]")) {
   scheduleIdle(() => import("./components/charts.js").then((module) => module.initCharts()));
 }

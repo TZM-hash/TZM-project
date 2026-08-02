@@ -182,7 +182,7 @@
                             payable = financialSummary.Payable
                         }, financeJsonOptions);
                         <tr>
-                            <td data-column-key="partner"><strong class="partner-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
+                            <td data-column-key="partner" data-sort-value="@partner.PartnerNumber"><strong class="partner-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
                             <td data-column-key="role_trade"><strong>@role.ToChinese()</strong><span class="table-secondary partner-name-clamp" title="@primaryRole?.TradeCategory">@(primaryRole?.TradeCategory ?? "未填写专业")</span></td>
                             <td data-column-key="contact"><strong>@(primaryContact?.Name ?? "未设置")</strong><span class="table-secondary">@(primaryContact?.Phone ?? "未设置电话")</span></td>
                             <td data-column-key="projects"><strong class="partner-project-count">@partner.ProjectCount</strong></td>

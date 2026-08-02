@@ -17,6 +17,11 @@ public sealed record DataWorkbenchColumn(
     bool IsVisible = true,
     bool IsFixed = false);
 
+public sealed record DataWorkbenchSortOption(
+    string Key,
+    string Label,
+    bool Descending);
+
 public sealed record DataWorkbenchFilterOption(string Value, string Label);
 
 public sealed record DataWorkbenchFilterField(
@@ -60,7 +65,45 @@ public sealed record DataWorkbenchViewModel(
     bool CanChangePageSize = true,
     IReadOnlyList<DataWorkbenchFilterField>? InlineFilters = null,
     string? ToolbarActionsPartial = null,
-    object? ToolbarActionsModel = null)
+    object? ToolbarActionsModel = null,
+    IReadOnlyList<DataWorkbenchSortOption>? SortOptions = null,
+    string? DefaultSortKey = null,
+    bool DefaultSortDescending = true,
+    bool SortOnServer = false)
 {
     public IReadOnlyList<DataWorkbenchFilterField> InlineFilterFields => InlineFilters ?? [];
+
+    public string EffectiveSortKey =>
+        !string.IsNullOrWhiteSpace(CurrentSortKey)
+            ? CurrentSortKey
+            : !string.IsNullOrWhiteSpace(DefaultSortKey)
+                ? DefaultSortKey
+                : Columns.FirstOrDefault(column => IsSortableColumn(column.Key))?.Key ?? "__original";
+
+    public bool EffectiveSortDescending =>
+        !string.IsNullOrWhiteSpace(CurrentSortKey) ? SortDescending : DefaultSortDescending;
+
+    public IReadOnlyList<DataWorkbenchSortOption> SortMenuOptions
+    {
+        get
+        {
+            if (SortOptions is { Count: > 0 }) return SortOptions;
+
+            var sortableColumns = Columns.Where(column => IsSortableColumn(column.Key)).ToArray();
+            var defaultKey = EffectiveSortKey;
+            var options = new List<DataWorkbenchSortOption>
+            {
+                new(defaultKey, "最新在前", EffectiveSortDescending),
+                new(defaultKey, "最早在前", !EffectiveSortDescending)
+            };
+            foreach (var column in sortableColumns.Where(column => !string.Equals(column.Key, defaultKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                options.Add(new DataWorkbenchSortOption(column.Key, $"{column.Label}：升序", false));
+                options.Add(new DataWorkbenchSortOption(column.Key, $"{column.Label}：降序", true));
+            }
+            return options;
+        }
+    }
+
+    private static bool IsSortableColumn(string key) => key is not ("actions" or "attachment" or "attachments" or "selection");
 }

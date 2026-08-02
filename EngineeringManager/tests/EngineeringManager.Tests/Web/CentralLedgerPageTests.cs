@@ -84,6 +84,39 @@ public sealed class CentralLedgerPageTests
     }
 
     [Fact]
+    public void LedgerMainListsUseServerSortingAndDefaultToNewestBusinessDate()
+    {
+        var externalModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml.cs");
+        var internalModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Internal", "Index.cshtml.cs");
+        var externalPage = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml");
+        var internalPage = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Internal", "Index.cshtml");
+
+        foreach (var model in new[] { externalModel, internalModel })
+        {
+            model.Should().Contain("SortKey { get; set; } = \"BusinessDate\"")
+                .And.Contain("SortDescending { get; set; } = true")
+                .And.Contain("SortKey: SortKey")
+                .And.Contain("SortDescending: SortDescending");
+        }
+
+        foreach (var page in new[] { externalPage, internalPage })
+        {
+            page.Should().Contain("data-list-sort-server=\"true\"")
+                .And.Contain("data-list-sort-current-key=\"@Model.SortKey\"")
+                .And.Contain("data-sort-key=\"BusinessDate\"")
+                .And.Contain("name=\"sortKey\"")
+                .And.Contain("name=\"sortDescending\"")
+                .And.NotContain("name=\"SortKey\"")
+                .And.NotContain("name=\"SortDescending\"");
+        }
+
+        externalModel.Should().Contain("[\"sortKey\"] = SortKey")
+            .And.Contain("[\"sortDescending\"] = SortDescending.ToString()");
+        internalModel.Should().Contain("[\"sortKey\"] = SortKey")
+            .And.Contain("[\"sortDescending\"] = SortDescending.ToString()");
+    }
+
+    [Fact]
     public void FinanceYearPageExplicitlyStatesItsIndependentScope()
     {
         ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Years", "Index.cshtml")

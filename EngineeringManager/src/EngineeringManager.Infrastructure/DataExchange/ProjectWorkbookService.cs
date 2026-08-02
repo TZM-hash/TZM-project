@@ -27,20 +27,20 @@ public sealed class ProjectWorkbookService(
         if (!actor.CanExport || !string.Equals(actor.UserId, request.Scope.Actor.UserId, StringComparison.Ordinal))
             throw new UnauthorizedAccessException("当前用户无权导出项目工作簿。");
 
-        var selectedSheets = request.Sheets.Count == 0
-            ? ProjectWorkbookCatalog.Sheets.Where(item => item.Sheet != ProjectWorkbookSheet.Attachments).Select(item => item.Sheet).ToHashSet()
-            : request.Sheets.ToHashSet();
-        var isFullWorkbook = request.Sheets.Count == 0
+        var selectedSheets = request.ProjectListColumns is not null
+            ? new HashSet<ProjectWorkbookSheet>([ProjectWorkbookSheet.ProjectMaster])
+            : request.Sheets.Count == 0
+                ? ProjectWorkbookCatalog.Sheets.Where(item => item.Sheet != ProjectWorkbookSheet.Attachments).Select(item => item.Sheet).ToHashSet()
+                : request.Sheets.ToHashSet();
+        var isFullWorkbook = request.ProjectListColumns is null && (request.Sheets.Count == 0
             || selectedSheets.Contains(ProjectWorkbookSheet.ProjectSummary)
-            || ProjectWorkbookCatalog.Sheets.Where(item => item.CanImport).All(item => selectedSheets.Contains(item.Sheet));
+            || ProjectWorkbookCatalog.Sheets.Where(item => item.CanImport).All(item => selectedSheets.Contains(item.Sheet)));
         if (isFullWorkbook && !actor.CanExportFullWorkbook)
             throw new UnauthorizedAccessException("全量项目工作簿仅限管理员或业务管理员导出。");
         if (selectedSheets.Any(sheet => !actor.CanExportSheet(sheet)))
             throw new UnauthorizedAccessException("当前用户无权导出所选项目工作表。");
         if (request.IncludeAttachments && !actor.CanExportAttachments)
             throw new UnauthorizedAccessException("当前用户无权导出项目附件。");
-        if (selectedSheets.Contains(ProjectWorkbookSheet.Attachments) && !request.IncludeAttachments)
-            throw new InvalidOperationException("选择附件清单时必须同时包含附件 ZIP。");
 
         var exporter = new ProjectWorkbookExporter(db, projectService, financeService, fileStore);
         var effectiveRequest = request with
@@ -49,18 +49,21 @@ public sealed class ProjectWorkbookService(
             Actor = actor
         };
         var result = await exporter.ExportAsync(effectiveRequest, cancellationToken);
-        var fileName = $"项目管理工作簿_{DateTime.Now:yyyyMMddHHmmss}.{(result.IsArchive ? "zip" : "xlsx")}";
+        var filePrefix = request.ProjectListColumns is not null ? "项目清单" : "项目管理工作簿";
+        var fileName = $"{filePrefix}_{DateTime.Now:yyyyMMddHHmmss}.{(result.IsArchive ? "zip" : "xlsx")}";
         var contentType = result.IsArchive ? "application/zip" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-        var recordedSheets = request.Sheets.Count == 0
-            ? ProjectWorkbookCatalog.Sheets.Where(item => item.Sheet != ProjectWorkbookSheet.Attachments).Select(item => item.Sheet).ToHashSet()
-            : request.Sheets.ToHashSet();
+        var recordedSheets = request.ProjectListColumns is not null
+            ? new HashSet<ProjectWorkbookSheet>([ProjectWorkbookSheet.ProjectMaster])
+            : request.Sheets.Count == 0
+                ? ProjectWorkbookCatalog.Sheets.Where(item => item.Sheet != ProjectWorkbookSheet.Attachments).Select(item => item.Sheet).ToHashSet()
+                : request.Sheets.ToHashSet();
         if (request.IncludeAttachments) recordedSheets.Add(ProjectWorkbookSheet.Attachments);
         var task = new DataExchangeTask
         {
             UserId = request.Scope.Actor.UserId,
             Direction = DataExchangeDirection.Export,
             DatasetsJson = JsonSerializer.Serialize(ProjectWorkbookCatalog.Sheets.Where(item => recordedSheets.Contains(item.Sheet)).Select(item => item.Sheet).ToArray()),
-            SelectedFieldsJson = "{}",
+            SelectedFieldsJson = request.ProjectListColumns is null ? "{}" : JsonSerializer.Serialize(request.ProjectListColumns),
             FilterJson = JsonSerializer.Serialize(request.Scope.Query),
             Scope = request.Scope.SelectAllMatching ? ExportScope.FullAuthorized : ExportScope.SelectedModules,
             PackageFormat = result.IsArchive ? ExportPackageFormat.Zip : ExportPackageFormat.Workbook,

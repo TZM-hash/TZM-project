@@ -128,7 +128,8 @@ public sealed record ProjectWorkbookExportRequest(
     IReadOnlyCollection<ProjectWorkbookSheet> Sheets,
     DateOnly? CutoffDate = null,
     bool IncludeAttachments = false,
-    ProjectWorkbookActor? Actor = null);
+    ProjectWorkbookActor? Actor = null,
+    IReadOnlyCollection<string>? ProjectListColumns = null);
 
 public sealed record ProjectWorkbookImportRequest(
     string UserId,

@@ -30,6 +30,22 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Theory]
+    [InlineData(20, 20)]
+    [InlineData(50, 50)]
+    [InlineData(100, 100)]
+    [InlineData(0, 20)]
+    [InlineData(10, 20)]
+    [InlineData(999, 20)]
+    public async Task PageSizeUsesTheUnifiedAllowedValues(int requested, int expected)
+    {
+        var model = new IndexModel(new RecordingEmployeeService()) { PageSize = requested };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        model.PageSize.Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(null, 3)]
     [InlineData(EmployeeType.Formal, 1)]
     [InlineData(EmployeeType.Labor, 1)]

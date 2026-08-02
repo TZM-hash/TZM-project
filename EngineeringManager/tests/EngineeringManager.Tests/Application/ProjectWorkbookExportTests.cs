@@ -98,6 +98,163 @@ public sealed class ProjectWorkbookExportTests
     }
 
     [Fact]
+    public async Task AttachmentSheetCanBeExportedAsExcelWithoutAttachmentArchive()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-ATTACH-XLSX", "仅清单项目", null);
+        await fixture.Db.SaveChangesAsync();
+        fixture.Db.Attachments.Add(new Attachment
+        {
+            ProjectId = project.Id,
+            StoredName = "清单.pdf",
+            OriginalFileName = "清单.pdf",
+            SizeBytes = 8,
+            ContentType = "application/pdf"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster, ProjectWorkbookSheet.Attachments],
+            IncludeAttachments: false,
+            Actor: ProjectWorkbookActor.Administrator("administrator")), CancellationToken.None);
+
+        file.ContentType.Should().Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        file.FileName.Should().EndWith(".xlsx");
+        var workbook = SimpleXlsxReader.Read(file.Content);
+        workbook.Single(item => item.Name == "附件清单").Rows.SelectMany(item => item).Should().Contain("清单.pdf");
+    }
+
+    [Fact]
+    public async Task PageListExportMatchesQueryOrderAndPageDisplayValues()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var older = AddProject(fixture.Db, "WB-LIST-001", "旧项目", null);
+        older.ActualStartDate = new DateOnly(2026, 7, 1);
+        older.Notes = null;
+        var latest = AddProject(fixture.Db, "WB-LIST-003", "最新项目", null);
+        latest.ActualStartDate = new DateOnly(2026, 8, 1);
+        latest.Notes = "这是一个页面导出测试备注";
+        AddProject(fixture.Db, "WB-LIST-002", "中间项目", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery("WB-LIST", [], null, null, null, null, "ProjectNumber", true, PageSize: 20),
+                true),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["project_number", "project_name", "stage", "actual_start_date", "contract_amount", "collection_progress", "notes"]), CancellationToken.None);
+
+        var sheets = SimpleXlsxReader.Read(file.Content);
+        sheets.Select(item => item.Name).Should().Equal("项目清单");
+        var rows = sheets.Single().Rows;
+        rows[0].Should().Equal("项目编号", "项目名称", "阶段", "实际开始日期", "合同金额", "收款率（应 / 已 / 未）", "备注摘要");
+        rows[1][0].Should().Be("WB-LIST-003");
+        rows[1][1].Should().Be("最新项目");
+        rows[1][2].Should().Be("施工中");
+        rows[1][3].Should().Be(new DateOnly(2026, 8, 1));
+        rows[1][4].Should().Be("0.00");
+        rows[1][5].Should().Be("0%（0.00 / 0.00 / 0.00）");
+        rows[1][6].Should().Be("这是一个页面导出测试备注");
+        rows[3][0].Should().Be("WB-LIST-001");
+        rows[3][6].Should().Be("—");
+    }
+
+    [Fact]
+    public async Task PageListExportPreservesPageOrderForManualSelectionAndColumnOrder()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var first = AddProject(fixture.Db, "WB-SELECT-001", "第一项目", null);
+        var second = AddProject(fixture.Db, "WB-SELECT-002", "第二项目", null);
+        var third = AddProject(fixture.Db, "WB-SELECT-003", "第三项目", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery("WB-SELECT", [], null, null, null, null, "ProjectNumber", true),
+                false,
+                [first.Id, third.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["project_name", "project_number"]), CancellationToken.None);
+
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+        rows[0].Should().Equal("项目名称", "项目编号");
+        rows[1].Should().Equal("第三项目", "WB-SELECT-003");
+        rows[2].Should().Equal("第一项目", "WB-SELECT-001");
+        rows.Should().NotContain(row => row.Contains("第二项目"));
+    }
+
+    [Fact]
+    public async Task PageListExportIncludesAllMatchingProjectsBeyondOneHundredRows()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        for (var index = 1; index <= 101; index++)
+        {
+            AddProject(fixture.Db, $"WB-BULK-{index:000}", $"批量项目 {index:000}", null);
+        }
+
+        await fixture.Db.SaveChangesAsync();
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery("WB-BULK", [], null, null, null, null, "ProjectNumber", true, PageSize: 20),
+                true),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["project_number"]), CancellationToken.None);
+
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+        rows.Should().HaveCount(102);
+        rows[1][0].Should().Be("WB-BULK-101");
+        rows[^1][0].Should().Be("WB-BULK-001");
+    }
+
+    [Fact]
+    public async Task PageListExportKeepsProjectListAndAttachmentsInOptionalZip()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync(includeFileStore: true);
+        var project = AddProject(fixture.Db, "WB-PAGE-ZIP", "页面 ZIP 项目", null);
+        await fixture.Db.SaveChangesAsync();
+        var storedName = await fixture.FileStore!.SaveAsync(new MemoryStream("page zip"u8.ToArray()), "页面附件.pdf", CancellationToken.None);
+        fixture.Db.Attachments.Add(new Attachment
+        {
+            ProjectId = project.Id,
+            StoredName = storedName,
+            OriginalFileName = "页面附件.pdf",
+            SizeBytes = 8,
+            ContentType = "application/pdf"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            IncludeAttachments: true,
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["project_number", "project_name"]), CancellationToken.None);
+
+        file.ContentType.Should().Be("application/zip");
+        using var archive = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        var workbook = SimpleXlsxReader.Read(await ReadEntryAsync(archive.GetEntry("project-workbook.xlsx")!));
+        workbook.Select(item => item.Name).Should().Equal("项目清单", "附件清单");
+        workbook.Single(item => item.Name == "项目清单").Rows[1].Should().Equal("WB-PAGE-ZIP", "页面 ZIP 项目");
+        workbook.Single(item => item.Name == "附件清单").Rows.SelectMany(item => item).Should().Contain("页面附件.pdf");
+        archive.Entries.Should().Contain(item => item.FullName.StartsWith("attachments/", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ExportRebuildsProjectScopeFromWorkbookActorRoles()
     {
         await using var fixture = await ProjectWorkbookFixture.CreateAsync();
