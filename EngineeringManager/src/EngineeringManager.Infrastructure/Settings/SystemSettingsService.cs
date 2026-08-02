@@ -90,7 +90,7 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
     private static void Validate(SystemDisplaySettings settings)
     {
         if (!Enum.IsDefined(settings.Theme) || !Enum.IsDefined(settings.Motion) || !Enum.IsDefined(settings.Effects) ||
-            !Enum.IsDefined(settings.Font) || !Enum.IsDefined(settings.Density))
+            !Enum.IsDefined(settings.Font) || !Enum.IsDefined(settings.Density) || !Enum.IsDefined(settings.FontSize))
         {
             throw new ArgumentOutOfRangeException(nameof(settings), "显示设置包含未知选项。");
         }

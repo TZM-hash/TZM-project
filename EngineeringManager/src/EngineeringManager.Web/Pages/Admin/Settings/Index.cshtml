@@ -25,16 +25,21 @@
 <form method="post" class="settings-form" data-settings-preview>
     <section class="form-section">
         <div class="form-section-heading"><div><p class="eyebrow">显示主题</p><h2>选择界面材质</h2></div><p>保存前可直接预览页面背景、侧栏和卡片层次。</p></div>
-        <div class="option-card-grid" role="radiogroup" aria-label="显示主题">
+        <div class="option-card-grid option-card-grid--themes" data-theme-grid role="radiogroup" aria-label="显示主题">
             <label class="option-card" data-theme-option="theme-default">
-                <input asp-for="Input.Theme" type="radio" value="Default" disabled="@Model.IsReadOnly" />
+                <input asp-for="Input.Theme" id="theme-default" type="radio" value="Default" disabled="@Model.IsReadOnly" />
                 <span class="option-preview option-preview--technology" aria-hidden="true"><i></i><i></i><i></i></span>
                 <span><strong>科技商务</strong><small>清晰、稳重的数据工作区，适合日常高频使用。</small></span>
             </label>
             <label class="option-card" data-theme-option="theme-clear-glass">
-                <input asp-for="Input.Theme" type="radio" value="ClearGlass" disabled="@Model.IsReadOnly" />
+                <input asp-for="Input.Theme" id="theme-clear-glass" type="radio" value="ClearGlass" disabled="@Model.IsReadOnly" />
                 <span class="option-preview option-preview--glass" aria-hidden="true"><i></i><i></i><i></i></span>
                 <span><strong>清透毛玻璃</strong><small>半透明材质、柔和高光和更明显的空间层次。</small></span>
+            </label>
+            <label class="option-card" data-theme-option="theme-lavender-cream">
+                <input asp-for="Input.Theme" id="theme-lavender-cream" type="radio" value="LavenderCream" disabled="@Model.IsReadOnly" />
+                <span class="option-preview option-preview--lavender" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span><strong>薰衣草奶油</strong><small>柔和紫白、奶油卡片和清新的多彩点缀。</small></span>
             </label>
         </div>
     </section>
@@ -42,17 +47,17 @@
     <section class="form-section">
         <div class="form-section-heading"><div><p class="eyebrow">动效风格</p><h2>选择交互节奏</h2></div></div>
         <div class="option-card-grid" role="radiogroup" aria-label="动效风格">
-            <label class="option-card" data-motion-option="motion-technology"><input asp-for="Input.Motion" type="radio" value="Technology" disabled="@Model.IsReadOnly" /><span><strong>科技商务动效</strong><small>线性转场、图表展开和克制的按钮反馈。</small></span></label>
-            <label class="option-card" data-motion-option="motion-apple"><input asp-for="Input.Motion" type="radio" value="Apple" disabled="@Model.IsReadOnly" /><span><strong>Apple 弹性动效</strong><small>柔焦入场、弹性缓动和按压缩放反馈。</small></span></label>
+            <label class="option-card" data-motion-option="motion-technology"><input asp-for="Input.Motion" id="motion-technology" type="radio" value="Technology" disabled="@Model.IsReadOnly" /><span><strong>科技商务动效</strong><small>线性转场、图表展开和克制的按钮反馈。</small></span></label>
+            <label class="option-card" data-motion-option="motion-apple"><input asp-for="Input.Motion" id="motion-apple" type="radio" value="Apple" disabled="@Model.IsReadOnly" /><span><strong>Apple 弹性动效</strong><small>柔焦入场、弹性缓动和按压缩放反馈。</small></span></label>
         </div>
     </section>
 
     <section class="form-section">
         <div class="form-section-heading"><div><p class="eyebrow">特效等级</p><h2>控制全站动画强度</h2></div></div>
         <div class="option-card-grid option-card-grid--three" role="radiogroup" aria-label="特效等级">
-            <label class="option-card" data-effects-option="ui-effects-low"><input asp-for="Input.Effects" type="radio" value="Low" disabled="@Model.IsReadOnly" /><span><strong>轻度</strong><small>只保留基础 hover、focus 和按压反馈。</small></span></label>
-            <label class="option-card" data-effects-option="ui-effects-medium"><input asp-for="Input.Effects" type="radio" value="Medium" disabled="@Model.IsReadOnly" /><span><strong>中度（推荐）</strong><small>启用柔和入场、数字滚动和图表展开。</small></span></label>
-            <label class="option-card" data-effects-option="ui-effects-high"><input asp-for="Input.Effects" type="radio" value="High" disabled="@Model.IsReadOnly" /><span><strong>高度</strong><small>启用完整转场、背景呼吸和强化弹性反馈。</small></span></label>
+            <label class="option-card" data-effects-option="ui-effects-low"><input asp-for="Input.Effects" id="effects-low" type="radio" value="Low" disabled="@Model.IsReadOnly" /><span><strong>轻度</strong><small>只保留基础 hover、focus 和按压反馈。</small></span></label>
+            <label class="option-card" data-effects-option="ui-effects-medium"><input asp-for="Input.Effects" id="effects-medium" type="radio" value="Medium" disabled="@Model.IsReadOnly" /><span><strong>中度（推荐）</strong><small>启用柔和入场、数字滚动和图表展开。</small></span></label>
+            <label class="option-card" data-effects-option="ui-effects-high"><input asp-for="Input.Effects" id="effects-high" type="radio" value="High" disabled="@Model.IsReadOnly" /><span><strong>高度</strong><small>启用完整转场、背景呼吸和强化弹性反馈。</small></span></label>
         </div>
     </section>
 

@@ -1,8 +1,10 @@
-const themeClasses = ["theme-default", "theme-clear-glass"];
+const themeClasses = ["theme-default", "theme-clear-glass", "theme-lavender-cream"];
+const themeColors = { "theme-default": "#2563eb", "theme-clear-glass": "#2563eb", "theme-lavender-cream": "#7653d6" };
 const motionClasses = ["motion-technology", "motion-apple"];
 const effectClasses = ["ui-effects-low", "ui-effects-medium", "ui-effects-high"];
 const fontClasses = ["font-system-default", "font-microsoft-yahei", "font-microsoft-jhenghei", "font-chinese-serif", "font-chinese-kai"];
 const fontSizeClasses = ["font-size-small", "font-size-standard", "font-size-large", "font-size-extra-large"];
+const densityClasses = ["table-density-compact", "table-density-standard", "table-density-spacious"];
 
 function swapClass(classes, selected) {
   document.body.classList.remove(...classes);
@@ -15,7 +17,12 @@ function swapRootClass(classes, selected) {
 }
 
 export function initThemePreview() {
-  document.querySelectorAll("[data-theme-option] input").forEach((input) => input.addEventListener("change", () => swapClass(themeClasses, input.closest("[data-theme-option]").dataset.themeOption)));
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  document.querySelectorAll("[data-theme-option] input").forEach((input) => input.addEventListener("change", () => {
+    const selected = input.closest("[data-theme-option]").dataset.themeOption;
+    swapClass(themeClasses, selected);
+    if (themeColor) themeColor.content = themeColors[selected] || themeColors["theme-default"];
+  }));
 }
 
 function initMotionPreview() {
@@ -37,9 +44,17 @@ function initFontSizePreview() {
   select.addEventListener("change", () => swapRootClass(fontSizeClasses, map[select.value] || "font-size-standard"));
 }
 
+function initTableDensityPreview() {
+  const select = document.querySelector("[data-table-density]");
+  if (!select) return;
+  const map = { Compact: "table-density-compact", Standard: "table-density-standard", Spacious: "table-density-spacious" };
+  select.addEventListener("change", () => swapClass(densityClasses, map[select.value] || "table-density-standard"));
+}
+
 export function initSettingsPreview() {
   initThemePreview();
   initMotionPreview();
   initFontPreview();
   initFontSizePreview();
+  initTableDensityPreview();
 }

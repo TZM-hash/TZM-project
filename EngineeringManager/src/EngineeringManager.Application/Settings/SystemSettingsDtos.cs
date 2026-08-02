@@ -1,6 +1,11 @@
 namespace EngineeringManager.Application.Settings;
 
-public enum VisualTheme { Default = 1, ClearGlass = 2 }
+public enum VisualTheme
+{
+    Default = 1,
+    ClearGlass = 2,
+    LavenderCream = 3
+}
 public enum MotionStyle { Technology = 1, Apple = 2 }
 public enum UiEffectsLevel { Low = 1, Medium = 2, High = 3 }
 public enum GlobalFont { SystemDefault = 1, MicrosoftYaHei = 2, MicrosoftJhengHei = 3, ChineseSerif = 4, ChineseKai = 5 }
@@ -23,7 +28,13 @@ public sealed record SystemDisplaySettings(
         TableDensity.Standard,
         GlobalFontSize.Standard);
 
-    public string ThemeCssClass => Theme == VisualTheme.ClearGlass ? "theme-clear-glass" : "theme-default";
+    public string ThemeCssClass => Theme switch
+    {
+        VisualTheme.ClearGlass => "theme-clear-glass",
+        VisualTheme.LavenderCream => "theme-lavender-cream",
+        _ => "theme-default"
+    };
+    public string ThemeColor => Theme == VisualTheme.LavenderCream ? "#7653d6" : "#2563eb";
     public string MotionCssClass => Motion == MotionStyle.Apple ? "motion-apple" : "motion-technology";
     public string EffectsCssClass => $"ui-effects-{Effects.ToString().ToLowerInvariant()}";
     public string FontCssClass => Font switch

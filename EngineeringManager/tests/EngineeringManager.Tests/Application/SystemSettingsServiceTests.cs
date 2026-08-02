@@ -10,6 +10,28 @@ namespace EngineeringManager.Tests.Application;
 
 public sealed class SystemSettingsServiceTests
 {
+    [Theory]
+    [InlineData(VisualTheme.Default, "theme-default")]
+    [InlineData(VisualTheme.ClearGlass, "theme-clear-glass")]
+    [InlineData(VisualTheme.LavenderCream, "theme-lavender-cream")]
+    public void EveryVisualThemeMapsToItsExpectedCssClass(VisualTheme theme, string expectedCssClass)
+    {
+        var settings = SystemDisplaySettings.Default with { Theme = theme };
+
+        settings.ThemeCssClass.Should().Be(expectedCssClass);
+    }
+
+    [Theory]
+    [InlineData(VisualTheme.Default, "#2563eb")]
+    [InlineData(VisualTheme.ClearGlass, "#2563eb")]
+    [InlineData(VisualTheme.LavenderCream, "#7653d6")]
+    public void EveryVisualThemeMapsToItsExpectedBrowserThemeColor(VisualTheme theme, string expectedColor)
+    {
+        var settings = SystemDisplaySettings.Default with { Theme = theme };
+
+        settings.ThemeColor.Should().Be(expectedColor);
+    }
+
     [Fact]
     public async Task DefaultsMatchConfirmedGlobalDisplayProfile()
     {
@@ -61,6 +83,21 @@ public sealed class SystemSettingsServiceTests
     }
 
     [Fact]
+    public async Task LavenderCreamThemeMapsToCssClassAndPersistsInExistingSetting()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var requested = SystemDisplaySettings.Default with { Theme = VisualTheme.LavenderCream };
+
+        requested.ThemeCssClass.Should().Be("theme-lavender-cream");
+
+        await fixture.Service.SaveAsync(new SettingsActor("sys", "系统管理员", true), requested, default);
+
+        (await fixture.Service.GetAsync(default)).Theme.Should().Be(VisualTheme.LavenderCream);
+        var stored = await fixture.Db.SystemSettings.SingleAsync(item => item.Key == "Display.Theme");
+        stored.Value.Should().Be("LavenderCream");
+    }
+
+    [Fact]
     public async Task ApplicationAdministratorCannotSaveGlobalSettings()
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -71,6 +108,21 @@ public sealed class SystemSettingsServiceTests
             default);
 
         await action.Should().ThrowAsync<UnauthorizedAccessException>();
+        (await fixture.Db.SystemSettings.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task InvalidGlobalFontSizeIsRejectedBeforeAnySettingIsWritten()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var invalid = SystemDisplaySettings.Default with { FontSize = (GlobalFontSize)999 };
+
+        var action = () => fixture.Service.SaveAsync(
+            new SettingsActor("sys", "系统管理员", true),
+            invalid,
+            default);
+
+        await action.Should().ThrowAsync<ArgumentOutOfRangeException>();
         (await fixture.Db.SystemSettings.CountAsync()).Should().Be(0);
     }
 

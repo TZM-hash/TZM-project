@@ -13,14 +13,34 @@ public sealed class UiEffectsAssetTests
         var js = ReadJavaScript();
         var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
 
-        css.Should().Contain("body.theme-clear-glass");
+        css.Should().Contain("body.theme-default")
+            .And.Contain("body.theme-clear-glass")
+            .And.Contain("body.theme-clear-glass .table-wrap > table th")
+            .And.Contain("body.theme-clear-glass .equipment-list-toolbar--integrated .data-workbench-toolbar")
+            .And.Contain(".option-card-grid--themes")
+            .And.Contain("--app-primary-rgb: 37, 99, 235")
+            .And.Contain("rgba(var(--app-primary-rgb), .2)")
+            .And.Contain("body.table-density-compact .table-wrap > table th")
+            .And.Contain("body.table-density-spacious .table-wrap > table th");
+        css.Should().Contain("body.theme-lavender-cream")
+            .And.Contain("--app-primary: #7653d6")
+            .And.Contain(".option-preview--lavender")
+            .And.Contain("body.theme-lavender-cream .app-sidebar")
+            .And.Contain("body.theme-lavender-cream .data-table th");
         css.Should().Contain("body.motion-apple.ui-effects-high");
         css.Should().Contain("body.ui-effects-low");
         css.Should().Contain("body.ui-effects-medium");
         css.Should().Contain("@media (prefers-reduced-motion: reduce)");
         css.Should().Contain("backdrop-filter: blur(24px) saturate(170%)");
-        js.Should().Contain("initThemePreview").And.Contain("initSidebar").And.Contain("initEffects");
-        layout.Should().Contain("type=\"module\"");
+        js.Should().Contain("initThemePreview")
+            .And.Contain("initTableDensityPreview")
+            .And.Contain("initSidebar")
+            .And.Contain("initEffects")
+            .And.Contain("\"theme-lavender-cream\"")
+            .And.Contain("meta[name=\"theme-color\"]")
+            .And.Contain("\"table-density-spacious\"");
+        layout.Should().Contain("type=\"module\"")
+            .And.Contain("content=\"@displaySettings.ThemeColor\"");
     }
 
     [Fact]

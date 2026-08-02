@@ -27,8 +27,19 @@ public sealed class SystemSettingsPageTests
 
         html.Should().Contain("显示与交互设置");
         html.Should().Contain("name=\"Input.Theme\"").And.Contain("value=\"ClearGlass\"");
+        html.Should().Contain("value=\"LavenderCream\"")
+            .And.Contain("data-theme-option=\"theme-lavender-cream\"")
+            .And.Contain("薰衣草奶油");
+        html.Should().Contain("data-theme-grid")
+            .And.Contain("id=\"theme-default\"")
+            .And.Contain("id=\"theme-clear-glass\"")
+            .And.Contain("id=\"theme-lavender-cream\"");
         html.Should().Contain("name=\"Input.Motion\"").And.Contain("value=\"Apple\"");
+        html.Should().Contain("id=\"motion-technology\"").And.Contain("id=\"motion-apple\"");
         html.Should().Contain("name=\"Input.Effects\"").And.Contain("value=\"High\"");
+        html.Should().Contain("id=\"effects-low\"")
+            .And.Contain("id=\"effects-medium\"")
+            .And.Contain("id=\"effects-high\"");
         html.Should().Contain("name=\"Input.Font\"").And.Contain("value=\"MicrosoftYaHei\"");
         html.Should().Contain("name=\"Input.FontSize\"").And.Contain("value=\"Large\"");
         html.Should().Contain("name=\"Input.Density\"").And.Contain("value=\"Compact\"");
