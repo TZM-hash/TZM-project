@@ -126,6 +126,7 @@ public sealed class Program
         builder.Services.AddScoped<IFinanceReconciliationService, FinanceReconciliationService>();
         builder.Services.AddScoped<LegacyFinanceMigrationService>();
         builder.Services.AddScoped<LegacyDataRepairService>();
+        builder.Services.AddScoped<ProjectDateBackfillService>();
         builder.Services.AddScoped<IEmployeeService, EmployeeService>();
         builder.Services.AddScoped<IEmployeeCertificateService, EmployeeCertificateService>();
         builder.Services.AddScoped<ICompanyCertificateService, CompanyCertificateService>();
@@ -213,6 +214,38 @@ public sealed class Program
             Console.WriteLine($"LEGACY_DATA_REPAIR_CHANGES={result.TotalChanges}");
             foreach (var count in result.Counts.OrderBy(item => item.Key, StringComparer.Ordinal))
                 Console.WriteLine($"LEGACY_DATA_REPAIR_{count.Key.ToUpperInvariant()}={count.Value}");
+            return;
+        }
+
+        if (maintenanceMode == MaintenanceMode.ProjectDateBackfillFromNotes)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var suffix = $"{DateTime.Now:yyyyMMddHHmmss}_{Guid.NewGuid():N}";
+            var backupRoot = Path.Combine(app.Environment.ContentRootPath, "App_Data", "backups");
+            var logRoot = Path.Combine(app.Environment.ContentRootPath, "App_Data", "logs");
+            Directory.CreateDirectory(backupRoot);
+            Directory.CreateDirectory(logRoot);
+            var backupPath = Path.GetFullPath(Path.Combine(backupRoot, $"EngineeringManager_ProjectDateBackfill_{suffix}.bak"));
+            var reportPath = Path.GetFullPath(Path.Combine(logRoot, $"project-date-backfill-{suffix}.json"));
+            EnsureWritableReportPath(reportPath);
+
+            await scope.ServiceProvider.GetRequiredService<IDatabaseBackupExecutor>()
+                .ExecuteAsync(backupPath, CancellationToken.None);
+            var result = await scope.ServiceProvider.GetRequiredService<ProjectDateBackfillService>()
+                .BackfillAsync(CancellationToken.None);
+            var report = JsonSerializer.Serialize(new
+            {
+                CompletedAt = DateTimeOffset.Now,
+                BackupPath = backupPath,
+                Result = result
+            }, MaintenanceReportJsonOptions);
+            await File.WriteAllTextAsync(reportPath, report, Encoding.UTF8, CancellationToken.None);
+
+            Console.WriteLine($"PROJECT_DATE_BACKFILL_BACKUP={backupPath}");
+            Console.WriteLine($"PROJECT_DATE_BACKFILL_REPORT={reportPath}");
+            Console.WriteLine($"PROJECT_DATE_BACKFILL_CHANGES={result.TotalChanges}");
+            Console.WriteLine($"PROJECT_DATE_BACKFILL_PROJECTS={result.ChangedProjects}");
+            Console.WriteLine($"PROJECT_DATE_BACKFILL_WARNINGS={result.ProjectsWithWarnings}");
             return;
         }
 

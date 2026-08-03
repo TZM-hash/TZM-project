@@ -21,4 +21,11 @@ public sealed class MaintenanceModeParserTests
         malformed.Should().Throw<ArgumentException>();
         multiple.Should().Throw<ArgumentException>();
     }
+
+    [Fact]
+    public void ParseRecognizesProjectDateBackfillFlag()
+    {
+        MaintenanceModeParser.Parse(["--backfill-project-dates-from-notes"])
+            .Should().Be(MaintenanceMode.ProjectDateBackfillFromNotes);
+    }
 }

@@ -251,3 +251,34 @@
 - Release 构建通过：0 个警告、0 个错误；服务已重新启动为 PID 27756，`/health/live` 与 `/health/ready` 均返回 HTTP 200 `Healthy`。
 - SQL Server 只读查询确认按 `ProjectNumber DESC` 的首条为 `XM0227 | （宏达）临政工出【2026】2号年产5000吨紧固件生产线项目`，本轮未执行数据库写入。
 - 内置浏览器确认登录页可加载、非空白、无控制台警告或错误，密码显示切换可正常交互；当前保存的登录信息被系统拒绝，未猜测或重置密码，因此受保护列表的真实页面排序、刷新记忆和响应式布局复核仍待用户登录后完成。
+
+### Task 15: 从备注回填项目实际日期
+
+**Files:**
+- Create: `docs/superpowers/specs/2026-08-03-project-date-backfill-from-notes-design.md`
+- Create: `docs/superpowers/plans/2026-08-03-project-date-backfill-from-notes.md`
+- Create: `EngineeringManager/src/EngineeringManager.Infrastructure/Data/ProjectNoteDateParser.cs`
+- Create: `EngineeringManager/src/EngineeringManager.Infrastructure/Data/ProjectDateBackfillService.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/MaintenanceModeParser.cs`
+- Modify: `EngineeringManager/src/EngineeringManager.Web/Program.cs`
+- Create: `EngineeringManager/tests/EngineeringManager.Tests/Application/ProjectNoteDateParserTests.cs`
+- Create: `EngineeringManager/tests/EngineeringManager.Tests/Application/ProjectDateBackfillServiceTests.cs`
+- Modify: `EngineeringManager/tests/EngineeringManager.Tests/Web/MaintenanceModeParserTests.cs`
+
+- [x] 先写解析器和回填服务失败测试，并确认按预期失败。
+- [x] 实现完整日期识别、生命周期分类、财务日期排除和待核实报告。
+- [x] 实现只补空字段的事务回填、审计和幂等。
+- [x] 增加 `--backfill-project-dates-from-notes`，先备份再执行并输出 UTF-8 JSON 报告。
+- [x] 在 `EngineeringManager_Test` 上运行 Release 维护命令，核对 XM0208、全库日期计数、异常列表、备份、审计和二次零变更。
+- [x] 运行定向测试、完整测试和 Release 构建，排除 `.build-obj/` 与运行产物。
+
+#### Task 15 验证记录
+
+- 解析器与回填定向测试通过：9/9。
+- 完整测试通过：992/992。
+- Release 构建通过：0 警告、0 错误。
+- 首次维护执行报告：`EngineeringManager/src/EngineeringManager.Web/bin/Release/net10.0/App_Data/logs/project-date-backfill-20260803194723_3383a29f863c475b90f6631772c0c5ab.json`。
+- 首次维护执行备份：`EngineeringManager/src/EngineeringManager.Web/bin/Release/net10.0/App_Data/backups/EngineeringManager_ProjectDateBackfill_20260803194723_3383a29f863c475b90f6631772c0c5ab.bak`。
+- 首次执行写入 162 个项目、314 个字段；18 个项目保留待核实提示。SQL Server 只读审计确认开工日期 161 个、完工日期 153 个、日期倒置 0 个，XM0208 为 `2025-03-10` 至 `2025-10-16`。
+- 第二次维护执行报告 `project-date-backfill-20260803194805_3a2bc00ea12d4af282c0791900da7420.json` 变更数为 0，审计日志仍只有 1 条。
+- Release 服务已重新启动于 `http://127.0.0.1:5075`；`/health/live` 和 `/health/ready` 均返回 HTTP 200 `Healthy`。

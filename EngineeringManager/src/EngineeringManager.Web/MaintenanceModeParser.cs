@@ -4,13 +4,15 @@ public enum MaintenanceMode
 {
     Web = 0,
     CentralLedgerMigration = 1,
-    LegacyProjectDataRepair = 2
+    LegacyProjectDataRepair = 2,
+    ProjectDateBackfillFromNotes = 3
 }
 
 public static class MaintenanceModeParser
 {
     private const string CentralLedgerFlag = "--migrate-central-ledger";
     private const string LegacyRepairFlag = "--repair-legacy-project-data";
+    private const string ProjectDateBackfillFlag = "--backfill-project-dates-from-notes";
 
     public static MaintenanceMode Parse(IReadOnlyCollection<string> args)
     {
@@ -25,6 +27,10 @@ public static class MaintenanceModeParser
             else if (MatchesFlag(argument, LegacyRepairFlag))
             {
                 selected.Add(MaintenanceMode.LegacyProjectDataRepair);
+            }
+            else if (MatchesFlag(argument, ProjectDateBackfillFlag))
+            {
+                selected.Add(MaintenanceMode.ProjectDateBackfillFromNotes);
             }
         }
 
