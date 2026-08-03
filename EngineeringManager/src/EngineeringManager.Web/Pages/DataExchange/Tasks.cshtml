@@ -1,0 +1,57 @@
+@page "/DataExchange/Tasks"
+@model EngineeringManager.Web.Pages.DataExchange.TasksModel
+@using EngineeringManager.Web.Pages.DataExchange
+@{
+    ViewData["Title"] = "任务记录";
+}
+
+<section class="page-heading data-exchange-heading">
+    <div>
+        <p class="eyebrow">数据交换工作台</p>
+        <h1>任务记录</h1>
+        <p class="page-lead">导入和导出统一按创建时间最新在前显示；文件和错误报告仅对任务所有者或管理员开放。</p>
+    </div>
+    <div class="data-exchange-heading-note"><strong>@Model.TaskHistory.TotalCount</strong><span>条交换任务</span></div>
+</section>
+
+<nav class="workspace-tabs" aria-label="数据交换功能">
+    <a asp-page="./Export" class="workspace-tab">导出数据</a>
+    <a asp-page="./Import" class="workspace-tab">导入数据</a>
+    <a asp-page="./Tasks" class="workspace-tab is-active">任务记录</a>
+</nav>
+
+<section class="panel data-exchange-panel" data-exchange-history>
+    <div class="data-exchange-section-heading"><div><p class="eyebrow">可追溯记录</p><h2>导入导出任务历史</h2></div><span>最新任务在前，共 @Model.TaskHistory.TotalCount 条</span></div>
+    <form method="get" class="data-exchange-history-toolbar">
+        <input type="hidden" name="HistoryPage" value="1" />
+        <label>每页显示<select name="HistoryPageSize" aria-label="任务历史每页显示条数" onchange="this.form.submit()"><option value="20" selected="@(Model.TaskHistory.PageSize == 20)">20</option><option value="50" selected="@(Model.TaskHistory.PageSize == 50)">50</option><option value="100" selected="@(Model.TaskHistory.PageSize == 100)">100</option></select></label>
+        <span class="exchange-help">第 @Model.TaskHistory.Page / @Model.TaskHistory.TotalPages 页</span>
+        @if (Model.TaskHistory.HasPrevious) { <a class="button button--ghost" asp-page="./Tasks" asp-route-HistoryPage="@(Model.TaskHistory.Page - 1)" asp-route-HistoryPageSize="@Model.TaskHistory.PageSize">上一页</a> }
+        @if (Model.TaskHistory.HasNext) { <a class="button button--ghost" asp-page="./Tasks" asp-route-HistoryPage="@(Model.TaskHistory.Page + 1)" asp-route-HistoryPageSize="@Model.TaskHistory.PageSize">下一页</a> }
+    </form>
+    @if (Model.Tasks.Count == 0)
+    {
+        <p class="exchange-help">暂无导入或导出任务。</p>
+    }
+    else
+    {
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>时间</th><th>类型</th><th>模块</th><th>文件</th><th>行数</th><th>状态</th><th>操作</th></tr></thead><tbody>
+        @foreach (var task in Model.Tasks)
+        {
+            <tr>
+                <td data-sort-value="@task.CreatedAt.ToUnixTimeMilliseconds()">@task.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@DataExchangeLabels.Direction(task.Direction)</td>
+                <td>@string.Join("、", task.Datasets.Select(DataExchangeLabels.Dataset))</td>
+                <td>@task.FileName</td>
+                <td>@task.RowCount@(task.ErrorRowCount > 0 ? $"（错误 {task.ErrorRowCount} 行）" : null)</td>
+                <td>@DataExchangeLabels.TaskStatus(task.Status)</td>
+                <td class="table-actions">
+                    @if (task.CanDownload) { <a asp-page-handler="DownloadExport" asp-route-taskId="@task.Id">下载文件</a> }
+                    @if (task.CanDownloadErrors) { <a asp-page-handler="DownloadImportErrors" asp-route-batchId="@task.Id">下载错误报告</a> }
+                    @if (!task.CanDownload && !task.CanDownloadErrors) { <span class="exchange-help">—</span> }
+                </td>
+            </tr>
+        }
+        </tbody></table></div>
+    }
+</section>

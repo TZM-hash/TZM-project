@@ -12,12 +12,18 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace EngineeringManager.Web.Pages.DataExchange;
 
 [Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly)]
-public sealed class IndexModel(IExportService exportService, IImportService importService, IProjectWorkbookService projectWorkbookService, IProjectService projectService) : PageModel
+public sealed class IndexModel(
+    IExportService exportService,
+    IImportService importService,
+    IDataExchangeTaskService taskService,
+    IProjectWorkbookService projectWorkbookService,
+    IProjectService projectService) : PageModel
 {
     public IReadOnlyList<EngineeringManager.Domain.DataExchange.ExportFieldDefinition> Fields { get; private set; } = [];
     public IReadOnlyList<ExportTemplateDto> Templates { get; private set; } = [];
     public IReadOnlyList<ExportDataset> ImportableDatasets => importService.ImportableDatasets;
-    public IReadOnlyList<ExportTaskDto> Tasks { get; private set; } = [];
+    public DataExchangeTaskPageDto TaskHistory { get; private set; } = new([], 1, 20, 0, 1);
+    public IReadOnlyList<DataExchangeTaskItemDto> Tasks => TaskHistory.Items;
     public IReadOnlyList<ImportMappingTemplateDto> MappingTemplates { get; private set; } = [];
     public ImportPreviewDto? Preview { get; private set; }
     public IReadOnlyList<ProjectWorkbookSheetDefinition> ProjectWorkbookSheets { get; private set; } = [];
@@ -59,8 +65,10 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
     [BindProperty] public ImportMode ProjectWorkbookImportMode { get; set; } = ImportMode.Mixed;
     [BindProperty] public ProjectWorkbookSheet MappingTargetSheet { get; set; } = ProjectWorkbookSheet.ProjectMaster;
     [BindProperty] public bool BlankMeansNoChange { get; set; }
+    [BindProperty(SupportsGet = true)] public int HistoryPage { get; set; } = 1;
+    [BindProperty(SupportsGet = true)] public int HistoryPageSize { get; set; } = 20;
 
-    public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken);
+    public Task<IActionResult> OnGetAsync() => Task.FromResult<IActionResult>(RedirectToPage("./Export"));
 
     public async Task<IActionResult> OnPostExportAsync(CancellationToken cancellationToken)
     {
@@ -175,6 +183,18 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnGetDownloadExportAsync(Guid taskId, CancellationToken cancellationToken)
+    {
+        var file = await taskService.DownloadExportAsync(UserId(), CanManage, taskId, cancellationToken);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    public async Task<IActionResult> OnGetDownloadImportErrorsAsync(Guid batchId, CancellationToken cancellationToken)
+    {
+        var file = await taskService.DownloadImportErrorsAsync(UserId(), CanManage, batchId, cancellationToken);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
     public async Task<IActionResult> OnPostSaveMappingTemplateAsync(CancellationToken cancellationToken)
     {
         if (!CanManage) return Forbid();
@@ -187,7 +207,7 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
     {
         Fields = exportService.GetFieldCatalog(Dataset);
         Templates = await exportService.ListTemplatesAsync(UserId(), Dataset, cancellationToken);
-        Tasks = await exportService.ListTasksAsync(UserId(), cancellationToken);
+        TaskHistory = await ListTasksAsync(cancellationToken);
         MappingTemplates = await importService.ListMappingTemplatesAsync(UserId(), ImportDataset, cancellationToken);
         ProjectWorkbookSheets = projectWorkbookService.GetSheets();
         var projectActor = ProjectActor();
@@ -201,6 +221,9 @@ public sealed class IndexModel(IExportService exportService, IImportService impo
             CutoffDate ??= last.CutoffDate;
         }
     }
+
+    private Task<DataExchangeTaskPageDto> ListTasksAsync(CancellationToken cancellationToken) =>
+        taskService.ListAsync(new DataExchangeTaskQuery(UserId(), CanManage, HistoryPage, HistoryPageSize), cancellationToken);
 
     private string UserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new InvalidOperationException("当前用户没有标识。");
 

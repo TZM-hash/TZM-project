@@ -24,6 +24,41 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ProjectWorkbookImportTests
 {
     [Fact]
+    public async Task StandardRoundTripProjectWorkbookUsesControlColumnsAndBlankMeansNoChange()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var project = new Project { ProjectNumber = "RT-PROJECT", Name = "原项目", GeneralContractorName = "原总包", Notes = "原备注", Stage = ProjectStage.UnderConstruction };
+        fixture.Db.Projects.Add(project);
+        await fixture.Db.SaveChangesAsync();
+
+        var exported = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(new ProjectListActor("admin", true), new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false), false, [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("admin"),
+            UseRoundTripWorkbook: true), CancellationToken.None);
+        var source = SimpleXlsxReader.Read(exported.Content);
+        var edited = new SimpleXlsxWorkbook();
+        foreach (var sheet in source)
+        {
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            var rows = sheet.Rows.Skip(1).Select(row => row.ToArray()).ToList();
+            if (sheet.Name == "项目主档")
+            {
+                rows[0][Array.IndexOf(headers, "项目名称")] = "修改项目";
+                rows[0][Array.IndexOf(headers, "总包单位")] = null;
+            }
+            edited.AddWorksheet(sheet.Name, headers, rows);
+        }
+
+        var preview = await fixture.Service.PreviewAsync(new ProjectWorkbookImportRequest("admin", "项目往返.xlsx", edited.ToArray(), ImportMode.Update, Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+        var updated = await fixture.Db.Projects.SingleAsync(item => item.Id == project.Id);
+        updated.Name.Should().Be("修改项目");
+        updated.GeneralContractorName.Should().Be("原总包");
+    }
+
+    [Fact]
     public async Task PreviewAppliesPersistedPerSheetPermissionDenial()
     {
         await using var fixture = await ImportFixture.CreateAsync();

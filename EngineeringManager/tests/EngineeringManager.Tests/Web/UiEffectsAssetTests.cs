@@ -32,15 +32,44 @@ public sealed class UiEffectsAssetTests
         css.Should().Contain("body.ui-effects-medium");
         css.Should().Contain("@media (prefers-reduced-motion: reduce)");
         css.Should().Contain("backdrop-filter: blur(24px) saturate(170%)");
+        css.Should().Contain("body.appearance-classic")
+            .And.Contain("body.appearance-rounded-soft")
+            .And.Contain("--appearance-card-radius: 22px")
+            .And.Contain("--appearance-dialog-radius: 26px")
+            .And.Contain("--appearance-control-radius: 14px")
+            .And.Contain("--appearance-card-shadow")
+            .And.Contain("--appearance-overlay-shadow");
+        layout.Should().Contain("@displaySettings.AppearanceCssClass");
         js.Should().Contain("initThemePreview")
+            .And.Contain("initAppearancePreview")
             .And.Contain("initTableDensityPreview")
             .And.Contain("initSidebar")
             .And.Contain("initEffects")
             .And.Contain("\"theme-lavender-cream\"")
+            .And.Contain("\"appearance-rounded-soft\"")
             .And.Contain("meta[name=\"theme-color\"]")
             .And.Contain("\"table-density-spacious\"");
         layout.Should().Contain("type=\"module\"")
             .And.Contain("content=\"@displaySettings.ThemeColor\"");
+    }
+
+    [Fact]
+    public void RoundedAppearanceCoversCardsDialogsControlsTablesMenusAndNavigation()
+    {
+        var css = ReadCss();
+
+        css.Should().Contain("body.appearance-rounded-soft :is(")
+            .And.Contain(".workbench-dialog")
+            .And.Contain(".quick-edit-dialog")
+            .And.Contain(".selection-dropdown-menu")
+            .And.Contain(".column-manager-menu")
+            .And.Contain(".project-workbook-export-popover")
+            .And.Contain(".button")
+            .And.Contain("input:not([type=\"checkbox\"])")
+            .And.Contain("body.appearance-rounded-soft :is(.table-wrap")
+            .And.Contain("body.appearance-rounded-soft .nav-link")
+            .And.Contain("body.appearance-rounded-soft .app-sidebar")
+            .And.Contain("body.appearance-rounded-soft .quick-edit-dialog");
     }
 
     [Fact]

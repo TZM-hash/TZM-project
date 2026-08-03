@@ -2,6 +2,12 @@ using EngineeringManager.Domain.DataExchange;
 
 namespace EngineeringManager.Application.DataExchange;
 
+public sealed record ImportSourceMetadata(
+    ImportSourceType SourceType,
+    Guid? SourceExportTaskId,
+    string DatasetVersion,
+    string SourceSha256);
+
 public sealed record ImportPreviewRequest(
     string UserId,
     ExportDataset Dataset,
@@ -9,7 +15,8 @@ public sealed record ImportPreviewRequest(
     byte[] Content,
     IReadOnlyDictionary<string, string>? SourceToTargetMapping,
     ImportMode Mode = ImportMode.Mixed,
-    bool IncludeAttachments = false);
+    bool IncludeAttachments = false,
+    ImportSourceMetadata? SourceMetadata = null);
 
 public sealed record ImportErrorDto(int RowNumber, string ColumnName, string Message, string? RawValue);
 

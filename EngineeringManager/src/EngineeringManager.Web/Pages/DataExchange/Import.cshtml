@@ -1,0 +1,75 @@
+@page "/DataExchange/Import"
+@model EngineeringManager.Web.Pages.DataExchange.ImportModel
+@using EngineeringManager.Domain.DataExchange
+@using EngineeringManager.Web.Pages.DataExchange
+@{
+    ViewData["Title"] = "导入数据";
+    var importableDatasets = Model.ImportableDatasets;
+}
+
+<section class="page-heading data-exchange-heading">
+    <div>
+        <p class="eyebrow">数据交换工作台</p>
+        <h1>导入数据</h1>
+        <p class="page-lead">上传系统导出的 Excel 或外部模板，先自动识别并预览差异，确认后才整批写入。</p>
+    </div>
+    <div class="data-exchange-heading-note"><strong>安全回导</strong><span>空白不修改 · 错误不部分写入</span></div>
+</section>
+
+<nav class="workspace-tabs" aria-label="数据交换功能">
+    <a asp-page="./Export" class="workspace-tab">导出数据</a>
+    <a asp-page="./Import" class="workspace-tab is-active">导入数据</a>
+    <a asp-page="./Tasks" class="workspace-tab">任务记录</a>
+</nav>
+
+<div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+
+@if (!Model.CanManage)
+{
+    <div class="exchange-card"><strong>当前账号仅可查看数据交换说明。</strong><p class="exchange-help">导入预览和确认写入需要系统管理员或应用管理员权限。</p></div>
+}
+else
+{
+    <section class="data-exchange-panel" data-exchange-import>
+        <div class="data-exchange-section-heading"><div><p class="eyebrow">批量导入</p><h2>模板、上传、预览、确认</h2></div><span>整批校验，错误不写入</span></div>
+        <div class="stepper" aria-label="导入步骤"><span class="is-current">1 选择来源</span><span>2 字段映射</span><span>3 预览校验</span><span>4 确认写入</span></div>
+        <div class="data-exchange-layout import-grid">
+            <form method="post" asp-page-handler="DownloadTemplate" class="exchange-card">
+                <div class="exchange-card-heading"><strong>下载空白模板</strong><span>填写后批量导入</span></div>
+                <label>模板类型<select asp-for="ImportDataset">@foreach (var dataset in importableDatasets) { <option value="@dataset" selected="@(dataset == Model.ImportDataset)">@DataExchangeLabels.Dataset(dataset)</option> }</select></label>
+                <button class="button button--secondary" type="submit">下载 Excel 模板</button>
+                <p class="exchange-help">模板包含必填字段、可选枚举、关联键和填写说明。</p>
+            </form>
+            <form method="post" enctype="multipart/form-data" asp-page-handler="PreviewImport" class="exchange-card">
+                <div class="exchange-card-heading"><strong>上传并预览</strong><span>确认前不会写入数据</span></div>
+                <div class="compact-form-grid"><label>导入数据集<select asp-for="ImportDataset">@foreach (var dataset in importableDatasets) { <option value="@dataset" selected="@(dataset == Model.ImportDataset)">@DataExchangeLabels.Dataset(dataset)</option> }</select></label><label>更新方式<select asp-for="ImportMode">@foreach (var value in Enum.GetValues<ImportMode>()) { <option value="@value" selected="@(value == Model.ImportMode)">@DataExchangeLabels.ImportMode(value)</option> }</select></label></div>
+                <label>Excel 文件<input asp-for="ImportFile" type="file" accept=".xlsx,.zip" /></label>
+                <label>高级字段映射（可留空自动匹配）<textarea asp-for="SourceMappingJson" rows="2" placeholder='{"姓名":"姓名","联系电话":"联系电话"}'></textarea></label>
+                <label class="check-label"><input asp-for="IncludeAttachments" /> 校验并导入附件 ZIP</label>
+                <button class="button button--primary" type="submit">上传并预览</button>
+            </form>
+        </div>
+        <form method="post" asp-page-handler="SaveMappingTemplate" class="mapping-template-form"><input type="hidden" asp-for="ImportDataset" /><input type="hidden" asp-for="SourceMappingJson" /><label>保存映射模板<input asp-for="MappingTemplateName" placeholder="例如：旧系统员工表" /></label><label class="check-label"><input asp-for="SharedMappingTemplate" /> 共享模板</label><button class="button button--ghost" type="submit">保存映射</button><span class="exchange-help">已有：@(Model.MappingTemplates.Count == 0 ? "暂无" : string.Join("、", Model.MappingTemplates.Select(item => item.Name)))</span></form>
+        @if (Model.Preview is not null)
+        {
+            <div class="import-result"><p class="exchange-help">批次 @Model.Preview.BatchId · 总行数 @Model.Preview.TotalRows · 有效 @Model.Preview.ValidRows · 错误 @Model.Preview.ErrorRows</p>@if (Model.Preview.Errors.Count == 0) { <form method="post" asp-page-handler="ConfirmImport"><input type="hidden" name="batchId" value="@Model.Preview.BatchId" /><button class="button button--primary" type="submit">确认整批导入</button></form> } else { <p><a class="button button--secondary" asp-page-handler="DownloadImportErrors" asp-route-batchId="@Model.Preview.BatchId">下载错误报告 Excel</a></p><div class="table-wrap"><table class="data-table"><thead><tr><th>源行</th><th>源列</th><th>原值</th><th>错误与修正建议</th></tr></thead><tbody>@foreach (var error in Model.Preview.Errors) { <tr><td>@error.RowNumber</td><td>@error.ColumnName</td><td>@error.RawValue</td><td>@error.Message</td></tr> }</tbody></table></div> }</div>
+        }
+    </section>
+
+    <section class="data-exchange-panel" data-project-workbook>
+        <div class="data-exchange-section-heading"><div><p class="eyebrow">项目管理工作簿</p><h2>项目工作簿回导</h2></div><span>支持 Excel 或附件 ZIP</span></div>
+        <form method="post" enctype="multipart/form-data" asp-page-handler="PreviewProjectWorkbook" class="exchange-card">
+            <div class="exchange-card-heading"><strong>上传并全量预览</strong><span>整份文件原子校验</span></div>
+            <label>Excel 或 ZIP<input asp-for="ProjectWorkbookFile" type="file" accept=".xlsx,.zip" /></label>
+            <label>导入模式<select asp-for="ProjectWorkbookImportMode">@foreach (var value in Enum.GetValues<ImportMode>()) { <option value="@value">@DataExchangeLabels.ImportMode(value)</option> }</select></label>
+            <label>任意 Excel 的目标细项<select asp-for="MappingTargetSheet">@foreach (var sheet in Model.ProjectWorkbookSheets.Where(item => item.CanImport)) { <option value="@sheet.Sheet">@sheet.WorksheetName</option> }</select></label>
+            <label>字段映射 JSON（标准工作簿留空）<textarea asp-for="SourceMappingJson" rows="3"></textarea></label>
+            <label class="check-label"><input asp-for="BlankMeansNoChange" /> 任意 Excel 空白时不更新</label>
+            <button class="button button--primary" type="submit">上传并全量预览</button>
+        </form>
+        @if (Model.ProjectWorkbookPreview is not null)
+        {
+            <div class="import-result"><div class="table-wrap"><table class="data-table"><thead><tr><th>工作表</th><th>总行数</th><th>新增</th><th>更新</th><th>未变化</th><th>错误</th></tr></thead><tbody>@foreach (var sheet in Model.ProjectWorkbookPreview.Sheets) { <tr><td>@sheet.WorksheetName</td><td>@sheet.TotalRows</td><td>@sheet.NewRows</td><td>@sheet.UpdatedRows</td><td>@sheet.UnchangedRows</td><td>@sheet.ErrorRows</td></tr> }</tbody></table></div>@if (Model.ProjectWorkbookPreview.Errors.Count == 0) { <form method="post" asp-page-handler="ConfirmProjectWorkbook"><input type="hidden" name="batchId" value="@Model.ProjectWorkbookPreview.BatchId" /><button class="button button--primary" type="submit">确认整批导入</button></form> } else { <p class="validation-summary">存在 @Model.ProjectWorkbookPreview.Errors.Count 个错误，整份文件不会写入。</p><p><a class="button button--secondary" asp-page-handler="DownloadImportErrors" asp-route-batchId="@Model.ProjectWorkbookPreview.BatchId">下载错误报告 Excel</a></p><div class="table-wrap"><table class="data-table"><thead><tr><th>源行</th><th>源列</th><th>原值</th><th>错误与修正建议</th></tr></thead><tbody>@foreach (var error in Model.ProjectWorkbookPreview.Errors) { <tr><td>@error.RowNumber</td><td>@error.ColumnName</td><td>@error.RawValue</td><td>@error.Message</td></tr> }</tbody></table></div> }</div>
+        }
+    </section>
+}

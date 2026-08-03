@@ -43,10 +43,12 @@ public sealed class ProjectWorkbookService(
             throw new UnauthorizedAccessException("当前用户无权导出项目附件。");
 
         var exporter = new ProjectWorkbookExporter(db, projectService, financeService, fileStore);
+        var exportBatchId = request.ExportBatchId ?? Guid.NewGuid();
         var effectiveRequest = request with
         {
             Scope = request.Scope with { Actor = ProjectScopeActor(actor) },
-            Actor = actor
+            Actor = actor,
+            ExportBatchId = exportBatchId
         };
         var result = await exporter.ExportAsync(effectiveRequest, cancellationToken);
         var filePrefix = request.ProjectListColumns is not null ? "项目清单" : "项目管理工作簿";
@@ -60,6 +62,7 @@ public sealed class ProjectWorkbookService(
         if (request.IncludeAttachments) recordedSheets.Add(ProjectWorkbookSheet.Attachments);
         var task = new DataExchangeTask
         {
+            Id = exportBatchId,
             UserId = request.Scope.Actor.UserId,
             Direction = DataExchangeDirection.Export,
             DatasetsJson = JsonSerializer.Serialize(ProjectWorkbookCatalog.Sheets.Where(item => recordedSheets.Contains(item.Sheet)).Select(item => item.Sheet).ToArray()),

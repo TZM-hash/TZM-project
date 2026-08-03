@@ -53,6 +53,10 @@
 .stepper .is-current { color: var(--app-primary); border-color: color-mix(in srgb, var(--app-primary) 50%, var(--app-border)); background: color-mix(in srgb, var(--app-primary) 8%, transparent); }
 .import-grid { margin: 0; }
 .import-result { display: grid; gap: .7rem; margin-top: .8rem; padding: .8rem 0 0; border-top: 1px solid var(--app-border); }
+.data-exchange-history-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; margin: -.15rem 0 .7rem; }
+.data-exchange-history-toolbar label { display: inline-flex; align-items: center; gap: .35rem; color: var(--app-muted); font-size: .72rem; }
+.data-exchange-history-toolbar select { min-height: 1.95rem; padding: .25rem .45rem; border: 1px solid var(--app-border-strong); border-radius: 5px; color: var(--app-text); background: var(--app-surface); font: inherit; }
+.data-exchange-history-toolbar .button { min-height: 1.95rem; padding: .3rem .55rem; font-size: .7rem; }
 .mapping-template-form { display: grid; grid-template-columns: minmax(11rem, 1fr) auto auto minmax(10rem, 1fr); align-items: end; gap: .55rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--app-border); }
 .offline-workspace { display: grid; grid-template-columns: minmax(0, 2fr) minmax(17rem, .8fr); gap: 1rem; align-items: start; }
 .offline-status-panel { position: sticky; top: calc(var(--header-height) + 1rem); }

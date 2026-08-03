@@ -129,7 +129,9 @@ public sealed record ProjectWorkbookExportRequest(
     DateOnly? CutoffDate = null,
     bool IncludeAttachments = false,
     ProjectWorkbookActor? Actor = null,
-    IReadOnlyCollection<string>? ProjectListColumns = null);
+    IReadOnlyCollection<string>? ProjectListColumns = null,
+    bool UseRoundTripWorkbook = false,
+    Guid? ExportBatchId = null);
 
 public sealed record ProjectWorkbookImportRequest(
     string UserId,

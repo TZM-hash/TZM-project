@@ -8,7 +8,7 @@
     <div>
         <p class="eyebrow">系统级全局设置</p>
         <h1>显示与交互设置</h1>
-        <p class="page-lead">统一管理全站主题、动效、字体和表格密度。所有设置都会自动尊重设备的“减少动态效果”偏好。</p>
+        <p class="page-lead">统一管理全站主题、外观、动效、字体和表格密度。所有设置都会自动尊重设备的“减少动态效果”偏好。</p>
     </div>
 </section>
 
@@ -40,6 +40,22 @@
                 <input asp-for="Input.Theme" id="theme-lavender-cream" type="radio" value="LavenderCream" disabled="@Model.IsReadOnly" />
                 <span class="option-preview option-preview--lavender" aria-hidden="true"><i></i><i></i><i></i></span>
                 <span><strong>薰衣草奶油</strong><small>柔和紫白、奶油卡片和清新的多彩点缀。</small></span>
+            </label>
+        </div>
+    </section>
+
+    <section class="form-section">
+        <div class="form-section-heading"><div><p class="eyebrow">界面外观</p><h2>选择组件圆润程度</h2></div><p>外观可与任意颜色主题组合，经典模式保持当前显示。</p></div>
+        <div class="option-card-grid" role="radiogroup" aria-label="界面外观">
+            <label class="option-card" data-appearance-option="appearance-classic">
+                <input asp-for="Input.Appearance" id="appearance-classic" type="radio" value="Classic" disabled="@Model.IsReadOnly" />
+                <span class="option-preview option-preview--appearance-classic" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span><strong>经典紧凑</strong><small>保留当前卡片、按钮、表格和弹窗形态。</small></span>
+            </label>
+            <label class="option-card" data-appearance-option="appearance-rounded-soft">
+                <input asp-for="Input.Appearance" id="appearance-rounded-soft" type="radio" value="RoundedSoft" disabled="@Model.IsReadOnly" />
+                <span class="option-preview option-preview--appearance-rounded-soft" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span><strong>圆润柔光</strong><small>明显大圆角、柔和阴影和圆润控件。</small></span>
             </label>
         </div>
     </section>

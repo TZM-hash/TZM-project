@@ -42,8 +42,9 @@ public sealed class IndexModel(ISystemSettingsService settingsService) : PageMod
         public GlobalFont Font { get; set; } = GlobalFont.SystemDefault;
         public TableDensity Density { get; set; } = TableDensity.Standard;
         public GlobalFontSize FontSize { get; set; } = GlobalFontSize.Standard;
+        public UiAppearanceStyle Appearance { get; set; } = UiAppearanceStyle.Classic;
 
-        public SystemDisplaySettings ToSettings() => new(Theme, Motion, Effects, Font, Density, FontSize);
+        public SystemDisplaySettings ToSettings() => new(Theme, Motion, Effects, Font, Density, FontSize, Appearance);
         public static InputModel From(SystemDisplaySettings settings) => new()
         {
             Theme = settings.Theme,
@@ -51,7 +52,8 @@ public sealed class IndexModel(ISystemSettingsService settingsService) : PageMod
             Effects = settings.Effects,
             Font = settings.Font,
             Density = settings.Density,
-            FontSize = settings.FontSize
+            FontSize = settings.FontSize,
+            Appearance = settings.Appearance
         };
     }
 }

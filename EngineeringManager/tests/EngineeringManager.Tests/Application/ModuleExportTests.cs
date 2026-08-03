@@ -19,6 +19,47 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ModuleExportTests
 {
     [Fact]
+    public async Task StandardEmployeeExportUsesRoundTripEnvelopeAndTechnicalColumns()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+
+        var file = await fixture.Service.ExportAsync(new ExportRequest(
+            ExportDataset.Employees,
+            "round-trip-envelope",
+            ["employee_number", "name"],
+            null,
+            UseRoundTripWorkbook: true,
+            SourcePage: "/Employees"), CancellationToken.None);
+
+        var sheets = SimpleXlsxReader.Read(file.Content);
+        sheets.Select(sheet => sheet.Name).Should().Equal("目录", "数据说明", "员工");
+        sheets.Single(sheet => sheet.Name == "员工").Rows[0]
+            .Should().ContainInOrder("员工编号", "姓名", "_record_id", "_business_key", "_row_version", "_dataset_key", "_dataset_version", "_export_batch_id");
+        sheets.Single(sheet => sheet.Name == "员工").Rows[1]
+            .Any(value => value is string text && Guid.TryParse(text, out _)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task StandardEmployeeExportStillMasksSensitiveFields()
+    {
+        await using var fixture = await ModuleExportFixture.CreateAsync();
+        var employee = await fixture.Db.Employees.SingleAsync();
+        employee.IdentityNumber = "510101199001011234";
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ExportRequest(
+            ExportDataset.Employees,
+            "round-trip-sensitive",
+            ["employee_number", "identity_number"],
+            null,
+            CanViewSensitiveData: false,
+            UseRoundTripWorkbook: true), CancellationToken.None);
+
+        var sheet = SimpleXlsxReader.Read(file.Content).Single(item => item.Name == "员工");
+        sheet.Rows[1].Should().Contain("******1234").And.NotContain(employee.IdentityNumber);
+    }
+
+    [Fact]
     public async Task SensitiveEmployeeFieldsAreMaskedUnlessExplicitlyAuthorized()
     {
         await using var fixture = await ModuleExportFixture.CreateAsync();

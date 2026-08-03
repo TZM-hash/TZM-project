@@ -17,7 +17,7 @@ scheduleIdle(() => initOfflineDashboard());
 if (document.querySelector("[data-conflict-notice]")) {
   scheduleIdle(() => import("./components/conflict-notice.js").then((module) => module.initConflictNotice()));
 }
-if (document.querySelector("[data-theme-option], [data-motion-option], [data-global-font-picker], [data-global-font-size-picker]")) {
+if (document.querySelector("[data-theme-option], [data-appearance-option], [data-motion-option], [data-global-font-picker], [data-global-font-size-picker]")) {
   scheduleIdle(() => import("./pages/settings.js").then((module) => module.initSettingsPreview()));
 }
 if (document.querySelector("[data-workbench]")) {

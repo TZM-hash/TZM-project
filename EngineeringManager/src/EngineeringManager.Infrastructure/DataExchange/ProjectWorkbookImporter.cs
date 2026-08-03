@@ -40,6 +40,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             OriginalFileName = request.OriginalFileName,
             OriginalContent = request.Content,
             MappingJson = JsonSerializer.Serialize(new ImportOptions(request.Mode, request.IncludeAttachments, request.BlankMeansNoChange, request.Mappings)),
+            SourceType = ImportSourceType.ProjectWorkbook,
             Status = DataExchangeTaskStatus.PreviewReady,
             TotalRows = totalRows,
             ValidRows = Math.Max(0, totalRows - errorRows),
@@ -208,10 +209,11 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         var sheets = workbookContent.Length == 0 ? [] : SimpleXlsxReader.Read(workbookContent);
         var parsed = new List<ParsedSheet>();
         var errors = archiveErrors;
-        ValidateWorkbookMetadata(sheets, request.Mappings is not null, errors);
+        var isRoundTrip = sheets.Any(item => item.Name == "目录") && sheets.Any(item => item.Name == "数据说明");
+        ValidateWorkbookMetadata(sheets, request.Mappings is not null, isRoundTrip, errors);
         foreach (var sheet in sheets)
         {
-            if (sheet.Name is "目录说明" or "_metadata") continue;
+            if (sheet.Name is "目录说明" or "_metadata" or "目录" or "数据说明") continue;
             var mappedDefinition = request.Mappings is { Count: 1 } ? ProjectWorkbookCatalog.Get(request.Mappings.Keys.Single()) : null;
             var definition = ProjectWorkbookCatalog.Sheets.SingleOrDefault(item => item.WorksheetName == sheet.Name) ?? mappedDefinition;
             if (definition is null)
@@ -233,7 +235,19 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             {
                 var header = ConvertValue(headerRow[column]);
                 if (string.IsNullOrWhiteSpace(header)) continue;
-                var target = mappings?.GetValueOrDefault(header)
+                var target = isRoundTrip
+                    ? header switch
+                    {
+                        "_record_id" => "_system_id",
+                        "_row_version" => "_concurrency_stamp",
+                        "_business_key" => "_business_key",
+                        "_dataset_key" => "_dataset_key",
+                        "_dataset_version" => "_dataset_version",
+                        "_export_batch_id" => "_export_batch_id",
+                        _ => null
+                    }
+                    : null;
+                target ??= mappings?.GetValueOrDefault(header)
                     ?? definition.Fields.FirstOrDefault(field => field.Header == header || field.Aliases?.Contains(header, StringComparer.OrdinalIgnoreCase) == true)?.Key;
                 if (target is not null) keys[column] = target;
             }
@@ -254,8 +268,12 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 var present = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var pair in keys)
                 {
-                    present.Add(pair.Value);
-                    values[pair.Value] = DataExchangeValueLabels.NormalizeEnumValue(definition.Sheet, pair.Value, pair.Key < row.Count ? ConvertValue(row[pair.Key]) : null);
+                    var value = DataExchangeValueLabels.NormalizeEnumValue(definition.Sheet, pair.Value, pair.Key < row.Count ? ConvertValue(row[pair.Key]) : null);
+                    values[pair.Value] = value;
+                    if (!isRoundTrip || !string.IsNullOrWhiteSpace(value) || pair.Value is "_system_id" or "_concurrency_stamp" or "_dataset_key" or "_dataset_version" or "_export_batch_id")
+                    {
+                        present.Add(pair.Value);
+                    }
                 }
                 parsedRows.Add(new ParsedRow(definition.Sheet, rowIndex + 1, values, present));
             }
@@ -327,9 +345,10 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
     private static void ValidateWorkbookMetadata(
         IReadOnlyList<SimpleXlsxSheet> sheets,
         bool isMappedImport,
+        bool isRoundTrip,
         List<ImportErrorDto> errors)
     {
-        if (isMappedImport) return;
+        if (isMappedImport || isRoundTrip) return;
         var metadata = sheets.SingleOrDefault(item => item.Name == "_metadata");
         if (metadata is null || metadata.Rows.Count < 2)
         {
@@ -440,7 +459,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         foreach (var field in ProjectWorkbookCatalog.Get(sheet.Sheet).Fields.Where(item => item.IsRequired && item.CanImport))
         {
             if (mode == ImportMode.Update && !row.PresentKeys.Contains(field.Key)) continue;
-            if (!row.Values.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value))
+            if (!row.Values.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value) || string.Equals(value, "【清空】", StringComparison.Ordinal))
                 errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/{field.Header}", "必填字段不能为空。", value));
         }
 
@@ -2053,7 +2072,12 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
 
     private static bool Has(ParsedRow row, string key, bool blankMeansNoChange) => row.PresentKeys.Contains(key) && (!blankMeansNoChange || !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault(key)));
     private static bool HasNonBlank(ParsedRow row, string key) => row.PresentKeys.Contains(key) && !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault(key));
-    private static void Set(ParsedRow row, string key, Action<string?> setter, string? current, bool blankMeansNoChange) { if (Has(row, key, blankMeansNoChange)) setter(row.Values.GetValueOrDefault(key)); }
+    private static void Set(ParsedRow row, string key, Action<string?> setter, string? current, bool blankMeansNoChange)
+    {
+        if (!Has(row, key, blankMeansNoChange)) return;
+        var value = row.Values.GetValueOrDefault(key);
+        setter(string.Equals(value, "【清空】", StringComparison.Ordinal) ? null : value);
+    }
     private static string Required(ParsedRow row, string key) => row.Values.GetValueOrDefault(key)?.Trim() ?? throw new InvalidOperationException($"缺少必填字段：{key}");
     private static Guid RequestedId(ParsedRow row) => Guid.TryParse(row.Values.GetValueOrDefault("_system_id"), out var id) ? id : Guid.NewGuid();
     private static string? ConvertValue(object? value) => value switch { null => null, DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), bool boolean => boolean ? "true" : "false", decimal number => number.ToString(CultureInfo.InvariantCulture), _ => Convert.ToString(value, CultureInfo.InvariantCulture) };

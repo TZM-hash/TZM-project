@@ -336,6 +336,167 @@ public sealed class StandardImportTests
     }
 
     [Fact]
+    public async Task RoundTripEmployeeImportTreatsBlankOptionalCellsAsNoChange()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "RT-001", Name = "原姓名", Phone = "13800000000", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var export = await new ExportService(fixture.Db, new EngineeringManager.Infrastructure.Finance.FinanceLedgerService(fixture.Db))
+            .ExportAsync(new ExportRequest(ExportDataset.Employees, "round-trip", ["employee_number", "name", "phone", "employee_type"], null, UseRoundTripWorkbook: true), CancellationToken.None);
+
+        var source = SimpleXlsxReader.Read(export.Content);
+        var edited = new SimpleXlsxWorkbook();
+        foreach (var sheet in source)
+        {
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            var rows = sheet.Rows.Skip(1).Select(row => row.ToArray()).ToList();
+            if (sheet.Name == "员工")
+            {
+                var nameIndex = Array.IndexOf(headers, "姓名");
+                var phoneIndex = Array.IndexOf(headers, "电话");
+                rows[0][nameIndex] = "修改后的姓名";
+                rows[0][phoneIndex] = null;
+            }
+            edited.AddWorksheet(sheet.Name, headers, rows);
+        }
+
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Employees, "员工往返.xlsx", edited.ToArray(), null), CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+
+        var updated = await fixture.Db.Employees.SingleAsync(item => item.Id == employee.Id);
+        updated.Name.Should().Be("修改后的姓名");
+        updated.Phone.Should().Be("13800000000");
+    }
+
+    [Fact]
+    public async Task RoundTripEmployeeImportRejectsTamperedBusinessKeyForSystemId()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "RT-TAMPER", Name = "原姓名", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var export = await new ExportService(fixture.Db, new EngineeringManager.Infrastructure.Finance.FinanceLedgerService(fixture.Db))
+            .ExportAsync(new ExportRequest(ExportDataset.Employees, "round-trip", ["employee_number", "name", "employee_type"], null, UseRoundTripWorkbook: true), CancellationToken.None);
+
+        var source = SimpleXlsxReader.Read(export.Content);
+        var edited = new SimpleXlsxWorkbook();
+        foreach (var sheet in source)
+        {
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            var rows = sheet.Rows.Skip(1).Select(row => row.ToArray()).ToList();
+            if (sheet.Name == "员工") rows[0][Array.IndexOf(headers, "_business_key")] = "RT-OTHER";
+            edited.AddWorksheet(sheet.Name, headers, rows);
+        }
+
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Employees, "员工篡改.xlsx", edited.ToArray(), null), CancellationToken.None);
+
+        preview.Errors.Should().Contain(item => item.ColumnName == "_record_id" && item.Message.Contains("篡改", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RoundTripWorkbookCannotBeImportedIntoAnotherDataset()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "RT-DATASET", Name = "员工数据集", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var export = await new ExportService(fixture.Db, new EngineeringManager.Infrastructure.Finance.FinanceLedgerService(fixture.Db))
+            .ExportAsync(new ExportRequest(ExportDataset.Employees, "round-trip", ["employee_number", "name", "employee_type"], null, UseRoundTripWorkbook: true), CancellationToken.None);
+
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Projects, "错误数据集.xlsx", export.Content, null), CancellationToken.None);
+
+        preview.Errors.Should().Contain(item => item.ColumnName == "_dataset_key" && item.Message.Contains("不一致", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RoundTripEmployeeImportUsesExplicitClearMarkerForNullableFields()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "RT-CLEAR", Name = "待清空", Phone = "13800000000", Notes = "旧备注", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var export = await new ExportService(fixture.Db, new EngineeringManager.Infrastructure.Finance.FinanceLedgerService(fixture.Db))
+            .ExportAsync(new ExportRequest(ExportDataset.Employees, "round-trip", ["employee_number", "name", "employee_type", "phone", "notes"], null, UseRoundTripWorkbook: true), CancellationToken.None);
+        var source = SimpleXlsxReader.Read(export.Content);
+        var edited = new SimpleXlsxWorkbook();
+        foreach (var sheet in source)
+        {
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            var rows = sheet.Rows.Skip(1).Select(row => row.ToArray()).ToList();
+            if (sheet.Name == "员工")
+            {
+                rows[0][Array.IndexOf(headers, "电话")] = "【清空】";
+                rows[0][Array.IndexOf(headers, "备注")] = "【清空】";
+            }
+            edited.AddWorksheet(sheet.Name, headers, rows);
+        }
+
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Employees, "员工清空.xlsx", edited.ToArray(), null), CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        var updated = await fixture.Db.Employees.SingleAsync(item => item.Id == employee.Id);
+        updated.Phone.Should().BeNull();
+        updated.Notes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RoundTripEmployeeImportBlocksStaleConcurrencyAsOneBatch()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var employee = new Employee { EmployeeNumber = "RT-002", Name = "导出姓名", EmployeeType = EmployeeType.Formal };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+        var exportService = new ExportService(fixture.Db, new EngineeringManager.Infrastructure.Finance.FinanceLedgerService(fixture.Db));
+        var export = await exportService.ExportAsync(new ExportRequest(ExportDataset.Employees, "round-trip", ["employee_number", "name", "employee_type"], null, UseRoundTripWorkbook: true), CancellationToken.None);
+
+        employee.Name = "系统内修改";
+        employee.ConcurrencyStamp = Guid.NewGuid();
+        await fixture.Db.SaveChangesAsync();
+        var source = SimpleXlsxReader.Read(export.Content);
+        var edited = new SimpleXlsxWorkbook();
+        foreach (var sheet in source)
+        {
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            var rows = sheet.Rows.Skip(1).Select(row => row.ToArray()).ToList();
+            if (sheet.Name == "员工") rows[0][Array.IndexOf(headers, "姓名")] = "不应覆盖";
+            edited.AddWorksheet(sheet.Name, headers, rows);
+        }
+
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Employees, "员工过期.xlsx", edited.ToArray(), null), CancellationToken.None);
+        preview.Errors.Should().Contain(error => error.ColumnName == "并发版本");
+        var confirm = () => fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        await confirm.Should().ThrowAsync<InvalidOperationException>();
+        (await fixture.Db.Employees.SingleAsync(item => item.Id == employee.Id)).Name.Should().Be("系统内修改");
+    }
+
+    [Fact]
+    public async Task RoundTripEmployeeImportAllowsAppendingRowsWithBlankControlColumns()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var exportService = new ExportService(fixture.Db, new EngineeringManager.Infrastructure.Finance.FinanceLedgerService(fixture.Db));
+        var export = await exportService.ExportAsync(new ExportRequest(ExportDataset.Employees, "round-trip", ["employee_number", "name", "employee_type"], null, UseRoundTripWorkbook: true), CancellationToken.None);
+        var source = SimpleXlsxReader.Read(export.Content);
+        var edited = new SimpleXlsxWorkbook();
+        foreach (var sheet in source)
+        {
+            var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+            var rows = sheet.Rows.Skip(1).Select(row => row.ToArray()).ToList();
+            if (sheet.Name == "员工")
+            {
+                rows.Add(["RT-NEW", "新增员工", "正式员工", null, null, null, null, null]);
+            }
+            edited.AddWorksheet(sheet.Name, headers, rows);
+        }
+
+        var preview = await fixture.Service.PreviewAsync(new ImportPreviewRequest("round-trip", ExportDataset.Employees, "员工新增.xlsx", edited.ToArray(), null), CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        (await fixture.Db.Employees.SingleAsync(item => item.EmployeeNumber == "RT-NEW")).Name.Should().Be("新增员工");
+    }
+
+    [Fact]
     public async Task CompanyAccountAndCertificateImportsResolveCompanyAndCategory()
     {
         await using var fixture = await ImportFixture.CreateAsync();

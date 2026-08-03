@@ -15,6 +15,7 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
     };
     private const string CacheKey = "system-display-settings";
     private const string ThemeKey = "Display.Theme";
+    private const string AppearanceKey = "Display.Appearance";
     private const string MotionKey = "Display.Motion";
     private const string EffectsKey = "Display.Effects";
     private const string FontKey = "Display.Font";
@@ -35,7 +36,8 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
             Parse(values, EffectsKey, UiEffectsLevel.Medium),
             Parse(values, FontKey, GlobalFont.SystemDefault),
             Parse(values, DensityKey, TableDensity.Standard),
-            Parse(values, FontSizeKey, GlobalFontSize.Standard));
+            Parse(values, FontSizeKey, GlobalFontSize.Standard),
+            Parse(values, AppearanceKey, UiAppearanceStyle.Classic));
         cache.Set(CacheKey, settings, TimeSpan.FromMinutes(5));
         return settings;
     }
@@ -50,6 +52,7 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
         var before = await GetAsync(token);
         var existing = await db.SystemSettings.ToDictionaryAsync(item => item.Key, token);
         Upsert(existing, ThemeKey, settings.Theme.ToString(), actor.UserId);
+        Upsert(existing, AppearanceKey, settings.Appearance.ToString(), actor.UserId);
         Upsert(existing, MotionKey, settings.Motion.ToString(), actor.UserId);
         Upsert(existing, EffectsKey, settings.Effects.ToString(), actor.UserId);
         Upsert(existing, FontKey, settings.Font.ToString(), actor.UserId);
@@ -62,7 +65,7 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
             Action = "UpdateSystemDisplaySettings",
             EntityType = "SystemDisplaySettings",
             EntityId = "global",
-            Reason = "维护全局主题、动效、字体和表格密度",
+            Reason = "维护全局主题、外观、动效、字体和表格密度",
             BeforeJson = JsonSerializer.Serialize(before, AuditJsonOptions),
             AfterJson = JsonSerializer.Serialize(settings, AuditJsonOptions)
         });
@@ -89,7 +92,8 @@ public sealed class SystemSettingsService(ApplicationDbContext db, IMemoryCache 
 
     private static void Validate(SystemDisplaySettings settings)
     {
-        if (!Enum.IsDefined(settings.Theme) || !Enum.IsDefined(settings.Motion) || !Enum.IsDefined(settings.Effects) ||
+        if (!Enum.IsDefined(settings.Theme) || !Enum.IsDefined(settings.Appearance) ||
+            !Enum.IsDefined(settings.Motion) || !Enum.IsDefined(settings.Effects) ||
             !Enum.IsDefined(settings.Font) || !Enum.IsDefined(settings.Density) || !Enum.IsDefined(settings.FontSize))
         {
             throw new ArgumentOutOfRangeException(nameof(settings), "显示设置包含未知选项。");

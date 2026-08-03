@@ -32,6 +32,25 @@ public sealed class SystemSettingsServiceTests
         settings.ThemeColor.Should().Be(expectedColor);
     }
 
+    [Theory]
+    [InlineData(UiAppearanceStyle.Classic, "appearance-classic")]
+    [InlineData(UiAppearanceStyle.RoundedSoft, "appearance-rounded-soft")]
+    public void EveryAppearanceStyleMapsToItsExpectedCssClass(
+        UiAppearanceStyle appearance,
+        string expectedCssClass)
+    {
+        var settings = SystemDisplaySettings.Default with { Appearance = appearance };
+
+        settings.AppearanceCssClass.Should().Be(expectedCssClass);
+    }
+
+    [Fact]
+    public void DefaultAppearanceStyleKeepsExistingClassicVisuals()
+    {
+        SystemDisplaySettings.Default.Appearance.Should().Be(UiAppearanceStyle.Classic);
+        SystemDisplaySettings.Default.AppearanceCssClass.Should().Be("appearance-classic");
+    }
+
     [Fact]
     public async Task DefaultsMatchConfirmedGlobalDisplayProfile()
     {
@@ -75,7 +94,7 @@ public sealed class SystemSettingsServiceTests
         await fixture.Service.SaveAsync(new SettingsActor("sys", "系统管理员", true), requested, default);
 
         (await fixture.Service.GetAsync(default)).Should().Be(requested);
-        (await fixture.Db.SystemSettings.CountAsync()).Should().Be(6);
+        (await fixture.Db.SystemSettings.CountAsync()).Should().Be(7);
         var audit = await fixture.Db.AuditLogs.SingleAsync(item => item.Action == "UpdateSystemDisplaySettings");
         audit.UserId.Should().Be("sys");
         audit.BeforeJson.Should().Contain("Medium");
@@ -95,6 +114,61 @@ public sealed class SystemSettingsServiceTests
         (await fixture.Service.GetAsync(default)).Theme.Should().Be(VisualTheme.LavenderCream);
         var stored = await fixture.Db.SystemSettings.SingleAsync(item => item.Key == "Display.Theme");
         stored.Value.Should().Be("LavenderCream");
+    }
+
+    [Fact]
+    public async Task RoundedSoftAppearancePersistsInExistingSettingsTable()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var requested = SystemDisplaySettings.Default with
+        {
+            Appearance = UiAppearanceStyle.RoundedSoft
+        };
+
+        await fixture.Service.SaveAsync(
+            new SettingsActor("sys", "系统管理员", true),
+            requested,
+            default);
+
+        (await fixture.Service.GetAsync(default)).Appearance
+            .Should().Be(UiAppearanceStyle.RoundedSoft);
+        var stored = await fixture.Db.SystemSettings
+            .SingleAsync(item => item.Key == "Display.Appearance");
+        stored.Value.Should().Be("RoundedSoft");
+    }
+
+    [Fact]
+    public async Task MissingOrInvalidAppearanceSettingFallsBackToClassic()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        fixture.Db.SystemSettings.Add(new SystemSetting
+        {
+            Key = "Display.Appearance",
+            Value = "UnknownAppearance",
+            UpdatedByUserId = "sys"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        (await fixture.Service.GetAsync(default)).Appearance
+            .Should().Be(UiAppearanceStyle.Classic);
+    }
+
+    [Fact]
+    public async Task InvalidAppearanceIsRejectedBeforeAnySettingIsWritten()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var invalid = SystemDisplaySettings.Default with
+        {
+            Appearance = (UiAppearanceStyle)999
+        };
+
+        var action = () => fixture.Service.SaveAsync(
+            new SettingsActor("sys", "系统管理员", true),
+            invalid,
+            default);
+
+        await action.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        (await fixture.Db.SystemSettings.CountAsync()).Should().Be(0);
     }
 
     [Fact]

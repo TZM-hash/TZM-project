@@ -15,6 +15,7 @@ namespace EngineeringManager.Infrastructure.DataExchange;
 
 public sealed class ExportService : IExportService
 {
+    private const string WorkbookContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private readonly ApplicationDbContext db;
     private readonly IFinanceLedgerService financeService;
     private readonly IFileStore? fileStore;
@@ -390,6 +391,8 @@ public sealed class ExportService : IExportService
             Scope = request.Scope,
             PackageFormat = request.PackageFormat,
             IncludeAttachments = request.IncludeAttachments,
+            DatasetVersion = request.DatasetVersion,
+            SourcePage = request.SourcePage,
             Status = DataExchangeTaskStatus.Running
         };
         db.DataExchangeTasks.Add(task);
@@ -399,10 +402,10 @@ public sealed class ExportService : IExportService
             var file = request.Dataset switch
             {
             ExportDataset.ProjectOverview => await ExportProjectOverviewAsync(fields, request.CutoffDate, request.ProjectIds, cancellationToken),
-            ExportDataset.Projects => await ExportProjectsAsync(fields, cancellationToken),
+            ExportDataset.Projects => await ExportProjectsAsync(fields, request, task.Id, cancellationToken),
             ExportDataset.Contracts => await ExportContractsAsync(fields, cancellationToken),
             ExportDataset.StageResults => await ExportStageResultsAsync(fields, cancellationToken),
-            ExportDataset.Employees => await ExportEmployeesAsync(fields, cancellationToken),
+            ExportDataset.Employees => await ExportEmployeesAsync(fields, request, task.Id, cancellationToken),
             ExportDataset.EmployeeCertificates => await ExportEmployeeCertificatesAsync(fields, cancellationToken),
             ExportDataset.Partners => await ExportPartnersAsync(fields, cancellationToken),
             ExportDataset.Payroll => await ExportPayrollAsync(fields, request.CutoffDate, cancellationToken),
@@ -457,7 +460,7 @@ public sealed class ExportService : IExportService
             request.SelectedFields.TryGetValue(dataset, out var selectedFields);
             IReadOnlyList<Guid>? projectIds = null;
             request.ProjectIds?.TryGetValue(dataset, out projectIds);
-            files.Add(await ExportAsync(new ExportRequest(dataset, request.UserId, selectedFields ?? [], null, projectIds, request.CanViewSensitiveData, ExportScope.SelectedModules, request.PackageFormat, request.IncludeAttachments), cancellationToken));
+            files.Add(await ExportAsync(new ExportRequest(dataset, request.UserId, selectedFields ?? [], null, projectIds, request.CanViewSensitiveData, ExportScope.SelectedModules, request.PackageFormat, request.IncludeAttachments, SourcePage: request.SourcePage, UseRoundTripWorkbook: request.UseRoundTripWorkbook), cancellationToken));
         }
         if (datasets.Length == 1 && request.PackageFormat == ExportPackageFormat.Workbook) return files[0];
 
@@ -703,10 +706,14 @@ public sealed class ExportService : IExportService
         return new ExportFileResult($"项目经营总览_{DateTime.Now:yyyyMMddHHmmss}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", workbook.ToArray());
     }
 
-    private async Task<ExportFileResult> ExportEmployeesAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    private async Task<ExportFileResult> ExportEmployeesAsync(
+        IReadOnlyList<ExportFieldDefinition> fields,
+        ExportRequest request,
+        Guid exportBatchId,
+        CancellationToken cancellationToken)
     {
         var employees = await db.Employees.AsNoTracking().OrderBy(item => item.EmployeeNumber).ToListAsync(cancellationToken);
-        return CreateSingleSheet("员工", fields, employees.Select(item => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        var values = employees.Select(item => new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["employee_number"] = item.EmployeeNumber,
             ["name"] = item.Name,
@@ -724,16 +731,52 @@ public sealed class ExportService : IExportService
             ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString(),
             ["is_active"] = item.IsActive,
             ["notes"] = item.Notes
-        })), "员工台账");
+        }).ToArray();
+        if (!request.UseRoundTripWorkbook)
+        {
+            return CreateSingleSheet("员工", fields, values.Select(item => Project(fields, item)), "员工台账");
+        }
+
+        var rows = employees.Zip(values, (employee, row) => new RoundTripWorkbookRow(
+            PrepareRoundTripValues(fields, row),
+            employee.Id.ToString(),
+            employee.EmployeeNumber,
+            employee.ConcurrencyStamp.ToString())).ToArray();
+        var content = new RoundTripWorkbookBuilder().Build(new RoundTripWorkbookRequest(
+            exportBatchId.ToString(),
+            [new RoundTripWorkbookSheet(ExportDataset.Employees, "员工", fields, rows, "员工基础档案")],
+            request.DatasetVersion,
+            request.SourcePage));
+        return new ExportFileResult($"员工台账_{DateTime.Now:yyyyMMddHHmmss}.xlsx", WorkbookContentType, content);
     }
 
-    private async Task<ExportFileResult> ExportProjectsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
+    private async Task<ExportFileResult> ExportProjectsAsync(
+        IReadOnlyList<ExportFieldDefinition> fields,
+        ExportRequest request,
+        Guid exportBatchId,
+        CancellationToken cancellationToken)
     {
         var projects = await db.Projects.AsNoTracking().OrderBy(item => item.ProjectNumber).ToListAsync(cancellationToken);
-        return CreateSingleSheet("项目", fields, projects.Select(item => Project(fields, new(StringComparer.Ordinal)
+        var values = projects.Select(item => new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["project_number"] = item.ProjectNumber, ["project_name"] = item.Name, ["stage"] = DataExchangeValueLabels.LabelProjectStage(item.Stage), ["contract_signing_status"] = DataExchangeValueLabels.LabelContractSigningStatus(item.ContractSigningStatus), ["affiliation_type"] = DataExchangeValueLabels.ProjectAffiliation(item.AffiliationType), ["general_contractor"] = item.GeneralContractorName, ["actual_start_date"] = item.ActualStartDate, ["actual_completion_date"] = item.ActualCompletionDate, ["is_active"] = item.IsActive, ["notes"] = item.Notes, ["_system_id"] = item.Id.ToString(), ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString()
-        })), "项目台账");
+        }).ToArray();
+        if (!request.UseRoundTripWorkbook)
+        {
+            return CreateSingleSheet("项目", fields, values.Select(item => Project(fields, item)), "项目台账");
+        }
+
+        var rows = projects.Zip(values, (project, row) => new RoundTripWorkbookRow(
+            PrepareRoundTripValues(fields, row),
+            project.Id.ToString(),
+            project.ProjectNumber,
+            project.ConcurrencyStamp.ToString())).ToArray();
+        var content = new RoundTripWorkbookBuilder().Build(new RoundTripWorkbookRequest(
+            exportBatchId.ToString(),
+            [new RoundTripWorkbookSheet(ExportDataset.Projects, "项目", fields, rows, "项目基础档案")],
+            request.DatasetVersion,
+            request.SourcePage));
+        return new ExportFileResult($"项目台账_{DateTime.Now:yyyyMMddHHmmss}.xlsx", WorkbookContentType, content);
     }
 
     private async Task<ExportFileResult> ExportContractsAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
@@ -1220,6 +1263,15 @@ public sealed class ExportService : IExportService
 
     private static object?[] Project(IReadOnlyList<ExportFieldDefinition> fields, Dictionary<string, object?> values) =>
         fields.Select(field => field.IsSensitive ? MaskSensitive(values[field.Key]) : values[field.Key]).ToArray();
+
+    private static Dictionary<string, object?> PrepareRoundTripValues(
+        IReadOnlyList<ExportFieldDefinition> fields,
+        IReadOnlyDictionary<string, object?> values) =>
+        fields.Where(field => !field.Key.StartsWith('_'))
+            .ToDictionary(
+                field => field.Key,
+                field => field.IsSensitive ? MaskSensitive(values.GetValueOrDefault(field.Key)) : values.GetValueOrDefault(field.Key),
+                StringComparer.Ordinal);
 
     private static string MaskSensitive(object? value) => value switch
     {

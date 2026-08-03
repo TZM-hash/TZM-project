@@ -11,6 +11,10 @@ public sealed class ImportBatch
     public string OriginalFileName { get; set; } = string.Empty;
     public byte[] OriginalContent { get; set; } = [];
     public string MappingJson { get; set; } = "{}";
+    public ImportSourceType SourceType { get; set; } = ImportSourceType.ExternalWorkbook;
+    public Guid? SourceExportTaskId { get; set; }
+    public string DatasetVersion { get; set; } = "1";
+    public string SourceSha256 { get; set; } = string.Empty;
     public DataExchangeTaskStatus Status { get; set; } = DataExchangeTaskStatus.Pending;
     public int TotalRows { get; set; }
     public int ValidRows { get; set; }

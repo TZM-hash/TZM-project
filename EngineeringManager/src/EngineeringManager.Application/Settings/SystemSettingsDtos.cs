@@ -6,6 +6,11 @@ public enum VisualTheme
     ClearGlass = 2,
     LavenderCream = 3
 }
+public enum UiAppearanceStyle
+{
+    Classic = 1,
+    RoundedSoft = 2
+}
 public enum MotionStyle { Technology = 1, Apple = 2 }
 public enum UiEffectsLevel { Low = 1, Medium = 2, High = 3 }
 public enum GlobalFont { SystemDefault = 1, MicrosoftYaHei = 2, MicrosoftJhengHei = 3, ChineseSerif = 4, ChineseKai = 5 }
@@ -18,7 +23,8 @@ public sealed record SystemDisplaySettings(
     UiEffectsLevel Effects,
     GlobalFont Font,
     TableDensity Density,
-    GlobalFontSize FontSize)
+    GlobalFontSize FontSize,
+    UiAppearanceStyle Appearance = UiAppearanceStyle.Classic)
 {
     public static SystemDisplaySettings Default { get; } = new(
         VisualTheme.Default,
@@ -26,7 +32,8 @@ public sealed record SystemDisplaySettings(
         UiEffectsLevel.Medium,
         GlobalFont.SystemDefault,
         TableDensity.Standard,
-        GlobalFontSize.Standard);
+        GlobalFontSize.Standard,
+        UiAppearanceStyle.Classic);
 
     public string ThemeCssClass => Theme switch
     {
@@ -35,6 +42,11 @@ public sealed record SystemDisplaySettings(
         _ => "theme-default"
     };
     public string ThemeColor => Theme == VisualTheme.LavenderCream ? "#7653d6" : "#2563eb";
+    public string AppearanceCssClass => Appearance switch
+    {
+        UiAppearanceStyle.RoundedSoft => "appearance-rounded-soft",
+        _ => "appearance-classic"
+    };
     public string MotionCssClass => Motion == MotionStyle.Apple ? "motion-apple" : "motion-technology";
     public string EffectsCssClass => $"ui-effects-{Effects.ToString().ToLowerInvariant()}";
     public string FontCssClass => Font switch

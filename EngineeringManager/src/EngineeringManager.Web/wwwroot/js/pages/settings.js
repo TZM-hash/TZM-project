@@ -1,5 +1,6 @@
 const themeClasses = ["theme-default", "theme-clear-glass", "theme-lavender-cream"];
 const themeColors = { "theme-default": "#2563eb", "theme-clear-glass": "#2563eb", "theme-lavender-cream": "#7653d6" };
+const appearanceClasses = ["appearance-classic", "appearance-rounded-soft"];
 const motionClasses = ["motion-technology", "motion-apple"];
 const effectClasses = ["ui-effects-low", "ui-effects-medium", "ui-effects-high"];
 const fontClasses = ["font-system-default", "font-microsoft-yahei", "font-microsoft-jhenghei", "font-chinese-serif", "font-chinese-kai"];
@@ -22,6 +23,13 @@ export function initThemePreview() {
     const selected = input.closest("[data-theme-option]").dataset.themeOption;
     swapClass(themeClasses, selected);
     if (themeColor) themeColor.content = themeColors[selected] || themeColors["theme-default"];
+  }));
+}
+
+function initAppearancePreview() {
+  document.querySelectorAll("[data-appearance-option] input").forEach((input) => input.addEventListener("change", () => {
+    const selected = input.closest("[data-appearance-option]").dataset.appearanceOption;
+    swapClass(appearanceClasses, selected);
   }));
 }
 
@@ -53,6 +61,7 @@ function initTableDensityPreview() {
 
 export function initSettingsPreview() {
   initThemePreview();
+  initAppearancePreview();
   initMotionPreview();
   initFontPreview();
   initFontSizePreview();

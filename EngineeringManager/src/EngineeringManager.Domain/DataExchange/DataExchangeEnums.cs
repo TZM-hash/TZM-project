@@ -47,5 +47,6 @@ public sealed record ExportFieldDefinition(
     IReadOnlyList<string>? AllowedValues = null);
 
 public enum ImportMode { New = 1, Update = 2, Mixed = 3 }
+public enum ImportSourceType { SystemExport = 1, BlankTemplate = 2, ExternalWorkbook = 3, ProjectWorkbook = 4 }
 public enum ExportScope { CurrentView = 1, FullAuthorized = 2, SelectedModules = 3 }
 public enum ExportPackageFormat { Workbook = 1, Zip = 2 }

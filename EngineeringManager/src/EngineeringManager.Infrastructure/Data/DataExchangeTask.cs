@@ -13,6 +13,8 @@ public sealed class DataExchangeTask
     public ExportScope Scope { get; set; }
     public ExportPackageFormat PackageFormat { get; set; }
     public bool IncludeAttachments { get; set; }
+    public string DatasetVersion { get; set; } = "1";
+    public string? SourcePage { get; set; }
     public DataExchangeTaskStatus Status { get; set; } = DataExchangeTaskStatus.Pending;
     public int RowCount { get; set; }
     public string? FileName { get; set; }

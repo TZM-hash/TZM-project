@@ -176,6 +176,148 @@ body.theme-lavender-cream .navigation-pending-indicator,
 body.theme-lavender-cream .toast-region,
 body.theme-lavender-cream .conflict-notice { background: rgba(255, 252, 255, .94); }
 
+/* Independent appearance profiles: color themes remain composable. */
+body.appearance-classic {
+  --appearance-card-radius: var(--app-radius-md);
+  --appearance-dialog-radius: var(--app-radius-lg);
+  --appearance-control-radius: var(--app-radius-sm);
+  --appearance-menu-radius: var(--app-radius-md);
+  --appearance-card-shadow: var(--app-shadow-soft);
+  --appearance-overlay-shadow: var(--app-shadow);
+  --appearance-highlight: inset 0 1px 0 transparent;
+}
+
+body.appearance-rounded-soft {
+  --app-radius-sm: 12px;
+  --app-radius-md: 18px;
+  --app-radius-lg: 24px;
+  --appearance-card-radius: 22px;
+  --appearance-dialog-radius: 26px;
+  --appearance-control-radius: 14px;
+  --appearance-menu-radius: 18px;
+  --appearance-card-shadow: 0 14px 38px rgba(var(--app-primary-rgb), .09), 0 3px 10px rgba(15, 23, 42, .045);
+  --appearance-overlay-shadow: 0 30px 80px rgba(15, 23, 42, .18), 0 8px 24px rgba(var(--app-primary-rgb), .08);
+  --appearance-highlight: inset 0 1px 0 rgba(255, 255, 255, .72);
+}
+
+body.appearance-rounded-soft :is(
+  .panel,
+  .metric-card,
+  .form-section,
+  .data-work-surface,
+  .settings-select-card,
+  .option-card,
+  .exchange-card,
+  .data-exchange-panel,
+  .overview-strip article,
+  .detail-grid > div,
+  .inline-edit-panel,
+  .quick-edit-body section,
+  .auth-card
+) {
+  border-radius: var(--appearance-card-radius);
+  box-shadow: var(--appearance-card-shadow), var(--appearance-highlight);
+}
+
+body.appearance-rounded-soft :is(
+  .workbench-dialog,
+  .quick-edit-dialog,
+  .conflict-notice,
+  .selection-dropdown-menu,
+  .column-manager-menu,
+  .project-workbook-export-popover,
+  .toast-region
+) {
+  border-radius: var(--appearance-dialog-radius);
+  box-shadow: var(--appearance-overlay-shadow), var(--appearance-highlight);
+}
+
+body.appearance-rounded-soft :is(
+  .selection-dropdown-menu,
+  .column-manager-menu,
+  .project-workbook-export-popover
+) {
+  border-radius: var(--appearance-menu-radius);
+}
+
+body.appearance-rounded-soft :is(
+  .button,
+  .workspace-tab,
+  .menu-toggle,
+  .header-icon-button,
+  .row-spacing-picker,
+  .row-spacing-picker button,
+  .dialog-close
+) {
+  border-radius: var(--appearance-control-radius);
+}
+
+body.appearance-rounded-soft :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select,
+  textarea,
+  .selection-dropdown-toggle,
+  .inline-cell-control
+) {
+  border-radius: var(--appearance-control-radius);
+}
+
+body.appearance-rounded-soft :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select,
+  textarea,
+  .button
+):focus-visible {
+  box-shadow: 0 0 0 4px rgba(var(--app-primary-rgb), .12);
+}
+
+body.appearance-rounded-soft :is(.table-wrap, .data-table-wrap) {
+  border-radius: var(--appearance-card-radius);
+  box-shadow: var(--appearance-card-shadow), var(--appearance-highlight);
+}
+
+body.appearance-rounded-soft :is(.table-wrap, .data-table-wrap) > table {
+  border-radius: inherit;
+}
+
+body.appearance-rounded-soft .data-workbench-toolbar {
+  border-radius: var(--appearance-menu-radius);
+  box-shadow: 0 8px 24px rgba(var(--app-primary-rgb), .06), var(--appearance-highlight);
+}
+
+body.appearance-rounded-soft .nav-link,
+body.appearance-rounded-soft .nav-submenu a {
+  border-radius: var(--appearance-control-radius);
+}
+
+body.appearance-rounded-soft .nav-link.is-active,
+body.appearance-rounded-soft .nav-submenu a.is-active {
+  box-shadow: 0 12px 28px rgba(var(--app-primary-rgb), .18), var(--appearance-highlight);
+}
+
+body.appearance-rounded-soft .app-sidebar {
+  border-radius: 0 24px 24px 0;
+  box-shadow: 12px 0 42px rgba(15, 23, 42, .08), var(--appearance-highlight);
+}
+
+body.appearance-rounded-soft .app-header {
+  box-shadow: 0 10px 32px rgba(15, 23, 42, .055);
+}
+
+.option-preview--appearance-classic {
+  background: linear-gradient(145deg, #e9eef6, #f8fafc);
+}
+.option-preview--appearance-classic i { border-radius: 5px; }
+.option-preview--appearance-rounded-soft {
+  padding: .55rem;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #eadfff, #fffaff 58%, #e2f7f0);
+}
+.option-preview--appearance-rounded-soft i {
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(var(--app-primary-rgb), .12), inset 0 1px 0 rgba(255,255,255,.8);
+}
+
 .option-preview--lavender {
   background: linear-gradient(135deg, #d8c8ff, #f9ecff 55%, #dff8ef);
 }
@@ -238,6 +380,9 @@ body.motion-apple.ui-effects-high .panel:hover { transform: translateY(-5px) sca
 
 @media (max-width: 680px) {
   .option-card-grid--themes { grid-template-columns: 1fr; }
+  body.appearance-rounded-soft .app-sidebar { border-radius: 0 20px 20px 0; }
+  body.appearance-rounded-soft .quick-edit-dialog { border-radius: 0; }
+  body.appearance-rounded-soft .sticky-actions { border-radius: 18px 18px 0 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

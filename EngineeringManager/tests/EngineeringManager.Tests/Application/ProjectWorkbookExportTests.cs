@@ -20,6 +20,29 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ProjectWorkbookExportTests
 {
     [Fact]
+    public async Task RoundTripProjectWorkbookUsesStandardDirectoryAndControlColumns()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-ROUNDTRIP", "往返项目", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            UseRoundTripWorkbook: true), CancellationToken.None);
+
+        var sheets = SimpleXlsxReader.Read(file.Content);
+        sheets.Select(item => item.Name).Should().Equal("目录", "数据说明", "项目主档");
+        sheets.Single(item => item.Name == "项目主档").Rows[0]
+            .Should().Contain("_record_id").And.Contain("_business_key").And.Contain("_row_version");
+    }
+
+    [Fact]
     public async Task ExportIntersectsManualSelectionWithAuthorizedMatchingProjects()
     {
         await using var fixture = await ProjectWorkbookFixture.CreateAsync();

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.DataExchange;
@@ -16,6 +17,7 @@ namespace EngineeringManager.Infrastructure.DataExchange;
 public sealed class ImportService(ApplicationDbContext db) : IImportService
 {
     private const string CompleteEmployeeWorkbookMarker = "__完整员工工作簿";
+    private const string ClearMarker = "【清空】";
     private readonly CentralLedgerCommandService centralLedgerCommands = new(db);
 
     private sealed record FinanceImportRow(int RowNumber, Dictionary<string, string?> Values);
@@ -71,6 +73,12 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         bool HasProjectColumn,
         bool HasContractColumn,
         bool HasNotes);
+    private sealed record ImportSheetDescriptor(
+        SimpleXlsxSheet Sheet,
+        string[] Headers,
+        Dictionary<string, string> Mapping,
+        bool IsRoundTrip,
+        RoundTripWorkbookContext? RoundTripContext);
 
     private static readonly Dictionary<ExportDataset, IReadOnlyList<ImportColumn>> Columns = new()
     {
@@ -89,7 +97,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("默认时工资", "default_hourly_rate", false),
             new("默认计件单价", "default_piecework_rate", false),
             new("系统ID", "_system_id", false),
-            new("并发版本", "_concurrency_stamp", false)
+            new("并发版本", "_concurrency_stamp", false),
+            new("备注", "notes", false)
         ],
         [ExportDataset.Payroll] =
         [
@@ -259,7 +268,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("项目编号", "project_number", true),
             new("项目名称", "name", true),
             new("项目阶段", "stage", false),
-            new("总包单位", "general_contractor", false)
+            new("总包单位", "general_contractor", false),
+            new("备注", "notes", false)
         ],
         [ExportDataset.Contracts] =
         [
@@ -363,7 +373,24 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         IReadOnlyList<ImportErrorDto> errors;
         var mapping = new Dictionary<string, string>(StringComparer.Ordinal);
         int totalRows;
-        if (IsCompleteEmployeeWorkbook(request.Dataset, sheets))
+        var isRoundTrip = ImportRoundTripMetadataReader.TryRead(sheets, request.Dataset, out var roundTripContext);
+        if (isRoundTrip)
+        {
+            var descriptor = DescribeRoundTripSheet(request.Dataset, roundTripContext!, request.SourceToTargetMapping);
+            mapping = descriptor.Mapping;
+            var validationErrors = await ValidateRowsAsync(
+                request.Dataset,
+                descriptor.Sheet.Rows.Skip(1).ToArray(),
+                descriptor.Headers,
+                mapping,
+                request.Mode,
+                cancellationToken,
+                IsRoundTrip: true,
+                ExpectedDatasetVersion: roundTripContext!.DatasetVersion);
+            errors = roundTripContext.Errors.Concat(validationErrors).ToArray();
+            totalRows = Math.Max(descriptor.Sheet.Rows.Count - 1, 0);
+        }
+        else if (IsCompleteEmployeeWorkbook(request.Dataset, sheets))
         {
             var analysis = await new EmployeeWorkbookImporter(db).AnalyzeAsync(sheets, fileName, cancellationToken);
             errors = analysis.Errors;
@@ -385,6 +412,19 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         }
 
         var errorRows = errors.Select(item => item.RowNumber).Distinct().Count();
+        var sourceMetadata = request.SourceMetadata ?? new ImportSourceMetadata(
+            ImportSourceType.ExternalWorkbook,
+            null,
+            "1",
+            Convert.ToHexString(SHA256.HashData(request.Content)));
+        if (isRoundTrip)
+        {
+            sourceMetadata = new ImportSourceMetadata(
+                ImportSourceType.SystemExport,
+                Guid.TryParse(roundTripContext!.ExportBatchId, out var exportTaskId) ? exportTaskId : sourceMetadata.SourceExportTaskId,
+                roundTripContext.DatasetVersion,
+                Convert.ToHexString(SHA256.HashData(request.Content)));
+        }
         var batch = new ImportBatch
         {
             CreatedByUserId = userId,
@@ -392,6 +432,10 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             OriginalFileName = fileName,
             OriginalContent = request.Content.ToArray(),
             MappingJson = JsonSerializer.Serialize(mapping),
+            SourceType = sourceMetadata.SourceType,
+            SourceExportTaskId = sourceMetadata.SourceExportTaskId,
+            DatasetVersion = sourceMetadata.DatasetVersion,
+            SourceSha256 = sourceMetadata.SourceSha256,
             Mode = request.Mode,
             Status = DataExchangeTaskStatus.PreviewReady,
             TotalRows = totalRows,
@@ -429,7 +473,53 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             throw new InvalidDataException("导入文件没有工作表。");
         }
 
-        if (IsCompleteEmployeeWorkbook(batch.Dataset, sheets))
+        var sourceHash = Convert.ToHexString(SHA256.HashData(batch.OriginalContent));
+        if (!string.Equals(sourceHash, batch.SourceSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("原始导入文件摘要已变化，不能确认导入。");
+        }
+
+        var isRoundTrip = ImportRoundTripMetadataReader.TryRead(sheets, batch.Dataset, out var roundTripContext);
+        if (isRoundTrip)
+        {
+            if (roundTripContext!.Errors.Count > 0)
+            {
+                throw new InvalidOperationException("标准往返工作簿重新识别后存在错误，不能确认导入。");
+            }
+
+            var descriptor = DescribeRoundTripSheet(batch.Dataset, roundTripContext, null);
+            var headers = descriptor.Headers;
+            var mapping = JsonSerializer.Deserialize<Dictionary<string, string>>(batch.MappingJson) ?? descriptor.Mapping;
+            var revalidationErrors = await ValidateRowsAsync(
+                batch.Dataset,
+                descriptor.Sheet.Rows.Skip(1).ToArray(),
+                headers,
+                mapping,
+                batch.Mode,
+                cancellationToken,
+                IsRoundTrip: true,
+                ExpectedDatasetVersion: batch.DatasetVersion);
+            if (revalidationErrors.Count > 0)
+            {
+                throw new InvalidOperationException("标准往返工作簿重新校验后存在错误，不能确认导入。");
+            }
+
+            var importRows = descriptor.Sheet.Rows.Skip(1)
+                .Select((row, index) => new FinanceImportRow(index + 2, NormalizeRoundTripValues(batch.Dataset, RowValues(headers, row, mapping))))
+                .ToArray();
+            if (IsCentralFinanceDataset(batch.Dataset))
+            {
+                await ApplyCentralFinanceGroupsAsync(batch.Dataset, importRows, batch.Mode, batch.CreatedByUserId, cancellationToken);
+            }
+            else
+            {
+                foreach (var row in importRows)
+                {
+                    AddOrUpdateEntity(batch.Dataset, row.Values, batch.Mode);
+                }
+            }
+        }
+        else if (IsCompleteEmployeeWorkbook(batch.Dataset, sheets))
         {
             var importer = new EmployeeWorkbookImporter(db);
             var analysis = await importer.AnalyzeAsync(sheets, batch.OriginalFileName, cancellationToken);
@@ -941,13 +1031,149 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         if (mode == ImportMode.Update && existing is null) throw new InvalidOperationException($"仅更新模式找不到已有{label}。");
     }
 
+    private static ImportSheetDescriptor DescribeRoundTripSheet(
+        ExportDataset dataset,
+        RoundTripWorkbookContext context,
+        IReadOnlyDictionary<string, string>? providedMapping)
+    {
+        var headers = context.BusinessSheet.Rows[0]
+            .Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)
+            .ToArray();
+        return new ImportSheetDescriptor(
+            context.BusinessSheet,
+            headers,
+            ResolveRoundTripMapping(dataset, headers, providedMapping),
+            true,
+            context);
+    }
+
+    private static Dictionary<string, string> ResolveRoundTripMapping(
+        ExportDataset dataset,
+        IReadOnlyList<string> headers,
+        IReadOnlyDictionary<string, string>? provided)
+    {
+        var mapping = ResolveMapping(dataset, headers, provided, allowTechnical: true);
+        foreach (var control in RoundTripWorkbookBuilder.ControlColumnKeys)
+        {
+            if (!headers.Contains(control, StringComparer.Ordinal)) continue;
+            mapping[control] = control switch
+            {
+                "_record_id" => "_system_id",
+                "_row_version" => "_concurrency_stamp",
+                _ => control
+            };
+        }
+
+        return mapping;
+    }
+
+    private static Dictionary<string, string?> NormalizeRoundTripValues(ExportDataset dataset, Dictionary<string, string?> values)
+    {
+        var businessKey = dataset switch
+        {
+            ExportDataset.Employees => "employee_number",
+            ExportDataset.Projects => "project_number",
+            ExportDataset.Partners => "partner_number",
+            ExportDataset.Companies => "company_code",
+            ExportDataset.Equipment => "equipment_number",
+            _ => null
+        };
+        if (businessKey is not null && string.IsNullOrWhiteSpace(values.GetValueOrDefault(businessKey)) && !string.IsNullOrWhiteSpace(values.GetValueOrDefault("_business_key")))
+        {
+            values[businessKey] = values["_business_key"];
+        }
+
+        return values;
+    }
+
+    private static void ValidateRoundTripControls(
+        ExportDataset dataset,
+        IReadOnlyDictionary<string, string?> values,
+        int row,
+        string? expectedDatasetVersion,
+        List<ImportErrorDto> errors)
+    {
+        var datasetKey = values.GetValueOrDefault("_dataset_key");
+        if (!string.IsNullOrWhiteSpace(datasetKey) && !string.Equals(datasetKey, dataset.ToString(), StringComparison.Ordinal))
+        {
+            errors.Add(new ImportErrorDto(row, "_dataset_key", "工作簿数据集与当前导入模块不一致。", datasetKey));
+        }
+
+        var datasetVersion = values.GetValueOrDefault("_dataset_version");
+        if (!string.IsNullOrWhiteSpace(expectedDatasetVersion) && !string.IsNullOrWhiteSpace(datasetVersion) && !string.Equals(datasetVersion, expectedDatasetVersion, StringComparison.Ordinal))
+        {
+            errors.Add(new ImportErrorDto(row, "_dataset_version", "工作簿数据集版本不匹配，请重新导出。", datasetVersion));
+        }
+
+        var recordId = values.GetValueOrDefault("_system_id");
+        if (!string.IsNullOrWhiteSpace(recordId) && !Guid.TryParse(recordId, out _))
+        {
+            errors.Add(new ImportErrorDto(row, "_record_id", "系统记录 ID 无法识别。", recordId));
+        }
+
+        var rowVersion = values.GetValueOrDefault("_concurrency_stamp");
+        if (!string.IsNullOrWhiteSpace(rowVersion) && !Guid.TryParse(rowVersion, out _))
+        {
+            errors.Add(new ImportErrorDto(row, "_row_version", "并发版本无法识别。", rowVersion));
+        }
+
+        if (!string.IsNullOrWhiteSpace(recordId) && string.IsNullOrWhiteSpace(rowVersion))
+        {
+            errors.Add(new ImportErrorDto(row, "_row_version", "已有记录必须保留并发版本。", null));
+        }
+        if (!string.IsNullOrWhiteSpace(recordId) && string.IsNullOrWhiteSpace(values.GetValueOrDefault("_export_batch_id")))
+        {
+            errors.Add(new ImportErrorDto(row, "_export_batch_id", "已有记录必须保留来源导出批次。", null));
+        }
+    }
+
+    private async Task ValidateRoundTripIdentityAsync(
+        ExportDataset dataset,
+        IReadOnlyDictionary<string, string?> values,
+        int row,
+        List<ImportErrorDto> errors,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(values.GetValueOrDefault("_system_id"), out var systemId)) return;
+
+        string? actualBusinessKey;
+        string? expectedBusinessKey;
+        switch (dataset)
+        {
+            case ExportDataset.Employees:
+                actualBusinessKey = await db.Employees.Where(item => item.Id == systemId).Select(item => item.EmployeeNumber).SingleOrDefaultAsync(cancellationToken);
+                expectedBusinessKey = values.GetValueOrDefault("_business_key") ?? values.GetValueOrDefault("employee_number");
+                break;
+            case ExportDataset.Projects:
+                actualBusinessKey = await db.Projects.Where(item => item.Id == systemId).Select(item => item.ProjectNumber).SingleOrDefaultAsync(cancellationToken);
+                expectedBusinessKey = values.GetValueOrDefault("_business_key") ?? values.GetValueOrDefault("project_number");
+                break;
+            default:
+                return;
+        }
+
+        if (actualBusinessKey is null)
+        {
+            errors.Add(new ImportErrorDto(row, "_record_id", "系统记录不存在，不能按往返工作簿更新。", systemId.ToString()));
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedBusinessKey)
+            && !string.Equals(actualBusinessKey, expectedBusinessKey.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(new ImportErrorDto(row, "_record_id", "控制列与业务编号不一致，疑似被篡改；请重新导出后再导入。", systemId.ToString()));
+        }
+    }
+
     private async Task<List<ImportErrorDto>> ValidateRowsAsync(
         ExportDataset dataset,
         IReadOnlyList<object?>[] rows,
         IReadOnlyList<string> headers,
         IReadOnlyDictionary<string, string> mapping,
         ImportMode requestMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool IsRoundTrip = false,
+        string? ExpectedDatasetVersion = null)
     {
         var errors = new List<ImportErrorDto>();
         var seenNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -965,9 +1191,15 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         {
             var excelRow = index + 2;
             var values = RowValues(headers, rows[index], mapping);
+            if (IsRoundTrip)
+            {
+                NormalizeRoundTripValues(dataset, values);
+                ValidateRoundTripControls(dataset, values, excelRow, ExpectedDatasetVersion, errors);
+                await ValidateRoundTripIdentityAsync(dataset, values, excelRow, errors, cancellationToken);
+            }
             foreach (var column in GetColumns(dataset).Where(item => item.Required))
             {
-                if (!values.TryGetValue(column.Key, out var value) || string.IsNullOrWhiteSpace(value))
+                if (!values.TryGetValue(column.Key, out var value) || string.IsNullOrWhiteSpace(value) || IsClearMarker(value))
                 {
                     errors.Add(new ImportErrorDto(excelRow, column.Header, "必填字段不能为空。", value));
                 }
@@ -982,13 +1214,17 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             {
                 errors.Add(new ImportErrorDto(excelRow, "员工类型", "员工类型必须是正式员工、劳务员工或特殊临时人员。", type));
             }
-            if (dataset == ExportDataset.Employees && Guid.TryParse(values.GetValueOrDefault("_concurrency_stamp"), out var expectedStamp))
+            if (dataset is ExportDataset.Employees or ExportDataset.Projects && Guid.TryParse(values.GetValueOrDefault("_concurrency_stamp"), out var expectedStamp))
             {
+                var systemId = Guid.TryParse(values.GetValueOrDefault("_system_id"), out var parsedSystemId) ? parsedSystemId : (Guid?)null;
                 var employeeNumber = values.GetValueOrDefault("employee_number");
-                var currentStamp = await db.Employees.Where(item => item.EmployeeNumber == employeeNumber).Select(item => (Guid?)item.ConcurrencyStamp).SingleOrDefaultAsync(cancellationToken);
+                var projectNumber = values.GetValueOrDefault("project_number");
+                var currentStamp = dataset == ExportDataset.Employees
+                    ? await db.Employees.Where(item => systemId.HasValue ? item.Id == systemId.Value : item.EmployeeNumber == employeeNumber).Select(item => (Guid?)item.ConcurrencyStamp).SingleOrDefaultAsync(cancellationToken)
+                    : await db.Projects.Where(item => systemId.HasValue ? item.Id == systemId.Value : item.ProjectNumber == projectNumber).Select(item => (Guid?)item.ConcurrencyStamp).SingleOrDefaultAsync(cancellationToken);
                 if (currentStamp.HasValue && currentStamp.Value != expectedStamp)
                 {
-                    errors.Add(new ImportErrorDto(excelRow, "并发版本", "员工已被其他用户修改，请重新导出后再导入。", values.GetValueOrDefault("_concurrency_stamp")));
+                    errors.Add(new ImportErrorDto(excelRow, "并发版本", dataset == ExportDataset.Employees ? "员工已被其他用户修改，请重新导出后再导入。" : "项目已被其他用户修改，请重新导出后再导入。", values.GetValueOrDefault("_concurrency_stamp")));
                 }
             }
 
@@ -1260,12 +1496,25 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         if (!await db.Employees.AnyAsync(item => item.EmployeeNumber == employeeNumber, cancellationToken)) errors.Add(new ImportErrorDto(row, "员工编号", "员工编号不存在。", employeeNumber));
     }
 
-    private static Dictionary<string, string> ResolveMapping(ExportDataset dataset, IReadOnlyList<string> headers, IReadOnlyDictionary<string, string>? provided)
+    private static Dictionary<string, string> ResolveMapping(
+        ExportDataset dataset,
+        IReadOnlyList<string> headers,
+        IReadOnlyDictionary<string, string>? provided,
+        bool allowTechnical = false)
     {
         var mapping = provided is null
             ? GetColumns(dataset).Where(column => headers.Contains(column.Header, StringComparer.Ordinal)).ToDictionary(column => column.Header, column => column.Key, StringComparer.Ordinal)
             : new Dictionary<string, string>(provided, StringComparer.Ordinal);
         var validKeys = GetColumns(dataset).Select(item => item.Key).ToHashSet(StringComparer.Ordinal);
+        if (allowTechnical)
+        {
+            foreach (var key in RoundTripWorkbookBuilder.ControlColumnKeys)
+            {
+                validKeys.Add(key);
+            }
+            validKeys.Add("_system_id");
+            validKeys.Add("_concurrency_stamp");
+        }
         if (mapping.Any(item => !headers.Contains(item.Key, StringComparer.Ordinal) || !validKeys.Contains(item.Value)))
         {
             throw new ArgumentException("字段映射包含不存在的源列或目标字段。", nameof(provided));
@@ -1281,11 +1530,40 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         {
             if (mapping.TryGetValue(headers[index], out var target))
             {
-                result[target] = index < row.Count ? Convert.ToString(row[index], System.Globalization.CultureInfo.InvariantCulture)?.Trim() : null;
+                var rawValue = index < row.Count ? row[index] : null;
+                result[target] = rawValue is null
+                    ? null
+                    : Convert.ToString(rawValue, System.Globalization.CultureInfo.InvariantCulture)?.Trim();
             }
         }
 
         return result;
+    }
+
+    private static bool IsClearMarker(string? value) => string.Equals(value, ClearMarker, StringComparison.Ordinal);
+
+    private static string? NullableImportValue(Dictionary<string, string?> values, string key)
+    {
+        var value = values.GetValueOrDefault(key);
+        return IsClearMarker(value) ? null : value;
+    }
+
+    private static string? NullableImportUpdate(Dictionary<string, string?> values, string key, string? current)
+    {
+        if (!values.TryGetValue(key, out var value) || value is null) return current;
+        return IsClearMarker(value) ? null : value;
+    }
+
+    private static decimal? NullableImportDecimal(Dictionary<string, string?> values, string key)
+    {
+        var value = values.GetValueOrDefault(key);
+        return string.IsNullOrWhiteSpace(value) || IsClearMarker(value) ? null : ParseDecimal(value);
+    }
+
+    private static decimal? NullableImportDecimalUpdate(Dictionary<string, string?> values, string key, decimal? current)
+    {
+        if (!values.TryGetValue(key, out var value) || value is null) return current;
+        return IsClearMarker(value) ? null : ParseDecimal(value, current ?? 0m);
     }
 
     private void AddOrUpdateEntity(ExportDataset dataset, Dictionary<string, string?> values, ImportMode mode)
@@ -1303,15 +1581,16 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     EmployeeNumber = values["employee_number"]!,
                     Name = values["name"]!,
                     EmployeeType = employeeType,
-                    PositionTitle = values.GetValueOrDefault("position"),
-                    Phone = values.GetValueOrDefault("phone"),
-                    IdentityNumber = values.GetValueOrDefault("identity_number"),
-                    BankAccountNumber = values.GetValueOrDefault("bank_account_number"),
-                    BankName = values.GetValueOrDefault("bank_name"),
-                    DefaultMonthlySalary = ParseDecimal(values.GetValueOrDefault("default_monthly_salary")),
-                    DefaultDailyRate = ParseDecimal(values.GetValueOrDefault("default_daily_rate")),
-                    DefaultHourlyRate = ParseDecimal(values.GetValueOrDefault("default_hourly_rate")),
-                    DefaultPieceworkRate = ParseDecimal(values.GetValueOrDefault("default_piecework_rate"))
+                    PositionTitle = NullableImportValue(values, "position"),
+                    Phone = NullableImportValue(values, "phone"),
+                    IdentityNumber = NullableImportValue(values, "identity_number"),
+                    BankAccountNumber = NullableImportValue(values, "bank_account_number"),
+                    BankName = NullableImportValue(values, "bank_name"),
+                    DefaultMonthlySalary = NullableImportDecimal(values, "default_monthly_salary"),
+                    DefaultDailyRate = NullableImportDecimal(values, "default_daily_rate"),
+                    DefaultHourlyRate = NullableImportDecimal(values, "default_hourly_rate"),
+                    DefaultPieceworkRate = NullableImportDecimal(values, "default_piecework_rate"),
+                    Notes = NullableImportValue(values, "notes")
                 });
                 break;
             case ExportDataset.Payroll:
@@ -1720,15 +1999,16 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 EnsureConcurrency(employee.ConcurrencyStamp, values.GetValueOrDefault("_concurrency_stamp"), "员工");
                 employee.Name = values.GetValueOrDefault("name") ?? employee.Name;
                 if (TryParseEmployeeType(values.GetValueOrDefault("employee_type") ?? string.Empty, out var type)) employee.EmployeeType = type;
-                employee.PositionTitle = values.GetValueOrDefault("position") ?? employee.PositionTitle;
-                employee.Phone = values.GetValueOrDefault("phone") ?? employee.Phone;
-                employee.IdentityNumber = values.GetValueOrDefault("identity_number") ?? employee.IdentityNumber;
-                employee.BankAccountNumber = values.GetValueOrDefault("bank_account_number") ?? employee.BankAccountNumber;
-                employee.BankName = values.GetValueOrDefault("bank_name") ?? employee.BankName;
-                employee.DefaultMonthlySalary = ParseDecimal(values.GetValueOrDefault("default_monthly_salary"), employee.DefaultMonthlySalary ?? 0m);
-                employee.DefaultDailyRate = ParseDecimal(values.GetValueOrDefault("default_daily_rate"), employee.DefaultDailyRate ?? 0m);
-                employee.DefaultHourlyRate = ParseDecimal(values.GetValueOrDefault("default_hourly_rate"), employee.DefaultHourlyRate ?? 0m);
-                employee.DefaultPieceworkRate = ParseDecimal(values.GetValueOrDefault("default_piecework_rate"), employee.DefaultPieceworkRate ?? 0m);
+                employee.PositionTitle = NullableImportUpdate(values, "position", employee.PositionTitle);
+                employee.Phone = NullableImportUpdate(values, "phone", employee.Phone);
+                employee.IdentityNumber = NullableImportUpdate(values, "identity_number", employee.IdentityNumber);
+                employee.BankAccountNumber = NullableImportUpdate(values, "bank_account_number", employee.BankAccountNumber);
+                employee.BankName = NullableImportUpdate(values, "bank_name", employee.BankName);
+                employee.DefaultMonthlySalary = NullableImportDecimalUpdate(values, "default_monthly_salary", employee.DefaultMonthlySalary);
+                employee.DefaultDailyRate = NullableImportDecimalUpdate(values, "default_daily_rate", employee.DefaultDailyRate);
+                employee.DefaultHourlyRate = NullableImportDecimalUpdate(values, "default_hourly_rate", employee.DefaultHourlyRate);
+                employee.DefaultPieceworkRate = NullableImportDecimalUpdate(values, "default_piecework_rate", employee.DefaultPieceworkRate);
+                employee.Notes = NullableImportUpdate(values, "notes", employee.Notes);
                 employee.ConcurrencyStamp = Guid.NewGuid();
                 return true;
             case ExportDataset.Partners:
@@ -1741,9 +2021,10 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             case ExportDataset.Projects:
                 var project = systemId.HasValue ? db.Projects.SingleOrDefault(item => item.Id == systemId.Value) : db.Projects.SingleOrDefault(item => item.ProjectNumber == values.GetValueOrDefault("project_number"));
                 if (project is null) return false;
-                project.Name = values.GetValueOrDefault("name") ?? project.Name;
+                project.Name = NullableImportUpdate(values, "name", project.Name) ?? project.Name;
                 if (Enum.TryParse<ProjectStage>(values.GetValueOrDefault("stage"), true, out var stage)) project.Stage = stage;
-                project.GeneralContractorName = values.GetValueOrDefault("general_contractor") ?? project.GeneralContractorName;
+                project.GeneralContractorName = NullableImportUpdate(values, "general_contractor", project.GeneralContractorName);
+                project.Notes = NullableImportUpdate(values, "notes", project.Notes);
                 project.ConcurrencyStamp = Guid.NewGuid();
                 return true;
             case ExportDataset.Companies:

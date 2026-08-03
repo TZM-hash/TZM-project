@@ -41,7 +41,7 @@
     <link rel="stylesheet" href="~/css/pages.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/themes.css" asp-append-version="true" />
 </head>
-<body class="app-shell @displaySettings.ThemeCssClass @displaySettings.MotionCssClass @displaySettings.EffectsCssClass @displaySettings.FontCssClass @displaySettings.DensityCssClass">
+<body class="app-shell @displaySettings.ThemeCssClass @displaySettings.AppearanceCssClass @displaySettings.MotionCssClass @displaySettings.EffectsCssClass @displaySettings.FontCssClass @displaySettings.DensityCssClass">
     <div class="app-bg-fx" aria-hidden="true"><span></span><span></span><span></span></div>
     <aside class="app-sidebar" id="primary-nav" data-navigation>
         <a class="app-sidebar-brand" asp-page="/Index"><span class="brand-mark" aria-hidden="true">工</span><span>工程项目经营管理系统</span></a>
@@ -70,7 +70,7 @@
                 <a class='@Nav("/Equipment")' asp-page="/Equipment/Index"><svg><use href="/img/icons.svg#equipment"></use></svg><span>设备管理</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">数据与系统</span>
-                <a class='@Nav("/DataExchange")' asp-page="/DataExchange/Index"><svg><use href="/img/icons.svg#exchange"></use></svg><span>导入导出</span></a>
+                <a class='@Nav("/DataExchange")' asp-page="/DataExchange/Export"><svg><use href="/img/icons.svg#exchange"></use></svg><span>导入导出</span></a>
                 <a class='@Nav("/Reminders")' asp-page="/Reminders/Index"><svg><use href="/img/icons.svg#reminder"></use></svg><span>提醒中心</span></a>
                 @if (User.IsInRole("SystemAdministrator") || User.IsInRole("ApplicationAdministrator"))
                 {

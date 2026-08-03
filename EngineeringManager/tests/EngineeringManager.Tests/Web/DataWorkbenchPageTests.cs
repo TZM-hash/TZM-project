@@ -20,6 +20,9 @@ public sealed class DataWorkbenchPageTests
             .And.Contain("DataExchangeLabels.TaskStatus")
             .And.Contain("data-check-selector")
             .And.Contain("selection-dropdown")
+            .And.Contain("下载错误报告 Excel")
+            .And.Contain("HistoryPageSize")
+            .And.Contain("DownloadExport")
             .And.NotContain("GetEnumSelectList")
             .And.NotContain("_DataWorkbench");
         model.Should().Contain("OnPostExportModulesAsync")

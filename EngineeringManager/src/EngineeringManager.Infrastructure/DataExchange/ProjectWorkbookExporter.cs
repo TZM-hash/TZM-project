@@ -86,6 +86,10 @@ public sealed class ProjectWorkbookExporter(
         }
 
         var workbookBytes = workbook.ToArray();
+        if (request.UseRoundTripWorkbook)
+        {
+            workbookBytes = BuildRoundTripWorkbook(workbookBytes, selectedSheets, request);
+        }
         if (request.IncludeAttachments)
         {
             if (fileStore is null) throw new InvalidOperationException("导出附件需要文件存储。");
@@ -130,6 +134,15 @@ public sealed class ProjectWorkbookExporter(
         }
 
         var workbookBytes = workbook.ToArray();
+        if (request.UseRoundTripWorkbook)
+        {
+            var roundTripSheets = new List<ProjectWorkbookSheet> { ProjectWorkbookSheet.ProjectMaster };
+            if (request.IncludeAttachments)
+            {
+                roundTripSheets.Add(ProjectWorkbookSheet.Attachments);
+            }
+            workbookBytes = BuildRoundTripWorkbook(workbookBytes, roundTripSheets, request);
+        }
         if (request.IncludeAttachments)
         {
             if (fileStore is null) throw new InvalidOperationException("导出附件需要文件存储。");
@@ -159,6 +172,87 @@ public sealed class ProjectWorkbookExporter(
         if (selected.Contains(ProjectWorkbookSheet.Attachments)) selected.Add(ProjectWorkbookSheet.ProjectMaster);
         return ProjectWorkbookCatalog.Sheets.Where(item => selected.Contains(item.Sheet)).Select(item => item.Sheet).ToArray();
     }
+
+    private static byte[] BuildRoundTripWorkbook(
+        byte[] source,
+        IReadOnlyCollection<ProjectWorkbookSheet> selectedSheets,
+        ProjectWorkbookExportRequest request)
+    {
+        var sourceSheets = SimpleXlsxReader.Read(source);
+        var roundTripSheets = new List<RoundTripWorkbookSheet>();
+        foreach (var sheet in selectedSheets)
+        {
+            var definition = ProjectWorkbookCatalog.Get(sheet);
+            var sourceSheet = sourceSheets.SingleOrDefault(item => item.Name == definition.WorksheetName);
+            if (sourceSheet is null || sourceSheet.Rows.Count == 0)
+            {
+                continue;
+            }
+
+            var fields = definition.Fields.Where(item => item.CanExport).ToArray();
+            var exportFields = fields.Select(item => new ExportFieldDefinition(
+                item.Key,
+                item.Header,
+                item.DataType,
+                item.IsRequired,
+                item.CanImport,
+                item.CanExport,
+                item.IsSensitive,
+                item.IsRequired,
+                item.IsCalculated)).ToArray();
+            var rows = sourceSheet.Rows.Skip(1).Select(row =>
+            {
+                var values = fields.Select((field, index) => (field.Key, Value: index < row.Count ? row[index] : null))
+                    .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+                return new RoundTripWorkbookRow(
+                    values,
+                    Convert.ToString(values.GetValueOrDefault("_system_id"), CultureInfo.InvariantCulture),
+                    FindBusinessKey(values),
+                    Convert.ToString(values.GetValueOrDefault("_concurrency_stamp"), CultureInfo.InvariantCulture));
+            }).ToArray();
+            roundTripSheets.Add(new RoundTripWorkbookSheet(ToExportDataset(sheet), definition.WorksheetName, exportFields, rows));
+        }
+
+        if (roundTripSheets.Count == 0)
+        {
+            return source;
+        }
+
+        return new RoundTripWorkbookBuilder().Build(new RoundTripWorkbookRequest(
+            (request.ExportBatchId ?? Guid.NewGuid()).ToString(),
+            roundTripSheets,
+            ProjectWorkbookVersions.Dataset));
+    }
+
+    private static string? FindBusinessKey(IReadOnlyDictionary<string, object?> values)
+    {
+        foreach (var key in new[] { "project_number", "contract_number", "employee_number", "partner_number", "equipment_number", "invoice_number", "code", "name" })
+        {
+            var value = Convert.ToString(values.GetValueOrDefault(key), CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static ExportDataset ToExportDataset(ProjectWorkbookSheet sheet) => sheet switch
+    {
+        ProjectWorkbookSheet.ProjectMaster => ExportDataset.Projects,
+        ProjectWorkbookSheet.ProjectSummary => ExportDataset.ProjectOverview,
+        ProjectWorkbookSheet.Contracts => ExportDataset.Contracts,
+        ProjectWorkbookSheet.Partners => ExportDataset.Partners,
+        ProjectWorkbookSheet.StageResults => ExportDataset.StageResults,
+        ProjectWorkbookSheet.Receivables => ExportDataset.Accounts,
+        ProjectWorkbookSheet.Collections => ExportDataset.Collections,
+        ProjectWorkbookSheet.Payables => ExportDataset.Accounts,
+        ProjectWorkbookSheet.Payments => ExportDataset.Payments,
+        ProjectWorkbookSheet.Invoices => ExportDataset.Invoices,
+        ProjectWorkbookSheet.Attachments => ExportDataset.Equipment,
+        _ => ExportDataset.Projects
+    };
 
     private static IEnumerable<IReadOnlyList<object?>> ProjectRows(List<Project> projects, IReadOnlyList<ProjectWorkbookFieldDefinition> fields) =>
         projects.Select(project => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)

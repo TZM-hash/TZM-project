@@ -1,0 +1,95 @@
+@page "/DataExchange/Export"
+@model EngineeringManager.Web.Pages.DataExchange.ExportModel
+@using EngineeringManager.Application.DataExchange
+@using EngineeringManager.Domain.DataExchange
+@using EngineeringManager.Domain.Projects
+@using EngineeringManager.Web.Pages.DataExchange
+@using EngineeringManager.Web.Presentation
+@{
+    ViewData["Title"] = "导出数据";
+    var datasets = Enum.GetValues<ExportDataset>();
+}
+
+<section class="page-heading data-exchange-heading">
+    <div>
+        <p class="eyebrow">数据交换工作台</p>
+        <h1>导出数据</h1>
+        <p class="page-lead">先选择范围和字段，生成 Excel 后即可补充信息，再从导入数据页整批回导。</p>
+    </div>
+    <div class="data-exchange-heading-note"><strong>Excel</strong><span>普通导出无需 ZIP</span></div>
+</section>
+
+<nav class="workspace-tabs" aria-label="数据交换功能">
+    <a asp-page="./Export" class="workspace-tab is-active">导出数据</a>
+    <a asp-page="./Import" class="workspace-tab">导入数据</a>
+    <a asp-page="./Tasks" class="workspace-tab">任务记录</a>
+</nav>
+
+<div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+
+<section class="data-exchange-panel" data-exchange-export>
+    <div class="data-exchange-section-heading"><div><p class="eyebrow">导出设置</p><h2>选择数据范围</h2></div><span>支持单模块或多模块导出</span></div>
+    <div class="data-exchange-layout data-exchange-layout--export">
+        <form method="post" asp-page-handler="ExportModules" class="exchange-card exchange-card--settings">
+            <div class="exchange-card-heading"><strong>导出范围</strong><span>沿用当前模块权限</span></div>
+            <div class="compact-form-grid">
+                <label>当前模块<select asp-for="Dataset">@foreach (var dataset in datasets) { <option value="@dataset" selected="@(dataset == Model.Dataset)">@DataExchangeLabels.Dataset(dataset)</option> }</select></label>
+                <label>数据范围<select asp-for="Scope">@foreach (var value in Enum.GetValues<ExportScope>()) { <option value="@value" selected="@(value == Model.Scope)">@DataExchangeLabels.Scope(value)</option> }</select></label>
+                <label>文件格式<select asp-for="PackageFormat">@foreach (var value in Enum.GetValues<ExportPackageFormat>()) { <option value="@value" selected="@(value == Model.PackageFormat)">@DataExchangeLabels.PackageFormat(value)</option> }</select></label>
+                <label>统计截止日<input asp-for="CutoffDate" type="date" /></label>
+            </div>
+            <details class="selection-dropdown" data-check-selector data-check-selector-empty-label="当前模块">
+                <summary class="selection-dropdown-toggle"><span>导出模块</span><strong data-check-selector-count></strong></summary>
+                <div class="selection-dropdown-menu">
+                    <div class="selection-dropdown-heading"><span>勾选需要导出的模块</span><div><button type="button" data-check-selector-all>全选</button><button type="button" data-check-selector-default>恢复默认</button></div></div>
+                    <div class="check-grid">@foreach (var dataset in datasets) { <label><input type="checkbox" name="SelectedDatasets" value="@dataset" checked="@(Model.SelectedDatasets.Contains(dataset) ? "checked" : null)" data-check-selector-option data-default="@(dataset == Model.Dataset ? "true" : "false")" /> @DataExchangeLabels.Dataset(dataset)</label> }</div>
+                </div>
+            </details>
+            <label class="check-label exchange-check"><input asp-for="IncludeAttachments" /> 包含附件，并在 Excel 中生成相对路径链接</label>
+            <button class="button button--primary" type="submit">生成导出文件</button>
+        </form>
+
+        <section class="exchange-card" data-field-selection>
+            <div class="exchange-card-heading"><strong>字段选择</strong><span>最后一次选择会自动保存</span></div>
+            <p class="exchange-help">不勾选时使用默认字段；敏感字段按当前权限自动脱敏。</p>
+            <form method="post" asp-page-handler="Export" class="field-selection-form">
+                <input type="hidden" asp-for="Dataset" /><input type="hidden" asp-for="CutoffDate" />
+                <details class="selection-dropdown" data-check-selector data-check-selector-empty-label="默认字段">
+                    <summary class="selection-dropdown-toggle"><span>选择导出字段</span><strong data-check-selector-count></strong></summary>
+                    <div class="selection-dropdown-menu selection-dropdown-menu--fields">
+                        <div class="selection-dropdown-heading"><span>勾选后直接用于导出</span><div><button type="button" data-check-selector-all>全选</button><button type="button" data-check-selector-default>恢复默认</button></div></div>
+                        <div class="field-choice-grid">@foreach (var field in Model.Fields) { <label title="@(field.IsSensitive ? "敏感字段：普通用户自动脱敏" : field.IsCalculated ? "计算字段，仅可导出" : null)"><input type="checkbox" name="SelectedFields" value="@field.Key" checked="@(Model.SelectedFields.Contains(field.Key) || (Model.SelectedFields.Count == 0 && field.IsDefault) ? "checked" : null)" data-check-selector-option data-default="@field.IsDefault.ToString().ToLowerInvariant()" /> <span>@field.Label@(field.IsSensitive ? " · 敏感" : null)</span></label> }</div>
+                    </div>
+                </details>
+                <button class="button button--secondary" type="submit">导出当前模块</button>
+            </form>
+            <form method="post" asp-page-handler="SaveTemplate" class="template-form"><input type="hidden" asp-for="Dataset" />@foreach (var field in Model.SelectedFields) { <input type="hidden" name="SelectedFields" value="@field" /> }<label>保存字段模板<input asp-for="TemplateName" placeholder="例如：项目经营分享版" /></label>@if (Model.CanManage) { <label class="check-label"><input asp-for="SharedTemplate" /> 共享模板</label> }<button class="button button--ghost" type="submit">保存模板</button></form>
+            @if (Model.Templates.Count > 0) { <p class="exchange-help">已有模板：@string.Join("、", Model.Templates.Select(item => item.Name))</p> }
+        </section>
+    </div>
+</section>
+
+<section class="data-exchange-panel" data-project-workbook>
+    <div class="data-exchange-section-heading"><div><p class="eyebrow">项目管理工作簿</p><h2>按项目范围和细项导出</h2></div><span>支持筛选、手动勾选和多工作表</span></div>
+    @if (Model.CanExportProjectWorkbook)
+    {
+        <form method="post" asp-page-handler="ExportProjectWorkbook" class="exchange-card">
+            <div class="exchange-card-heading"><strong>导出项目工作簿</strong><span>附件另行生成 ZIP，清单仍可单独导出 Excel</span></div>
+            <div class="compact-form-grid">
+                <label>关键词<input asp-for="ProjectSearch" /></label>
+                <label>项目阶段<select asp-for="ProjectStages" multiple>@foreach (var stage in Enum.GetValues<ProjectStage>()) { <option value="@stage">@stage.ToChinese()</option> }</select></label>
+                <label>合作方式<select asp-for="ProjectAffiliationType"><option value="">全部</option>@foreach (var value in Enum.GetValues<ProjectAffiliationType>()) { <option value="@value">@value.ToChinese()</option> }</select></label>
+                <label>签约公司<select asp-for="ProjectLegalEntityId"><option value="">全部</option>@foreach (var company in Model.ProjectWorkbookOptions.LegalEntities) { <option value="@company.Value">@company.Label</option> }</select></label>
+                <label>负责人<select asp-for="ProjectResponsibleUserId"><option value="">全部</option>@foreach (var user in Model.ProjectWorkbookOptions.ResponsibleUsers) { <option value="@user.Value">@user.Label</option> }</select></label>
+                <label>当前金额下限<input asp-for="ProjectMinimumCurrentAmount" type="number" step="0.01" /></label>
+                <label>当前金额上限<input asp-for="ProjectMaximumCurrentAmount" type="number" step="0.01" /></label>
+            </div>
+            <p class="exchange-help">筛选命中 @Model.ProjectWorkbookProjects.TotalCount 个项目；已手动选择 <strong data-project-export-selected-count>0</strong> 个。</p>
+            <label class="check-label"><input asp-for="SelectAllMatchingProjects" data-project-export-all-matching /> 导出筛选命中的全部项目</label>
+            <div class="project-workbook-project-list">@foreach (var project in Model.ProjectWorkbookProjects.Items) { <label><input type="checkbox" name="SelectedProjectIds" value="@project.Project.Id" data-project-export-item /> @project.Project.ProjectNumber · @project.Project.Name</label> }</div>
+            @if (Model.CanExportProjectWorkbookAttachments) { <label class="check-label"><input asp-for="IncludeProjectAttachments" data-project-export-attachments /> 包含附件文件并生成 ZIP</label> }
+            <details class="selection-dropdown"><summary>选择项目细项</summary><div class="check-grid">@foreach (var sheet in Model.ProjectWorkbookSheets.Where(sheet => Model.CanExportFullProjectWorkbook || sheet.Sheet != ProjectWorkbookSheet.ProjectSummary && sheet.Sheet != ProjectWorkbookSheet.Attachments)) { var isSelected = Model.SelectedProjectSheets.Count > 0 ? Model.SelectedProjectSheets.Contains(sheet.Sheet) : sheet.Sheet != ProjectWorkbookSheet.Attachments || Model.IncludeProjectAttachments; <label><input type="checkbox" name="SelectedProjectSheets" value="@sheet.Sheet" checked="@(isSelected ? "checked" : null)" /> @sheet.WorksheetName@(sheet.CanImport ? null : " · 只读")</label> }</div></details>
+            <button class="button button--primary" type="submit">生成项目工作簿</button>
+        </form>
+    }
+</section>

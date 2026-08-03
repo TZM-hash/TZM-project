@@ -34,6 +34,13 @@ public sealed class SystemSettingsPageTests
             .And.Contain("id=\"theme-default\"")
             .And.Contain("id=\"theme-clear-glass\"")
             .And.Contain("id=\"theme-lavender-cream\"");
+        html.Should().Contain("name=\"Input.Appearance\"")
+            .And.Contain("value=\"Classic\"")
+            .And.Contain("value=\"RoundedSoft\"")
+            .And.Contain("data-appearance-option=\"appearance-classic\"")
+            .And.Contain("data-appearance-option=\"appearance-rounded-soft\"")
+            .And.Contain("经典紧凑")
+            .And.Contain("圆润柔光");
         html.Should().Contain("name=\"Input.Motion\"").And.Contain("value=\"Apple\"");
         html.Should().Contain("id=\"motion-technology\"").And.Contain("id=\"motion-apple\"");
         html.Should().Contain("name=\"Input.Effects\"").And.Contain("value=\"High\"");

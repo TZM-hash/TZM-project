@@ -64,7 +64,12 @@ public sealed class Program
     public static async Task Main(string[] args)
     {
         var maintenanceMode = MaintenanceModeParser.Parse(args);
-        var builder = WebApplication.CreateBuilder(args);
+        var bundledWebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            WebRootPath = Directory.Exists(bundledWebRootPath) ? bundledWebRootPath : null
+        });
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
 
@@ -133,6 +138,7 @@ public sealed class Program
             TimeProvider.System));
         builder.Services.AddScoped<IExportService, ExportService>();
         builder.Services.AddScoped<IImportService, ImportService>();
+        builder.Services.AddScoped<IDataExchangeTaskService, DataExchangeTaskService>();
         builder.Services.AddScoped<IProjectWorkbookService, ProjectWorkbookService>();
         builder.Services.AddSingleton<IDatabaseBackupExecutor>(_ => new SqlServerBackupExecutor(connectionString));
         builder.Services.AddScoped<IBackupService>(services => new BackupService(
@@ -238,7 +244,15 @@ public sealed class Program
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.MapStaticAssets();
+        var staticAssetsManifestPath = ResolveStaticAssetsManifestPath();
+        if (staticAssetsManifestPath is null)
+        {
+            app.MapStaticAssets();
+        }
+        else
+        {
+            app.MapStaticAssets(staticAssetsManifestPath);
+        }
         app.MapHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains("live")
@@ -247,10 +261,31 @@ public sealed class Program
         {
             Predicate = registration => registration.Tags.Contains("ready")
         });
-        app.MapRazorPages()
-            .WithStaticAssets();
+        var razorPages = app.MapRazorPages();
+        if (staticAssetsManifestPath is null)
+        {
+            razorPages.WithStaticAssets();
+        }
+        else
+        {
+            razorPages.WithStaticAssets(staticAssetsManifestPath);
+        }
 
         await app.RunAsync();
+    }
+
+    private static string? ResolveStaticAssetsManifestPath()
+    {
+        var applicationName = typeof(Program).Assembly.GetName().Name;
+        if (string.IsNullOrWhiteSpace(applicationName))
+        {
+            return null;
+        }
+
+        var manifestPath = Path.Combine(
+            AppContext.BaseDirectory,
+            $"{applicationName}.staticwebassets.endpoints.json");
+        return File.Exists(manifestPath) ? manifestPath : null;
     }
 
     private static void EnsureWritableReportPath(string reportPath)

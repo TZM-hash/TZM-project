@@ -478,7 +478,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.OriginalFileName).HasMaxLength(255).IsRequired();
             entity.Property(item => item.MappingJson).HasMaxLength(4000).IsRequired();
             entity.Property(item => item.OriginalContent).IsRequired();
+            entity.Property(item => item.DatasetVersion).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.SourceSha256).HasMaxLength(64).IsRequired();
             entity.HasIndex(item => item.CreatedAt);
+            entity.HasIndex(item => item.SourceExportTaskId);
         });
         builder.Entity<ImportError>(entity =>
         {
@@ -553,6 +556,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(item => item.FileName).HasMaxLength(260);
             entity.Property(item => item.ContentType).HasMaxLength(200);
             entity.Property(item => item.Sha256).HasMaxLength(64);
+            entity.Property(item => item.DatasetVersion).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.SourcePage).HasMaxLength(200);
             entity.Property(item => item.ErrorMessage).HasMaxLength(2000);
             entity.HasIndex(item => new { item.UserId, item.CreatedAt });
             entity.HasIndex(item => item.Status);

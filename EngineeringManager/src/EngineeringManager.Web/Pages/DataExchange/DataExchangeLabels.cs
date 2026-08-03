@@ -87,4 +87,11 @@ public static class DataExchangeLabels
         DataExchangeTaskStatus.Failed => "失败",
         _ => "未知"
     };
+
+    public static string Direction(DataExchangeDirection value) => value switch
+    {
+        DataExchangeDirection.Export => "导出",
+        DataExchangeDirection.Import => "导入",
+        _ => "未知"
+    };
 }

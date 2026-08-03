@@ -11,7 +11,10 @@ public sealed record ExportRequest(
     bool CanViewSensitiveData = true,
     ExportScope Scope = ExportScope.CurrentView,
     ExportPackageFormat PackageFormat = ExportPackageFormat.Workbook,
-    bool IncludeAttachments = false);
+    bool IncludeAttachments = false,
+    string DatasetVersion = "1",
+    string? SourcePage = null,
+    bool UseRoundTripWorkbook = false);
 
 public sealed record ExportFileResult(string FileName, string ContentType, byte[] Content);
 
@@ -45,7 +48,9 @@ public sealed record ExportModuleRequest(
     IReadOnlyDictionary<ExportDataset, IReadOnlyList<Guid>>? ProjectIds = null,
     ExportPackageFormat PackageFormat = ExportPackageFormat.Workbook,
     bool IncludeAttachments = false,
-    bool CanViewSensitiveData = false);
+    bool CanViewSensitiveData = false,
+    bool UseRoundTripWorkbook = false,
+    string? SourcePage = null);
 
 public sealed record ExportTaskDto(
     Guid Id,
