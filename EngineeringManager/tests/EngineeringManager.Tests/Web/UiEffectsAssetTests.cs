@@ -69,6 +69,8 @@ public sealed class UiEffectsAssetTests
             .And.Contain("body.appearance-rounded-soft :is(.table-wrap")
             .And.Contain("body.appearance-rounded-soft .nav-link")
             .And.Contain("body.appearance-rounded-soft .app-sidebar")
+            .And.Contain("body.appearance-rounded-soft .app-sidebar {\n  overflow: hidden;")
+            .And.Contain("body.appearance-rounded-soft .workbench-dialog {\n  overflow: hidden;")
             .And.Contain("body.appearance-rounded-soft .quick-edit-dialog");
     }
 

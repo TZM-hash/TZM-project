@@ -296,8 +296,13 @@ body.appearance-rounded-soft .nav-submenu a.is-active {
 }
 
 body.appearance-rounded-soft .app-sidebar {
+  overflow: hidden;
   border-radius: 0 24px 24px 0;
   box-shadow: 12px 0 42px rgba(15, 23, 42, .08), var(--appearance-highlight);
+}
+
+body.appearance-rounded-soft .workbench-dialog {
+  overflow: hidden;
 }
 
 body.appearance-rounded-soft .app-header {
