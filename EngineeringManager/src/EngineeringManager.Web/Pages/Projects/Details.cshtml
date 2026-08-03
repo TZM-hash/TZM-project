@@ -487,9 +487,23 @@ else
 
                         <div><dt>合作方式</dt><dd><span data-inline-edit-value>@item.Overview.AffiliationType.ToChinese()</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.AffiliationType" data-inline-edit-control hidden>@foreach (var value in Enum.GetValues<ProjectAffiliationType>()) { <option value="@value">@value.ToChinese()</option> }</select> }</dd></div>
 
+                        @{
+                            var actualStartDate = item.Overview.ActualStartDate;
+                            var actualCompletionDate = item.Overview.ActualCompletionDate;
+                            var constructionDurationState = actualStartDate.HasValue && actualCompletionDate.HasValue
+                                ? actualCompletionDate.Value < actualStartDate.Value ? "invalid" : "confirmed"
+                                : "pending";
+                            var constructionDurationText = constructionDurationState switch
+                            {
+                                "confirmed" => $"{actualCompletionDate!.Value.DayNumber - actualStartDate!.Value.DayNumber} 天",
+                                "invalid" => "日期异常",
+                                _ => "待确认"
+                            };
+                        }
+
                         <div><dt>实际开工日期</dt><dd><span data-inline-edit-value>@(item.Overview.ActualStartDate?.ToString("yyyy-MM-dd") ?? "未设置")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ActualStartDate" type="date" data-inline-edit-control hidden /> }</dd></div>
 
-                        <div><dt>实际完工日期</dt><dd><span data-inline-edit-value>@(item.Overview.ActualCompletionDate?.ToString("yyyy-MM-dd") ?? "未设置")</span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ActualCompletionDate" type="date" data-inline-edit-control hidden /> }</dd></div>
+                        <div><dt>实际完工日期</dt><dd><span data-inline-edit-value>@(item.Overview.ActualCompletionDate?.ToString("yyyy-MM-dd") ?? "未设置")</span><span class="project-construction-duration project-construction-duration--@constructionDurationState" data-construction-duration-state="@constructionDurationState"><span>施工时间</span><strong>@constructionDurationText</strong></span>@if (Model.CanManage) { <input class="inline-cell-control" asp-for="QuickEdit.ActualCompletionDate" type="date" data-inline-edit-control hidden /> }</dd></div>
 
                         <div class="project-summary-section-heading"><dt>税务、施工与合同</dt></div>
 

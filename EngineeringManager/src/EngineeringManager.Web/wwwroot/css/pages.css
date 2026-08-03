@@ -196,6 +196,13 @@
 .project-summary-section-heading dt { color: var(--app-text); font-size: .82rem; font-weight: 750; }
 .project-summary-grid dt { font-size: .66rem; }
 .project-summary-grid dd { margin-top: .18rem; overflow: hidden; font-size: .78rem; line-height: 1.35; text-overflow: ellipsis; }
+.project-construction-duration { display: inline-flex; max-width: 100%; align-items: baseline; gap: .32rem; margin-top: .35rem; padding: .22rem .52rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--app-accent) 42%, var(--app-border)); border-left: 3px solid var(--app-accent); border-radius: 999px; color: var(--app-accent); background: color-mix(in srgb, var(--app-accent) 12%, var(--app-surface)); font-size: .67rem; font-weight: 800; line-height: 1.2; white-space: nowrap; }
+.project-construction-duration > span { overflow: hidden; text-overflow: ellipsis; }
+.project-construction-duration strong { color: var(--app-accent); font-size: .76rem; font-variant-numeric: tabular-nums; }
+.project-construction-duration--pending { border-color: color-mix(in srgb, var(--app-warning) 42%, var(--app-border)); border-left-color: var(--app-warning); color: var(--app-warning); background: color-mix(in srgb, var(--app-warning) 12%, var(--app-surface)); }
+.project-construction-duration--pending strong { color: var(--app-warning); }
+.project-construction-duration--invalid { border-color: color-mix(in srgb, var(--app-danger) 42%, var(--app-border)); border-left-color: var(--app-danger); color: var(--app-danger); background: color-mix(in srgb, var(--app-danger) 10%, var(--app-surface)); }
+.project-construction-duration--invalid strong { color: var(--app-danger); }
 .project-summary-grid > .project-summary-wide { grid-column: 1 / -1; }
 .project-summary-grid > .project-summary-half { grid-column: span 2; }
 .project-summary-grid > .project-summary-quarter { grid-column: span 1; }

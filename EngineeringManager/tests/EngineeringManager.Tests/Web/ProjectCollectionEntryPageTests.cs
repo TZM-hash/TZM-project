@@ -126,6 +126,29 @@ public sealed class ProjectCollectionEntryPageTests
             .And.Contain("background: #eef3f8");
     }
 
+    [Fact]
+    public void ProjectOverviewShowsConstructionDurationInsideCompletionDateFieldWithThemeEmphasis()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        var completionFieldStart = page.IndexOf("<div><dt>实际完工日期</dt>", StringComparison.Ordinal);
+        var nextSectionStart = page.IndexOf("<div class=\"project-summary-section-heading\">", completionFieldStart, StringComparison.Ordinal);
+
+        completionFieldStart.Should().BeGreaterThanOrEqualTo(0);
+        nextSectionStart.Should().BeGreaterThan(completionFieldStart);
+        page[completionFieldStart..nextSectionStart]
+            .Should().Contain("project-construction-duration")
+            .And.Contain("施工时间");
+        page.Should().Contain("actualCompletionDate!.Value.DayNumber - actualStartDate!.Value.DayNumber")
+            .And.Contain("project-construction-duration--@constructionDurationState")
+            .And.Contain("constructionDurationState");
+        styles.Should().Contain(".project-construction-duration")
+            .And.Contain("var(--app-accent)")
+            .And.Contain(".project-construction-duration--pending")
+            .And.Contain(".project-construction-duration--invalid");
+    }
+
 
     [Fact]
     public void InvoicePaymentConstructionQuickEditMatchQuantityCollectionPattern()
