@@ -103,6 +103,7 @@ internal static class DataExchangeValueLabels
         ContractSigningStatus.NotSigned => "未签订",
         ContractSigningStatus.SentForSignature => "待签署",
         ContractSigningStatus.FullySigned => "已签订",
+        ContractSigningStatus.NoContract => "不签合同",
         _ => "未知状态"
     };
 

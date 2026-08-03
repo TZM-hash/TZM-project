@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Projects;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
@@ -23,6 +24,74 @@ public sealed class ProjectWorkspaceServiceTests
         options.LegalEntities.Should().Contain(item => Guid.Parse(item.Value) == fixture.LegalEntity.Id && item.Label == fixture.LegalEntity.Name);
         options.LegalEntities.Should().NotContain(item => item.Label.Contains(fixture.LegalEntity.Code, StringComparison.Ordinal));
         workspace!.Overview.LegalEntities.Should().Contain(item => Guid.Parse(item.Value) == fixture.LegalEntity.Id && item.Label == fixture.LegalEntity.ShortName);
+    }
+
+    [Fact]
+    public async Task ProjectResponsibleOptionsOnlyIncludeActiveEmployeesMarkedAsResponsible()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var eligible = new Employee { EmployeeNumber = "WORK-EMP-01", Name = "可负责员工", EmployeeType = EmployeeType.Formal, IsActive = true };
+        var ineligible = new Employee { EmployeeNumber = "WORK-EMP-02", Name = "普通员工", EmployeeType = EmployeeType.Formal, IsActive = true };
+        var inactiveEligible = new Employee { EmployeeNumber = "WORK-EMP-03", Name = "停用负责人", EmployeeType = EmployeeType.Formal, IsActive = false };
+        var flag = typeof(Employee).GetProperty("IsProjectResponsible");
+        flag.Should().NotBeNull();
+        flag!.SetValue(eligible, true);
+        flag.SetValue(inactiveEligible, true);
+        fixture.Db.AddRange(eligible, ineligible, inactiveEligible);
+        await fixture.Db.SaveChangesAsync();
+        (await fixture.Db.Employees.AsNoTracking().SingleAsync(item => item.Id == eligible.Id)).IsProjectResponsible.Should().BeTrue();
+        (await fixture.Db.Employees.AsNoTracking().CountAsync(item => item.IsActive && item.IsProjectResponsible)).Should().Be(1);
+
+        var options = await fixture.Service.GetEditOptionsAsync(CancellationToken.None);
+        var responsibleProperty = options.GetType().GetProperty("ResponsibleEmployees");
+        responsibleProperty.Should().NotBeNull();
+        var responsibleEmployees = responsibleProperty!.GetValue(options).Should().BeAssignableTo<IReadOnlyList<ProjectWorkspaceOptionDto>>().Subject;
+        responsibleEmployees.Count.Should().Be(1);
+        Guid.Parse(responsibleEmployees[0].Value).Should().Be(eligible.Id);
+        responsibleEmployees[0].Label.Should().Be(eligible.Name);
+
+        responsibleEmployees.Should().ContainSingle(item => Guid.Parse(item.Value) == eligible.Id && item.Label == eligible.Name);
+        responsibleEmployees.Should().NotContain(item => Guid.Parse(item.Value) == ineligible.Id);
+        responsibleEmployees.Should().NotContain(item => Guid.Parse(item.Value) == inactiveEligible.Id);
+    }
+
+    [Fact]
+    public async Task ProjectUpdateRejectsEmployeeWithoutResponsibleFlag()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var employee = new Employee
+        {
+            EmployeeNumber = "WORK-EMP-04",
+            Name = "未授权员工",
+            EmployeeType = EmployeeType.Formal,
+            IsActive = true,
+            IsProjectResponsible = false
+        };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+
+        var request = new UpdateProjectRequest(
+            fixture.Project.Id,
+            fixture.Project.ProjectNumber,
+            fixture.Project.Name,
+            fixture.Project.ParentProjectName,
+            fixture.Project.GeneralContractorName,
+            fixture.Project.GeneralContractorContact,
+            fixture.Project.GeneralContractorPhone,
+            fixture.Project.ResponsibleUserId,
+            fixture.Project.DepartmentId,
+            fixture.Project.BranchId,
+            fixture.Project.Stage,
+            fixture.Project.AffiliationType,
+            [fixture.LegalEntity.Id],
+            fixture.Project.ConcurrencyStamp,
+            "负责人资格校验",
+            ResponsibleEmployeeId: employee.Id);
+
+        await fixture.Service.Invoking(service => service.UpdateAsync(
+                new ProjectWorkspaceActor("workspace-user", "项目管理员"), request, CancellationToken.None))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*未设置为项目负责人*");
     }
 
     [Fact]

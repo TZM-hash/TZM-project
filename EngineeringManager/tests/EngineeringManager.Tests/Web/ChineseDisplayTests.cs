@@ -24,6 +24,29 @@ public sealed class ChineseDisplayTests
     }
 
     [Fact]
+    public void ContractSigningStatusIncludesNoContractOption()
+    {
+        Enum.GetNames<ContractSigningStatus>().Should().Contain("NoContract");
+        Enum.TryParse<ContractSigningStatus>("NoContract", out var value).Should().BeTrue();
+        value.ToChinese().Should().Be("不签合同");
+    }
+
+    [Fact]
+    public void EmployeeAndProjectEditorsExposeProjectResponsibleSelection()
+    {
+        var root = RepositoryRoot();
+        var employeeEditor = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Employees", "_EmployeeEditor.cshtml"));
+        var employeeDetails = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml"));
+        var projectEdit = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Edit.cshtml"));
+        var projectDetails = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Details.cshtml"));
+
+        employeeEditor.Should().Contain("是否作为项目负责人");
+        employeeDetails.Should().Contain("是否作为项目负责人");
+        projectEdit.Should().Contain("ResponsibleEmployees");
+        projectDetails.Should().Contain("ResponsibleEmployees");
+    }
+
+    [Fact]
     public void UnknownEmployeeDisplayValuesUseChineseFallbacks()
     {
         EmployeeDisplayText.WageEntryType((EmployeeWageEntryType)999).Should().Be("未知工资明细类型");

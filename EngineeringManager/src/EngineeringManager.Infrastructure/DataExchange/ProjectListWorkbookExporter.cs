@@ -146,7 +146,7 @@ public sealed class ProjectListWorkbookExporter(
             ["general_contractor"] = ProjectGeneralContractors.Display(project.GeneralContractorName),
             ["general_contractor_contact"] = project.GeneralContractorContact ?? "未设置",
             ["general_contractor_phone"] = project.GeneralContractorPhone ?? "未设置",
-            ["responsible_user"] = project.ResponsibleUserName ?? "未设置",
+            ["responsible_user"] = project.ResponsibleEmployeeName ?? project.ResponsibleUserName ?? "未设置",
             ["department"] = project.DepartmentName ?? "未设置",
             ["branch"] = project.BranchName ?? "未设置",
             ["legal_entities"] = project.LegalEntityNames is { Count: > 0 } ? string.Join("、", project.LegalEntityNames) : "未设置",
@@ -202,6 +202,7 @@ public sealed class ProjectListWorkbookExporter(
         ContractSigningStatus.NotSigned => "未签合同",
         ContractSigningStatus.SentForSignature => "合同已寄出",
         ContractSigningStatus.FullySigned => "合同已签完",
+        ContractSigningStatus.NoContract => "不签合同",
         _ => "未知合同状态"
     };
 

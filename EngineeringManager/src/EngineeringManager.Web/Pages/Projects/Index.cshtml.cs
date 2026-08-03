@@ -25,7 +25,7 @@ public sealed class IndexModel(
 {
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
-        new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
+        new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "ResponsibleEmployeeId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
         new HashSet<string>(["serial_number", "project_number", "project_name", "stage", "contract_signing_status", "affiliation_type", "parent_project", "general_contractor", "general_contractor_contact", "general_contractor_phone", "responsible_user", "department", "branch", "legal_entities", "actual_start_date", "actual_completion_date", "contract_amount", "estimated_amount", "settled_amount", "current_project_amount", "settlement_status", "contract_count", "line_item_count", "collection_progress", "payment_progress", "invoice_progress", "notes", "actions"], StringComparer.Ordinal),
         new HashSet<string>(["ProjectNumber", "Name", "Stage", "ContractAmount", "CurrentAmount", "SettlementStatus"], StringComparer.Ordinal));
 
@@ -41,6 +41,7 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public List<ProjectStage> Stages { get; set; } = [];
     [BindProperty(SupportsGet = true)] public Guid? LegalEntityId { get; set; }
     [BindProperty(SupportsGet = true)] public string? ResponsibleUserId { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid? ResponsibleEmployeeId { get; set; }
     [BindProperty(SupportsGet = true)] public ProjectAffiliationType? AffiliationType { get; set; }
     [BindProperty(SupportsGet = true)] public decimal? MinimumCurrentAmount { get; set; }
     [BindProperty(SupportsGet = true)] public decimal? MaximumCurrentAmount { get; set; }
@@ -133,7 +134,9 @@ public sealed class IndexModel(
         SortDescending,
         PageNumber,
         PageSize,
-        AffiliationType);
+        AffiliationType,
+        false,
+        ResponsibleEmployeeId);
 
     private static int NormalizePageSize(int pageSize) => pageSize is 20 or 50 or 100 ? pageSize : 20;
 
@@ -155,8 +158,8 @@ public sealed class IndexModel(
                 Enum.GetValues<ProjectStage>().Select(value => new DataWorkbenchFilterOption(((int)value).ToString(System.Globalization.CultureInfo.InvariantCulture), StageLabel(value))).ToArray()),
             new("LegalEntityId", "签约公司", LegalEntityId?.ToString(), DataWorkbenchFilterKind.Select,
                 options.LegalEntities.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
-            new("ResponsibleUserId", "项目负责人", ResponsibleUserId, DataWorkbenchFilterKind.Select,
-                options.ResponsibleUsers.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
+            new("ResponsibleEmployeeId", "项目负责人", ResponsibleEmployeeId?.ToString(), DataWorkbenchFilterKind.Select,
+                (options.ResponsibleEmployees ?? []).Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
             new("AffiliationType", "项目合作方式", AffiliationType.HasValue ? ((int)AffiliationType.Value).ToString(System.Globalization.CultureInfo.InvariantCulture) : null, DataWorkbenchFilterKind.Select,
                 [new("1", "自营项目"), new("2", "他方挂靠我方"), new("3", "我方挂靠他方")]),
             new("MinimumCurrentAmount", "最低当前金额", MinimumCurrentAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture), DataWorkbenchFilterKind.Number),
@@ -166,7 +169,7 @@ public sealed class IndexModel(
         if (!string.IsNullOrWhiteSpace(Search)) chips.Add(new("Search", "关键词", Search));
         if (Stages.Count > 0) chips.Add(new("Stages", "阶段", string.Join("、", Stages.Select(StageLabel))));
         if (LegalEntityId.HasValue) chips.Add(new("LegalEntityId", "签约公司", options.LegalEntities.FirstOrDefault(item => item.Value == LegalEntityId.Value.ToString())?.Label ?? LegalEntityId.Value.ToString()));
-        if (!string.IsNullOrWhiteSpace(ResponsibleUserId)) chips.Add(new("ResponsibleUserId", "负责人", options.ResponsibleUsers.FirstOrDefault(item => item.Value == ResponsibleUserId)?.Label ?? ResponsibleUserId));
+        if (ResponsibleEmployeeId.HasValue) chips.Add(new("ResponsibleEmployeeId", "负责人", (options.ResponsibleEmployees ?? []).FirstOrDefault(item => item.Value == ResponsibleEmployeeId.Value.ToString())?.Label ?? ResponsibleEmployeeId.Value.ToString()));
         if (AffiliationType.HasValue) chips.Add(new("AffiliationType", "合作方式", AffiliationTypeLabel(AffiliationType.Value)));
         if (MinimumCurrentAmount.HasValue) chips.Add(new("MinimumCurrentAmount", "最低金额", MinimumCurrentAmount.Value.ToString("N2", System.Globalization.CultureInfo.CurrentCulture)));
         if (MaximumCurrentAmount.HasValue) chips.Add(new("MaximumCurrentAmount", "最高金额", MaximumCurrentAmount.Value.ToString("N2", System.Globalization.CultureInfo.CurrentCulture)));
@@ -243,6 +246,7 @@ public sealed class IndexModel(
         if (TryReadStage(ReadString(filters, "Stages"), out var parsedStage)) Stages = [parsedStage];
         if (Guid.TryParse(ReadString(filters, "LegalEntityId"), out var legalEntityId)) LegalEntityId = legalEntityId;
         ResponsibleUserId = ReadString(filters, "ResponsibleUserId") ?? ResponsibleUserId;
+        if (Guid.TryParse(ReadString(filters, "ResponsibleEmployeeId"), out var responsibleEmployeeId)) ResponsibleEmployeeId = responsibleEmployeeId;
         if (int.TryParse(ReadString(filters, "AffiliationType"), out var affiliation) && Enum.IsDefined(typeof(ProjectAffiliationType), affiliation)) AffiliationType = (ProjectAffiliationType)affiliation;
         if (decimal.TryParse(ReadString(filters, "MinimumCurrentAmount"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var minimum)) MinimumCurrentAmount = minimum;
         if (decimal.TryParse(ReadString(filters, "MaximumCurrentAmount"), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var maximum)) MaximumCurrentAmount = maximum;

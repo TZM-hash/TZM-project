@@ -1,6 +1,7 @@
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Projects;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.DataExchange;
@@ -190,6 +191,41 @@ public sealed class ProjectWorkbookExportTests
         rows[1].Should().Equal("第三项目", "WB-SELECT-003");
         rows[2].Should().Equal("第一项目", "WB-SELECT-001");
         rows.Should().NotContain(row => row.Contains("第二项目"));
+    }
+
+    [Fact]
+    public async Task ProjectMasterExportIncludesResponsibleEmployeeIdAndName()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var employee = new Employee
+        {
+            EmployeeNumber = "WB-RESP-01",
+            Name = "导出负责人",
+            EmployeeType = EmployeeType.Formal,
+            IsActive = true,
+            IsProjectResponsible = true
+        };
+        var project = AddProject(fixture.Db, "WB-RESP", "负责人导出项目", null);
+        project.ResponsibleEmployee = employee;
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator")), CancellationToken.None);
+
+        var rows = SimpleXlsxReader.Read(file.Content).Single(item => item.Name == "项目主档").Rows;
+        var employeeIdColumn = Array.IndexOf(rows[0].ToArray(), "负责人职员ID");
+        var nameColumn = Array.IndexOf(rows[0].ToArray(), "项目负责人");
+        employeeIdColumn.Should().BeGreaterThanOrEqualTo(0);
+        nameColumn.Should().BeGreaterThanOrEqualTo(0);
+        rows[1][employeeIdColumn].Should().Be(employee.Id.ToString());
+        rows[1][nameColumn].Should().Be(employee.Name);
     }
 
     [Fact]

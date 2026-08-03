@@ -69,7 +69,7 @@ public sealed class IndexModel(
                         Editor.HireDate, Editor.LeaveDate, Editor.PositionTitle, Editor.DefaultLegalEntityId,
                         Editor.DefaultMonthlySalary, Editor.DefaultDailyRate, Editor.DefaultHourlyRate,
                         Editor.DefaultPieceworkRate, Editor.IsActive, Editor.ConcurrencyStamp,
-                        Editor.Reason, Editor.Notes),
+                        Editor.Reason, Editor.Notes, Editor.IsProjectResponsible),
                     cancellationToken);
             }
             else
@@ -80,7 +80,7 @@ public sealed class IndexModel(
                         Editor.IdentityNumber, Editor.BankAccountNumber, Editor.BankName,
                         Editor.HireDate, Editor.LeaveDate, Editor.PositionTitle, Editor.DefaultLegalEntityId,
                         Editor.DefaultDailyRate, Editor.DefaultPieceworkRate, Editor.IsActive,
-                        Editor.DefaultMonthlySalary, Editor.DefaultHourlyRate, Editor.Notes),
+                        Editor.DefaultMonthlySalary, Editor.DefaultHourlyRate, Editor.Notes, Editor.IsProjectResponsible),
                     cancellationToken);
             }
 
@@ -175,6 +175,7 @@ public sealed class IndexModel(
         public decimal? DefaultHourlyRate { get; set; }
         public decimal? DefaultPieceworkRate { get; set; }
         public bool IsActive { get; set; } = true;
+        public bool IsProjectResponsible { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "维护员工资料";
         public string? Notes { get; set; }

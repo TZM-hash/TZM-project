@@ -115,6 +115,7 @@ public static class ProjectDisplayText
         ContractSigningStatus.NotSigned => "未签合同",
         ContractSigningStatus.SentForSignature => "合同已寄出",
         ContractSigningStatus.FullySigned => "合同已签完",
+        ContractSigningStatus.NoContract => "不签合同",
         _ => "未知合同状态"
     };
 

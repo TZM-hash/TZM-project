@@ -606,6 +606,7 @@ public sealed class ExportService : IExportService
             .Include(item => item.Contracts)
                 .ThenInclude(item => item.LineItems)
             .Include(item => item.ResponsibleUser)
+            .Include(item => item.ResponsibleEmployee)
             .Include(item => item.Department)
             .Include(item => item.Branch)
             .Include(item => item.LegalEntities)
@@ -644,7 +645,7 @@ public sealed class ExportService : IExportService
                 ["general_contractor"] = project.GeneralContractorName,
                 ["general_contractor_contact"] = project.GeneralContractorContact,
                 ["general_contractor_phone"] = project.GeneralContractorPhone,
-                ["responsible_user"] = project.ResponsibleUser?.DisplayName,
+                ["responsible_user"] = project.ResponsibleEmployee?.Name ?? project.ResponsibleUser?.DisplayName,
                 ["department"] = project.Department?.Name,
                 ["branch"] = project.Branch?.Name,
                 ["legal_entities"] = string.Join("、", project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => item.LegalEntity.ShortName)),

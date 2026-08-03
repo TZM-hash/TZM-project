@@ -76,8 +76,8 @@
 
             @if (Model.ActiveTab is "overview" or "receivable" or "payable" or "exceptions")
             {
-                <section class="panel ledger-tab-panel" data-ledger-panel="settlement">
-                    <div class="panel-heading"><div><p class="eyebrow">@Model.Tabs.First(item => item.Key == Model.ActiveTab).Label</p><h2>结算明细</h2><p>金额口径来自中央账本计算器，来源记录在此只读。</p></div><span class="result-count">共 @Model.Result.TotalCount 条</span></div>
+                <section class="panel ledger-tab-panel ledger-settlement-panel" data-ledger-panel="settlement">
+                    <div class="panel-heading"><div><p class="eyebrow">@Model.Tabs.First(item => item.Key == Model.ActiveTab).Label</p><h2>结算明细</h2><p title="金额口径来自中央账本计算器，来源记录在此只读。">金额口径来自中央账本计算器，来源记录在此只读。</p></div></div>
                     <div class="table-wrap ledger-table-wrap"><table class="data-table ledger-workspace-table" data-list-sort-server="true" data-list-pagination-server="true" data-list-pagination-current-page="@Model.Result.Page" data-list-pagination-total-pages="@Model.Result.TotalPages" data-list-pagination-total-count="@Model.Result.TotalCount" data-list-pagination-page-size="@Model.Result.PageSize" data-list-sort-default-key="BusinessDate" data-list-sort-default-descending="true" data-list-sort-current-key="@Model.SortKey" data-list-sort-current-descending="@Model.SortDescending.ToString().ToLowerInvariant()">
                         <thead><tr><th data-column-key="date" data-sort-key="BusinessDate">日期</th><th data-column-key="direction">方向</th><th data-column-key="company">自有公司</th><th data-column-key="partner" data-sort-key="BusinessPartnerName">合作单位</th><th data-column-key="project" data-sort-key="ProjectName">项目</th><th data-column-key="status">状态</th><th data-column-key="actual" data-sort-key="ActualAmount">实际应收/应付</th><th data-column-key="cash">已收/已付</th><th data-column-key="balance" data-sort-key="UncollectedOrUnpaid">未收/未付</th><th data-column-key="invoice" data-sort-key="ShouldInvoiceAmount">应开票/已开票</th><th data-column-key="risk" data-sort-key="Uninvoiced">异常</th><th data-column-key="actions">操作</th></tr></thead>
                         <tbody>

@@ -18,6 +18,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .AsNoTracking()
             .AsSplitQuery()
             .Include(item => item.ResponsibleUser)
+            .Include(item => item.ResponsibleEmployee)
             .Include(item => item.Department)
             .Include(item => item.Branch)
             .Include(item => item.LegalEntities).ThenInclude(item => item.LegalEntity)
@@ -196,13 +197,19 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     {
         var users = await db.Users.AsNoTracking().Where(item => item.IsEnabled).OrderBy(item => item.DisplayName)
             .Select(item => new ProjectWorkspaceOptionDto(item.Id, item.DisplayName)).ToListAsync(cancellationToken);
+        var employees = await db.Employees.AsNoTracking()
+            .Where(item => item.IsActive && item.IsProjectResponsible)
+            .OrderBy(item => item.Name)
+            .ThenBy(item => item.EmployeeNumber)
+            .Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Name))
+            .ToListAsync(cancellationToken);
         var departments = await db.OrganizationUnits.AsNoTracking().Where(item => item.IsActive && item.UnitType == OrganizationUnitType.Department)
             .OrderBy(item => item.Name).Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Name)).ToListAsync(cancellationToken);
         var branches = await db.OrganizationUnits.AsNoTracking().Where(item => item.IsActive && item.UnitType == OrganizationUnitType.Branch)
             .OrderBy(item => item.Name).Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Name)).ToListAsync(cancellationToken);
         var legalEntities = await db.LegalEntities.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name)
             .Select(item => new ProjectWorkspaceOptionDto(item.Id.ToString(), item.Name)).ToListAsync(cancellationToken);
-        return new ProjectEditOptionsDto(users, departments, branches, legalEntities);
+        return new ProjectEditOptionsDto(users, departments, branches, legalEntities, employees);
     }
 
     public async Task<ProjectWorkspaceDto> UpdateAsync(ProjectWorkspaceActor actor, UpdateProjectRequest request, CancellationToken cancellationToken)
@@ -230,6 +237,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         project.GeneralContractorContact = Optional(request.GeneralContractorContact);
         project.GeneralContractorPhone = Optional(request.GeneralContractorPhone);
         project.ResponsibleUserId = Optional(request.ResponsibleUserId);
+        project.ResponsibleEmployeeId = request.ResponsibleEmployeeId;
         project.DepartmentId = request.DepartmentId;
         project.BranchId = request.BranchId;
         project.Stage = request.Stage;
@@ -323,6 +331,8 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     {
         if (!string.IsNullOrWhiteSpace(request.ResponsibleUserId) && !await db.Users.AnyAsync(item => item.Id == request.ResponsibleUserId && item.IsEnabled, token))
             throw new InvalidOperationException("项目负责人不存在或已停用。");
+        if (request.ResponsibleEmployeeId.HasValue && !await db.Employees.AnyAsync(item => item.Id == request.ResponsibleEmployeeId.Value && item.IsActive && item.IsProjectResponsible, token))
+            throw new InvalidOperationException("项目负责人不存在、已停用或未设置为项目负责人。");
         var organizationIds = new[] { request.DepartmentId, request.BranchId }.Where(item => item.HasValue).Select(item => item!.Value).Distinct().ToArray();
         if (organizationIds.Length > 0 && await db.OrganizationUnits.CountAsync(item => organizationIds.Contains(item.Id) && item.IsActive, token) != organizationIds.Length)
             throw new InvalidOperationException("部门或分支机构不存在或已停用。");
@@ -369,7 +379,9 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         project.UpdatedAt, project.ConcurrencyStamp, project.ActualStartDate, project.ActualCompletionDate, project.Notes,
         project.ContractSigningStatus,
         project.TaxConfigurations.OrderBy(item => item.TaxRate).ThenBy(item => item.InvoiceType)
-            .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray());
+            .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray(),
+        project.ResponsibleEmployeeId,
+        project.ResponsibleEmployee?.Name);
 
     private static ContractDto ToContractDto(Contract contract) => new(
         contract.Id, contract.ContractNumber, contract.Name, contract.ContractType, contract.AllocationMode, contract.TotalAmount,
@@ -383,7 +395,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     private static object Snapshot(Project item) => new
     {
         item.ProjectNumber, item.Name, item.ParentProjectName, item.GeneralContractorName, item.GeneralContractorContact,
-        item.GeneralContractorPhone, item.ResponsibleUserId, item.DepartmentId, item.BranchId, item.Stage, item.ContractSigningStatus, item.AffiliationType,
+        item.GeneralContractorPhone, item.ResponsibleUserId, item.ResponsibleEmployeeId, item.DepartmentId, item.BranchId, item.Stage, item.ContractSigningStatus, item.AffiliationType,
         item.ActualStartDate, item.ActualCompletionDate, item.Notes,
         LegalEntityIds = item.LegalEntities.Select(link => link.LegalEntityId).Order().ToArray(),
         TaxConfigurations = item.TaxConfigurations.OrderBy(configuration => configuration.TaxRate).ThenBy(configuration => configuration.InvoiceType)

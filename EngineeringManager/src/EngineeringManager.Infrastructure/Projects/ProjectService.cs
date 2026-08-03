@@ -33,6 +33,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             GeneralContractorContact = NormalizeOptional(request.GeneralContractorContact),
             GeneralContractorPhone = NormalizeOptional(request.GeneralContractorPhone),
             ResponsibleUserId = request.ResponsibleUserId,
+            ResponsibleEmployeeId = request.ResponsibleEmployeeId,
             DepartmentId = request.DepartmentId,
             BranchId = request.BranchId,
             Stage = request.Stage,
@@ -220,6 +221,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         var query = db.Projects.AsNoTracking()
             .Include(project => project.Contracts).ThenInclude(contract => contract.LineItems)
             .Include(project => project.TaxConfigurations)
+            .Include(project => project.ResponsibleEmployee)
             .Where(project => project.IsActive);
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -243,6 +245,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
                 .ThenInclude(contract => contract.LineItems)
             .Include(project => project.TaxConfigurations)
             .Include(project => project.ResponsibleUser)
+            .Include(project => project.ResponsibleEmployee)
             .Include(project => project.Department)
             .Include(project => project.Branch)
             .Include(project => project.LegalEntities)
@@ -269,6 +272,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
                 || (project.GeneralContractorPhone != null && project.GeneralContractorPhone.Contains(term))
                 || (project.Notes != null && project.Notes.Contains(term))
                 || (project.ResponsibleUser != null && (project.ResponsibleUser.UserName!.Contains(term) || project.ResponsibleUser.DisplayName.Contains(term)))
+                || (project.ResponsibleEmployee != null && (project.ResponsibleEmployee.EmployeeNumber.Contains(term) || project.ResponsibleEmployee.Name.Contains(term)))
                 || (project.Department != null && (project.Department.Code.Contains(term) || project.Department.Name.Contains(term)))
                 || (project.Branch != null && (project.Branch.Code.Contains(term) || project.Branch.Name.Contains(term)))
                 || project.LegalEntities.Any(link => link.LegalEntity.Code.Contains(term) || link.LegalEntity.Name.Contains(term) || link.LegalEntity.ShortName.Contains(term))
@@ -306,6 +310,10 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         {
             var responsibleUserId = query.ResponsibleUserId.Trim();
             projectQuery = projectQuery.Where(project => project.ResponsibleUserId == responsibleUserId);
+        }
+        if (query.ResponsibleEmployeeId.HasValue)
+        {
+            projectQuery = projectQuery.Where(project => project.ResponsibleEmployeeId == query.ResponsibleEmployeeId.Value);
         }
 
         var projects = await projectQuery.ToListAsync(cancellationToken);
@@ -357,7 +365,13 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             .Select(item => new ProjectFilterOptionDto(item.UserId, item.DisplayName))
             .OrderBy(item => item.Label)
             .ToArray();
-        return new ProjectListOptionsDto(legalEntities, responsibleUsers);
+        var responsibleEmployees = await db.Employees.AsNoTracking()
+            .Where(item => item.IsActive && item.IsProjectResponsible)
+            .OrderBy(item => item.Name)
+            .ThenBy(item => item.EmployeeNumber)
+            .Select(item => new ProjectFilterOptionDto(item.Id.ToString(), item.Name))
+            .ToListAsync(cancellationToken);
+        return new ProjectListOptionsDto(legalEntities, responsibleUsers, responsibleEmployees);
     }
 
     public async Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken)
@@ -367,6 +381,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             .Include(item => item.Contracts)
                 .ThenInclude(contract => contract.LineItems)
             .Include(item => item.TaxConfigurations)
+            .Include(item => item.ResponsibleEmployee)
             .SingleOrDefaultAsync(item => item.Id == projectId && item.IsActive, cancellationToken);
         if (project is null)
         {
@@ -384,6 +399,10 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         if (request.ResponsibleUserId is not null && !await db.Users.AnyAsync(user => user.Id == request.ResponsibleUserId && user.IsEnabled, cancellationToken))
         {
             throw new InvalidOperationException("项目负责人不存在或已停用。");
+        }
+        if (request.ResponsibleEmployeeId.HasValue && !await db.Employees.AnyAsync(employee => employee.Id == request.ResponsibleEmployeeId.Value && employee.IsActive && employee.IsProjectResponsible, cancellationToken))
+        {
+            throw new InvalidOperationException("项目负责人不存在、已停用或未设置为项目负责人。");
         }
 
         var organizationIds = new[] { request.DepartmentId, request.BranchId }.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
@@ -411,7 +430,9 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             project.ResponsibleUser?.DisplayName,
             project.Department?.Name,
             project.Branch?.Name,
-            project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => item.LegalEntity?.ShortName).Where(name => !string.IsNullOrWhiteSpace(name)).Cast<string>().ToArray());
+            project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => item.LegalEntity?.ShortName).Where(name => !string.IsNullOrWhiteSpace(name)).Cast<string>().ToArray(),
+            project.ResponsibleEmployeeId,
+            project.ResponsibleEmployee?.Name);
 
     private static string BuildProjectContractNumber(string projectNumber, int sequence)
     {
@@ -549,6 +570,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         "未签合同" or "未签" => ContractSigningStatus.NotSigned,
         "合同已寄出" or "已寄出" => ContractSigningStatus.SentForSignature,
         "合同已签完" or "已签完" => ContractSigningStatus.FullySigned,
+        "不签合同" or "无需合同" => ContractSigningStatus.NoContract,
         _ => Enum.TryParse<ContractSigningStatus>(term, true, out var value) ? value : null
     };
 

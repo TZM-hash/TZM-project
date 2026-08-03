@@ -1217,6 +1217,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(project => project.ConcurrencyStamp).IsConcurrencyToken();
             entity.HasIndex(project => project.ProjectNumber).IsUnique();
             entity.HasOne(project => project.ResponsibleUser).WithMany().HasForeignKey(project => project.ResponsibleUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(project => project.ResponsibleEmployee).WithMany().HasForeignKey(project => project.ResponsibleEmployeeId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(project => project.Department).WithMany().HasForeignKey(project => project.DepartmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(project => project.Branch).WithMany().HasForeignKey(project => project.BranchId).OnDelete(DeleteBehavior.Restrict);
         });

@@ -15,6 +15,7 @@ public static class ProjectWorkbookCatalog
             Field("general_contractor", "总包单位", ExportFieldDataType.Text),
             Field("general_contractor_contact", "总包联系人", ExportFieldDataType.Text),
             Field("general_contractor_phone", "总包电话", ExportFieldDataType.Text),
+            Field("responsible_employee_id", "负责人职员ID", ExportFieldDataType.Text),
             Field("responsible_user_id", "负责人账号", ExportFieldDataType.Text),
             Field("responsible_user", "项目负责人", ExportFieldDataType.Text, CanImport: false),
             Field("department_id", "部门ID", ExportFieldDataType.Text),

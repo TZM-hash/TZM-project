@@ -64,6 +64,7 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
         }
 
         var settlements = await records
+            .AsSplitQuery()
             .Include(item => item.LegalEntity)
             .Include(item => item.BusinessPartner)
             .Include(item => item.CounterLegalEntity)

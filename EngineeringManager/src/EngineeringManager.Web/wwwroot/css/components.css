@@ -237,6 +237,8 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .table-link-button { min-height: 0; padding: 0; border: 0; color: var(--app-primary); background: transparent; font: inherit; cursor: pointer; }
 .table-sort-button::after { color: #94a3b8; content: "↕"; font-size: .65rem; }
 .table-pagination { display: flex; align-items: center; justify-content: flex-end; gap: .7rem; margin-top: .85rem; color: var(--app-muted); font-size: .74rem; }
+.pagination__actions, .pagination-page-jump { display: flex; align-items: center; gap: .35rem; }
+.pagination-page-jump input { width: 3.4rem; min-height: 2.2rem; padding: .3rem .4rem; border: 1px solid var(--app-border-strong); border-radius: 6px; color: var(--app-text); background: var(--app-surface); font: inherit; text-align: center; }
 .table-pagination .button { min-height: 2.2rem; padding: .35rem .65rem; font-size: .72rem; }
 .table-pagination .is-disabled { pointer-events: none; opacity: .45; }
 .result-count { color: var(--app-muted); font-size: .74rem; }

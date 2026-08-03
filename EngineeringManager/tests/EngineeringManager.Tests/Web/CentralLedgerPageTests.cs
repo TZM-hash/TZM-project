@@ -117,6 +117,39 @@ public sealed class CentralLedgerPageTests
     }
 
     [Fact]
+    public void LedgerSettlementToolbarIsCompactResponsiveAndDoesNotDuplicateTheTotal()
+    {
+        var external = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml");
+        var internalLedger = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Internal", "Index.cshtml");
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        foreach (var page in new[] { external, internalLedger })
+        {
+            page.Should().Contain("ledger-settlement-panel")
+                .And.Contain("title=\"")
+                .And.NotContain("<span class=\"result-count\">共 @Model.Result.TotalCount 条</span>");
+        }
+
+        styles.Should().Contain("--ledger-toolbar-control-height")
+            .And.Contain(".ledger-settlement-panel > .standalone-list-pagination")
+            .And.Contain(".ledger-settlement-panel > .ledger-table-wrap")
+            .And.Contain("max-height: calc(100vh")
+            .And.Contain("text-overflow: ellipsis")
+            .And.Contain("@media (max-width: 1180px)")
+            .And.Contain("@media (max-width: 760px)");
+    }
+
+    [Fact]
+    public void CentralLedgerUsesSplitQueriesForCollectionHeavySettlementLoading()
+    {
+        ReadFile("src", "EngineeringManager.Infrastructure", "Finance", "CentralLedgerQueryService.cs")
+            .Should().Contain(".AsSplitQuery()")
+            .And.Contain(".Include(item => item.Adjustments)")
+            .And.Contain(".Include(item => item.InvoiceAllocations)")
+            .And.Contain(".Include(item => item.CashAllocations)");
+    }
+
+    [Fact]
     public void FinanceYearPageExplicitlyStatesItsIndependentScope()
     {
         ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Years", "Index.cshtml")

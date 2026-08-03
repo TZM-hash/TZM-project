@@ -39,7 +39,8 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             DefaultHourlyRate = request.DefaultHourlyRate,
             DefaultPieceworkRate = request.DefaultPieceworkRate,
             Notes = NormalizeOptional(request.Notes),
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            IsProjectResponsible = request.IsProjectResponsible
         };
         db.Employees.Add(employee);
         await db.SaveChangesAsync(cancellationToken);
@@ -61,7 +62,8 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
                 DefaultPieceworkRate: source.DefaultPieceworkRate,
                 DefaultMonthlySalary: source.DefaultMonthlySalary,
                 DefaultHourlyRate: source.DefaultHourlyRate,
-                Notes: source.Notes),
+                Notes: source.Notes,
+                IsProjectResponsible: source.IsProjectResponsible),
             cancellationToken);
     }
 
@@ -94,6 +96,7 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
         employee.DefaultPieceworkRate = request.DefaultPieceworkRate;
         employee.Notes = NormalizeOptional(request.Notes);
         employee.IsActive = request.IsActive;
+        employee.IsProjectResponsible = request.IsProjectResponsible;
         employee.UpdatedAt = DateTimeOffset.UtcNow;
         db.Entry(employee).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
         employee.ConcurrencyStamp = Guid.NewGuid();
@@ -286,9 +289,10 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             employee.HireDate,
             employee.LeaveDate,
             employee.ConcurrencyStamp,
-            employee.Notes);
+            employee.Notes,
+            employee.IsProjectResponsible);
 
-    private static object Snapshot(Employee employee) => new { employee.EmployeeNumber, employee.Name, employee.EmployeeType, employee.Phone, employee.IdentityNumber, employee.BankAccountNumber, employee.BankName, employee.HireDate, employee.LeaveDate, employee.PositionTitle, employee.DefaultLegalEntityId, employee.DefaultMonthlySalary, employee.DefaultDailyRate, employee.DefaultHourlyRate, employee.DefaultPieceworkRate, employee.Notes, employee.IsActive };
+    private static object Snapshot(Employee employee) => new { employee.EmployeeNumber, employee.Name, employee.EmployeeType, employee.Phone, employee.IdentityNumber, employee.BankAccountNumber, employee.BankName, employee.HireDate, employee.LeaveDate, employee.PositionTitle, employee.DefaultLegalEntityId, employee.DefaultMonthlySalary, employee.DefaultDailyRate, employee.DefaultHourlyRate, employee.DefaultPieceworkRate, employee.Notes, employee.IsActive, employee.IsProjectResponsible };
 
     private static EmployeeAffiliationDto ToDto(EmployeeAffiliationHistory affiliation) =>
         new(

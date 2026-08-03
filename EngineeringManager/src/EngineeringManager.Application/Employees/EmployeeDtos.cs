@@ -19,7 +19,8 @@ public sealed record CreateEmployeeRequest(
     bool IsActive = true,
     decimal? DefaultMonthlySalary = null,
     decimal? DefaultHourlyRate = null,
-    string? Notes = null);
+    string? Notes = null,
+    bool IsProjectResponsible = false);
 
 public sealed record CopyEmployeeRequest(Guid SourceEmployeeId, string NewEmployeeNumber, string NewName);
 
@@ -43,7 +44,8 @@ public sealed record UpdateEmployeeRequest(
     bool IsActive,
     Guid ConcurrencyStamp,
     string Reason,
-    string? Notes = null);
+    string? Notes = null,
+    bool IsProjectResponsible = false);
 
 public sealed record CreateEmployeeAffiliationRequest(
     Guid EmployeeId,
@@ -93,4 +95,5 @@ public sealed record EmployeeDto(
     DateOnly? HireDate = null,
     DateOnly? LeaveDate = null,
     Guid ConcurrencyStamp = default,
-    string? Notes = null);
+    string? Notes = null,
+    bool IsProjectResponsible = false);

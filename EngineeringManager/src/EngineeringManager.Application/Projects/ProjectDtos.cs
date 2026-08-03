@@ -20,7 +20,8 @@ public sealed record CreateProjectRequest(
     DateOnly? ActualCompletionDate = null,
     string? Notes = null,
     ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
-    IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null);
+    IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null,
+    Guid? ResponsibleEmployeeId = null);
 
 public sealed record ProjectTaxConfigurationInput(decimal TaxRate, ProjectInvoiceType InvoiceType);
 
@@ -98,7 +99,9 @@ public sealed record ProjectDto(
     string? ResponsibleUserName = null,
     string? DepartmentName = null,
     string? BranchName = null,
-    IReadOnlyList<string>? LegalEntityNames = null);
+    IReadOnlyList<string>? LegalEntityNames = null,
+    Guid? ResponsibleEmployeeId = null,
+    string? ResponsibleEmployeeName = null);
 
 public sealed record ContractLineItemDto(
     Guid Id,
@@ -149,7 +152,8 @@ public sealed record ProjectListQuery(
     int Page = 1,
     int PageSize = 20,
     ProjectAffiliationType? AffiliationType = null,
-    bool IncludeInactive = false);
+    bool IncludeInactive = false,
+    Guid? ResponsibleEmployeeId = null);
 
 public sealed record ProjectListPageDto(
     IReadOnlyList<ProjectListItemDto> Items,
@@ -170,7 +174,8 @@ public sealed record ProjectFilterOptionDto(string Value, string Label);
 
 public sealed record ProjectListOptionsDto(
     IReadOnlyList<ProjectFilterOptionDto> LegalEntities,
-    IReadOnlyList<ProjectFilterOptionDto> ResponsibleUsers);
+    IReadOnlyList<ProjectFilterOptionDto> ResponsibleUsers,
+    IReadOnlyList<ProjectFilterOptionDto>? ResponsibleEmployees = null);
 
 public sealed record ProjectDetailsDto(
     ProjectDto Project,

@@ -17,6 +17,10 @@ public sealed class ListPaginationAssetTests
             .And.Contain("MutationObserver")
             .And.Contain("let scanScheduled = false")
             .And.Contain("if (scanScheduled) return")
+            .And.Contain("首页")
+            .And.Contain("末页")
+            .And.Contain("跳转")
+            .And.Contain("pagination-page-jump")
             .And.Contain("aria-label", "分页控件必须可访问");
     }
 

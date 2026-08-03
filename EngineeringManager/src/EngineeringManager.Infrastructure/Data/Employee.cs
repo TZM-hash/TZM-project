@@ -24,6 +24,7 @@ public sealed class Employee
     public decimal? DefaultPieceworkRate { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsProjectResponsible { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();

@@ -164,6 +164,55 @@ function serverPageUrl(page) {
   return url.toString();
 }
 
+function pageAction(state, label, targetPage, disabled) {
+  const control = document.createElement(state.server ? "a" : "button");
+  if (!state.server) control.type = "button";
+  control.className = "button button--secondary button--small";
+  control.textContent = label;
+  if (disabled) {
+    if (state.server) {
+      control.classList.add("is-disabled");
+      control.setAttribute("aria-disabled", "true");
+    } else {
+      control.disabled = true;
+    }
+  } else if (state.server) {
+    control.href = serverPageUrl(targetPage);
+  } else {
+    control.addEventListener("click", () => {
+      state.page = targetPage;
+      render(state);
+    });
+  }
+  return control;
+}
+
+function pageJump(state, page, totalPages) {
+  const form = document.createElement("form");
+  form.className = "pagination-page-jump";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.max = String(totalPages);
+  input.value = String(page);
+  input.setAttribute("aria-label", "跳转页码");
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "button button--secondary button--small";
+  submit.textContent = "跳转";
+  form.append(input, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const targetPage = normalizePage(input.value, totalPages);
+    if (state.server) window.location.assign(serverPageUrl(targetPage));
+    else {
+      state.page = targetPage;
+      render(state);
+    }
+  });
+  return form;
+}
+
 function renderNavigation(state, totalCount, totalPages, page) {
   if (!state.nav) return;
   state.nav.replaceChildren();
@@ -174,33 +223,13 @@ function renderNavigation(state, totalCount, totalPages, page) {
 
   const actions = document.createElement("div");
   actions.className = "pagination__actions";
-  if (state.server) {
-    const previous = document.createElement("a");
-    previous.className = "button button--secondary button--small";
-    previous.textContent = "上一页";
-    if (page > 1) previous.href = serverPageUrl(page - 1);
-    else { previous.classList.add("is-disabled"); previous.setAttribute("aria-disabled", "true"); }
-    const next = document.createElement("a");
-    next.className = "button button--secondary button--small";
-    next.textContent = "下一页";
-    if (page < totalPages) next.href = serverPageUrl(page + 1);
-    else { next.classList.add("is-disabled"); next.setAttribute("aria-disabled", "true"); }
-    actions.append(previous, next);
-  } else {
-    const previous = document.createElement("button");
-    previous.type = "button";
-    previous.className = "button button--secondary button--small";
-    previous.textContent = "上一页";
-    previous.disabled = page <= 1;
-    previous.addEventListener("click", () => { state.page = Math.max(1, state.page - 1); render(state); });
-    const next = document.createElement("button");
-    next.type = "button";
-    next.className = "button button--secondary button--small";
-    next.textContent = "下一页";
-    next.disabled = page >= totalPages;
-    next.addEventListener("click", () => { state.page = Math.min(totalPages, state.page + 1); render(state); });
-    actions.append(previous, next);
-  }
+  actions.append(
+    pageAction(state, "首页", 1, page <= 1),
+    pageAction(state, "上一页", Math.max(1, page - 1), page <= 1),
+    pageAction(state, "下一页", Math.min(totalPages, page + 1), page >= totalPages),
+    pageAction(state, "末页", totalPages, page >= totalPages),
+    pageJump(state, page, totalPages)
+  );
   state.nav.append(summary, actions);
 }
 

@@ -2,6 +2,7 @@ using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Finance;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.DataExchange;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
@@ -763,6 +764,36 @@ public sealed class ProjectWorkbookImportTests
         project.ActualStartDate.Should().Be(new DateOnly(2026, 1, 2));
         project.ActualCompletionDate.Should().Be(new DateOnly(2026, 6, 30));
         project.LegalEntities.Select(item => item.LegalEntityId).Should().Equal(company.Id);
+    }
+
+    [Fact]
+    public async Task ProjectMasterRoundTripsEligibleResponsibleEmployee()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var employee = new Employee
+        {
+            EmployeeNumber = "RESP-EMP-01",
+            Name = "项目负责人",
+            EmployeeType = EmployeeType.Formal,
+            IsActive = true,
+            IsProjectResponsible = true
+        };
+        fixture.Db.Employees.Add(employee);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.ProjectMaster, [Row(ProjectWorkbookSheet.ProjectMaster, new Dictionary<string, object?>
+        {
+            ["project_number"] = "RESP-P", ["project_name"] = "负责人项目", ["responsible_employee_id"] = employee.Id.ToString(),
+            ["stage"] = "UnderConstruction", ["contract_signing_status"] = "NotSigned", ["affiliation_type"] = "SelfOperated", ["is_active"] = true
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(new ProjectWorkbookImportRequest("admin", "负责人项目.xlsx", workbook, Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+
+        var project = await fixture.Db.Projects.AsNoTracking().SingleAsync();
+        project.ResponsibleEmployeeId.Should().Be(employee.Id);
+        project.ResponsibleUserId.Should().BeNull();
     }
 
     [Fact]

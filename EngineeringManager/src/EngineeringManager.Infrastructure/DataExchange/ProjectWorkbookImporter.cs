@@ -505,7 +505,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         }
     }
 
-    private static bool IsGuidField(string key) => key is "department_id" or "branch_id" or "account_id" or "receivable_id" or "payable_id" or "settlement_id" or "project_tax_configuration_id" or "stage_result_id"
+    private static bool IsGuidField(string key) => key is "responsible_employee_id" or "department_id" or "branch_id" or "account_id" or "receivable_id" or "payable_id" or "settlement_id" or "project_tax_configuration_id" or "stage_result_id"
         or "_system_id" or "_project_system_id" or "_contract_system_id" or "_concurrency_stamp";
 
     private static bool IsEnumField(ProjectWorkbookSheet sheet, string key) => (sheet, key) switch
@@ -591,6 +591,13 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
 
         if (sheet.Sheet == ProjectWorkbookSheet.ProjectMaster)
         {
+            var responsibleEmployeeId = row.Values.GetValueOrDefault("responsible_employee_id");
+            if (!string.IsNullOrWhiteSpace(responsibleEmployeeId))
+            {
+                var valid = Guid.TryParse(responsibleEmployeeId, out var employeeId)
+                    && await db.Employees.AnyAsync(item => item.Id == employeeId && item.IsActive && item.IsProjectResponsible, cancellationToken);
+                await Require(valid, "负责人职员ID", "负责人职员不存在、已停用或未设置为项目负责人。", responsibleEmployeeId);
+            }
             var responsibleUserId = row.Values.GetValueOrDefault("responsible_user_id");
             if (!string.IsNullOrWhiteSpace(responsibleUserId)) await Require(await db.Users.AnyAsync(item => item.Id == responsibleUserId, cancellationToken), "负责人账号", "负责人账号不存在。", responsibleUserId);
             if (Guid.TryParse(row.Values.GetValueOrDefault("department_id"), out var departmentId)) await Require(await db.OrganizationUnits.AnyAsync(item => item.Id == departmentId && item.UnitType == OrganizationUnitType.Department && item.IsActive, cancellationToken), "部门ID", "部门不存在、已停用或类型不匹配。", departmentId.ToString());
@@ -919,7 +926,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             case ProjectWorkbookSheet.ProjectMaster when existing is Project project:
                 values["project_number"] = project.ProjectNumber; values["project_name"] = project.Name; values["parent_project"] = project.ParentProjectName;
                 values["general_contractor"] = project.GeneralContractorName; values["general_contractor_contact"] = project.GeneralContractorContact; values["general_contractor_phone"] = project.GeneralContractorPhone;
-                values["responsible_user_id"] = project.ResponsibleUserId; values["department_id"] = project.DepartmentId?.ToString(); values["branch_id"] = project.BranchId?.ToString(); values["stage"] = project.Stage.ToString(); values["contract_signing_status"] = project.ContractSigningStatus.ToString(); values["affiliation_type"] = project.AffiliationType.ToString(); values["actual_start_date"] = project.ActualStartDate; values["actual_completion_date"] = project.ActualCompletionDate; values["is_active"] = project.IsActive; values["notes"] = project.Notes;
+                values["responsible_employee_id"] = project.ResponsibleEmployeeId?.ToString(); values["responsible_user_id"] = project.ResponsibleUserId; values["department_id"] = project.DepartmentId?.ToString(); values["branch_id"] = project.BranchId?.ToString(); values["stage"] = project.Stage.ToString(); values["contract_signing_status"] = project.ContractSigningStatus.ToString(); values["affiliation_type"] = project.AffiliationType.ToString(); values["actual_start_date"] = project.ActualStartDate; values["actual_completion_date"] = project.ActualCompletionDate; values["is_active"] = project.IsActive; values["notes"] = project.Notes;
                 values["legal_entity_ids"] = string.Join(",", await db.ProjectLegalEntities.Where(item => item.ProjectId == project.Id).OrderBy(item => item.LegalEntityId).Select(item => item.LegalEntityId).ToListAsync(cancellationToken));
                 break;
             case ProjectWorkbookSheet.Contracts when existing is Contract contract:
@@ -1963,6 +1970,13 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         Set(row, "general_contractor", value => project.GeneralContractorName = value, project.GeneralContractorName, blankMeansNoChange);
         Set(row, "general_contractor_contact", value => project.GeneralContractorContact = value, project.GeneralContractorContact, blankMeansNoChange);
         Set(row, "general_contractor_phone", value => project.GeneralContractorPhone = value, project.GeneralContractorPhone, blankMeansNoChange);
+        if (Has(row, "responsible_employee_id", blankMeansNoChange))
+        {
+            var employeeId = ExpectedGuid(row, "responsible_employee_id");
+            if (employeeId.HasValue && !await db.Employees.AnyAsync(item => item.Id == employeeId.Value && item.IsActive && item.IsProjectResponsible, cancellationToken))
+                throw new InvalidOperationException($"负责人职员不存在、已停用或未设置为项目负责人：{row.Values.GetValueOrDefault("responsible_employee_id")}");
+            project.ResponsibleEmployeeId = employeeId;
+        }
         if (Has(row, "responsible_user_id", blankMeansNoChange))
         {
             var userId = row.Values.GetValueOrDefault("responsible_user_id");

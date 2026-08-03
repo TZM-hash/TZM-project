@@ -27,7 +27,8 @@
     <section class="form-section"><h2 class="section-heading">总包与负责人</h2>
         <label>总包单位<input asp-for="GeneralContractorName" /></label><label>总包联系人<input asp-for="GeneralContractorContact" /></label>
         <label>联系电话<input asp-for="GeneralContractorPhone" /></label>
-        <label>项目负责人<select asp-for="ResponsibleUserId"><option value="">未设置</option>@foreach (var item in Model.Options.ResponsibleUsers) { <option value="@item.Value">@item.Label</option> }</select></label>
+        <input type="hidden" asp-for="ResponsibleUserId" />
+        <label>项目负责人<select asp-for="ResponsibleEmployeeId"><option value="">未设置</option>@foreach (var item in Model.Options.ResponsibleEmployees ?? []) { <option value="@item.Value">@item.Label</option> }</select></label>
         <label>部门<select asp-for="DepartmentId"><option value="">未设置</option>@foreach (var item in Model.Options.Departments) { <option value="@item.Value">@item.Label</option> }</select></label>
         <label>分支机构<select asp-for="BranchId"><option value="">未设置</option>@foreach (var item in Model.Options.Branches) { <option value="@item.Value">@item.Label</option> }</select></label>
     </section>

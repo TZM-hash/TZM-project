@@ -4,5 +4,6 @@ public enum ContractSigningStatus
 {
     NotSigned = 1,
     SentForSignature = 2,
-    FullySigned = 3
+    FullySigned = 3,
+    NoContract = 4
 }

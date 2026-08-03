@@ -30,6 +30,8 @@ public sealed class ProjectWorkbookCatalogTests
         ProjectWorkbookCatalog.Sheets.Select(item => item.WorksheetName).Should().OnlyHaveUniqueItems();
         ProjectWorkbookCatalog.Get(ProjectWorkbookSheet.ProjectSummary).CanImport.Should().BeFalse();
         ProjectWorkbookCatalog.Get(ProjectWorkbookSheet.Attachments).RequiresArchive.Should().BeTrue();
+        ProjectWorkbookCatalog.Get(ProjectWorkbookSheet.ProjectMaster).Fields
+            .Should().Contain(item => item.Key == "responsible_employee_id" && item.CanImport);
     }
 
     [Fact]

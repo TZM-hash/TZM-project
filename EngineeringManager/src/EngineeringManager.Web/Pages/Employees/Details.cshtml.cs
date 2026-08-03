@@ -93,7 +93,8 @@ public sealed class DetailsModel(
                 EmployeeInput.IsActive,
                 EmployeeInput.ConcurrencyStamp,
                 EmployeeInput.Reason,
-                current.Notes),
+                current.Notes,
+                EmployeeInput.IsProjectResponsible),
             cancellationToken);
     }, Tab, cancellationToken, "profile");
 
@@ -309,6 +310,7 @@ public sealed class DetailsModel(
         public decimal? DefaultHourlyRate { get; set; }
         public decimal? DefaultPieceworkRate { get; set; }
         public bool IsActive { get; set; } = true;
+        public bool IsProjectResponsible { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "快捷编辑员工资料";
     }

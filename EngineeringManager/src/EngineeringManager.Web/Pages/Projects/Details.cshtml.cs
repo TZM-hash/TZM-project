@@ -125,7 +125,8 @@ public sealed class DetailsModel(
                     QuickEdit.Notes,
                     QuickEdit.ContractSigningStatus,
                     ParseTaxConfigurations(QuickEdit.TaxConfigurationSelections),
-                    QuickEdit.Contracts),
+                    QuickEdit.Contracts,
+                    QuickEdit.ResponsibleEmployeeId),
                 cancellationToken);
             return RedirectToPage(new { id });
         }
@@ -979,6 +980,7 @@ public sealed class DetailsModel(
         public string? GeneralContractorContact { get; set; }
         public string? GeneralContractorPhone { get; set; }
         public string? ResponsibleUserId { get; set; }
+        public Guid? ResponsibleEmployeeId { get; set; }
         public Guid? DepartmentId { get; set; }
         public Guid? BranchId { get; set; }
         public ProjectStage Stage { get; set; }
@@ -1003,6 +1005,7 @@ public sealed class DetailsModel(
             GeneralContractorContact = item.GeneralContractorContact,
             GeneralContractorPhone = item.GeneralContractorPhone,
             ResponsibleUserId = item.ResponsibleUserId,
+            ResponsibleEmployeeId = item.ResponsibleEmployeeId,
             DepartmentId = item.DepartmentId,
             BranchId = item.BranchId,
             Stage = item.Stage,

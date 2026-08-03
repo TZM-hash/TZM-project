@@ -35,6 +35,7 @@ public sealed class ProjectWorkbookExporter(
             .AsSplitQuery()
             .Include(item => item.Contracts).ThenInclude(item => item.LineItems)
             .Include(item => item.ResponsibleUser)
+            .Include(item => item.ResponsibleEmployee)
             .Include(item => item.Department)
             .Include(item => item.Branch)
             .Include(item => item.LegalEntities).ThenInclude(item => item.LegalEntity)
@@ -164,7 +165,7 @@ public sealed class ProjectWorkbookExporter(
         {
             ["project_number"] = project.ProjectNumber, ["project_name"] = project.Name, ["parent_project"] = project.ParentProjectName,
             ["general_contractor"] = project.GeneralContractorName, ["general_contractor_contact"] = project.GeneralContractorContact, ["general_contractor_phone"] = project.GeneralContractorPhone,
-            ["responsible_user_id"] = project.ResponsibleUserId, ["responsible_user"] = project.ResponsibleUser?.DisplayName, ["department_id"] = project.DepartmentId?.ToString(), ["department"] = project.Department?.Name,
+            ["responsible_employee_id"] = project.ResponsibleEmployeeId, ["responsible_user_id"] = project.ResponsibleUserId, ["responsible_user"] = project.ResponsibleEmployee?.Name ?? project.ResponsibleUser?.DisplayName, ["department_id"] = project.DepartmentId?.ToString(), ["department"] = project.Department?.Name,
             ["branch_id"] = project.BranchId?.ToString(), ["branch"] = project.Branch?.Name, ["stage"] = DataExchangeValueLabels.LabelProjectStage(project.Stage), ["contract_signing_status"] = DataExchangeValueLabels.LabelContractSigningStatus(project.ContractSigningStatus),
             ["affiliation_type"] = DataExchangeValueLabels.ProjectAffiliation(project.AffiliationType), ["legal_entity_ids"] = string.Join(",", project.LegalEntities.Select(item => item.LegalEntityId)), ["legal_entities"] = string.Join("、", project.LegalEntities.Select(item => item.LegalEntity.ShortName)),
             ["actual_start_date"] = project.ActualStartDate, ["actual_completion_date"] = project.ActualCompletionDate, ["is_active"] = project.IsActive, ["notes"] = project.Notes,
