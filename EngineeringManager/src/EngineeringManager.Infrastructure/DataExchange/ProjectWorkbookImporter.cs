@@ -8,6 +8,7 @@ using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Files;
 using EngineeringManager.Infrastructure.Finance;
+using EngineeringManager.Infrastructure.Projects;
 using EngineeringManager.Domain.StageResults;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Equipment;
@@ -521,6 +522,8 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
                 errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/{field.Header}", "ID 格式无效。", value));
             if (field.Key == "legal_entity_ids" && value.Split([',', '，', ';', '；'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(item => !Guid.TryParse(item, out _)))
                 errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/{field.Header}", "签约公司 ID 列表格式无效。", value));
+            if (field.Key == "responsible_employee_ids" && value.Split([',', '，', ';', '；'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(item => !Guid.TryParse(item, out _)))
+                errors.Add(new ImportErrorDto(row.RowNumber, $"{sheet.WorksheetName}/{field.Header}", "负责人职员 ID 列表格式无效。", value));
         }
     }
 
@@ -610,6 +613,12 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
 
         if (sheet.Sheet == ProjectWorkbookSheet.ProjectMaster)
         {
+            var responsibleEmployeeIdsValue = row.Values.GetValueOrDefault("responsible_employee_ids");
+            if (!string.IsNullOrWhiteSpace(responsibleEmployeeIdsValue) && TryParseGuidList(responsibleEmployeeIdsValue, out var responsibleEmployeeIds))
+            {
+                var valid = await db.Employees.CountAsync(item => responsibleEmployeeIds.Contains(item.Id) && item.IsActive && item.IsProjectResponsible, cancellationToken) == responsibleEmployeeIds.Count;
+                await Require(valid, "负责人职员ID集合", "负责人职员不存在、已停用或未设置为项目负责人。", responsibleEmployeeIdsValue);
+            }
             var responsibleEmployeeId = row.Values.GetValueOrDefault("responsible_employee_id");
             if (!string.IsNullOrWhiteSpace(responsibleEmployeeId))
             {
@@ -945,7 +954,11 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             case ProjectWorkbookSheet.ProjectMaster when existing is Project project:
                 values["project_number"] = project.ProjectNumber; values["project_name"] = project.Name; values["parent_project"] = project.ParentProjectName;
                 values["general_contractor"] = project.GeneralContractorName; values["general_contractor_contact"] = project.GeneralContractorContact; values["general_contractor_phone"] = project.GeneralContractorPhone;
-                values["responsible_employee_id"] = project.ResponsibleEmployeeId?.ToString(); values["responsible_user_id"] = project.ResponsibleUserId; values["department_id"] = project.DepartmentId?.ToString(); values["branch_id"] = project.BranchId?.ToString(); values["stage"] = project.Stage.ToString(); values["contract_signing_status"] = project.ContractSigningStatus.ToString(); values["affiliation_type"] = project.AffiliationType.ToString(); values["actual_start_date"] = project.ActualStartDate; values["actual_completion_date"] = project.ActualCompletionDate; values["is_active"] = project.IsActive; values["notes"] = project.Notes;
+                var responsibleEmployeeIds = await db.ProjectResponsibleEmployees.Where(item => item.ProjectId == project.Id).OrderBy(item => item.SortOrder).Select(item => item.EmployeeId).ToListAsync(cancellationToken);
+                if (responsibleEmployeeIds.Count == 0 && project.ResponsibleEmployeeId.HasValue) responsibleEmployeeIds.Add(project.ResponsibleEmployeeId.Value);
+                values["responsible_employee_id"] = responsibleEmployeeIds.Count > 0 ? responsibleEmployeeIds[0].ToString() : null;
+                values["responsible_employee_ids"] = string.Join(",", responsibleEmployeeIds);
+                values["responsible_user_id"] = project.ResponsibleUserId; values["department_id"] = project.DepartmentId?.ToString(); values["branch_id"] = project.BranchId?.ToString(); values["stage"] = project.Stage.ToString(); values["contract_signing_status"] = project.ContractSigningStatus.ToString(); values["affiliation_type"] = project.AffiliationType.ToString(); values["actual_start_date"] = project.ActualStartDate; values["actual_completion_date"] = project.ActualCompletionDate; values["is_active"] = project.IsActive; values["notes"] = project.Notes;
                 values["legal_entity_ids"] = string.Join(",", await db.ProjectLegalEntities.Where(item => item.ProjectId == project.Id).OrderBy(item => item.LegalEntityId).Select(item => item.LegalEntityId).ToListAsync(cancellationToken));
                 break;
             case ProjectWorkbookSheet.Contracts when existing is Contract contract:
@@ -1989,12 +2002,17 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
         Set(row, "general_contractor", value => project.GeneralContractorName = value, project.GeneralContractorName, blankMeansNoChange);
         Set(row, "general_contractor_contact", value => project.GeneralContractorContact = value, project.GeneralContractorContact, blankMeansNoChange);
         Set(row, "general_contractor_phone", value => project.GeneralContractorPhone = value, project.GeneralContractorPhone, blankMeansNoChange);
-        if (Has(row, "responsible_employee_id", blankMeansNoChange))
+        if (Has(row, "responsible_employee_ids", blankMeansNoChange) || Has(row, "responsible_employee_id", blankMeansNoChange))
         {
-            var employeeId = ExpectedGuid(row, "responsible_employee_id");
-            if (employeeId.HasValue && !await db.Employees.AnyAsync(item => item.Id == employeeId.Value && item.IsActive && item.IsProjectResponsible, cancellationToken))
-                throw new InvalidOperationException($"负责人职员不存在、已停用或未设置为项目负责人：{row.Values.GetValueOrDefault("responsible_employee_id")}");
-            project.ResponsibleEmployeeId = employeeId;
+            var responsibleEmployeeIds = row.PresentKeys.Contains("responsible_employee_ids") && !string.IsNullOrWhiteSpace(row.Values.GetValueOrDefault("responsible_employee_ids"))
+                ? ParseGuidList(row.Values.GetValueOrDefault("responsible_employee_ids"))
+                : (ExpectedGuid(row, "responsible_employee_id") is Guid employeeId ? [employeeId] : []);
+            var eligibleCount = await db.Employees.CountAsync(item => responsibleEmployeeIds.Contains(item.Id) && item.IsActive && item.IsProjectResponsible, cancellationToken);
+            if (eligibleCount != responsibleEmployeeIds.Count)
+                throw new InvalidOperationException($"负责人职员不存在、已停用或未设置为项目负责人：{row.Values.GetValueOrDefault("responsible_employee_ids") ?? row.Values.GetValueOrDefault("responsible_employee_id")}");
+            if (db.Entry(project).State != EntityState.Added && !db.Entry(project).Collection(item => item.ResponsibleEmployeeLinks).IsLoaded)
+                await db.Entry(project).Collection(item => item.ResponsibleEmployeeLinks).LoadAsync(cancellationToken);
+            ProjectResponsibleEmployeeCoordinator.Synchronize(project, responsibleEmployeeIds, db);
         }
         if (Has(row, "responsible_user_id", blankMeansNoChange))
         {
@@ -2043,6 +2061,23 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             if (!ids.Contains(id)) ids.Add(id);
         }
         return ids;
+    }
+
+    private static bool TryParseGuidList(string value, out List<Guid> ids)
+    {
+        ids = [];
+        foreach (var part in value.Split([',', '，', ';', '；'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!Guid.TryParse(part, out var id))
+            {
+                ids = [];
+                return false;
+            }
+
+            if (!ids.Contains(id)) ids.Add(id);
+        }
+
+        return true;
     }
 
     private static void Apply(Contract contract, ParsedRow row, bool blankMeansNoChange)

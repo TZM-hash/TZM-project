@@ -21,7 +21,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             throw new InvalidOperationException($"项目编号已存在：{projectNumber}");
         }
 
-        await ValidateProjectReferencesAsync(request, cancellationToken);
+        var responsibleEmployeeIds = await ValidateProjectReferencesAsync(request, cancellationToken);
         ValidateActualDates(request.ActualStartDate, request.ActualCompletionDate);
         ValidateTaxConfigurations(request.TaxConfigurations);
         var project = new Project
@@ -33,7 +33,6 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             GeneralContractorContact = NormalizeOptional(request.GeneralContractorContact),
             GeneralContractorPhone = NormalizeOptional(request.GeneralContractorPhone),
             ResponsibleUserId = request.ResponsibleUserId,
-            ResponsibleEmployeeId = request.ResponsibleEmployeeId,
             DepartmentId = request.DepartmentId,
             BranchId = request.BranchId,
             Stage = request.Stage,
@@ -61,6 +60,8 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
                 InvoiceType = configuration.InvoiceType
             });
         }
+
+        ProjectResponsibleEmployeeCoordinator.Synchronize(project, responsibleEmployeeIds, db);
 
         project.Contracts.Add(new Contract
         {
@@ -222,6 +223,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             .Include(project => project.Contracts).ThenInclude(contract => contract.LineItems)
             .Include(project => project.TaxConfigurations)
             .Include(project => project.ResponsibleEmployee)
+            .Include(project => project.ResponsibleEmployeeLinks).ThenInclude(link => link.Employee)
             .Where(project => project.IsActive);
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -246,6 +248,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             .Include(project => project.TaxConfigurations)
             .Include(project => project.ResponsibleUser)
             .Include(project => project.ResponsibleEmployee)
+            .Include(project => project.ResponsibleEmployeeLinks).ThenInclude(link => link.Employee)
             .Include(project => project.Department)
             .Include(project => project.Branch)
             .Include(project => project.LegalEntities)
@@ -272,6 +275,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
                 || (project.GeneralContractorPhone != null && project.GeneralContractorPhone.Contains(term))
                 || (project.Notes != null && project.Notes.Contains(term))
                 || (project.ResponsibleUser != null && (project.ResponsibleUser.UserName!.Contains(term) || project.ResponsibleUser.DisplayName.Contains(term)))
+                || project.ResponsibleEmployeeLinks.Any(link => link.Employee.EmployeeNumber.Contains(term) || link.Employee.Name.Contains(term))
                 || (project.ResponsibleEmployee != null && (project.ResponsibleEmployee.EmployeeNumber.Contains(term) || project.ResponsibleEmployee.Name.Contains(term)))
                 || (project.Department != null && (project.Department.Code.Contains(term) || project.Department.Name.Contains(term)))
                 || (project.Branch != null && (project.Branch.Code.Contains(term) || project.Branch.Name.Contains(term)))
@@ -313,7 +317,8 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         }
         if (query.ResponsibleEmployeeId.HasValue)
         {
-            projectQuery = projectQuery.Where(project => project.ResponsibleEmployeeId == query.ResponsibleEmployeeId.Value);
+            projectQuery = projectQuery.Where(project => project.ResponsibleEmployeeId == query.ResponsibleEmployeeId.Value
+                || project.ResponsibleEmployeeLinks.Any(link => link.EmployeeId == query.ResponsibleEmployeeId.Value));
         }
 
         var projects = await projectQuery.ToListAsync(cancellationToken);
@@ -382,6 +387,7 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
                 .ThenInclude(contract => contract.LineItems)
             .Include(item => item.TaxConfigurations)
             .Include(item => item.ResponsibleEmployee)
+            .Include(item => item.ResponsibleEmployeeLinks).ThenInclude(link => link.Employee)
             .SingleOrDefaultAsync(item => item.Id == projectId && item.IsActive, cancellationToken);
         if (project is null)
         {
@@ -394,16 +400,14 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             project.Contracts.Where(contract => contract.IsActive).Select(ToContractDto).ToArray());
     }
 
-    private async Task ValidateProjectReferencesAsync(CreateProjectRequest request, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<Guid>> ValidateProjectReferencesAsync(CreateProjectRequest request, CancellationToken cancellationToken)
     {
         if (request.ResponsibleUserId is not null && !await db.Users.AnyAsync(user => user.Id == request.ResponsibleUserId && user.IsEnabled, cancellationToken))
         {
             throw new InvalidOperationException("项目负责人不存在或已停用。");
         }
-        if (request.ResponsibleEmployeeId.HasValue && !await db.Employees.AnyAsync(employee => employee.Id == request.ResponsibleEmployeeId.Value && employee.IsActive && employee.IsProjectResponsible, cancellationToken))
-        {
-            throw new InvalidOperationException("项目负责人不存在、已停用或未设置为项目负责人。");
-        }
+        var responsibleEmployeeIds = await ProjectResponsibleEmployeeCoordinator.ResolveAndValidateAsync(
+            db, request.ResponsibleEmployeeIds, request.ResponsibleEmployeeId, cancellationToken);
 
         var organizationIds = new[] { request.DepartmentId, request.BranchId }.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
         if (organizationIds.Length > 0 && await db.OrganizationUnits.CountAsync(unit => organizationIds.Contains(unit.Id) && unit.IsActive, cancellationToken) != organizationIds.Length)
@@ -416,10 +420,17 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         {
             throw new InvalidOperationException("项目关联的签约公司不存在或已停用。");
         }
+
+        return responsibleEmployeeIds;
     }
 
-    private static ProjectDto ToProjectDto(Project project) =>
-        new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage,
+    private static ProjectDto ToProjectDto(Project project)
+    {
+        var responsibleEmployeeIds = ProjectResponsibleEmployeeCoordinator.Ids(project);
+        var responsibleEmployeeNames = ProjectResponsibleEmployeeCoordinator.Names(project);
+        var primaryId = responsibleEmployeeIds.Count > 0 ? responsibleEmployeeIds[0] : (Guid?)null;
+        var primaryName = responsibleEmployeeNames.Count > 0 ? responsibleEmployeeNames[0] : null;
+        return new(project.Id, project.ProjectNumber, project.Name, project.GeneralContractorName, project.Stage,
             project.AffiliationType, project.ActualStartDate, project.ActualCompletionDate, project.Notes, project.ContractSigningStatus,
             project.TaxConfigurations.OrderBy(item => item.TaxRate).ThenBy(item => item.InvoiceType)
                 .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray(),
@@ -431,8 +442,11 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             project.Department?.Name,
             project.Branch?.Name,
             project.LegalEntities.OrderByDescending(item => item.IsPrimary).Select(item => item.LegalEntity?.ShortName).Where(name => !string.IsNullOrWhiteSpace(name)).Cast<string>().ToArray(),
-            project.ResponsibleEmployeeId,
-            project.ResponsibleEmployee?.Name);
+            primaryId,
+            primaryName,
+            responsibleEmployeeIds,
+            responsibleEmployeeNames);
+    }
 
     private static string BuildProjectContractNumber(string projectNumber, int sequence)
     {

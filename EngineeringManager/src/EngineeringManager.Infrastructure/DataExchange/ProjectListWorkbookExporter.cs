@@ -146,7 +146,9 @@ public sealed class ProjectListWorkbookExporter(
             ["general_contractor"] = ProjectGeneralContractors.Display(project.GeneralContractorName),
             ["general_contractor_contact"] = project.GeneralContractorContact ?? "未设置",
             ["general_contractor_phone"] = project.GeneralContractorPhone ?? "未设置",
-            ["responsible_user"] = project.ResponsibleEmployeeName ?? project.ResponsibleUserName ?? "未设置",
+            ["responsible_user"] = project.ResponsibleEmployeeNames is { Count: > 0 }
+                ? string.Join("、", project.ResponsibleEmployeeNames)
+                : project.ResponsibleEmployeeName ?? project.ResponsibleUserName ?? "未设置",
             ["department"] = project.DepartmentName ?? "未设置",
             ["branch"] = project.BranchName ?? "未设置",
             ["legal_entities"] = project.LegalEntityNames is { Count: > 0 } ? string.Join("、", project.LegalEntityNames) : "未设置",

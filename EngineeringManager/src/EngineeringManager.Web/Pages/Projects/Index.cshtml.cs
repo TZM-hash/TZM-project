@@ -26,7 +26,7 @@ public sealed class IndexModel(
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
         new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "ResponsibleEmployeeId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
-        new HashSet<string>(["serial_number", "project_number", "project_name", "stage", "contract_signing_status", "affiliation_type", "parent_project", "general_contractor", "general_contractor_contact", "general_contractor_phone", "responsible_user", "department", "branch", "legal_entities", "actual_start_date", "actual_completion_date", "contract_amount", "estimated_amount", "settled_amount", "current_project_amount", "settlement_status", "contract_count", "line_item_count", "collection_progress", "payment_progress", "invoice_progress", "notes", "actions"], StringComparer.Ordinal),
+        new HashSet<string>(["serial_number", "project_number", "project_name", "stage", "contract_signing_status", "affiliation_type", "parent_project", "general_contractor", "general_contractor_contact", "responsible_user", "department", "branch", "legal_entities", "actual_start_date", "actual_completion_date", "contract_amount", "estimated_amount", "settled_amount", "current_project_amount", "settlement_status", "contract_count", "line_item_count", "collection_progress", "payment_progress", "invoice_progress", "notes", "actions"], StringComparer.Ordinal),
         new HashSet<string>(["ProjectNumber", "Name", "Stage", "ContractAmount", "CurrentAmount", "SettlementStatus"], StringComparer.Ordinal));
 
     public ProjectListPageDto Result { get; private set; } = new([], new ProjectListAggregateDto(0, 0m, 0m, 0), 1, 20, 0, 1, []);
@@ -187,7 +187,6 @@ public sealed class IndexModel(
                 new("parent_project", "上级项目"),
                 new("general_contractor", "总包单位"),
                 new("general_contractor_contact", "总包联系人"),
-                new("general_contractor_phone", "总包电话"),
                 new("responsible_user", "项目负责人"),
                 new("department", "部门"),
                 new("branch", "分支机构"),

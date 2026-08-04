@@ -16,6 +16,7 @@ public sealed class Project
     public ApplicationUser? ResponsibleUser { get; set; }
     public Guid? ResponsibleEmployeeId { get; set; }
     public Employee? ResponsibleEmployee { get; set; }
+    public ICollection<ProjectResponsibleEmployee> ResponsibleEmployeeLinks { get; set; } = [];
     public Guid? DepartmentId { get; set; }
     public OrganizationUnit? Department { get; set; }
     public Guid? BranchId { get; set; }

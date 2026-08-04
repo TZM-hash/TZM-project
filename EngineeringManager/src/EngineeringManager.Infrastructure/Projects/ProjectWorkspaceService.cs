@@ -19,6 +19,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             .AsSplitQuery()
             .Include(item => item.ResponsibleUser)
             .Include(item => item.ResponsibleEmployee)
+            .Include(item => item.ResponsibleEmployeeLinks).ThenInclude(link => link.Employee)
             .Include(item => item.Department)
             .Include(item => item.Branch)
             .Include(item => item.LegalEntities).ThenInclude(item => item.LegalEntity)
@@ -219,6 +220,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         var number = Required(request.ProjectNumber, nameof(request.ProjectNumber));
         var name = Required(request.Name, nameof(request.Name));
         var project = await db.Projects.Include(item => item.LegalEntities).Include(item => item.TaxConfigurations).Include(item => item.Contracts)
+            .Include(item => item.ResponsibleEmployeeLinks).ThenInclude(link => link.Employee)
             .SingleOrDefaultAsync(item => item.Id == request.Id && item.IsActive, cancellationToken)
             ?? throw new InvalidOperationException("项目不存在或已停用。");
         if (project.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("项目资料已被其他用户修改，请刷新后重试。");
@@ -226,7 +228,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
             throw new InvalidOperationException($"项目编号已存在：{number}");
         ValidateActualDates(request.ActualStartDate, request.ActualCompletionDate);
         ValidateTaxConfigurations(request.TaxConfigurations);
-        await ValidateReferencesAsync(request, cancellationToken);
+        var responsibleEmployeeIds = await ValidateReferencesAsync(request, cancellationToken);
 
         var previousStage = project.Stage;
         var before = Snapshot(project);
@@ -237,7 +239,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         project.GeneralContractorContact = Optional(request.GeneralContractorContact);
         project.GeneralContractorPhone = Optional(request.GeneralContractorPhone);
         project.ResponsibleUserId = Optional(request.ResponsibleUserId);
-        project.ResponsibleEmployeeId = request.ResponsibleEmployeeId;
+        ProjectResponsibleEmployeeCoordinator.Synchronize(project, responsibleEmployeeIds, db);
         project.DepartmentId = request.DepartmentId;
         project.BranchId = request.BranchId;
         project.Stage = request.Stage;
@@ -327,18 +329,20 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         return await GetAsync(project.Id, cancellationToken) ?? throw new InvalidOperationException("项目保存后无法读取。");
     }
 
-    private async Task ValidateReferencesAsync(UpdateProjectRequest request, CancellationToken token)
+    private async Task<IReadOnlyList<Guid>> ValidateReferencesAsync(UpdateProjectRequest request, CancellationToken token)
     {
         if (!string.IsNullOrWhiteSpace(request.ResponsibleUserId) && !await db.Users.AnyAsync(item => item.Id == request.ResponsibleUserId && item.IsEnabled, token))
             throw new InvalidOperationException("项目负责人不存在或已停用。");
-        if (request.ResponsibleEmployeeId.HasValue && !await db.Employees.AnyAsync(item => item.Id == request.ResponsibleEmployeeId.Value && item.IsActive && item.IsProjectResponsible, token))
-            throw new InvalidOperationException("项目负责人不存在、已停用或未设置为项目负责人。");
+        var responsibleEmployeeIds = await ProjectResponsibleEmployeeCoordinator.ResolveAndValidateAsync(
+            db, request.ResponsibleEmployeeIds, request.ResponsibleEmployeeId, token);
         var organizationIds = new[] { request.DepartmentId, request.BranchId }.Where(item => item.HasValue).Select(item => item!.Value).Distinct().ToArray();
         if (organizationIds.Length > 0 && await db.OrganizationUnits.CountAsync(item => organizationIds.Contains(item.Id) && item.IsActive, token) != organizationIds.Length)
             throw new InvalidOperationException("部门或分支机构不存在或已停用。");
         var legalEntityIds = request.LegalEntityIds.Distinct().ToArray();
         if (legalEntityIds.Length > 0 && await db.LegalEntities.CountAsync(item => legalEntityIds.Contains(item.Id) && item.IsActive, token) != legalEntityIds.Length)
             throw new InvalidOperationException("签约公司不存在或已停用。");
+
+        return responsibleEmployeeIds;
     }
 
     private async Task<IReadOnlyList<ProjectActivityItemDto>> BuildActivitiesAsync(
@@ -371,7 +375,13 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         return items.OrderByDescending(item => item.OccurredAt).Take(35).ToArray();
     }
 
-    private static ProjectWorkspaceOverviewDto ToOverview(Project project) => new(
+    private static ProjectWorkspaceOverviewDto ToOverview(Project project)
+    {
+        var responsibleEmployeeIds = ProjectResponsibleEmployeeCoordinator.Ids(project);
+        var responsibleEmployeeNames = ProjectResponsibleEmployeeCoordinator.Names(project);
+        var primaryId = responsibleEmployeeIds.Count > 0 ? responsibleEmployeeIds[0] : (Guid?)null;
+        var primaryName = responsibleEmployeeNames.Count > 0 ? responsibleEmployeeNames[0] : null;
+        return new(
         project.Id, project.ProjectNumber, project.Name, project.ParentProjectName, project.GeneralContractorName,
         project.GeneralContractorContact, project.GeneralContractorPhone, project.ResponsibleUserId, project.ResponsibleUser?.DisplayName,
         project.DepartmentId, project.Department?.Name, project.BranchId, project.Branch?.Name, project.Stage, project.AffiliationType,
@@ -380,8 +390,11 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         project.ContractSigningStatus,
         project.TaxConfigurations.OrderBy(item => item.TaxRate).ThenBy(item => item.InvoiceType)
             .Select(item => new ProjectTaxConfigurationDto(item.Id, item.TaxRate, item.InvoiceType, item.IsActive, item.ConcurrencyStamp)).ToArray(),
-        project.ResponsibleEmployeeId,
-        project.ResponsibleEmployee?.Name);
+        primaryId,
+        primaryName,
+        responsibleEmployeeIds,
+        responsibleEmployeeNames);
+    }
 
     private static ContractDto ToContractDto(Contract contract) => new(
         contract.Id, contract.ContractNumber, contract.Name, contract.ContractType, contract.AllocationMode, contract.TotalAmount,
@@ -395,7 +408,7 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
     private static object Snapshot(Project item) => new
     {
         item.ProjectNumber, item.Name, item.ParentProjectName, item.GeneralContractorName, item.GeneralContractorContact,
-        item.GeneralContractorPhone, item.ResponsibleUserId, item.ResponsibleEmployeeId, item.DepartmentId, item.BranchId, item.Stage, item.ContractSigningStatus, item.AffiliationType,
+        item.GeneralContractorPhone, item.ResponsibleUserId, item.ResponsibleEmployeeId, ResponsibleEmployeeIds = ProjectResponsibleEmployeeCoordinator.Ids(item), item.DepartmentId, item.BranchId, item.Stage, item.ContractSigningStatus, item.AffiliationType,
         item.ActualStartDate, item.ActualCompletionDate, item.Notes,
         LegalEntityIds = item.LegalEntities.Select(link => link.LegalEntityId).Order().ToArray(),
         TaxConfigurations = item.TaxConfigurations.OrderBy(configuration => configuration.TaxRate).ThenBy(configuration => configuration.InvoiceType)

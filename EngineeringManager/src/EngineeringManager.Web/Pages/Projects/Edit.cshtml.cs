@@ -31,6 +31,7 @@ public sealed class EditModel(
     [BindProperty] public string? GeneralContractorPhone { get; set; }
     [BindProperty] public string? ResponsibleUserId { get; set; }
     [BindProperty] public Guid? ResponsibleEmployeeId { get; set; }
+    [BindProperty] public List<Guid> ResponsibleEmployeeIds { get; set; } = [];
     [BindProperty] public Guid? DepartmentId { get; set; }
     [BindProperty] public Guid? BranchId { get; set; }
     [BindProperty] public ProjectStage Stage { get; set; } = ProjectStage.AwaitingMobilization;
@@ -84,7 +85,8 @@ public sealed class EditModel(
                 var created = await projectService.CreateProjectAsync(new CreateProjectRequest(
                     ProjectNumber, Name, GeneralContractorName, ResponsibleUserId, DepartmentId, BranchId, Stage,
                     LegalEntityIds, ParentProjectName, GeneralContractorContact, GeneralContractorPhone, AffiliationType,
-                    ActualStartDate, ActualCompletionDate, Notes, ContractSigningStatus, ParseTaxConfigurations(), ResponsibleEmployeeId), token);
+                    ActualStartDate, ActualCompletionDate, Notes, ContractSigningStatus, ParseTaxConfigurations(),
+                    ResponsibleEmployeeId: ResponsibleEmployeeId, ResponsibleEmployeeIds: ResponsibleEmployeeIds), token);
                 return RedirectToPage("Details", new { id = created.Id });
             }
             await workspaceService.UpdateAsync(
@@ -92,7 +94,8 @@ public sealed class EditModel(
                 new UpdateProjectRequest(Id.Value, ProjectNumber, Name, ParentProjectName, GeneralContractorName,
                     GeneralContractorContact, GeneralContractorPhone, ResponsibleUserId, DepartmentId, BranchId, Stage, AffiliationType,
                     LegalEntityIds, ConcurrencyStamp, Reason, ActualStartDate, ActualCompletionDate, Notes,
-                    ContractSigningStatus, ParseTaxConfigurations(), Contracts: null, ResponsibleEmployeeId), token);
+                    ContractSigningStatus, ParseTaxConfigurations(), Contracts: null,
+                    ResponsibleEmployeeId: ResponsibleEmployeeId, ResponsibleEmployeeIds: ResponsibleEmployeeIds), token);
             return RedirectToPage("Details", new { id = Id.Value });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
@@ -114,6 +117,8 @@ public sealed class EditModel(
         GeneralContractorPhone = item.GeneralContractorPhone;
         ResponsibleUserId = item.ResponsibleUserId;
         ResponsibleEmployeeId = item.ResponsibleEmployeeId;
+        ResponsibleEmployeeIds = item.ResponsibleEmployeeIds?.ToList()
+            ?? (item.ResponsibleEmployeeId.HasValue ? [item.ResponsibleEmployeeId.Value] : []);
         DepartmentId = item.DepartmentId;
         BranchId = item.BranchId;
         Stage = item.Stage;

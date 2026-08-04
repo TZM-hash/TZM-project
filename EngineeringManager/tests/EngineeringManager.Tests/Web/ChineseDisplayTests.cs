@@ -43,7 +43,9 @@ public sealed class ChineseDisplayTests
         employeeEditor.Should().Contain("是否作为项目负责人");
         employeeDetails.Should().Contain("是否作为项目负责人");
         projectEdit.Should().Contain("ResponsibleEmployees");
+        projectEdit.Should().Contain("multiple").And.Contain("ResponsibleEmployeeIds");
         projectDetails.Should().Contain("ResponsibleEmployees");
+        projectDetails.Should().Contain("ResponsibleEmployeeNames");
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
@@ -153,6 +154,33 @@ public sealed class ProjectModelTests
         var action = () => db.SaveChangesAsync();
 
         await action.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task ProjectCanPersistMultipleOrderedResponsibleEmployees()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateContext(connection);
+        await db.Database.EnsureCreatedAsync();
+
+        var primary = new Employee { EmployeeNumber = "RESP-001", Name = "主负责人", EmployeeType = EmployeeType.Formal, IsProjectResponsible = true };
+        var secondary = new Employee { EmployeeNumber = "RESP-002", Name = "第二负责人", EmployeeType = EmployeeType.Formal, IsProjectResponsible = true };
+        var project = new Project { ProjectNumber = "RESP-P-001", Name = "多人负责人项目" };
+        project.ResponsibleEmployeeLinks.Add(new ProjectResponsibleEmployee { Project = project, Employee = primary, SortOrder = 0, IsPrimary = true });
+        project.ResponsibleEmployeeLinks.Add(new ProjectResponsibleEmployee { Project = project, Employee = secondary, SortOrder = 1, IsPrimary = false });
+        project.ResponsibleEmployeeId = primary.Id;
+        db.Projects.Add(project);
+
+        await db.SaveChangesAsync();
+
+        var saved = await db.Projects
+            .Include(item => item.ResponsibleEmployeeLinks)
+            .ThenInclude(item => item.Employee)
+            .SingleAsync();
+        saved.ResponsibleEmployeeId.Should().Be(primary.Id);
+        saved.ResponsibleEmployeeLinks.OrderBy(item => item.SortOrder).Select(item => item.Employee.Name)
+            .Should().Equal("主负责人", "第二负责人");
     }
 
     private static ApplicationDbContext CreateContext(SqliteConnection connection) =>

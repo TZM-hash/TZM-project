@@ -36,6 +36,7 @@ public sealed class ProjectWorkbookExporter(
             .Include(item => item.Contracts).ThenInclude(item => item.LineItems)
             .Include(item => item.ResponsibleUser)
             .Include(item => item.ResponsibleEmployee)
+            .Include(item => item.ResponsibleEmployeeLinks).ThenInclude(link => link.Employee)
             .Include(item => item.Department)
             .Include(item => item.Branch)
             .Include(item => item.LegalEntities).ThenInclude(item => item.LegalEntity)
@@ -255,16 +256,27 @@ public sealed class ProjectWorkbookExporter(
     };
 
     private static IEnumerable<IReadOnlyList<object?>> ProjectRows(List<Project> projects, IReadOnlyList<ProjectWorkbookFieldDefinition> fields) =>
-        projects.Select(project => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+        projects.Select(project =>
         {
-            ["project_number"] = project.ProjectNumber, ["project_name"] = project.Name, ["parent_project"] = project.ParentProjectName,
-            ["general_contractor"] = project.GeneralContractorName, ["general_contractor_contact"] = project.GeneralContractorContact, ["general_contractor_phone"] = project.GeneralContractorPhone,
-            ["responsible_employee_id"] = project.ResponsibleEmployeeId, ["responsible_user_id"] = project.ResponsibleUserId, ["responsible_user"] = project.ResponsibleEmployee?.Name ?? project.ResponsibleUser?.DisplayName, ["department_id"] = project.DepartmentId?.ToString(), ["department"] = project.Department?.Name,
-            ["branch_id"] = project.BranchId?.ToString(), ["branch"] = project.Branch?.Name, ["stage"] = DataExchangeValueLabels.LabelProjectStage(project.Stage), ["contract_signing_status"] = DataExchangeValueLabels.LabelContractSigningStatus(project.ContractSigningStatus),
-            ["affiliation_type"] = DataExchangeValueLabels.ProjectAffiliation(project.AffiliationType), ["legal_entity_ids"] = string.Join(",", project.LegalEntities.Select(item => item.LegalEntityId)), ["legal_entities"] = string.Join("、", project.LegalEntities.Select(item => item.LegalEntity.ShortName)),
-            ["actual_start_date"] = project.ActualStartDate, ["actual_completion_date"] = project.ActualCompletionDate, ["is_active"] = project.IsActive, ["notes"] = project.Notes,
-            ["_system_id"] = project.Id.ToString(), ["_project_system_id"] = project.Id.ToString(), ["_concurrency_stamp"] = project.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
-        }));
+            var responsibleEmployeeIds = ProjectResponsibleEmployeeCoordinator.Ids(project);
+            var responsibleEmployeeNames = ProjectResponsibleEmployeeCoordinator.Names(project);
+            var primaryId = responsibleEmployeeIds.Count > 0 ? responsibleEmployeeIds[0] : (Guid?)null;
+            var responsibleEmployeeDisplay = responsibleEmployeeNames.Count > 0
+                ? string.Join("、", responsibleEmployeeNames)
+                : project.ResponsibleUser?.DisplayName;
+            return Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["project_number"] = project.ProjectNumber, ["project_name"] = project.Name, ["parent_project"] = project.ParentProjectName,
+                ["general_contractor"] = project.GeneralContractorName, ["general_contractor_contact"] = project.GeneralContractorContact, ["general_contractor_phone"] = project.GeneralContractorPhone,
+                ["responsible_employee_id"] = primaryId?.ToString(), ["responsible_employee_ids"] = string.Join(",", responsibleEmployeeIds),
+                ["responsible_user_id"] = project.ResponsibleUserId, ["responsible_user"] = responsibleEmployeeDisplay, ["responsible_employees"] = responsibleEmployeeNames.Count > 0 ? string.Join("、", responsibleEmployeeNames) : null,
+                ["department_id"] = project.DepartmentId?.ToString(), ["department"] = project.Department?.Name,
+                ["branch_id"] = project.BranchId?.ToString(), ["branch"] = project.Branch?.Name, ["stage"] = DataExchangeValueLabels.LabelProjectStage(project.Stage), ["contract_signing_status"] = DataExchangeValueLabels.LabelContractSigningStatus(project.ContractSigningStatus),
+                ["affiliation_type"] = DataExchangeValueLabels.ProjectAffiliation(project.AffiliationType), ["legal_entity_ids"] = string.Join(",", project.LegalEntities.Select(item => item.LegalEntityId)), ["legal_entities"] = string.Join("、", project.LegalEntities.Select(item => item.LegalEntity.ShortName)),
+                ["actual_start_date"] = project.ActualStartDate, ["actual_completion_date"] = project.ActualCompletionDate, ["is_active"] = project.IsActive, ["notes"] = project.Notes,
+                ["_system_id"] = project.Id.ToString(), ["_project_system_id"] = project.Id.ToString(), ["_concurrency_stamp"] = project.ConcurrencyStamp.ToString(), ["_dataset_version"] = ProjectWorkbookVersions.Dataset
+            });
+        });
 
     private static IEnumerable<IReadOnlyList<object?>> ContractRows(List<Project> projects, IReadOnlyList<ProjectWorkbookFieldDefinition> fields) =>
         projects.SelectMany(project => project.Contracts.OrderBy(item => item.ContractNumber).Select(contract => Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)

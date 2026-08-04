@@ -320,12 +320,27 @@ else
     var amountView = item.Overview.Stage is ProjectStage.PartiallySettled or ProjectStage.SettledArchived ? "settled" : "estimated";
 
     var amountLabel = amountView == "settled" ? "结算金额" : "暂估金额";
+    var responsibleEmployeeDisplay = item.Overview.ResponsibleEmployeeNames is { Count: > 0 }
+        ? string.Join("、", item.Overview.ResponsibleEmployeeNames)
+        : item.Overview.ResponsibleEmployeeName ?? item.Overview.ResponsibleUserName ?? "未设置负责人";
 
     <section class="page-heading project-heading compact-page-heading">
 
-        <div><p class="eyebrow">@item.Overview.ProjectNumber</p><h1>@item.Overview.Name</h1><p class="page-lead">@(ProjectGeneralContractors.Display(item.Overview.GeneralContractorName) == "未设置" ? "未填写总包单位" : ProjectGeneralContractors.Display(item.Overview.GeneralContractorName)) · @(item.Overview.ResponsibleEmployeeName ?? item.Overview.ResponsibleUserName ?? "未设置负责人")</p></div>
+        <div><p class="eyebrow">@item.Overview.ProjectNumber</p><h1>@item.Overview.Name</h1><p class="page-lead">@(ProjectGeneralContractors.Display(item.Overview.GeneralContractorName) == "未设置" ? "未填写总包单位" : ProjectGeneralContractors.Display(item.Overview.GeneralContractorName)) · @responsibleEmployeeDisplay</p></div>
 
-        <div class="button-row"><span class="pill pill--success">@item.Overview.Stage.ToChinese()</span>@if (Model.CanExportWorkbook) { <form method="post" asp-page-handler="ExportWorkbook" asp-route-id="@item.Overview.Id" class="inline-form"><details class="selection-dropdown"><summary class="button button--secondary button--action">导出工作簿</summary><div class="selection-dropdown-menu">@if (Model.CanExportWorkbookAttachments) { <label class="check-label"><input asp-for="IncludeWorkbookAttachments" /> 包含附件</label> }@foreach (var sheet in Enum.GetValues<ProjectWorkbookSheet>().Where(sheet => Model.CanExportFullWorkbook || sheet != ProjectWorkbookSheet.ProjectSummary && sheet != ProjectWorkbookSheet.Attachments)) { <label class="check-label"><input type="checkbox" name="SelectedWorkbookSheets" value="@sheet" checked="@(Model.SelectedWorkbookSheets.Count == 0 || Model.SelectedWorkbookSheets.Contains(sheet) ? "checked" : null)" /> @DataExchangeLabels.ProjectSheet(sheet)</label> }<button class="button button--primary button--small" type="submit">生成</button></div></details></form> }@if (Model.CanManage) { <a class="button button--secondary button--action" asp-page="Edit" asp-route-copyFrom="@item.Overview.Id">复制</a> }</div>
+        <div class="project-heading-actions">
+
+            <nav class="project-detail-navigation" aria-label="相邻项目切换">
+
+                @if (Model.PreviousProjectId.HasValue) { <a class="button button--secondary button--action" asp-page="Details" asp-route-id="@Model.PreviousProjectId" asp-route-tab="@Model.Tab">上一页</a> } else { <span class="button button--secondary button--action project-detail-navigation-button--disabled" aria-disabled="true">上一页</span> }
+
+                @if (Model.NextProjectId.HasValue) { <a class="button button--secondary button--action" asp-page="Details" asp-route-id="@Model.NextProjectId" asp-route-tab="@Model.Tab">下一页</a> } else { <span class="button button--secondary button--action project-detail-navigation-button--disabled" aria-disabled="true">下一页</span> }
+
+            </nav>
+
+            <div class="button-row"><span class="pill pill--success">@item.Overview.Stage.ToChinese()</span>@if (Model.CanExportWorkbook) { <form method="post" asp-page-handler="ExportWorkbook" asp-route-id="@item.Overview.Id" class="inline-form"><details class="selection-dropdown"><summary class="button button--secondary button--action">导出工作簿</summary><div class="selection-dropdown-menu">@if (Model.CanExportWorkbookAttachments) { <label class="check-label"><input asp-for="IncludeWorkbookAttachments" /> 包含附件</label> }@foreach (var sheet in Enum.GetValues<ProjectWorkbookSheet>().Where(sheet => Model.CanExportFullWorkbook || sheet != ProjectWorkbookSheet.ProjectSummary && sheet != ProjectWorkbookSheet.Attachments)) { <label class="check-label"><input type="checkbox" name="SelectedWorkbookSheets" value="@sheet" checked="@(Model.SelectedWorkbookSheets.Count == 0 || Model.SelectedWorkbookSheets.Contains(sheet) ? "checked" : null)" /> @DataExchangeLabels.ProjectSheet(sheet)</label> }<button class="button button--primary button--small" type="submit">生成</button></div></details></form> }@if (Model.CanManage) { <a class="button button--secondary button--action" asp-page="Edit" asp-route-copyFrom="@item.Overview.Id">复制</a> }</div>
+
+        </div>
 
     </section>
 
@@ -337,27 +352,27 @@ else
 
             <section class="overview-strip project-detail-strip" aria-label="项目经营总览">
 
-                <article class="is-accent"><span>当前工程金额 · @item.ProjectSummary.SettlementStatus.ToChinese()</span><strong>@item.ProjectSummary.CurrentAmount.ToString("N2")</strong></article>
-
                 <article><span>应收金额</span><strong>@item.FinanceSummary.ReceivableAmount.ToString("N2")</strong></article>
 
                 <article class="is-success"><span>已收款</span><strong>@item.FinanceSummary.CollectedAmount.ToString("N2")</strong></article>
 
                 <article class="is-warning"><span>未收款</span><strong>@item.FinanceSummary.UncollectedAmount.ToString("N2")</strong></article>
 
-                <article><span>应开票金额</span><strong>@item.ProjectSummary.InvoiceRequiredAmount.ToString("N2")</strong></article>
+                <article class="is-payable"><span>应付金额</span><strong>@item.FinanceSummary.PayableAmount.ToString("N2")</strong></article>
 
-                <article><span>已开票</span><strong>@item.FinanceSummary.OutputInvoiceAmount.ToString("N2")</strong></article>
-
-                <article class="is-warning"><span>未开票</span><strong>@item.FinanceSummary.UninvoicedAmount.ToString("N2")</strong></article>
-
-                <article><span>应付金额</span><strong>@item.FinanceSummary.PayableAmount.ToString("N2")</strong></article>
-
-                <article><span>已付款</span><strong>@item.FinanceSummary.PaidAmount.ToString("N2")</strong></article>
+                <article class="is-payable"><span>已付款</span><strong>@item.FinanceSummary.PaidAmount.ToString("N2")</strong></article>
 
                 <article class="is-warning"><span>未付款</span><strong>@item.FinanceSummary.UnpaidAmount.ToString("N2")</strong></article>
 
-                <article class="@(cashGap < 0 ? "is-danger" : "is-success")"><span>现金缺口</span><strong>@cashGap.ToString("N2")</strong></article>
+                <article class="is-invoice"><span>应开票金额</span><strong>@item.ProjectSummary.InvoiceRequiredAmount.ToString("N2")</strong></article>
+
+                <article class="is-invoice"><span>已开票</span><strong>@item.FinanceSummary.OutputInvoiceAmount.ToString("N2")</strong></article>
+
+                <article class="is-warning"><span>未开票</span><strong>@item.FinanceSummary.UninvoicedAmount.ToString("N2")</strong></article>
+
+                <article class="is-accent"><span>当前工程金额 · @item.ProjectSummary.SettlementStatus.ToChinese()</span><strong>@item.ProjectSummary.CurrentAmount.ToString("N2")</strong></article>
+
+                <article class="@(cashGap < 0 ? "is-danger" : "is-success") project-detail-cash-gap"><span>现金缺口</span><strong>@cashGap.ToString("N2")</strong></article>
 
             </section>
 
@@ -479,7 +494,7 @@ else
 
                         <div><dt>总包联系人 / 电话</dt><dd><span data-inline-edit-value>@(string.IsNullOrWhiteSpace(item.Overview.GeneralContractorContact) && string.IsNullOrWhiteSpace(item.Overview.GeneralContractorPhone) ? "未设置" : $"{item.Overview.GeneralContractorContact ?? "-"} · {item.Overview.GeneralContractorPhone ?? "-"}")</span>@if (Model.CanManage) { <div class="inline-cell-control compact-contact-editor" data-inline-edit-control hidden><input asp-for="QuickEdit.GeneralContractorContact" placeholder="联系人" /><input asp-for="QuickEdit.GeneralContractorPhone" placeholder="联系电话" /></div> }</dd></div>
 
-                        <div><dt>项目负责人</dt><dd><span data-inline-edit-value>@(item.Overview.ResponsibleEmployeeName ?? item.Overview.ResponsibleUserName ?? "未设置")</span>@if (Model.CanManage) { <input type="hidden" asp-for="QuickEdit.ResponsibleUserId" /><select class="inline-cell-control" asp-for="QuickEdit.ResponsibleEmployeeId" data-inline-edit-control hidden><option value="">未设置</option>@foreach (var option in Model.Options.ResponsibleEmployees ?? []) { <option value="@option.Value">@option.Label</option> }</select> }</dd></div>
+                        <div><dt>项目负责人</dt><dd><span data-inline-edit-value>@(item.Overview.ResponsibleEmployeeNames is { Count: > 0 } ? string.Join("、", item.Overview.ResponsibleEmployeeNames) : item.Overview.ResponsibleEmployeeName ?? item.Overview.ResponsibleUserName ?? "未设置")</span>@if (Model.CanManage) { <input type="hidden" asp-for="QuickEdit.ResponsibleUserId" /><select class="inline-cell-control" asp-for="QuickEdit.ResponsibleEmployeeIds" multiple size="4" data-inline-edit-control hidden>@foreach (var option in Model.Options.ResponsibleEmployees ?? []) { var employeeId = Guid.Parse(option.Value); <option value="@option.Value" selected="@(Model.QuickEdit.ResponsibleEmployeeIds.Contains(employeeId) ? "selected" : null)">@option.Label</option> }</select> }</dd></div>
 
                         <div><dt>部门</dt><dd><span data-inline-edit-value>@(item.Overview.DepartmentName ?? "未设置")</span>@if (Model.CanManage) { <select class="inline-cell-control" asp-for="QuickEdit.DepartmentId" data-inline-edit-control hidden><option value="">未设置</option>@foreach (var option in Model.Options.Departments) { <option value="@option.Value">@option.Label</option> }</select> }</dd></div>
 
@@ -615,15 +630,15 @@ else
 
                         <div class="project-summary-metrics"><dt>收款比例</dt><dd><div class="mini-progress mini-progress--success"><div class="mini-progress-head"><span>已收 / 应收</span><strong>@collectionRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @collectionBar.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span></div></dd></div>
 
-                        <div class="project-summary-metrics"><dt>应收 / 已收 / 未收</dt><dd>@item.FinanceSummary.ReceivableAmount.ToString("N2") / @item.FinanceSummary.CollectedAmount.ToString("N2") / @item.FinanceSummary.UncollectedAmount.ToString("N2")</dd></div>
+                        <div class="project-summary-metrics"><dt>应收 / 已收 / 未收</dt><dd><span class="project-finance-breakdown"><span data-project-finance-tone="target">@item.FinanceSummary.ReceivableAmount.ToString("N2")</span><span class="project-finance-separator" data-project-finance-separator>/</span><span data-project-finance-tone="collection-completed">@item.FinanceSummary.CollectedAmount.ToString("N2")</span><span class="project-finance-separator" data-project-finance-separator>/</span><span data-project-finance-tone="pending">@item.FinanceSummary.UncollectedAmount.ToString("N2")</span></span></dd></div>
 
-                        <div class="project-summary-metrics"><dt>开票比例</dt><dd><div class="mini-progress"><div class="mini-progress-head"><span>已开 / 应开</span><strong>@invoiceRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @invoiceBar.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span></div></dd></div>
+                        <div class="project-summary-metrics"><dt>开票比例</dt><dd><div class="mini-progress mini-progress--invoice"><div class="mini-progress-head"><span>已开 / 应开</span><strong>@invoiceRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @invoiceBar.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span></div></dd></div>
 
-                        <div class="project-summary-metrics"><dt>应开 / 已开 / 未开</dt><dd>@item.ProjectSummary.InvoiceRequiredAmount.ToString("N2") / @item.FinanceSummary.OutputInvoiceAmount.ToString("N2") / @item.FinanceSummary.UninvoicedAmount.ToString("N2")</dd></div>
+                        <div class="project-summary-metrics"><dt>应开 / 已开 / 未开</dt><dd><span class="project-finance-breakdown"><span data-project-finance-tone="target">@item.ProjectSummary.InvoiceRequiredAmount.ToString("N2")</span><span class="project-finance-separator" data-project-finance-separator>/</span><span data-project-finance-tone="invoice-completed">@item.FinanceSummary.OutputInvoiceAmount.ToString("N2")</span><span class="project-finance-separator" data-project-finance-separator>/</span><span data-project-finance-tone="pending">@item.FinanceSummary.UninvoicedAmount.ToString("N2")</span></span></dd></div>
 
-                        <div class="project-summary-metrics"><dt>付款比例</dt><dd><div class="mini-progress mini-progress--warning"><div class="mini-progress-head"><span>已付 / 应付</span><strong>@paymentRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @paymentBar.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span></div></dd></div>
+                        <div class="project-summary-metrics"><dt>付款比例</dt><dd><div class="mini-progress mini-progress--payable"><div class="mini-progress-head"><span>已付 / 应付</span><strong>@paymentRate.ToString("N0")%</strong></div><span class="mini-progress-track"><span class="mini-progress-fill" style="width: @paymentBar.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></span></span></div></dd></div>
 
-                        <div class="project-summary-metrics"><dt>应付 / 已付 / 未付</dt><dd>@item.FinanceSummary.PayableAmount.ToString("N2") / @item.FinanceSummary.PaidAmount.ToString("N2") / @item.FinanceSummary.UnpaidAmount.ToString("N2")</dd></div>
+                        <div class="project-summary-metrics"><dt>应付 / 已付 / 未付</dt><dd><span class="project-finance-breakdown"><span data-project-finance-tone="target">@item.FinanceSummary.PayableAmount.ToString("N2")</span><span class="project-finance-separator" data-project-finance-separator>/</span><span data-project-finance-tone="payment-completed">@item.FinanceSummary.PaidAmount.ToString("N2")</span><span class="project-finance-separator" data-project-finance-separator>/</span><span data-project-finance-tone="pending">@item.FinanceSummary.UnpaidAmount.ToString("N2")</span></span></dd></div>
 
                         <div class="project-summary-metrics project-amount-switch"><dt>工程金额</dt><dd><span class="project-amount-view-label" data-project-amount-view-label data-inline-edit-value><span>@amountLabel</span><strong>@item.ProjectSummary.CurrentAmount.ToString("N2")</strong></span>@if (Model.CanManage) { <div class="project-amount-edit-control" data-inline-edit-control hidden><select data-project-amount-view><option value="estimated" selected="@(amountView == "estimated" ? "selected" : null)">暂估金额</option><option value="settled" selected="@(amountView == "settled" ? "selected" : null)">结算金额</option></select><strong data-project-amount-estimated>@item.ProjectSummary.CurrentAmount.ToString("N2")</strong><strong data-project-amount-settled hidden>@item.ProjectSummary.CurrentAmount.ToString("N2")</strong></div> }</dd></div>
 

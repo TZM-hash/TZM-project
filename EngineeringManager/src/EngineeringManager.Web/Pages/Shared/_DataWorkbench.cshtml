@@ -29,7 +29,8 @@
           data-list-pagination-server="@Model.SortOnServer.ToString().ToLowerInvariant()"
           data-list-sort-default-key="@Model.EffectiveSortKey"
          data-list-sort-default-descending="@Model.EffectiveSortDescending.ToString().ToLowerInvariant()"
-         data-default-columns="@defaultColumns" data-saved-view-columns="@initialColumns">
+          data-default-columns="@defaultColumns" data-saved-view-columns="@initialColumns"
+          data-current-saved-view-id="@Model.CurrentSavedViewId">
     <div class="data-workbench-toolbar" aria-label="数据视图工具栏">
         <form method="get" class="workbench-inline-filters" role="search" aria-label="快速搜索">
             @foreach (var field in inlineFilters)

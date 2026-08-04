@@ -72,6 +72,18 @@ public sealed class DataWorkbenchAssetTests
         site.Should().Contain("./components/filter-drawer.js");
     }
 
+    [Fact]
+    public void WorkbenchPrioritizesLocalColumnsUnlessAViewWasExplicitlySelected()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "data-table.js");
+        var razor = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_DataWorkbench.cshtml");
+
+        script.Should().Contain("hasExplicitSavedView")
+            .And.Contain("persistAfterInit")
+            .And.Contain("localColumns");
+        razor.Should().Contain("data-current-saved-view-id=\"@Model.CurrentSavedViewId\"");
+    }
+
     private static string ReadJavaScript()
     {
         var directory = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "wwwroot", "js");

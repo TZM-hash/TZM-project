@@ -92,13 +92,27 @@ function persist(root) {
   return state;
 }
 
+function readLocalState(root) {
+  try { return safeParse(localStorage.getItem(storageKey(root)), {}); } catch { return {}; }
+}
+
 function initialState(root) {
   const serverColumns = safeParse(root.dataset.savedViewColumns, []);
-  if (serverColumns.length) return { columns: normalizeColumns(root, serverColumns), density: root.dataset.rowDensity || "standard" };
-  let local = {};
-  try { local = safeParse(localStorage.getItem(storageKey(root)), {}); } catch { local = {}; }
+  const local = readLocalState(root);
+  const localColumns = Array.isArray(local.columns) && local.columns.length ? local.columns : null;
+  const hasExplicitSavedView = Boolean(root.dataset.currentSavedViewId);
+  const useServerColumns = hasExplicitSavedView && serverColumns.length > 0;
   const defaults = safeParse(root.dataset.defaultColumns, []);
-  return { columns: normalizeColumns(root, local.columns?.length ? local.columns : defaults), density: local.density || root.dataset.rowDensity || "standard" };
+  const requestedColumns = useServerColumns
+    ? serverColumns
+    : (localColumns ?? (serverColumns.length ? serverColumns : defaults));
+  return {
+    columns: normalizeColumns(root, requestedColumns),
+    density: useServerColumns
+      ? root.dataset.rowDensity || local.density || "standard"
+      : local.density || root.dataset.rowDensity || "standard",
+    persistAfterInit: useServerColumns
+  };
 }
 
 function initColumnManager(root) {
@@ -224,6 +238,7 @@ export function initDataTables() {
     const state = initialState(root);
     applyColumns(root, state.columns);
     applyRowSpacing(root, state.density);
+    if (state.persistAfterInit) persist(root);
     initColumnManager(root);
     initDialogs(root);
     initRowSpacing(root);

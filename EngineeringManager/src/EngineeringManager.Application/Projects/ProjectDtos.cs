@@ -21,7 +21,8 @@ public sealed record CreateProjectRequest(
     string? Notes = null,
     ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
     IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null,
-    Guid? ResponsibleEmployeeId = null);
+    Guid? ResponsibleEmployeeId = null,
+    IReadOnlyCollection<Guid>? ResponsibleEmployeeIds = null);
 
 public sealed record ProjectTaxConfigurationInput(decimal TaxRate, ProjectInvoiceType InvoiceType);
 
@@ -101,7 +102,9 @@ public sealed record ProjectDto(
     string? BranchName = null,
     IReadOnlyList<string>? LegalEntityNames = null,
     Guid? ResponsibleEmployeeId = null,
-    string? ResponsibleEmployeeName = null);
+    string? ResponsibleEmployeeName = null,
+    IReadOnlyList<Guid>? ResponsibleEmployeeIds = null,
+    IReadOnlyList<string>? ResponsibleEmployeeNames = null);
 
 public sealed record ContractLineItemDto(
     Guid Id,

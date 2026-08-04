@@ -832,6 +832,52 @@ public sealed class ProjectWorkbookImportTests
     }
 
     [Fact]
+    public async Task ProjectMasterRoundTripsMultipleResponsibleEmployees()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var primary = new Employee
+        {
+            EmployeeNumber = "RESP-EMP-02",
+            Name = "主负责人二",
+            EmployeeType = EmployeeType.Formal,
+            IsActive = true,
+            IsProjectResponsible = true
+        };
+        var secondary = new Employee
+        {
+            EmployeeNumber = "RESP-EMP-03",
+            Name = "协同负责人",
+            EmployeeType = EmployeeType.Formal,
+            IsActive = true,
+            IsProjectResponsible = true
+        };
+        fixture.Db.Employees.AddRange(primary, secondary);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.ProjectMaster, [Row(ProjectWorkbookSheet.ProjectMaster, new Dictionary<string, object?>
+        {
+            ["project_number"] = "RESP-MULTI-P",
+            ["project_name"] = "多人负责人往返项目",
+            ["responsible_employee_ids"] = $"{primary.Id};{secondary.Id}",
+            ["stage"] = "UnderConstruction",
+            ["contract_signing_status"] = "NotSigned",
+            ["affiliation_type"] = "SelfOperated",
+            ["is_active"] = true
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(new ProjectWorkbookImportRequest("admin", "多人负责人项目.xlsx", workbook, Actor: ProjectWorkbookActor.Administrator("admin")), CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+
+        var project = await fixture.Db.Projects
+            .Include(item => item.ResponsibleEmployeeLinks)
+            .SingleAsync();
+        project.ResponsibleEmployeeId.Should().Be(primary.Id);
+        project.ResponsibleEmployeeLinks.OrderBy(item => item.SortOrder).Select(item => item.EmployeeId)
+            .Should().Equal(primary.Id, secondary.Id);
+    }
+
+    [Fact]
     public async Task PreviewRejectsDuplicateBusinessKeysAndInvalidFinanceDimensions()
     {
         await using var fixture = await ImportFixture.CreateAsync();

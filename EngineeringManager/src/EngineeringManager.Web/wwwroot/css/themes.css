@@ -341,7 +341,7 @@ body.appearance-rounded-soft .app-header {
 .option-card:has(input:checked) { box-shadow: 0 0 0 3px rgba(var(--app-primary-rgb), .09); }
 .project-workbook-export-menu[open] .project-workbook-export-trigger { box-shadow: 0 0 0 3px rgba(var(--app-primary-rgb), .1); }
 body.table-density-compact .table-wrap > table th,
-body.table-density-compact .table-wrap > table td { height: 2.15rem; padding-block: .28rem; font-size: .74rem; }
+body.table-density-compact .table-wrap > table td { height: 2.15rem; padding-block: .28rem; font-size: .8rem; }
 body.table-density-spacious .table-wrap > table th,
 body.table-density-spacious .table-wrap > table td { height: 3.45rem; padding-block: .85rem; }
 
@@ -355,10 +355,10 @@ body.motion-technology .nav-link,
 body.motion-technology .button,
 body.motion-technology .metric-card,
 body.motion-technology .panel { transition: color .18s ease, background-color .18s ease, border-color .18s ease, transform .2s ease, box-shadow .2s ease; }
-body.motion-technology.ui-effects-medium .metric-card:hover,
-body.motion-technology.ui-effects-medium .panel:hover { transform: translateY(-2px); box-shadow: var(--app-shadow); }
-body.motion-technology.ui-effects-high .metric-card:hover,
-body.motion-technology.ui-effects-high .panel:hover { transform: translateY(-4px); box-shadow: 0 22px 50px rgba(var(--app-primary-rgb), .13); }
+body.motion-technology.ui-effects-medium .metric-card:hover { transform: translateY(-2px); box-shadow: var(--app-shadow); }
+body.motion-technology.ui-effects-medium .panel:hover { box-shadow: var(--app-shadow); }
+body.motion-technology.ui-effects-high .metric-card:hover { transform: translateY(-4px); box-shadow: 0 22px 50px rgba(var(--app-primary-rgb), .13); }
+body.motion-technology.ui-effects-high .panel:hover { box-shadow: 0 22px 50px rgba(var(--app-primary-rgb), .13); }
 
 body.motion-apple { --apple-spring: cubic-bezier(.2,.8,.2,1); }
 body.motion-apple .nav-link,
@@ -370,8 +370,8 @@ body.motion-apple.ui-effects-medium .app-main { animation: apple-page-enter .22s
 body.motion-apple.ui-effects-high .app-main { animation: apple-page-enter-high .32s var(--apple-spring) both; }
 body.motion-apple.ui-effects-high .button:active,
 body.motion-apple.ui-effects-high .nav-link:active { transform: scale(.96); }
-body.motion-apple.ui-effects-high .metric-card:hover,
-body.motion-apple.ui-effects-high .panel:hover { transform: translateY(-5px) scale(1.003); box-shadow: 0 24px 55px rgba(var(--app-primary-rgb), .16); }
+body.motion-apple.ui-effects-high .metric-card:hover { transform: translateY(-5px) scale(1.003); box-shadow: 0 24px 55px rgba(var(--app-primary-rgb), .16); }
+body.motion-apple.ui-effects-high .panel:hover { box-shadow: 0 24px 55px rgba(var(--app-primary-rgb), .16); }
 
 .ui-click-ripple { position: fixed; z-index: 1200; width: .5rem; height: .5rem; border-radius: 50%; pointer-events: none; background: rgba(var(--app-primary-rgb), .2); transform: translate(-50%,-50%) scale(0); animation: click-ripple .5s ease-out forwards; }
 @keyframes fx-drift { from { transform: translate3d(-2%, -2%, 0) scale(.96); } to { transform: translate3d(4%, 5%, 0) scale(1.08); } }

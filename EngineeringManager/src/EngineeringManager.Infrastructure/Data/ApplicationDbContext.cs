@@ -33,6 +33,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<Project> Projects => Set<Project>();
 
+    public DbSet<ProjectResponsibleEmployee> ProjectResponsibleEmployees => Set<ProjectResponsibleEmployee>();
+
     public DbSet<ProjectAssignment> ProjectAssignments => Set<ProjectAssignment>();
 
     public DbSet<ProjectLegalEntity> ProjectLegalEntities => Set<ProjectLegalEntity>();
@@ -1225,6 +1227,18 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(project => project.ResponsibleEmployee).WithMany().HasForeignKey(project => project.ResponsibleEmployeeId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(project => project.Department).WithMany().HasForeignKey(project => project.DepartmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(project => project.Branch).WithMany().HasForeignKey(project => project.BranchId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProjectResponsibleEmployee>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.ProjectId, item.EmployeeId }).IsUnique();
+            entity.HasIndex(item => new { item.ProjectId, item.SortOrder });
+            entity.HasOne(item => item.Project).WithMany(project => project.ResponsibleEmployeeLinks)
+                .HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Employee).WithMany()
+                .HasForeignKey(item => item.EmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<ProjectAssignment>(entity =>

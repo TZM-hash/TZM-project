@@ -34,7 +34,9 @@ public sealed record ProjectWorkspaceOverviewDto(
     ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
     IReadOnlyList<ProjectTaxConfigurationDto>? TaxConfigurations = null,
     Guid? ResponsibleEmployeeId = null,
-    string? ResponsibleEmployeeName = null);
+    string? ResponsibleEmployeeName = null,
+    IReadOnlyList<Guid>? ResponsibleEmployeeIds = null,
+    IReadOnlyList<string>? ResponsibleEmployeeNames = null);
 
 public sealed record ProjectOverviewEquipmentDto(
     Guid ConstructionRecordId,
@@ -79,7 +81,8 @@ public sealed record UpdateProjectRequest(
     ContractSigningStatus ContractSigningStatus = ContractSigningStatus.NotSigned,
     IReadOnlyCollection<ProjectTaxConfigurationInput>? TaxConfigurations = null,
     IReadOnlyCollection<ProjectContractQuickEditInput>? Contracts = null,
-    Guid? ResponsibleEmployeeId = null);
+    Guid? ResponsibleEmployeeId = null,
+    IReadOnlyCollection<Guid>? ResponsibleEmployeeIds = null);
 
 public sealed record ProjectReceivableItemDto(
     Guid Id,

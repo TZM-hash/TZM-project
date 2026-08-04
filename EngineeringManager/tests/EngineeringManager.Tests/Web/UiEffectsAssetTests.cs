@@ -88,6 +88,43 @@ public sealed class UiEffectsAssetTests
     }
 
     [Fact]
+    public void GlobalFontScaleImprovesReadabilityWithoutRemovingOverflowGuards()
+    {
+        var css = ReadCss();
+
+        css.Should().Contain("html.font-size-standard { font-size: 18px; }")
+            .And.Contain("html.font-size-large { font-size: 20px; }")
+            .And.Contain("html.font-size-extra-large { font-size: 22px; }")
+            .And.Contain(".data-table, .table-wrap > table { width: 100%; min-width: 44rem; border-collapse: separate; border-spacing: 0; font-size: .88rem; }")
+            .And.Contain("#projects-table.data-table th, #projects-table.data-table td { font-size: .9rem;")
+            .And.Contain(".project-summary-grid dt { font-size: .74rem;")
+            .And.Contain(".table-wrap, .data-table-wrap { width: 100%; margin-top: 1rem; overflow-x: auto;");
+    }
+
+    [Fact]
+    public void DialogsAndDensePageSurfacesUseReadableFontScale()
+    {
+        var css = ReadCss();
+
+        css.Should().Contain("html.font-size-standard { font-size: 18px; }")
+            .And.Contain(".employee-view-dialog-body dt { color: var(--app-muted); font-size: .82rem; }")
+            .And.Contain(".employee-view-dialog-body dd { margin: .28rem 0 0; overflow-wrap: anywhere; font-size: .94rem; line-height: 1.55; }")
+            .And.Contain(".entity-detail-field-grid dt { color: var(--app-muted); font-size: .82rem; font-weight: 650; }")
+            .And.Contain(".entity-detail-field-grid dd { margin: .28rem 0 0; color: var(--app-text); font-size: .92rem;")
+            .And.Contain(".workbench-dialog-heading span { margin-top: .25rem; color: var(--app-muted); font-size: .84rem;")
+            .And.Contain(":is(.company-account-table, .company-certificate-table, .company-certificate-workspace-table, .equipment-table, .equipment-usage-history-table, .partner-workspace-table, .crew-workspace-table, .employee-workspace-table, .employee-certificate-table, .ledger-workspace-table, .payroll-roster-table) :is(th, td) { font-size: .84rem;");
+    }
+
+    [Fact]
+    public void DataPanelsDoNotTransformOnHoverWhileMetricCardsKeepMotion()
+    {
+        var css = ReadCss();
+
+        css.Should().NotContain(".panel:hover { transform:")
+            .And.Contain(".metric-card:hover { transform:");
+    }
+
+    [Fact]
     public void SharedConflictNoticeRequiresExplicitRefreshInsteadOfOverwriting()
     {
         var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");

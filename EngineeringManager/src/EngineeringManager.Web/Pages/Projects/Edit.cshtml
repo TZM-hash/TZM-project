@@ -28,7 +28,7 @@
         <label>总包单位<input asp-for="GeneralContractorName" /></label><label>总包联系人<input asp-for="GeneralContractorContact" /></label>
         <label>联系电话<input asp-for="GeneralContractorPhone" /></label>
         <input type="hidden" asp-for="ResponsibleUserId" />
-        <label>项目负责人<select asp-for="ResponsibleEmployeeId"><option value="">未设置</option>@foreach (var item in Model.Options.ResponsibleEmployees ?? []) { <option value="@item.Value">@item.Label</option> }</select></label>
+        <label class="form-span">项目负责人<select asp-for="ResponsibleEmployeeIds" multiple size="5" aria-describedby="responsible-employee-help">@foreach (var item in Model.Options.ResponsibleEmployees ?? []) { var employeeId = Guid.Parse(item.Value); <option value="@item.Value" selected="@(Model.ResponsibleEmployeeIds.Contains(employeeId) ? "selected" : null)">@item.Label</option> }</select><small id="responsible-employee-help" class="field-help">可多选；第一位为主负责人，其余为协同负责人。</small></label>
         <label>部门<select asp-for="DepartmentId"><option value="">未设置</option>@foreach (var item in Model.Options.Departments) { <option value="@item.Value">@item.Label</option> }</select></label>
         <label>分支机构<select asp-for="BranchId"><option value="">未设置</option>@foreach (var item in Model.Options.Branches) { <option value="@item.Value">@item.Label</option> }</select></label>
     </section>

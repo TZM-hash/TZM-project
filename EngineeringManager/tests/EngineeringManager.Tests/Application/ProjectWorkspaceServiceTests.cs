@@ -95,6 +95,42 @@ public sealed class ProjectWorkspaceServiceTests
     }
 
     [Fact]
+    public async Task ProjectUpdatePersistsMultipleResponsibleEmployeesAndKeepsFirstAsPrimary()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync();
+        var primary = new Employee { EmployeeNumber = "WORK-EMP-05", Name = "第一负责人", EmployeeType = EmployeeType.Formal, IsActive = true, IsProjectResponsible = true };
+        var secondary = new Employee { EmployeeNumber = "WORK-EMP-06", Name = "第二负责人", EmployeeType = EmployeeType.Formal, IsActive = true, IsProjectResponsible = true };
+        fixture.Db.AddRange(primary, secondary);
+        await fixture.Db.SaveChangesAsync();
+
+        var updated = await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            new UpdateProjectRequest(
+                fixture.Project.Id,
+                fixture.Project.ProjectNumber,
+                fixture.Project.Name,
+                fixture.Project.ParentProjectName,
+                fixture.Project.GeneralContractorName,
+                fixture.Project.GeneralContractorContact,
+                fixture.Project.GeneralContractorPhone,
+                fixture.Project.ResponsibleUserId,
+                fixture.Project.DepartmentId,
+                fixture.Project.BranchId,
+                fixture.Project.Stage,
+                fixture.Project.AffiliationType,
+                [fixture.LegalEntity.Id],
+                fixture.Project.ConcurrencyStamp,
+                "设置多人负责人",
+                ResponsibleEmployeeIds: [primary.Id, secondary.Id]),
+            CancellationToken.None);
+
+        updated.Overview.ResponsibleEmployeeId.Should().Be(primary.Id);
+        updated.Overview.ResponsibleEmployeeIds.Should().Equal(primary.Id, secondary.Id);
+        updated.Overview.ResponsibleEmployeeNames.Should().Equal("第一负责人", "第二负责人");
+        (await fixture.Db.ProjectResponsibleEmployees.CountAsync(item => item.ProjectId == fixture.Project.Id)).Should().Be(2);
+    }
+
+    [Fact]
     public async Task WorkspaceIncludesMilestoneAssignmentAndPartnerNotes()
     {
         await using var fixture = await ProjectWorkspaceFixture.CreateAsync();

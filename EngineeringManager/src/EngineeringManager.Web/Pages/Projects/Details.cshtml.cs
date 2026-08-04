@@ -31,6 +31,8 @@ public sealed class DetailsModel(
     public ProjectConstructionWorkspaceDto ConstructionWorkspace { get; private set; } = new([], [], [], []);
     public IReadOnlyDictionary<Guid, ProjectRecordAttachmentDto> QuantityAttachments { get; private set; } = new Dictionary<Guid, ProjectRecordAttachmentDto>();
     public IReadOnlyDictionary<Guid, ProjectRecordAttachmentDto> RecordAttachments { get; private set; } = new Dictionary<Guid, ProjectRecordAttachmentDto>();
+    public Guid? PreviousProjectId { get; private set; }
+    public Guid? NextProjectId { get; private set; }
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
     public bool CanManageFinance => CanManage || User.IsInRole(SystemRoles.Finance);
     public bool CanExportWorkbook => WorkbookActor().CanExport;
@@ -125,8 +127,9 @@ public sealed class DetailsModel(
                     QuickEdit.Notes,
                     QuickEdit.ContractSigningStatus,
                     ParseTaxConfigurations(QuickEdit.TaxConfigurationSelections),
-                    QuickEdit.Contracts,
-                    QuickEdit.ResponsibleEmployeeId),
+                     QuickEdit.Contracts,
+                     ResponsibleEmployeeId: QuickEdit.ResponsibleEmployeeId,
+                     ResponsibleEmployeeIds: QuickEdit.ResponsibleEmployeeIds),
                 cancellationToken);
             return RedirectToPage(new { id });
         }
@@ -711,6 +714,23 @@ public sealed class DetailsModel(
     {
         Workspace = await workspaceService.GetAsync(id, cancellationToken);
         if (Workspace is null) return;
+        var navigation = await projectService.SearchProjectsAsync(
+            WorkbookProjectActor(),
+            new ProjectListQuery(
+                null,
+                [],
+                null,
+                null,
+                null,
+                null,
+                SortKey: "ProjectNumber",
+                SortDescending: true,
+                PageSize: 1,
+                IncludeInactive: false),
+            cancellationToken);
+        var adjacentProjects = ProjectNavigationResolver.Resolve(navigation.MatchingProjectIds, id);
+        PreviousProjectId = adjacentProjects.PreviousProjectId;
+        NextProjectId = adjacentProjects.NextProjectId;
         QuantityAttachments = await LoadQuantityAttachmentsAsync(Workspace, cancellationToken);
         ConstructionWorkspace = await constructionService.GetWorkspaceAsync(id, DateOnly.FromDateTime(DateTime.Today), cancellationToken);
         RecordAttachments = await LoadRecordAttachmentsAsync(Workspace, ConstructionWorkspace, cancellationToken);
@@ -981,6 +1001,7 @@ public sealed class DetailsModel(
         public string? GeneralContractorPhone { get; set; }
         public string? ResponsibleUserId { get; set; }
         public Guid? ResponsibleEmployeeId { get; set; }
+        public List<Guid> ResponsibleEmployeeIds { get; set; } = [];
         public Guid? DepartmentId { get; set; }
         public Guid? BranchId { get; set; }
         public ProjectStage Stage { get; set; }
@@ -1006,6 +1027,8 @@ public sealed class DetailsModel(
             GeneralContractorPhone = item.GeneralContractorPhone,
             ResponsibleUserId = item.ResponsibleUserId,
             ResponsibleEmployeeId = item.ResponsibleEmployeeId,
+            ResponsibleEmployeeIds = item.ResponsibleEmployeeIds?.ToList()
+                ?? (item.ResponsibleEmployeeId.HasValue ? [item.ResponsibleEmployeeId.Value] : []),
             DepartmentId = item.DepartmentId,
             BranchId = item.BranchId,
             Stage = item.Stage,
