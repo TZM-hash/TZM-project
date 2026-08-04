@@ -13,7 +13,8 @@ public sealed class ProjectContactColumnTests
         page.Should().Contain("project-contact-list")
             .And.Contain("StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries")
             .And.Contain("data-column-key=\"general_contractor_contact\"");
-        css.Should().Contain("#projects-table [data-column-key=\"general_contractor_contact\"] { width: 10rem; max-width: 10rem; white-space: normal; }")
+        css.Should().Contain("#projects-table [data-column-key=\"general_contractor_contact\"] { width: 11.5rem; min-width: 11.5rem; max-width: 11.5rem; white-space: normal; }")
+            .And.Contain(".project-contact-list { display: grid; gap: .1rem; min-width: 0; width: 100%; max-width: 100%; }")
             .And.Contain(".project-contact-list > span { display: block; overflow-wrap: anywhere; white-space: normal; }");
     }
 

@@ -1,6 +1,25 @@
 import { deleteSearchParamsIgnoreCase } from "./url-search-params.js";
 
 const rowSpacingClasses = ["row-spacing-compact", "row-spacing-standard", "row-spacing-spacious"];
+const columnOrderMigrations = {
+  projects: [{
+    id: "project-contact-after-contractor-v1",
+    apply: (columns) => {
+      const contact = columns.find((column) => column.key === "general_contractor_contact");
+      const contractor = columns.find((column) => column.key === "general_contractor");
+      if (!contact || !contractor) return columns;
+
+      const contractorIndex = columns.findIndex((column) => column.key === contractor.key);
+      if (contractorIndex < 0 || columns[contractorIndex + 1]?.key === contact.key) return columns;
+
+      const withoutContact = columns.filter((column) => column.key !== contact.key);
+      const targetIndex = withoutContact.findIndex((column) => column.key === contractor.key);
+      if (targetIndex < 0) return columns;
+      withoutContact.splice(targetIndex + 1, 0, contact);
+      return withoutContact.map((column, order) => ({ ...column, order }));
+    }
+  }]
+};
 
 function safeParse(value, fallback) {
   try { return JSON.parse(value || "") ?? fallback; } catch { return fallback; }
@@ -83,7 +102,9 @@ function applyRowSpacing(root, spacing) {
 }
 
 function persist(root) {
+  const existing = readLocalState(root);
   const state = {
+    ...existing,
     columns: readColumnState(root),
     density: root.dataset.rowDensity || "standard",
     pageSize: Number(root.querySelector("[data-current-page-size]")?.value || 20)
@@ -96,9 +117,29 @@ function readLocalState(root) {
   try { return safeParse(localStorage.getItem(storageKey(root)), {}); } catch { return {}; }
 }
 
+function migrateLocalState(root, state) {
+  const migrations = columnOrderMigrations[root.dataset.pageKey] || [];
+  if (!Array.isArray(state.columns) || !state.columns.length || !migrations.length) return state;
+
+  let nextState = state;
+  const completed = Array.isArray(state.columnOrderMigrations) ? [...state.columnOrderMigrations] : [];
+  let changed = false;
+  migrations.forEach((migration) => {
+    if (completed.includes(migration.id)) return;
+    nextState = { ...nextState, columns: migration.apply(nextState.columns) };
+    completed.push(migration.id);
+    changed = true;
+  });
+  if (!changed) return state;
+
+  nextState = { ...nextState, columnOrderMigrations: completed };
+  try { localStorage.setItem(storageKey(root), JSON.stringify(nextState)); } catch { /* storage unavailable */ }
+  return nextState;
+}
+
 function initialState(root) {
   const serverColumns = safeParse(root.dataset.savedViewColumns, []);
-  const local = readLocalState(root);
+  const local = migrateLocalState(root, readLocalState(root));
   const localColumns = Array.isArray(local.columns) && local.columns.length ? local.columns : null;
   const hasExplicitSavedView = Boolean(root.dataset.currentSavedViewId);
   const useServerColumns = hasExplicitSavedView && serverColumns.length > 0;
