@@ -79,6 +79,15 @@ public sealed class AdminAuthorizationTests
 
         public Task<LegalEntityDto> CreateLegalEntityAsync(CreateLegalEntityRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyList<DepartmentDto>> ListDepartmentsAsync(OrganizationOwnerKind ownerKind, Guid ownerId, bool includeInactive, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DepartmentDto>>([]);
+
+        public Task<DepartmentDto> SaveDepartmentAsync(SaveDepartmentRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task DeactivateDepartmentAsync(Guid departmentId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class TestAuthenticationHandler(

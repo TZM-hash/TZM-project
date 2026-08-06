@@ -11,4 +11,18 @@ public interface IOrganizationService
     Task<LegalEntityDto> CreateLegalEntityAsync(
         CreateLegalEntityRequest request,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DepartmentDto>> ListDepartmentsAsync(
+        OrganizationOwnerKind ownerKind,
+        Guid ownerId,
+        bool includeInactive,
+        CancellationToken cancellationToken);
+
+    Task<DepartmentDto> SaveDepartmentAsync(
+        SaveDepartmentRequest request,
+        CancellationToken cancellationToken);
+
+    Task DeactivateDepartmentAsync(
+        Guid departmentId,
+        CancellationToken cancellationToken);
 }

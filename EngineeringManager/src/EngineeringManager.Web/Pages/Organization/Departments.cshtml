@@ -1,0 +1,91 @@
+@page
+@model EngineeringManager.Web.Pages.Organization.DepartmentsModel
+@using EngineeringManager.Application.Organization
+@{
+    ViewData["Title"] = $"部门设置 - {Model.OwnerName}";
+}
+
+<section class="page-heading compact-page-heading">
+    <div><p class="eyebrow">组织架构</p><h1>@Model.OwnerName · 部门设置</h1><p class="page-lead">部门编码在当前组织内唯一；父子部门不能跨公司或单位，已有当前人员归属的部门不能直接停用。</p></div>
+    <div class="page-actions-inline"><a class="button button--secondary button--action" asp-page="@Model.SafeReturnPage" asp-route-id="@Model.OwnerId">返回组织详情</a></div>
+</section>
+
+<div asp-validation-summary="ModelOnly" class="validation-summary-errors"></div>
+
+<section class="overview-strip">
+    <article><span>部门总数</span><strong>@Model.Departments.Count</strong></article>
+    <article><span>启用部门</span><strong>@Model.Departments.Count(item => item.IsActive)</strong></article>
+    <article><span>当前人员</span><strong>@Model.Departments.Sum(item => item.CurrentPersonnelCount)</strong></article>
+</section>
+
+@if (Model.CanManage)
+{
+    <details class="workspace-create" open="@(Model.Departments.Count == 0 ? "open" : null)">
+        <summary class="button button--primary">新增部门</summary>
+        <form method="post" asp-page-handler="Save" class="form-grid">
+            <input type="hidden" name="LegalEntityId" value="@Model.LegalEntityId" />
+            <input type="hidden" name="BusinessPartnerId" value="@Model.BusinessPartnerId" />
+            <input type="hidden" name="ReturnPage" value="@Model.ReturnPage" />
+            <input type="hidden" name="Input.IsActive" value="true" />
+            <label>部门编码<input name="Input.Code" required maxlength="50" /></label>
+            <label>部门名称<input name="Input.Name" required maxlength="200" /></label>
+            <label>上级部门<select name="Input.ParentId"><option value="">无上级部门</option>@foreach (var item in Model.Departments.Where(item => item.IsActive)) { <option value="@item.Id">@item.Name（@item.Code）</option> }</select></label>
+            <label>作为权限范围<select name="Input.IsAuthorizationScope"><option value="true">是</option><option value="false">否</option></select></label>
+            <button class="button button--primary" type="submit">保存部门</button>
+        </form>
+    </details>
+}
+
+<section class="panel" style="margin-top:var(--space-3)">
+    <div class="panel-heading"><div><p class="eyebrow">部门清单</p><h2>启用与停用部门</h2></div><small>共 @Model.Departments.Count 个</small></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>编码 / 名称</th><th>上级部门</th><th>权限范围</th><th>当前人员</th><th>状态</th><th>维护</th></tr></thead><tbody>
+    @if (Model.Departments.Count == 0) { <tr><td colspan="6" class="empty-state">尚未设置部门。</td></tr> }
+    @foreach (var item in Model.Departments)
+    {
+        <tr>
+            <td><strong>@item.Name</strong><span class="table-secondary">@item.Code</span></td>
+            <td>@(item.ParentName ?? "无")</td>
+            <td>@(item.IsAuthorizationScope ? "是" : "否")</td>
+            <td>
+                @if (item.OwnerKind == OrganizationOwnerKind.LegalEntity)
+                {
+                    <a asp-page="/Personnel/Internal/Index" asp-route-legalEntityId="@item.OwnerId" asp-route-departmentId="@item.Id">@item.CurrentPersonnelCount 人</a>
+                }
+                else
+                {
+                    <a asp-page="/Personnel/External/Index" asp-route-businessPartnerId="@item.OwnerId" asp-route-departmentId="@item.Id">@item.CurrentPersonnelCount 人</a>
+                }
+            </td>
+            <td><span class="partner-status partner-status--@(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "启用" : "停用")</span></td>
+            <td>
+                @if (Model.CanManage)
+                {
+                    <details><summary class="button button--secondary button--small">编辑</summary>
+                        <form method="post" asp-page-handler="Save" class="form-grid">
+                            <input type="hidden" name="LegalEntityId" value="@Model.LegalEntityId" />
+                            <input type="hidden" name="BusinessPartnerId" value="@Model.BusinessPartnerId" />
+                            <input type="hidden" name="ReturnPage" value="@Model.ReturnPage" />
+                            <input type="hidden" name="Input.Id" value="@item.Id" />
+                            <label>部门编码<input name="Input.Code" value="@item.Code" required maxlength="50" /></label>
+                            <label>部门名称<input name="Input.Name" value="@item.Name" required maxlength="200" /></label>
+                            <label>上级部门<select name="Input.ParentId"><option value="">无上级部门</option>@foreach (var parent in Model.Departments.Where(parent => parent.IsActive && parent.Id != item.Id)) { if (parent.Id == item.ParentId) { <option value="@parent.Id" selected>@parent.Name（@parent.Code）</option> } else { <option value="@parent.Id">@parent.Name（@parent.Code）</option> } }</select></label>
+                            <label>作为权限范围<select name="Input.IsAuthorizationScope"><option value="true" selected="@(item.IsAuthorizationScope ? "selected" : null)">是</option><option value="false" selected="@(!item.IsAuthorizationScope ? "selected" : null)">否</option></select></label>
+                            @if (!item.IsActive) { <input type="hidden" name="Input.IsActive" value="true" /><button class="button button--primary button--small" type="submit">重新启用</button> } else { <input type="hidden" name="Input.IsActive" value="true" /><button class="button button--primary button--small" type="submit">保存修改</button> }
+                        </form>
+                    </details>
+                    @if (item.IsActive)
+                    {
+                        <form method="post" asp-page-handler="Deactivate" class="table-inline-form">
+                            <input type="hidden" name="LegalEntityId" value="@Model.LegalEntityId" />
+                            <input type="hidden" name="BusinessPartnerId" value="@Model.BusinessPartnerId" />
+                            <input type="hidden" name="ReturnPage" value="@Model.ReturnPage" />
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button class="button button--secondary button--small" type="submit">停用</button>
+                        </form>
+                    }
+                }
+            </td>
+        </tr>
+    }
+    </tbody></table></div>
+</section>

@@ -68,6 +68,7 @@
     </div>
     <div class="button-row company-workspace-actions">
         <partial name="_CompanyScopeSwitcher" model="(Model.CompanyOptions, (Guid?)Model.Company.Id, Model.ActiveTab)" />
+        <a class="button button--secondary button--action" asp-page="/Organization/Departments" asp-route-legalEntityId="@Model.Company.Id" asp-route-returnPage="/Companies/Details">部门设置</a>
         @if (Model.CanManage)
         {
             <a class="button button--secondary button--action" asp-page="Edit" asp-route-copyFrom="@Model.Company.Id">复制公司</a>
