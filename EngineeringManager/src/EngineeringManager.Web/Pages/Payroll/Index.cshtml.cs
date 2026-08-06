@@ -3,6 +3,7 @@ using EngineeringManager.Application.Payroll;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Web.Presentation;
@@ -364,7 +365,17 @@ public sealed class IndexModel(IPayrollService payrollService, ApplicationDbCont
                 item.RecipientType,
                 item.EmployeeId ?? item.ConstructionWorkerId!.Value,
                 item.RecipientType == PayrollRecipientType.CrewWorker ? item.CrewBusinessPartnerId : null)) ?? [];
-        var employees = await db.Employees.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.EmployeeNumber).ToListAsync(cancellationToken);
+        var paymentDate = details?.Batch.PaymentDate ?? Input.PaymentDate ?? DateOnly.FromDateTime(DateTime.Today);
+        var employees = await db.Employees.AsNoTracking()
+            .Where(item => item.PersonId.HasValue
+                ? item.Person!.IsActive && item.Person.EngagementHistory.Any(engagement =>
+                    engagement.IsPrimary
+                    && engagement.Scope == PersonnelScope.Internal
+                    && engagement.StartDate <= paymentDate
+                    && (!engagement.EndDate.HasValue || engagement.EndDate >= paymentDate))
+                : item.IsActive)
+            .OrderBy(item => item.EmployeeNumber)
+            .ToListAsync(cancellationToken);
         var employeeLines = employees.Select(item => MakeLine(existing, PayrollRecipientType.Employee, item.Id, item.EmployeeNumber + " · " + item.Name + " · " + item.EmployeeType.ToChinese(), null)).ToList();
         foreach (var line in existing.Values.Where(item => item.RecipientType == PayrollRecipientType.Employee && employeeLines.All(candidate => candidate.PersonId != item.EmployeeId)))
         {
@@ -373,7 +384,19 @@ public sealed class IndexModel(IPayrollService payrollService, ApplicationDbCont
         Input.EmployeeLines = MergePostedLines(employeeLines, postedEmployeeLines);
 
         var memberships = await db.ConstructionCrewMemberships.AsNoTracking()
-            .Where(item => !item.EndDate.HasValue && item.Worker.IsActive && item.CrewBusinessPartner.IsActive && item.CrewBusinessPartner.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew))
+            .Where(item => item.StartDate <= paymentDate
+                && (!item.EndDate.HasValue || item.EndDate >= paymentDate)
+                && item.CrewBusinessPartner.IsActive
+                && item.CrewBusinessPartner.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.ConstructionCrew)
+                && (item.Worker.PersonId.HasValue
+                    ? item.Worker.Person!.IsActive && item.Worker.Person.EngagementHistory.Any(engagement =>
+                        engagement.IsPrimary
+                        && engagement.Scope == PersonnelScope.External
+                        && engagement.ExternalType == ExternalPersonnelType.ConstructionCrew
+                        && engagement.CrewBusinessPartnerId == item.CrewBusinessPartnerId
+                        && engagement.StartDate <= paymentDate
+                        && (!engagement.EndDate.HasValue || engagement.EndDate >= paymentDate))
+                    : item.Worker.IsActive))
             .Include(item => item.Worker)
             .Include(item => item.CrewBusinessPartner)
             .OrderBy(item => item.CrewBusinessPartner.Name)

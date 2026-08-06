@@ -15,6 +15,8 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
     public async Task<PersonnelDetailsDto> CreateAsync(string userId, CreatePersonRequest request, CancellationToken cancellationToken)
     {
         var personNumber = Required(request.PersonNumber, nameof(request.PersonNumber));
+        var effectiveDate = request.EffectiveDate ?? DateOnly.FromDateTime(DateTime.Today);
+        ValidateEffectiveDate(effectiveDate);
         if (await db.People.AnyAsync(item => item.PersonNumber == personNumber, cancellationToken))
         {
             throw new InvalidOperationException($"人员编号已存在：{personNumber}");
@@ -44,9 +46,10 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             true);
         db.People.Add(person);
 
+        Employee? employee = null;
         if (request.Scope == PersonnelScope.Internal)
         {
-            var employee = CreateEmployee(person, request.InternalType!.Value, request.PositionTitle, request.LegalEntityId);
+            employee = CreateEmployee(person, request.InternalType!.Value, request.PositionTitle, request.LegalEntityId);
             db.Employees.Add(employee);
         }
         else if (request.ExternalType == ExternalPersonnelType.ConstructionCrew)
@@ -56,7 +59,7 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             {
                 Worker = worker,
                 CrewBusinessPartnerId = request.CrewBusinessPartnerId!.Value,
-                StartDate = request.EffectiveDate ?? DateOnly.FromDateTime(DateTime.Today),
+                StartDate = effectiveDate,
                 IsPrimary = true,
                 Notes = Optional(request.Reason)
             });
@@ -74,10 +77,11 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             request.ProjectId,
             request.CrewBusinessPartnerId,
             request.PositionTitle,
-            request.EffectiveDate ?? DateOnly.FromDateTime(DateTime.Today),
+            effectiveDate,
             request.Notes,
             request.Reason);
         db.PersonnelEngagementHistories.Add(engagement);
+        SyncEmployeeAffiliation(employee, engagement);
         AddAudit(userId, "CreatePerson", person.Id, request.Reason, null, Snapshot(engagement));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -99,6 +103,7 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
         if (query.IsActive.HasValue) items = items.Where(item => item.IsActive == query.IsActive.Value);
         if (query.LegalEntityId.HasValue) items = items.Where(item => item.CurrentAffiliation?.LegalEntityId == query.LegalEntityId.Value);
         if (query.BusinessPartnerId.HasValue) items = items.Where(item => item.CurrentAffiliation?.BusinessPartnerId == query.BusinessPartnerId.Value);
+        if (query.CrewBusinessPartnerId.HasValue) items = items.Where(item => item.CurrentAffiliation?.CrewBusinessPartnerId == query.CrewBusinessPartnerId.Value);
         if (query.OrganizationUnitId.HasValue) items = items.Where(item => item.CurrentAffiliation?.OrganizationUnitId == query.OrganizationUnitId.Value);
         if (query.InternalType.HasValue) items = items.Where(item => item.CurrentAffiliation?.InternalType == query.InternalType.Value);
         if (query.ExternalType.HasValue) items = items.Where(item => item.CurrentAffiliation?.ExternalType == query.ExternalType.Value);
@@ -126,6 +131,7 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
         var person = await db.People
             .Include(item => item.Employee)
             .Include(item => item.ConstructionWorker)
+            .Include(item => item.EngagementHistory)
             .SingleOrDefaultAsync(item => item.Id == request.PersonId, cancellationToken)
             ?? throw new InvalidOperationException("人员不存在。");
         if (person.ConcurrencyStamp != request.ConcurrencyStamp)
@@ -135,6 +141,10 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
 
         await ValidateIdentityNumberAsync(person.Id, request.IdentityNumber, cancellationToken);
         var before = PublicSnapshot(person);
+        var currentAffiliation = person.EngagementHistory
+            .Where(item => item.IsPrimary && item.StartDate <= DateOnly.FromDateTime(DateTime.Today) && (item.EndDate is null || item.EndDate >= DateOnly.FromDateTime(DateTime.Today)))
+            .OrderByDescending(item => item.StartDate)
+            .FirstOrDefault();
         db.Entry(person).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
         PersonPublicDataSynchronizer.Apply(
             person,
@@ -145,6 +155,7 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             request.BankName,
             request.Notes,
             request.IsActive);
+        PersonPublicDataSynchronizer.ApplyActiveProfile(person, request.IsActive, currentAffiliation);
         AddAudit(userId, "UpdatePerson", person.Id, request.Reason, before, PublicSnapshot(person));
         await db.SaveChangesAsync(cancellationToken);
         return (await GetAsync(person.Id, null, true, cancellationToken))!;
@@ -162,18 +173,37 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
     public async Task<PersonnelDetailsDto> SwitchScopeAsync(string userId, SwitchPersonnelScopeRequest request, CancellationToken cancellationToken)
     {
         ValidateScope(request.Scope, request.InternalType, request.ExternalType, request.BusinessPartnerId, request.CrewBusinessPartnerId);
+        var reason = Required(request.Reason, nameof(request.Reason));
+        ValidateEffectiveDate(request.EffectiveDate);
+        await ValidateAffiliationReferencesAsync(
+            request.Scope,
+            request.LegalEntityId,
+            request.BusinessPartnerId,
+            request.OrganizationUnitId,
+            request.ProjectId,
+            request.CrewBusinessPartnerId,
+            cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var person = await db.People
+            .Include(item => item.EngagementHistory)
             .Include(item => item.Employee)
             .Include(item => item.ConstructionWorker).ThenInclude(item => item!.Memberships)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == request.PersonId, cancellationToken)
             ?? throw new InvalidOperationException("人员不存在。");
+        if (!request.ConcurrencyStamp.HasValue)
+        {
+            throw new DbUpdateConcurrencyException("人员归属已被其他用户修改，请刷新后重试。");
+        }
+        ValidateAffiliationPeriod(person.EngagementHistory, request.EffectiveDate, request.ConcurrencyStamp, allowSameDayReplacement: false);
 
         if (request.Scope == PersonnelScope.Internal)
         {
+            CloseCurrentCrewIdentity(person.ConstructionWorker, request.EffectiveDate);
             if (person.Employee is null)
             {
                 person.Employee = CreateEmployee(person, request.InternalType!.Value, request.PositionTitle, request.LegalEntityId);
+                person.Employee.IsActive = person.IsActive;
                 db.Employees.Add(person.Employee);
             }
             else
@@ -181,36 +211,45 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
                 person.Employee.EmployeeType = request.InternalType!.Value;
                 person.Employee.PositionTitle = Optional(request.PositionTitle);
                 person.Employee.DefaultLegalEntityId = request.LegalEntityId;
-                person.Employee.IsActive = true;
+                person.Employee.IsActive = person.IsActive;
                 person.Employee.LeaveDate = null;
             }
         }
-        else if (request.ExternalType == ExternalPersonnelType.ConstructionCrew)
+        else
         {
-            if (person.ConstructionWorker is null)
+            if (person.Employee is not null)
             {
-                person.ConstructionWorker = CreateConstructionWorker(person, request.PositionTitle);
-                db.ConstructionWorkers.Add(person.ConstructionWorker);
+                person.Employee.IsActive = false;
+                person.Employee.LeaveDate = request.EffectiveDate.AddDays(-1);
+                person.Employee.UpdatedAt = DateTimeOffset.UtcNow;
+                person.Employee.ConcurrencyStamp = Guid.NewGuid();
             }
 
-            var currentMembership = person.ConstructionWorker.Memberships
-                .Where(item => item.IsPrimary && item.StartDate <= request.EffectiveDate && (item.EndDate is null || item.EndDate >= request.EffectiveDate))
-                .OrderByDescending(item => item.StartDate)
-                .FirstOrDefault();
-            if (currentMembership is not null && currentMembership.StartDate < request.EffectiveDate)
+            if (request.ExternalType == ExternalPersonnelType.ConstructionCrew)
             {
-                currentMembership.EndDate = request.EffectiveDate.AddDays(-1);
-            }
-            if (currentMembership is null || currentMembership.CrewBusinessPartnerId != request.CrewBusinessPartnerId)
-            {
-                person.ConstructionWorker.Memberships.Add(new ConstructionCrewMembership
+                if (person.ConstructionWorker is null)
                 {
-                    Worker = person.ConstructionWorker,
-                    CrewBusinessPartnerId = request.CrewBusinessPartnerId!.Value,
-                    StartDate = request.EffectiveDate,
-                    IsPrimary = true,
-                    Notes = Required(request.Reason, nameof(request.Reason))
-                });
+                    person.ConstructionWorker = CreateConstructionWorker(person, request.PositionTitle);
+                    person.ConstructionWorker.IsActive = person.IsActive;
+                    db.ConstructionWorkers.Add(person.ConstructionWorker);
+                }
+                else
+                {
+                    person.ConstructionWorker.IsActive = person.IsActive;
+                    person.ConstructionWorker.Trade = Optional(request.PositionTitle);
+                    person.ConstructionWorker.UpdatedAt = DateTimeOffset.UtcNow;
+                    person.ConstructionWorker.ConcurrencyStamp = Guid.NewGuid();
+                }
+
+                SyncCurrentCrewMembership(
+                    person.ConstructionWorker,
+                    request.CrewBusinessPartnerId!.Value,
+                    request.EffectiveDate,
+                    reason);
+            }
+            else
+            {
+                CloseCurrentCrewIdentity(person.ConstructionWorker, request.EffectiveDate);
             }
         }
 
@@ -226,8 +265,8 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             request.CrewBusinessPartnerId,
             request.PositionTitle,
             request.EffectiveDate,
-            request.Reason), cancellationToken);
-        AddAudit(userId, "SwitchPersonnelScope", person.Id, request.Reason, null, new { request.Scope, request.InternalType, request.ExternalType, request.EffectiveDate });
+            reason), cancellationToken, allowIdentityChange: true);
+        AddAudit(userId, "SwitchPersonnelScope", person.Id, reason, null, new { request.Scope, request.InternalType, request.ExternalType, request.EffectiveDate });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (await GetAsync(person.Id, request.EffectiveDate, true, cancellationToken))!;
@@ -245,6 +284,7 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             .Include(item => item.LegalEntities)
             .Include(item => item.Partners)
             .Include(item => item.ConstructionRecords)
+            .AsSplitQuery()
             .OrderBy(item => item.Name)
             .ToArrayAsync(cancellationToken);
         var projects = projectRows.Select(item => new PersonnelProjectOptionDto(
@@ -260,9 +300,15 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
     public Task<Guid?> ResolvePersonIdForEmployeeAsync(Guid employeeId, CancellationToken cancellationToken) =>
         db.Employees.AsNoTracking().Where(item => item.Id == employeeId).Select(item => item.PersonId).SingleOrDefaultAsync(cancellationToken);
 
-    private async Task<PersonnelEngagementHistory> SaveAffiliationCoreAsync(string userId, SavePersonnelAffiliationRequest request, CancellationToken cancellationToken)
+    private async Task<PersonnelEngagementHistory> SaveAffiliationCoreAsync(
+        string userId,
+        SavePersonnelAffiliationRequest request,
+        CancellationToken cancellationToken,
+        bool allowIdentityChange = false)
     {
         ValidateScope(request.Scope, request.InternalType, request.ExternalType, request.BusinessPartnerId, request.CrewBusinessPartnerId);
+        var reason = Required(request.Reason, nameof(request.Reason));
+        ValidateEffectiveDate(request.EffectiveDate);
         await ValidateAffiliationReferencesAsync(
             request.Scope,
             request.LegalEntityId,
@@ -271,23 +317,37 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             request.ProjectId,
             request.CrewBusinessPartnerId,
             cancellationToken);
-        var person = await db.People.Include(item => item.EngagementHistory).Include(item => item.Employee)
+        var person = await db.People
+            .Include(item => item.EngagementHistory)
+            .Include(item => item.Employee).ThenInclude(item => item!.AffiliationHistory)
+            .Include(item => item.ConstructionWorker).ThenInclude(item => item!.Memberships)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == request.PersonId, cancellationToken)
             ?? throw new InvalidOperationException("人员不存在。");
-        var current = person.EngagementHistory
-            .Where(item => item.IsPrimary && item.StartDate <= request.EffectiveDate && (item.EndDate is null || item.EndDate >= request.EffectiveDate))
-            .OrderByDescending(item => item.StartDate)
-            .FirstOrDefault();
-        if (current is not null)
+        var current = ValidateAffiliationPeriod(
+            person.EngagementHistory,
+            request.EffectiveDate,
+            request.ConcurrencyStamp,
+            allowSameDayReplacement: true);
+        if (!allowIdentityChange)
         {
-            if (request.ConcurrencyStamp.HasValue && current.ConcurrencyStamp != request.ConcurrencyStamp.Value)
+            ValidateAffiliationIdentityChange(current, request);
+        }
+        var before = current is null ? null : Snapshot(current);
+        if (current is not null && current.StartDate == request.EffectiveDate)
+        {
+            if (!request.ConcurrencyStamp.HasValue)
             {
                 throw new DbUpdateConcurrencyException("人员归属已被其他用户修改，请刷新后重试。");
             }
-            if (current.StartDate >= request.EffectiveDate)
-            {
-                throw new InvalidOperationException("新归属生效日期必须晚于当前归属开始日期。");
-            }
+            ApplyAffiliationValues(current, request, reason);
+            SyncEmployeeAffiliation(person.Employee, current);
+            SyncConstructionWorkerAffiliation(person.ConstructionWorker, current);
+            AddAudit(userId, "UpdatePersonnelAffiliation", person.Id, reason, before, Snapshot(current));
+            return current;
+        }
+        if (current is not null)
+        {
             current.EndDate = request.EffectiveDate.AddDays(-1);
             current.ConcurrencyStamp = Guid.NewGuid();
         }
@@ -305,13 +365,68 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             request.PositionTitle,
             request.EffectiveDate,
             null,
-            request.Reason);
+            reason);
         person.EngagementHistory.Add(engagement);
         db.PersonnelEngagementHistories.Add(engagement);
-        PersonnelEngagementRules.ValidatePrimaryPeriods(person.EngagementHistory.Select(item => new EngagementPeriod(item.StartDate, item.EndDate, item.IsPrimary)));
         SyncEmployeeAffiliation(person.Employee, engagement);
-        AddAudit(userId, "UpdatePersonnelAffiliation", person.Id, request.Reason, current is null ? null : Snapshot(current), Snapshot(engagement));
+        SyncConstructionWorkerAffiliation(person.ConstructionWorker, engagement);
+        AddAudit(userId, "UpdatePersonnelAffiliation", person.Id, reason, before, Snapshot(engagement));
         return engagement;
+    }
+
+    private static PersonnelEngagementHistory? ValidateAffiliationPeriod(
+        IEnumerable<PersonnelEngagementHistory> history,
+        DateOnly effectiveDate,
+        Guid? concurrencyStamp,
+        bool allowSameDayReplacement)
+    {
+        var records = history.ToArray();
+        var current = records
+            .Where(item => item.IsPrimary && item.StartDate <= effectiveDate && (item.EndDate is null || item.EndDate >= effectiveDate))
+            .OrderByDescending(item => item.StartDate)
+            .FirstOrDefault();
+        if (current is not null)
+        {
+            if (concurrencyStamp.HasValue && current.ConcurrencyStamp != concurrencyStamp.Value)
+            {
+                throw new DbUpdateConcurrencyException("人员归属已被其他用户修改，请刷新后重试。");
+            }
+            if (current.StartDate > effectiveDate || (current.StartDate == effectiveDate && !allowSameDayReplacement))
+            {
+                throw new InvalidOperationException("新归属生效日期必须晚于当前归属开始日期。");
+            }
+        }
+
+        var periods = records
+            .Where(item => !ReferenceEquals(item, current) || current.StartDate != effectiveDate)
+            .Select(item => new EngagementPeriod(
+                item.StartDate,
+                ReferenceEquals(item, current) ? effectiveDate.AddDays(-1) : item.EndDate,
+                item.IsPrimary))
+            .Append(new EngagementPeriod(effectiveDate, null, true));
+        PersonnelEngagementRules.ValidatePrimaryPeriods(periods);
+        return current;
+    }
+
+    private static void ValidateAffiliationIdentityChange(
+        PersonnelEngagementHistory? current,
+        SavePersonnelAffiliationRequest request)
+    {
+        if (current is null)
+        {
+            return;
+        }
+        if (current.Scope != request.Scope)
+        {
+            throw new InvalidOperationException("人员范围变更请使用内部 / 外部身份切换功能。");
+        }
+        if (current.Scope == PersonnelScope.External
+            && current.ExternalType != request.ExternalType
+            && (current.ExternalType == ExternalPersonnelType.ConstructionCrew
+                || request.ExternalType == ExternalPersonnelType.ConstructionCrew))
+        {
+            throw new InvalidOperationException("施工班组人员类型变更请使用身份切换功能。");
+        }
     }
 
     private async Task ValidateAffiliationReferencesAsync(
@@ -323,9 +438,31 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
         Guid? crewBusinessPartnerId,
         CancellationToken cancellationToken)
     {
-        if (scope == PersonnelScope.Internal && !legalEntityId.HasValue)
+        if (scope == PersonnelScope.Internal)
         {
-            throw new InvalidOperationException("内部人员必须选择自有公司。");
+            if (businessPartnerId.HasValue)
+            {
+                throw new InvalidOperationException("内部人员不能归属合作单位。");
+            }
+            if (!legalEntityId.HasValue)
+            {
+                throw new InvalidOperationException("内部人员必须选择自有公司。");
+            }
+        }
+        else
+        {
+            if (legalEntityId.HasValue && businessPartnerId.HasValue)
+            {
+                throw new InvalidOperationException("外部人员不能同时归属自有公司和合作单位。");
+            }
+            if (legalEntityId.HasValue)
+            {
+                throw new InvalidOperationException("外部人员不能归属自有公司。");
+            }
+            if (!businessPartnerId.HasValue)
+            {
+                throw new InvalidOperationException("外部人员必须选择所属合作单位。");
+            }
         }
         if (scope == PersonnelScope.External && businessPartnerId.HasValue && !await db.BusinessPartners.AnyAsync(item => item.Id == businessPartnerId && item.IsActive, cancellationToken))
         {
@@ -355,6 +492,16 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
             if (!projectMatches)
             {
                 throw new InvalidOperationException("项目与当前选择的公司或合作单位没有有效关联。");
+            }
+
+            if (crewBusinessPartnerId.HasValue && !await db.Projects.AnyAsync(item =>
+                    item.Id == projectId
+                    && item.IsActive
+                    && (item.Partners.Any(link => link.BusinessPartnerId == crewBusinessPartnerId && link.IsActive)
+                        || item.ConstructionRecords.Any(record => record.CrewBusinessPartnerId == crewBusinessPartnerId)),
+                    cancellationToken))
+            {
+                throw new InvalidOperationException("所选施工班组未关联当前项目。");
             }
         }
     }
@@ -400,6 +547,83 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
         Notes = person.Notes,
         IsActive = true
     };
+
+    private static void CloseCurrentCrewIdentity(ConstructionWorker? worker, DateOnly effectiveDate)
+    {
+        if (worker is null) return;
+        var currentMembership = worker.Memberships
+            .Where(item => item.IsPrimary && item.StartDate <= effectiveDate && (item.EndDate is null || item.EndDate >= effectiveDate))
+            .OrderByDescending(item => item.StartDate)
+            .FirstOrDefault();
+        if (currentMembership is not null)
+        {
+            currentMembership.EndDate = effectiveDate.AddDays(-1);
+            currentMembership.IsPrimary = false;
+            currentMembership.ConcurrencyStamp = Guid.NewGuid();
+        }
+        worker.IsActive = false;
+        worker.UpdatedAt = DateTimeOffset.UtcNow;
+        worker.ConcurrencyStamp = Guid.NewGuid();
+    }
+
+    private void SyncConstructionWorkerAffiliation(ConstructionWorker? worker, PersonnelEngagementHistory engagement)
+    {
+        if (worker is null
+            || engagement.Scope != PersonnelScope.External
+            || engagement.ExternalType != ExternalPersonnelType.ConstructionCrew
+            || !engagement.CrewBusinessPartnerId.HasValue)
+        {
+            return;
+        }
+
+        worker.Trade = engagement.PositionTitle;
+        worker.UpdatedAt = DateTimeOffset.UtcNow;
+        worker.ConcurrencyStamp = Guid.NewGuid();
+        SyncCurrentCrewMembership(
+            worker,
+            engagement.CrewBusinessPartnerId.Value,
+            engagement.StartDate,
+            Required(engagement.Reason ?? string.Empty, nameof(engagement.Reason)));
+    }
+
+    private void SyncCurrentCrewMembership(
+        ConstructionWorker worker,
+        Guid crewBusinessPartnerId,
+        DateOnly effectiveDate,
+        string reason)
+    {
+        var currentMembership = worker.Memberships
+            .Where(item => item.IsPrimary && item.StartDate <= effectiveDate && (item.EndDate is null || item.EndDate >= effectiveDate))
+            .OrderByDescending(item => item.StartDate)
+            .FirstOrDefault();
+        if (currentMembership is not null && currentMembership.CrewBusinessPartnerId != crewBusinessPartnerId)
+        {
+            if (currentMembership.StartDate == effectiveDate)
+            {
+                currentMembership.CrewBusinessPartnerId = crewBusinessPartnerId;
+                currentMembership.Notes = reason;
+                currentMembership.ConcurrencyStamp = Guid.NewGuid();
+                return;
+            }
+            currentMembership.EndDate = effectiveDate.AddDays(-1);
+            currentMembership.IsPrimary = false;
+            currentMembership.ConcurrencyStamp = Guid.NewGuid();
+            currentMembership = null;
+        }
+        if (currentMembership is null)
+        {
+            var membership = new ConstructionCrewMembership
+            {
+                Worker = worker,
+                CrewBusinessPartnerId = crewBusinessPartnerId,
+                StartDate = effectiveDate,
+                IsPrimary = true,
+                Notes = reason
+            };
+            worker.Memberships.Add(membership);
+            db.ConstructionCrewMemberships.Add(membership);
+        }
+    }
 
     private static ConstructionWorker CreateConstructionWorker(Person person, string? trade) => new()
     {
@@ -448,13 +672,40 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
     private void SyncEmployeeAffiliation(Employee? employee, PersonnelEngagementHistory engagement)
     {
         if (employee is null) return;
+        if (engagement.Scope == PersonnelScope.Internal)
+        {
+            employee.EmployeeType = engagement.InternalType!.Value;
+            employee.DefaultLegalEntityId = engagement.LegalEntityId;
+            employee.PositionTitle = engagement.PositionTitle;
+            employee.UpdatedAt = DateTimeOffset.UtcNow;
+            employee.ConcurrencyStamp = Guid.NewGuid();
+        }
         var current = employee.AffiliationHistory
             .Where(item => item.IsPrimary && item.StartDate <= engagement.StartDate && (item.EndDate is null || item.EndDate >= engagement.StartDate))
             .OrderByDescending(item => item.StartDate)
             .FirstOrDefault();
+        if (current is not null && current.StartDate == engagement.StartDate)
+        {
+            if (engagement.Scope == PersonnelScope.Internal)
+            {
+                current.EndDate = engagement.EndDate;
+                current.DepartmentId = engagement.OrganizationUnitId;
+                current.ProjectId = engagement.ProjectId;
+                current.CrewBusinessPartnerId = engagement.CrewBusinessPartnerId;
+                current.LegalEntityId = engagement.LegalEntityId;
+                current.PositionTitle = engagement.PositionTitle;
+                current.IsPrimary = true;
+                current.Notes = engagement.Reason;
+            }
+            return;
+        }
         if (current is not null && current.StartDate < engagement.StartDate)
         {
             current.EndDate = engagement.StartDate.AddDays(-1);
+        }
+        if (engagement.Scope != PersonnelScope.Internal)
+        {
+            return;
         }
         var affiliation = new EmployeeAffiliationHistory
         {
@@ -562,6 +813,33 @@ public sealed class PersonnelService(ApplicationDbContext db) : IPersonnelServic
     };
 
     private static object PublicSnapshot(Person person) => new { person.Name, person.Phone, person.IsActive, person.Notes };
+
+    private static void ApplyAffiliationValues(
+        PersonnelEngagementHistory engagement,
+        SavePersonnelAffiliationRequest request,
+        string reason)
+    {
+        engagement.InternalType = request.InternalType;
+        engagement.ExternalType = request.ExternalType;
+        engagement.LegalEntityId = request.LegalEntityId;
+        engagement.BusinessPartnerId = request.BusinessPartnerId;
+        engagement.OrganizationUnitId = request.OrganizationUnitId;
+        engagement.ProjectId = request.ProjectId;
+        engagement.CrewBusinessPartnerId = request.CrewBusinessPartnerId;
+        engagement.PositionTitle = Optional(request.PositionTitle);
+        engagement.EndDate = null;
+        engagement.IsPrimary = true;
+        engagement.Reason = reason;
+        engagement.ConcurrencyStamp = Guid.NewGuid();
+    }
+
+    private static void ValidateEffectiveDate(DateOnly effectiveDate)
+    {
+        if (effectiveDate > DateOnly.FromDateTime(DateTime.Today))
+        {
+            throw new InvalidOperationException("归属生效日期不能晚于今天。");
+        }
+    }
 
     private static string Required(string value, string parameterName) => string.IsNullOrWhiteSpace(value)
         ? throw new ArgumentException("值不能为空。", parameterName)

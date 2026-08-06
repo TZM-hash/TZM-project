@@ -197,11 +197,11 @@
                         <tbody>
                         @foreach (var company in Model.Companies)
                         {
-                            <tr>
+                            <tr data-row-group="company-@company.Id">
                                 <td data-column-key="code">@company.Code</td>
-                                <td data-column-key="company"><a class="company-name-link" asp-page="Details" asp-route-id="@company.Id" asp-route-tab="overview">@company.Name</a></td>
-                                <td data-column-key="category">@(company.CategoryName ?? "未分类")</td>
-                                <td data-column-key="representative">@(string.IsNullOrWhiteSpace(company.LegalRepresentative) ? "—" : company.LegalRepresentative)</td>
+                                <td data-column-key="company"><a class="company-name-link company-name-clamp" title="@company.Name" asp-page="Details" asp-route-id="@company.Id" asp-route-tab="overview">@company.Name</a></td>
+                                <td data-column-key="category"><span class="company-cell-clamp" title="@company.CategoryName">@(company.CategoryName ?? "未分类")</span></td>
+                                <td data-column-key="representative"><span class="company-cell-clamp" title="@company.LegalRepresentative">@(string.IsNullOrWhiteSpace(company.LegalRepresentative) ? "—" : company.LegalRepresentative)</span></td>
                                 <td data-column-key="accounts">
                                     <a asp-page="Details" asp-route-id="@company.Id" asp-route-tab="accounts">
                                         @company.ActiveAccountCount 个启用
@@ -211,7 +211,7 @@
                                         }
                                     </a>
                                 </td>
-                                <td data-column-key="notes">@(string.IsNullOrWhiteSpace(company.Notes) ? "—" : company.Notes)</td>
+                                <td data-column-key="notes"><span class="company-notes-clamp" title="@company.Notes">@(string.IsNullOrWhiteSpace(company.Notes) ? "—" : company.Notes)</span></td>
                                 <td data-column-key="status">
                                     <span class="pill @(company.IsActive ? "pill--success" : "pill--warning")">@(company.IsActive ? "启用" : "停用")</span>
                                 </td>
@@ -230,7 +230,7 @@
                             </tr>
                             @if (Model.OrganizationSummaries.TryGetValue(company.Id, out var organizationSummary))
                             {
-                                <tr class="organization-summary-row">
+                                <tr class="organization-summary-row" data-row-group="company-@company.Id">
                                     <td colspan="8">
                                         <partial name="_OrganizationSummary" model="new OrganizationSummaryViewModel(organizationSummary, true)" />
                                     </td>

@@ -115,6 +115,8 @@ public sealed class PartnerStageResultAuthorizationTests
         var overview = html[..html.IndexOf("<dialog", StringComparison.Ordinal)];
 
         overview.Should().Contain("data-partner-financial-summary")
+            .And.Contain(">资金往来</th>")
+            .And.Contain(">票据往来</th>")
             .And.Contain("应付")
             .And.Contain("已付")
             .And.Contain("未付")
@@ -125,7 +127,7 @@ public sealed class PartnerStageResultAuthorizationTests
             .And.Contain("role=\"progressbar\"")
             .And.Contain("data-progress-state=\"no-target\"")
             .And.Contain("aria-valuetext=\"—")
-            .And.NotContain("data-column-key=\"receipts\"");
+            .And.Contain("data-column-key=\"receipts\"");
         factory.Services.GetRequiredService<RecordingCentralLedgerQueryService>().SummaryCallCount.Should().Be(1);
     }
 

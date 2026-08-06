@@ -15,6 +15,10 @@
     var inlineFilters = Model.InlineFilterFields;
     var inlineKeys = inlineFilters.Select(field => field.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
     var advancedFilters = Model.Filters.Where(field => !inlineKeys.Contains(field.Key)).ToArray();
+    var managedQueryKeys = Model.Filters.Select(field => field.Key)
+        .Concat(inlineFilters.Select(field => field.Key))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var preservedQueryParameters = Model.PreservedQueryParameters ?? new Dictionary<string, string?>();
     var hasInlineValue = inlineFilters.Any(field => !string.IsNullOrWhiteSpace(field.Value) || !string.IsNullOrWhiteSpace(Context.Request.Query[field.Key].ToString()));
     var currentSortKey = Model.EffectiveSortKey;
     var currentSortDescending = Model.EffectiveSortDescending;
@@ -33,6 +37,13 @@
           data-current-saved-view-id="@Model.CurrentSavedViewId">
     <div class="data-workbench-toolbar" aria-label="数据视图工具栏">
         <form method="get" class="workbench-inline-filters" role="search" aria-label="快速搜索">
+            @foreach (var parameter in preservedQueryParameters)
+            {
+                if (!managedQueryKeys.Contains(parameter.Key) && !string.IsNullOrWhiteSpace(parameter.Value))
+                {
+                    <input type="hidden" name="@parameter.Key" value="@parameter.Value" data-preserved-query-parameter />
+                }
+            }
             @foreach (var field in inlineFilters)
             {
                 var value = field.Value ?? Context.Request.Query[field.Key].ToString();
@@ -78,7 +89,7 @@
             @if (inlineFilters.Count > 0)
             {
                 <button class="button button--secondary workbench-inline-submit" type="submit">搜索</button>
-                @if (hasInlineValue) { <a class="button button--ghost workbench-inline-clear" href="@Context.Request.Path">清除</a> }
+                @if (hasInlineValue) { <a class="button button--ghost workbench-inline-clear" href="@(Model.ClearFiltersUrl ?? Context.Request.Path)">清除</a> }
             }
         </form>
 
@@ -196,6 +207,13 @@
             {
     <dialog class="workbench-dialog filter-dialog" data-filter-drawer>
         <form method="get" data-filter-form>
+            @foreach (var parameter in preservedQueryParameters)
+            {
+                if (!managedQueryKeys.Contains(parameter.Key) && !string.IsNullOrWhiteSpace(parameter.Value))
+                {
+                    <input type="hidden" name="@parameter.Key" value="@parameter.Value" data-preserved-query-parameter />
+                }
+            }
             <div class="workbench-dialog-heading">
                 <div><strong>高级筛选</strong><span>组合多个条件后应用，筛选会同步到地址栏和导出范围。</span></div>
                 <button type="button" class="dialog-close" data-close-dialog aria-label="关闭高级筛选">×</button>

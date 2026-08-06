@@ -15,16 +15,32 @@ namespace EngineeringManager.Tests.Web;
 public sealed class PersonnelPageTests
 {
     [Fact]
-    public void MainNavigationExposesPersonnelScopesAndRetainsEmployeeBusinessEntry()
+    public void MainNavigationExposesOnlyTheTwoPersonnelScopes()
     {
         var layout = ReadPage("Shared", "_Layout.cshtml");
 
         layout.Should().Contain("人员管理")
             .And.Contain("asp-page=\"/Personnel/Internal/Index\"")
             .And.Contain("asp-page=\"/Personnel/External/Index\"")
-            .And.Contain("asp-page=\"/Employees/Index\"")
             .And.Contain("内部人员")
-            .And.Contain("外部人员");
+            .And.Contain("外部人员")
+            .And.NotContain("<a class='@Nav(\"/Employees\")' asp-page=\"/Employees/Index\">员工业务档案</a>");
+    }
+
+    [Fact]
+    public void PersonnelCategoryTabsDoNotPresentEmployeeBusinessRecordsAsAThirdScope()
+    {
+        var pages = new[]
+        {
+            ReadPage("Personnel", "Internal", "Index.cshtml"),
+            ReadPage("Personnel", "External", "Index.cshtml"),
+            ReadPage("Personnel", "Details.cshtml"),
+            ReadPage("Personnel", "Create.cshtml")
+        };
+
+        pages.Should().OnlyContain(page => !page.Contains(
+            "<a class=\"button button--secondary button--small\" asp-page=\"/Employees/Index\">员工业务档案</a>",
+            StringComparison.Ordinal));
     }
 
     [Fact]
@@ -32,14 +48,14 @@ public sealed class PersonnelPageTests
     {
         var service = new RecordingPersonnelService();
         var legalEntityId = Guid.NewGuid();
-        var businessPartnerId = Guid.NewGuid();
+        var crewBusinessPartnerId = Guid.NewGuid();
         var departmentId = Guid.NewGuid();
         var asOf = new DateOnly(2026, 8, 6);
         var model = new InternalIndexModel(service)
         {
             Search = "张三",
             LegalEntityId = legalEntityId,
-            BusinessPartnerId = businessPartnerId,
+            CrewBusinessPartnerId = crewBusinessPartnerId,
             DepartmentId = departmentId,
             InternalType = EmployeeType.Labor,
             IsActive = false,
@@ -53,12 +69,13 @@ public sealed class PersonnelPageTests
             PersonnelScope.Internal,
             "张三",
             legalEntityId,
-            businessPartnerId,
+            null,
             departmentId,
             EmployeeType.Labor,
             null,
             false,
-            asOf));
+            asOf,
+            crewBusinessPartnerId));
         service.LastCanViewSensitiveData.Should().BeTrue();
     }
 
@@ -66,15 +83,15 @@ public sealed class PersonnelPageTests
     public async Task ExternalWorkbenchPassesEveryGetFilterToPersonnelService()
     {
         var service = new RecordingPersonnelService();
-        var legalEntityId = Guid.NewGuid();
         var businessPartnerId = Guid.NewGuid();
+        var crewBusinessPartnerId = Guid.NewGuid();
         var departmentId = Guid.NewGuid();
         var asOf = new DateOnly(2026, 8, 6);
         var model = new ExternalIndexModel(service)
         {
             Search = "班组人员",
-            LegalEntityId = legalEntityId,
             BusinessPartnerId = businessPartnerId,
+            CrewBusinessPartnerId = crewBusinessPartnerId,
             DepartmentId = departmentId,
             ExternalType = ExternalPersonnelType.ConstructionCrew,
             IsActive = true,
@@ -87,13 +104,14 @@ public sealed class PersonnelPageTests
         service.LastListQuery.Should().Be(new PersonnelListQuery(
             PersonnelScope.External,
             "班组人员",
-            legalEntityId,
+            null,
             businessPartnerId,
             departmentId,
             null,
             ExternalPersonnelType.ConstructionCrew,
             true,
-            asOf));
+            asOf,
+            crewBusinessPartnerId));
         service.LastCanViewSensitiveData.Should().BeTrue();
     }
 
@@ -122,7 +140,7 @@ public sealed class PersonnelPageTests
     {
         var personId = Guid.NewGuid();
         var partnerId = Guid.NewGuid();
-        var crewId = Guid.NewGuid();
+        var concurrencyStamp = Guid.NewGuid();
         var service = new RecordingPersonnelService(personId);
         var model = new PersonnelDetailsModel(service)
         {
@@ -131,12 +149,14 @@ public sealed class PersonnelPageTests
             SwitchInput = new PersonnelDetailsModel.ScopeSwitchInput
             {
                 Scope = PersonnelScope.External,
+                InternalType = EmployeeType.Formal,
                 ExternalType = ExternalPersonnelType.ConstructionCrew,
                 BusinessPartnerId = partnerId,
-                CrewBusinessPartnerId = crewId,
+                CrewBusinessPartnerId = partnerId,
                 EffectiveDate = new DateOnly(2026, 8, 7),
                 PositionTitle = "班组长",
-                Reason = "转为外部班组人员"
+                Reason = "转为外部班组人员",
+                ConcurrencyStamp = concurrencyStamp
             }
         };
 
@@ -152,10 +172,11 @@ public sealed class PersonnelPageTests
             partnerId,
             null,
             null,
-            crewId,
+            partnerId,
             "班组长",
             new DateOnly(2026, 8, 7),
-            "转为外部班组人员"));
+            "转为外部班组人员",
+            concurrencyStamp));
     }
 
     [Fact]
@@ -168,8 +189,7 @@ public sealed class PersonnelPageTests
         foreach (var page in new[] { internalPage, externalPage })
         {
             page.Should().Contain("name=\"Search\"")
-                .And.Contain("name=\"LegalEntityId\"")
-                .And.Contain("name=\"BusinessPartnerId\"")
+                .And.Contain("name=\"CrewBusinessPartnerId\"")
                 .And.Contain("name=\"DepartmentId\"")
                 .And.Contain("name=\"IsActive\"")
                 .And.Contain("asp-page=\"/Personnel/Details\"")
@@ -177,14 +197,19 @@ public sealed class PersonnelPageTests
         }
 
         internalPage.Should().Contain("name=\"InternalType\"")
+            .And.Contain("name=\"LegalEntityId\"")
+            .And.NotContain("name=\"BusinessPartnerId\"")
             .And.Contain("asp-page=\"/Employees/Ledger\"")
             .And.Contain("asp-page=\"/Employees/Certificates/Index\"");
         externalPage.Should().Contain("name=\"ExternalType\"")
+            .And.Contain("name=\"BusinessPartnerId\"")
+            .And.NotContain("name=\"LegalEntityId\"")
             .And.Contain("asp-page=\"/Crews/Details\"")
             .And.Contain("asp-page=\"/Partners/Details\"");
         detailsPage.Should().Contain("asp-page-handler=\"SwitchScope\"")
             .And.Contain("SwitchInput.EffectiveDate")
             .And.Contain("SwitchInput.Reason")
+            .And.Contain("SwitchInput.ConcurrencyStamp")
             .And.Contain("归属历史")
             .And.Contain("asp-page=\"/Employees/Details\"")
             .And.Contain("asp-page=\"/Crews/Details\"");

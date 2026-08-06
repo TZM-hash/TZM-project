@@ -69,7 +69,9 @@ public sealed record DataWorkbenchViewModel(
     IReadOnlyList<DataWorkbenchSortOption>? SortOptions = null,
     string? DefaultSortKey = null,
     bool DefaultSortDescending = true,
-    bool SortOnServer = false)
+    bool SortOnServer = false,
+    IReadOnlyDictionary<string, string?>? PreservedQueryParameters = null,
+    string? ClearFiltersUrl = null)
 {
     public IReadOnlyList<DataWorkbenchFilterField> InlineFilterFields => InlineFilters ?? [];
 

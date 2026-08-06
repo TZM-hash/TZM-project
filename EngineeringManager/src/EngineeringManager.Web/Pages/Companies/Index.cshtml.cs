@@ -151,15 +151,11 @@ public sealed class IndexModel(
         CompanyDetails = details;
         if (organizationSummaryService is not null)
         {
-            var summaries = new Dictionary<Guid, OrganizationSummaryDto>();
             var asOf = DateOnly.FromDateTime(DateTime.Today);
-            foreach (var company in Companies)
-            {
-                summaries[company.Id] = await organizationSummaryService.GetAsync(
-                    new OrganizationSummaryQuery(OrganizationOwnerKind.LegalEntity, company.Id, asOf),
-                    cancellationToken);
-            }
-            OrganizationSummaries = summaries;
+            OrganizationSummaries = (await organizationSummaryService.GetManyAsync(
+                    Companies.Select(item => new OrganizationSummaryQuery(OrganizationOwnerKind.LegalEntity, item.Id, asOf)).ToArray(),
+                    cancellationToken))
+                .ToDictionary(item => item.Query.Id);
         }
         CompanyCertificates = await certificateService.ListAsync(actor, new CertificateFilter(), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
         if (CategoryRows.Count == 0)

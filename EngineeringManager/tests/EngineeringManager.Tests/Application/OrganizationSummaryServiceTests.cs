@@ -126,6 +126,115 @@ public sealed class OrganizationSummaryServiceTests
         crewSummary.Personnel.ConstructionCrewCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task PartnerSummaryExcludesInternalPersonnelAssignedToTheCrew()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var company = new LegalEntity { Code = "LE-CREW-ASSIGN", Name = "派驻公司", ShortName = "派驻公司" };
+        var crew = new BusinessPartner { PartnerNumber = "CREW-INTERNAL", Name = "内部派驻班组", ShortName = "内部派驻班组" };
+        crew.Roles.Add(new BusinessPartnerRole { Partner = crew, RoleType = BusinessPartnerRoleType.ConstructionCrew });
+        var employee = Person("RY-INTERNAL-CREW", true);
+        fixture.Db.AddRange(company, crew, employee);
+        fixture.Db.PersonnelEngagementHistories.Add(new PersonnelEngagementHistory
+        {
+            Person = employee,
+            Scope = PersonnelScope.Internal,
+            InternalType = EmployeeType.Formal,
+            LegalEntity = company,
+            CrewBusinessPartner = crew,
+            StartDate = Today().AddDays(-10),
+            IsPrimary = true,
+            Reason = "内部人员派驻班组"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var direct = await fixture.Service.GetAsync(
+            new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, crew.Id, Today()), CancellationToken.None);
+        var batch = (await fixture.Service.GetManyAsync(
+            [new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, crew.Id, Today())],
+            CancellationToken.None)).Single();
+
+        direct.Personnel.TotalCurrentCount.Should().Be(0);
+        batch.Personnel.TotalCurrentCount.Should().Be(0);
+        direct.Personnel.FormalCount.Should().Be(0);
+        batch.Personnel.FormalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task PartnerSummaryExcludesMembershipOnlyWorkersThatAreAbsentFromPersonnelFilter()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var crew = new BusinessPartner { PartnerNumber = "CREW-LEGACY", Name = "历史名册班组", ShortName = "历史班组" };
+        crew.Roles.Add(new BusinessPartnerRole { Partner = crew, RoleType = BusinessPartnerRoleType.ConstructionCrew });
+        var worker = new ConstructionWorker { Name = "仅名册人员", IsActive = true };
+        worker.Memberships.Add(new ConstructionCrewMembership
+        {
+            Worker = worker,
+            CrewBusinessPartner = crew,
+            StartDate = Today().AddDays(-10),
+            IsPrimary = true
+        });
+        fixture.Db.AddRange(crew, worker);
+        await fixture.Db.SaveChangesAsync();
+
+        var direct = await fixture.Service.GetAsync(
+            new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, crew.Id, Today()), CancellationToken.None);
+        var batch = (await fixture.Service.GetManyAsync(
+            [new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, crew.Id, Today())],
+            CancellationToken.None)).Single();
+
+        direct.Personnel.TotalCurrentCount.Should().Be(0);
+        batch.Personnel.TotalCurrentCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BatchSummaryLoadsSeveralPartnerOrganizationsInOneRequest()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var crew = new BusinessPartner { PartnerNumber = "CREW-BATCH", Name = "批量班组", ShortName = "批量班组" };
+        crew.Roles.Add(new BusinessPartnerRole { Partner = crew, RoleType = BusinessPartnerRoleType.ConstructionCrew });
+        var supplier = new BusinessPartner { PartnerNumber = "SUP-BATCH", Name = "批量供应商", ShortName = "批量供应商" };
+        supplier.Roles.Add(new BusinessPartnerRole { Partner = supplier, RoleType = BusinessPartnerRoleType.MaterialSupplier });
+        var crewProject = new Project { ProjectNumber = "P-CREW-BATCH", Name = "班组批量项目", Stage = ProjectStage.UnderConstruction };
+        crewProject.Partners.Add(new ProjectPartner { Project = crewProject, Partner = crew, RoleType = BusinessPartnerRoleType.ConstructionCrew });
+        var supplierProject = new Project { ProjectNumber = "P-SUP-BATCH", Name = "供应商批量项目", Stage = ProjectStage.SettledArchived };
+        supplierProject.Partners.Add(new ProjectPartner { Project = supplierProject, Partner = supplier, RoleType = BusinessPartnerRoleType.MaterialSupplier });
+        fixture.Db.AddRange(crew, supplier, crewProject, supplierProject);
+        fixture.Db.OrganizationUnits.AddRange(
+            new OrganizationUnit { Code = "CREW-DEPT", Name = "班组部门", UnitType = OrganizationUnitType.Department, BusinessPartnerId = crew.Id, IsActive = true },
+            new OrganizationUnit { Code = "SUP-DEPT", Name = "供应商部门", UnitType = OrganizationUnitType.Department, BusinessPartnerId = supplier.Id, IsActive = false });
+        var supplierPerson = Person("RY-SUP-BATCH", true);
+        fixture.Db.People.Add(supplierPerson);
+        fixture.Db.PersonnelEngagementHistories.Add(new PersonnelEngagementHistory
+        {
+            Person = supplierPerson,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.BusinessPartner,
+            BusinessPartner = supplier,
+            StartDate = Today().AddDays(-5),
+            IsPrimary = true,
+            Reason = "批量汇总测试"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var summaries = await fixture.Service.GetManyAsync(
+            [
+                new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, crew.Id, Today()),
+                new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, supplier.Id, Today())
+            ],
+            CancellationToken.None);
+
+        summaries.Should().HaveCount(2);
+        var byId = summaries.ToDictionary(item => item.Query.Id);
+        byId[crew.Id].IsConstructionCrew.Should().BeTrue();
+        byId[crew.Id].Projects.UnderConstructionCount.Should().Be(1);
+        byId[crew.Id].Departments.ActiveCount.Should().Be(1);
+        byId[supplier.Id].IsConstructionCrew.Should().BeFalse();
+        byId[supplier.Id].Projects.SettledArchivedCount.Should().Be(1);
+        byId[supplier.Id].Personnel.BusinessPartnerCount.Should().Be(1);
+        byId[supplier.Id].Departments.ActiveCount.Should().Be(0);
+    }
+
     private static Person Person(string number, bool isActive) => new() { PersonNumber = number, Name = number, IsActive = isActive };
 
     private static PersonnelEngagementHistory Internal(Person person, LegalEntity company, EmployeeType type, DateOnly start, DateOnly? end) => new()

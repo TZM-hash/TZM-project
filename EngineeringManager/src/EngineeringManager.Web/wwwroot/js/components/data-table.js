@@ -74,6 +74,7 @@ function applyColumns(root, columns) {
   const table = tableFor(root);
   if (!table) return;
   const byKey = new Map(columns.map((item) => [item.key, item]));
+  const visibleColumnCount = Math.max(1, columns.filter((column) => column.visible).length);
   table.querySelectorAll("tr").forEach((row) => {
     const cells = Array.from(row.children).filter((cell) => cell.dataset.columnKey);
     cells.sort((left, right) => (byKey.get(left.dataset.columnKey)?.order ?? 999) - (byKey.get(right.dataset.columnKey)?.order ?? 999));
@@ -81,6 +82,8 @@ function applyColumns(root, columns) {
       cell.hidden = byKey.get(cell.dataset.columnKey)?.visible === false;
       row.appendChild(cell);
     });
+    const wideCell = row.children.length === 1 ? row.children[0] : null;
+    if (wideCell && !wideCell.dataset.columnKey) wideCell.colSpan = visibleColumnCount;
   });
   applyColumnControls(root, columns);
   const exportForm = document.getElementById(`${root.dataset.tableId}-export-form`) ?? root.querySelector("[data-project-export-scope]");

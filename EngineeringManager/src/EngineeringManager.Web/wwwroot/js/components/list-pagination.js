@@ -61,6 +61,11 @@ function headerColumnCount(table) {
 }
 
 function rowIsFixed(row, columnCount) {
+  if (row.dataset.rowGroup) {
+    row.removeAttribute("data-pagination-fixed");
+    row.removeAttribute("data-sort-fixed");
+    return false;
+  }
   if (row.matches("[data-pagination-fixed], [data-sort-fixed]")) return true;
   const text = String(row.textContent || "").replace(/\s+/g, " ").trim();
   const singleWideCell = row.cells.length === 1 && Number(row.cells[0]?.colSpan || 1) >= Math.max(columnCount, 2);
@@ -69,16 +74,35 @@ function rowIsFixed(row, columnCount) {
   return singleWideCell || summary;
 }
 
-function rowsFor(table) {
+function rowGroupsFor(table) {
   const columnCount = headerColumnCount(table);
-  return Array.from(table.tBodies).flatMap((body) => Array.from(body.rows)).map((row) => ({
-    row,
-    fixed: rowIsFixed(row, columnCount)
-  }));
+  return Array.from(table.tBodies).flatMap((body) => {
+    const groups = [];
+    const groupsByKey = new Map();
+    Array.from(body.rows).forEach((row) => {
+      if (rowIsFixed(row, columnCount)) {
+        groups.push({ rows: [row], fixed: true });
+        return;
+      }
+      const key = row.dataset.rowGroup;
+      if (!key) {
+        groups.push({ rows: [row], fixed: false });
+        return;
+      }
+      let group = groupsByKey.get(key);
+      if (!group) {
+        group = { rows: [], fixed: false };
+        groupsByKey.set(key, group);
+        groups.push(group);
+      }
+      group.rows.push(row);
+    });
+    return groups;
+  });
 }
 
 function businessRows(table) {
-  return rowsFor(table).filter((item) => !item.fixed).map((item) => item.row);
+  return rowGroupsFor(table).filter((group) => !group.fixed).map((group) => group.rows[0]);
 }
 
 function paginationHost(table, workbench) {
@@ -238,11 +262,11 @@ function persistClientState(state) {
 }
 
 function render(state) {
-  const rows = rowsFor(state.table);
-  const business = rows.filter((item) => !item.fixed).map((item) => item.row);
+  const groups = rowGroupsFor(state.table);
+  const business = groups.filter((group) => !group.fixed);
   if (state.server) {
     state.page = normalizePage(state.serverPage, state.totalPages);
-    rows.forEach((item) => { item.row.hidden = false; });
+    groups.flatMap((group) => group.rows).forEach((row) => { row.hidden = false; });
     renderNavigation(state, state.totalCount, state.totalPages, state.page);
     return;
   }
@@ -252,9 +276,10 @@ function render(state) {
   const start = (state.page - 1) * state.pageSize;
   const end = start + state.pageSize;
   let index = 0;
-  rows.forEach((item) => {
-    item.row.hidden = item.fixed ? false : !(index >= start && index < end);
-    if (!item.fixed) index += 1;
+  groups.forEach((group) => {
+    const hidden = group.fixed ? false : !(index >= start && index < end);
+    group.rows.forEach((row) => { row.hidden = hidden; });
+    if (!group.fixed) index += 1;
   });
   persistClientState(state);
   renderNavigation(state, business.length, totalPages, state.page);

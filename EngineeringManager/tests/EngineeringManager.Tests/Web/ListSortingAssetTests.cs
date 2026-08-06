@@ -70,6 +70,35 @@ public sealed class ListSortingAssetTests
             .And.Contain("var(--app-surface)");
     }
 
+    [Theory]
+    [InlineData("Companies/Index.cshtml")]
+    [InlineData("Partners/Index.cshtml")]
+    [InlineData("Crews/Index.cshtml")]
+    public void OrganizationSummaryRowsShareAStableSortingGroupWithTheirBusinessRow(string relativePath)
+    {
+        var razor = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "EngineeringManager.Web",
+            "Pages",
+            relativePath.Replace('/', Path.DirectorySeparatorChar)));
+
+        Regex.Matches(razor, "data-row-group=", RegexOptions.IgnoreCase)
+            .Should().HaveCountGreaterThanOrEqualTo(2, "the business row and its summary row must move together");
+    }
+
+    [Fact]
+    public void SharedSortingTreatsGroupedRowsAsOneBusinessRecord()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "list-sorting.js");
+
+        script.Should().Contain("function rowGroupsFor(body, columnCount)")
+            .And.Contain("if (row.dataset.rowGroup)")
+            .And.Contain("group.sortRow")
+            .And.Contain("groups.flatMap((group) => group.rows)")
+            .And.Contain("rowGroupsFor(body, columnCount).groups.map((group) => group.sortRow)");
+    }
+
     [Fact]
     public void ServerSortingClearsLegacyCaseVariantsPageStateAndSavedViewSelection()
     {

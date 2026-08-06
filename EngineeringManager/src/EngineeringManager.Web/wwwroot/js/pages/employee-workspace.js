@@ -4,6 +4,8 @@ if (page) {
     const editorDialog = page.querySelector("[data-employee-editor-dialog]");
     const detailsDialog = page.querySelector("[data-employee-details-dialog]");
     const editorForm = editorDialog?.querySelector("[data-employee-editor-form]");
+    const affiliationManagedFields = editorDialog?.querySelectorAll("[data-employee-affiliation-managed-fields]") || [];
+    const affiliationReadonly = editorDialog?.querySelector("[data-employee-affiliation-readonly]");
     const nextEmployeeNumber = page.dataset.nextEmployeeNumber || "";
     const field = (name) => editorForm?.querySelector(`[name="Editor.${name}"]`);
     const show = (dialog) => { if (dialog && !dialog.open) dialog.showModal(); };
@@ -18,6 +20,10 @@ if (page) {
         const target = detailsDialog?.querySelector(`[data-employee-detail="${name}"]`);
         if (target) target.textContent = value || "未填写";
     };
+    const setAffiliationFieldMode = (editing) => {
+        affiliationManagedFields.forEach((target) => { target.hidden = editing; });
+        if (affiliationReadonly) affiliationReadonly.hidden = !editing;
+    };
     const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const filterForm = page.querySelector(".workbench-inline-filters");
@@ -29,6 +35,7 @@ if (page) {
         editorForm?.reset();
         const editing = mode === "edit";
         const copying = mode === "copy";
+        setAffiliationFieldMode(editing);
         setField("Id", editing ? payload.id : "");
         setField("ConcurrencyStamp", editing ? payload.concurrencyStamp : "00000000-0000-0000-0000-000000000000");
         setField("EmployeeNumber", editing ? payload.employeeNumber : nextEmployeeNumber);
@@ -95,6 +102,7 @@ if (page) {
 
     if (editorDialog?.dataset.dialogOpen === "true") {
         const editing = Boolean(field("Id")?.value);
+        setAffiliationFieldMode(editing);
         const reason = editorDialog.querySelector("[data-employee-reason]");
         if (reason) reason.hidden = !editing;
         const title = editorDialog.querySelector("[data-employee-editor-title]");

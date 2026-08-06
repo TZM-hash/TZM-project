@@ -16,7 +16,6 @@
 <nav class="page-tabs page-tabs--buttons employee-sub-navigation" aria-label="人员管理子导航">
     <a class="button button--secondary button--small" asp-page="/Personnel/Internal/Index">内部人员</a>
     <a class="button button--secondary button--small is-active" asp-page="/Personnel/External/Index" aria-current="page">外部人员</a>
-    <a class="button button--secondary button--small" asp-page="/Employees/Index">员工业务档案</a>
 </nav>
 
 <div class="employee-workspace-page personnel-workbench">
@@ -26,27 +25,27 @@
             <h1>外部人员</h1>
             <p class="page-lead">集中管理施工班组人员、合作单位人员和其他外部人员，并保留身份与归属历史。</p>
         </div>
-        <div class="page-actions-inline"><a class="button button--secondary button--action" asp-page="/Crews/Index">维护施工班组</a><a class="button button--primary button--action" asp-page="/Partners/Index">维护合作单位</a></div>
+        <div class="page-actions-inline"><a class="button button--secondary button--action" asp-page="/Partners/Index">维护合作单位</a><a class="button button--primary button--action" asp-page="/Personnel/Create" asp-route-scope="External">新增外部人员</a></div>
     </section>
 
     <form method="get" class="panel filter-bar personnel-filter-bar" aria-label="外部人员筛选">
         <label>搜索<input name="Search" value="@Model.Search" placeholder="姓名、编号、电话、项目" /></label>
-        <label>关联自有公司
-            <select name="LegalEntityId">
-                <option value="">全部公司</option>
-                @foreach (var item in Model.Options.LegalEntities)
-                {
-                    if (Model.LegalEntityId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
-                    else { <option value="@item.Id">@item.Name</option> }
-                }
-            </select>
-        </label>
         <label>合作单位 / 班组
             <select name="BusinessPartnerId">
                 <option value="">全部单位</option>
                 @foreach (var item in Model.Options.BusinessPartners)
                 {
                     if (Model.BusinessPartnerId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
+                    else { <option value="@item.Id">@item.Name</option> }
+                }
+            </select>
+        </label>
+        <label>当前班组
+            <select name="CrewBusinessPartnerId">
+                <option value="">全部班组</option>
+                @foreach (var item in Model.Options.Crews)
+                {
+                    if (Model.CrewBusinessPartnerId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
                     else { <option value="@item.Id">@item.Name</option> }
                 }
             </select>

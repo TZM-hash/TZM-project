@@ -1,4 +1,5 @@
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Domain.Personnel;
 
 namespace EngineeringManager.Infrastructure.Personnel;
 
@@ -60,6 +61,43 @@ public static class PersonPublicDataSynchronizer
             : normalized.Replace(" ", string.Empty, StringComparison.Ordinal)
                 .Replace("-", string.Empty, StringComparison.Ordinal)
                 .ToUpperInvariant();
+    }
+
+    public static void ApplyActiveProfile(Person person, bool isActive, PersonnelEngagementHistory? currentAffiliation)
+    {
+        if (currentAffiliation is null)
+        {
+            if (!isActive)
+            {
+                SetActive(person.Employee, false);
+                SetActive(person.ConstructionWorker, false);
+            }
+
+            return;
+        }
+
+        SetActive(person.Employee, isActive && currentAffiliation.Scope == PersonnelScope.Internal);
+        SetActive(
+            person.ConstructionWorker,
+            isActive
+            && currentAffiliation.Scope == PersonnelScope.External
+            && currentAffiliation.ExternalType == ExternalPersonnelType.ConstructionCrew);
+    }
+
+    private static void SetActive(Employee? employee, bool isActive)
+    {
+        if (employee is null || employee.IsActive == isActive) return;
+        employee.IsActive = isActive;
+        employee.UpdatedAt = DateTimeOffset.UtcNow;
+        employee.ConcurrencyStamp = Guid.NewGuid();
+    }
+
+    private static void SetActive(ConstructionWorker? worker, bool isActive)
+    {
+        if (worker is null || worker.IsActive == isActive) return;
+        worker.IsActive = isActive;
+        worker.UpdatedAt = DateTimeOffset.UtcNow;
+        worker.ConcurrencyStamp = Guid.NewGuid();
     }
 
     private static string Required(string value, string parameterName) => string.IsNullOrWhiteSpace(value)

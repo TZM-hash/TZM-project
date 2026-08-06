@@ -65,8 +65,12 @@ if (page) {
         setField("RoleType", payload.roleType ?? defaultRole);
         setField("PreviousRoleType", editing ? (payload.previousRoleType ?? payload.roleType ?? "") : "");
         setField("TradeCategory", payload.tradeCategory);
+        setField("PricingRule", payload.pricingRule);
+        setField("SettlementTerms", payload.settlementTerms);
         setField("ContactName", copy ? "" : payload.contactName);
         setField("ContactPhone", copy ? "" : payload.contactPhone);
+        setField("ContactEmail", copy ? "" : payload.contactEmail);
+        setField("ContactAddress", copy ? "" : payload.contactAddress);
         setField("ContactNotes", copy ? "" : payload.contactNotes);
         setField("Notes", payload.notes);
         setField("IsActive", editing ? payload.isActive : true);

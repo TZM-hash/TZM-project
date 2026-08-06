@@ -167,15 +167,11 @@ public sealed class IndexModel(
             .ToArray();
         if (organizationSummaryService is not null)
         {
-            var summaries = new Dictionary<Guid, OrganizationSummaryDto>();
             var asOf = DateOnly.FromDateTime(DateTime.Today);
-            foreach (var crew in Crews)
-            {
-                summaries[crew.Partner.Id] = await organizationSummaryService.GetAsync(
-                    new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, crew.Partner.Id, asOf),
-                    cancellationToken);
-            }
-            OrganizationSummaries = summaries;
+            OrganizationSummaries = (await organizationSummaryService.GetManyAsync(
+                    Crews.Select(item => new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, item.Partner.Id, asOf)).ToArray(),
+                    cancellationToken))
+                .ToDictionary(item => item.Query.Id);
         }
         if (CanViewFinance && Crews.Count > 0)
         {

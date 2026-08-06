@@ -17,8 +17,8 @@ public sealed class IndexModel(IPersonnelService personnelService) : PageModel
         || User.IsInRole(SystemRoles.Finance);
 
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
-    [BindProperty(SupportsGet = true)] public Guid? LegalEntityId { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? BusinessPartnerId { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid? CrewBusinessPartnerId { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? DepartmentId { get; set; }
     [BindProperty(SupportsGet = true)] public ExternalPersonnelType? ExternalType { get; set; }
     [BindProperty(SupportsGet = true)] public bool? IsActive { get; set; }
@@ -31,13 +31,14 @@ public sealed class IndexModel(IPersonnelService personnelService) : PageModel
             new PersonnelListQuery(
                 PersonnelScope.External,
                 Search,
-                LegalEntityId,
+                null,
                 BusinessPartnerId,
                 DepartmentId,
                 null,
                 ExternalType,
                 IsActive,
-                AsOf),
+                AsOf,
+                CrewBusinessPartnerId),
             CanViewSensitive,
             cancellationToken);
     }

@@ -16,10 +16,11 @@
     };
 }
 
+@section Scripts { <script type="module" src="~/js/pages/personnel-affiliation.js" asp-append-version="true"></script> }
+
 <nav class="page-tabs page-tabs--buttons employee-sub-navigation" aria-label="人员管理子导航">
     <a class="button button--secondary button--small" asp-page="/Personnel/Internal/Index">内部人员</a>
     <a class="button button--secondary button--small" asp-page="/Personnel/External/Index">外部人员</a>
-    <a class="button button--secondary button--small" asp-page="/Employees/Index">员工业务档案</a>
 </nav>
 
 <div class="employee-detail-workspace personnel-detail-workspace">
@@ -40,74 +41,164 @@
             @if (Model.Person.EmployeeId.HasValue) { <a class="button button--secondary button--small" asp-page="/Employees/Details" asp-route-id="@Model.Person.EmployeeId">员工业务档案</a> }
             @if (affiliation?.CrewBusinessPartnerId.HasValue == true) { <a class="button button--secondary button--small" asp-page="/Crews/Details" asp-route-id="@affiliation.CrewBusinessPartnerId">施工班组名册</a> }
         </div></div>
-        <div class="detail-grid">
-            <div><span>人员编号</span><strong>@Model.Person.PersonNumber</strong></div>
-            <div><span>姓名</span><strong>@Model.Person.Name</strong></div>
-            <div><span>联系电话</span><strong>@(Model.Person.Phone ?? "未填写")</strong></div>
-            <div><span>身份证号</span><strong>@(Model.Person.IdentityNumber ?? "未填写或无权限查看")</strong></div>
-            <div><span>银行卡号</span><strong>@(Model.Person.BankAccountNumber ?? "未填写或无权限查看")</strong></div>
-            <div><span>开户行</span><strong>@(Model.Person.BankName ?? "未填写")</strong></div>
-            <div><span>备注</span><strong>@(Model.Person.Notes ?? "无")</strong></div>
-        </div>
+        @if (Model.CanManage)
+        {
+            <form method="post" asp-page-handler="SavePublicData" class="form-grid personnel-public-data-form">
+                <input type="hidden" asp-for="PersonId" />
+                <input type="hidden" asp-for="AsOf" />
+                <input type="hidden" asp-for="PublicInput.ConcurrencyStamp" />
+                <label>人员编号<input value="@Model.Person.PersonNumber" disabled /></label>
+                <label>姓名<input asp-for="PublicInput.Name" required /></label>
+                <label>联系电话<input asp-for="PublicInput.Phone" /></label>
+                <label>身份证号<input asp-for="PublicInput.IdentityNumber" /></label>
+                <label>银行卡号<input asp-for="PublicInput.BankAccountNumber" /></label>
+                <label>开户行<input asp-for="PublicInput.BankName" /></label>
+                <label>状态<select asp-for="PublicInput.IsActive"><option value="true">启用</option><option value="false">停用</option></select></label>
+                <label class="form-span-2">备注<textarea asp-for="PublicInput.Notes" rows="3"></textarea></label>
+                <label class="form-span-2">修改原因<input asp-for="PublicInput.Reason" required /></label>
+                <div class="form-actions form-span-2"><button class="button button--primary" type="submit">保存公共资料</button></div>
+            </form>
+        }
+        else
+        {
+            <div class="detail-grid">
+                <div><span>人员编号</span><strong>@Model.Person.PersonNumber</strong></div>
+                <div><span>姓名</span><strong>@Model.Person.Name</strong></div>
+                <div><span>联系电话</span><strong>@(Model.Person.Phone ?? "未填写")</strong></div>
+                <div><span>身份证号</span><strong>@(Model.Person.IdentityNumber ?? "未填写或无权限查看")</strong></div>
+                <div><span>银行卡号</span><strong>@(Model.Person.BankAccountNumber ?? "未填写或无权限查看")</strong></div>
+                <div><span>开户行</span><strong>@(Model.Person.BankName ?? "未填写")</strong></div>
+                <div><span>备注</span><strong>@(Model.Person.Notes ?? "无")</strong></div>
+            </div>
+        }
     </section>
 
     <section class="panel">
         <div class="panel-heading"><div><p class="eyebrow">当前有效记录</p><h2>当前身份与归属</h2></div><small>@(affiliation is null ? "尚未设置" : $"自 {affiliation.StartDate:yyyy-MM-dd} 生效")</small></div>
-        <div class="detail-grid">
-            <div><span>人员范围</span><strong>@(affiliation is null ? "未设置" : ScopeLabel(affiliation.Scope))</strong></div>
-            <div><span>人员类型</span><strong>@(affiliation?.Scope == PersonnelScope.Internal ? affiliation.InternalType?.ToChinese() : ExternalTypeLabel(affiliation?.ExternalType))</strong></div>
-            <div><span>公司 / 单位</span><strong>@(affiliation?.LegalEntityName ?? affiliation?.BusinessPartnerName ?? "未设置")</strong></div>
-            <div><span>部门</span><strong>@(affiliation?.OrganizationUnitName ?? "未设置")</strong></div>
-            <div><span>当前项目</span><strong>@(affiliation?.ProjectName ?? "未设置")</strong></div>
-            <div><span>施工班组</span><strong>@(affiliation?.CrewBusinessPartnerName ?? "未设置")</strong></div>
-            <div><span>岗位</span><strong>@(affiliation?.PositionTitle ?? "未设置")</strong></div>
-        </div>
+        @if (Model.CanEditCurrentAffiliation && affiliation is not null)
+        {
+            <form method="post" asp-page-handler="SaveAffiliation" class="personnel-affiliation-form" data-personnel-affiliation data-personnel-scope="@affiliation.Scope" data-personnel-external-type="@affiliation.ExternalType">
+                <input type="hidden" asp-for="PersonId" />
+                <input type="hidden" asp-for="AsOf" />
+                <input type="hidden" asp-for="AffiliationInput.LegalEntityId" data-affiliation-legal-entity />
+                <input type="hidden" asp-for="AffiliationInput.BusinessPartnerId" data-affiliation-business-partner />
+                <input type="hidden" asp-for="AffiliationInput.ConcurrencyStamp" />
+                <label><span>人员范围</span><input value="@ScopeLabel(affiliation.Scope)" disabled /></label>
+                <label><span>人员类型</span><input value="@(affiliation.Scope == PersonnelScope.Internal ? affiliation.InternalType?.ToChinese() : ExternalTypeLabel(affiliation.ExternalType))" disabled /></label>
+                <label><span>当前公司 / 单位</span><select name="AffiliationInput.OwnerKey" data-affiliation-owner required>
+                    <option value="">请选择公司或单位</option>
+                    @if (affiliation.Scope == PersonnelScope.Internal)
+                    {
+                        @foreach (var item in Model.Options.LegalEntities)
+                        {
+                            var ownerKey = $"legal:{item.Id}";
+                            <option value="@ownerKey" data-owner-scope="Internal" data-legal-entity-id="@item.Id" data-business-partner-id="" data-role="company" selected="@(Model.AffiliationInput.OwnerKey == ownerKey ? "selected" : null)">@item.Name</option>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Options.BusinessPartners)
+                        {
+                            var ownerKey = $"partner:{item.Id}";
+                            <option value="@ownerKey" data-owner-scope="External" data-legal-entity-id="" data-business-partner-id="@item.Id" data-role="@(item.IsCrew ? "crew" : "partner")" selected="@(Model.AffiliationInput.OwnerKey == ownerKey ? "selected" : null)">@item.Name</option>
+                        }
+                    }
+                </select></label>
+                <label><span>当前部门</span><select name="AffiliationInput.OrganizationUnitId" data-affiliation-department>
+                    <option value="">未归属部门</option>
+                    @foreach (var item in Model.Options.Departments)
+                    {
+                        <option value="@item.Id" data-legal-entity-id="@item.LegalEntityId" data-business-partner-id="@item.BusinessPartnerId" selected="@(Model.AffiliationInput.OrganizationUnitId == item.Id ? "selected" : null)">@item.Name</option>
+                    }
+                </select></label>
+                <label><span>当前项目</span><select name="AffiliationInput.ProjectId" data-affiliation-project>
+                    <option value="">未归属项目</option>
+                    @foreach (var item in Model.Options.Projects)
+                    {
+                        <option value="@item.Id" data-legal-entity-id="@string.Join(",", item.LegalEntityIds)" data-business-partner-id="@string.Join(",", item.BusinessPartnerIds)" selected="@(Model.AffiliationInput.ProjectId == item.Id ? "selected" : null)">@item.Name</option>
+                    }
+                </select><small>修改后旧记录保留，当前项目自动读取最新生效归属。</small></label>
+                <label><span>当前班组</span><select name="AffiliationInput.CrewBusinessPartnerId" data-affiliation-crew>
+                    <option value="">未归属班组</option>
+                    @foreach (var item in Model.Options.Crews)
+                    {
+                        <option value="@item.Id" data-legal-entity-id="" data-business-partner-id="@item.Id" data-role="crew" selected="@(Model.AffiliationInput.CrewBusinessPartnerId == item.Id ? "selected" : null)">@item.Name</option>
+                    }
+                </select></label>
+                <label><span>岗位 / 工种</span><input asp-for="AffiliationInput.PositionTitle" /></label>
+                <label><span>生效日期</span><input asp-for="AffiliationInput.EffectiveDate" type="date" max="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" required /></label>
+                <label class="personnel-affiliation-reason"><span>修改原因</span><input asp-for="AffiliationInput.Reason" required /></label>
+                <div class="personnel-affiliation-actions"><button class="button button--primary button--small" type="submit">保存当前归属</button></div>
+            </form>
+        }
+        else
+        {
+            <div class="detail-grid">
+                <div><span>人员范围</span><strong>@(affiliation is null ? "未设置" : ScopeLabel(affiliation.Scope))</strong></div>
+                <div><span>人员类型</span><strong>@(affiliation?.Scope == PersonnelScope.Internal ? affiliation.InternalType?.ToChinese() : ExternalTypeLabel(affiliation?.ExternalType))</strong></div>
+                <div><span>公司 / 单位</span><strong>@(affiliation?.LegalEntityName ?? affiliation?.BusinessPartnerName ?? "未设置")</strong></div>
+                <div><span>部门</span><strong>@(affiliation?.OrganizationUnitName ?? "未设置")</strong></div>
+                <div><span>当前项目</span><strong>@(affiliation?.ProjectName ?? "未设置")</strong></div>
+                <div><span>施工班组</span><strong>@(affiliation?.CrewBusinessPartnerName ?? "未设置")</strong></div>
+                <div><span>岗位</span><strong>@(affiliation?.PositionTitle ?? "未设置")</strong></div>
+            </div>
+        }
     </section>
 
-    @if (Model.CanManage)
+    @if (Model.CanEditCurrentAffiliation)
     {
         <section class="panel">
             <div class="panel-heading"><div><p class="eyebrow">有生效日期的变更</p><h2>内部 / 外部身份切换</h2></div><small>旧身份自动截止并保留历史</small></div>
-            <form method="post" asp-page-handler="SwitchScope" class="form-grid">
+            <form method="post" asp-page-handler="SwitchScope" class="form-grid" data-personnel-affiliation>
                 <input type="hidden" asp-for="PersonId" />
                 <input type="hidden" asp-for="AsOf" />
+                <input type="hidden" asp-for="SwitchInput.LegalEntityId" data-affiliation-legal-entity />
+                <input type="hidden" asp-for="SwitchInput.BusinessPartnerId" data-affiliation-business-partner />
+                <input type="hidden" asp-for="SwitchInput.ConcurrencyStamp" />
                 <label>切换为
-                    <select asp-for="SwitchInput.Scope">
+                    <select asp-for="SwitchInput.Scope" data-affiliation-scope>
                         <option value="Internal">内部人员</option>
                         <option value="External">外部人员</option>
                     </select>
                 </label>
                 <label>内部人员类型
-                    <select asp-for="SwitchInput.InternalType">
+                    <select asp-for="SwitchInput.InternalType" data-affiliation-internal-type data-default-value="Formal">
                         <option value="">不适用</option>
                         @foreach (var value in Enum.GetValues<EmployeeType>()) { <option value="@value">@value.ToChinese()</option> }
                     </select>
                 </label>
                 <label>外部人员类型
-                    <select asp-for="SwitchInput.ExternalType">
+                    <select asp-for="SwitchInput.ExternalType" data-affiliation-external-type data-default-value="Other">
                         <option value="">不适用</option>
                         <option value="ConstructionCrew">施工班组人员</option>
                         <option value="BusinessPartner">合作单位人员</option>
                         <option value="Other">其他外部人员</option>
                     </select>
                 </label>
-                <label>自有公司
-                    <select asp-for="SwitchInput.LegalEntityId"><option value="">不选择</option>@foreach (var item in Model.Options.LegalEntities) { <option value="@item.Id">@item.Name</option> }</select>
-                </label>
-                <label>合作单位
-                    <select asp-for="SwitchInput.BusinessPartnerId"><option value="">不选择</option>@foreach (var item in Model.Options.BusinessPartners) { <option value="@item.Id">@item.Name</option> }</select>
+                <label>所属公司 / 单位
+                    <select asp-for="SwitchInput.OwnerKey" data-affiliation-owner required>
+                        <option value="">请选择公司或单位</option>
+                        @foreach (var item in Model.Options.LegalEntities)
+                        {
+                            <option value="legal:@item.Id" data-owner-scope="Internal" data-legal-entity-id="@item.Id" data-business-partner-id="" data-role="company">@item.Name</option>
+                        }
+                        @foreach (var item in Model.Options.BusinessPartners)
+                        {
+                            <option value="partner:@item.Id" data-owner-scope="External" data-legal-entity-id="" data-business-partner-id="@item.Id" data-role="@(item.IsCrew ? "crew" : "partner")">@item.Name</option>
+                        }
+                    </select>
                 </label>
                 <label>部门
-                    <select asp-for="SwitchInput.OrganizationUnitId"><option value="">不选择</option>@foreach (var item in Model.Options.Departments) { <option value="@item.Id">@item.Name</option> }</select>
+                    <select asp-for="SwitchInput.OrganizationUnitId" data-affiliation-department><option value="">不选择</option>@foreach (var item in Model.Options.Departments) { <option value="@item.Id" data-legal-entity-id="@item.LegalEntityId" data-business-partner-id="@item.BusinessPartnerId">@item.Name</option> }</select>
                 </label>
                 <label>当前项目
-                    <select asp-for="SwitchInput.ProjectId"><option value="">不选择</option>@foreach (var item in Model.Options.Projects) { <option value="@item.Id">@item.Name</option> }</select>
+                    <select asp-for="SwitchInput.ProjectId" data-affiliation-project><option value="">不选择</option>@foreach (var item in Model.Options.Projects) { <option value="@item.Id" data-legal-entity-id="@string.Join(",", item.LegalEntityIds)" data-business-partner-id="@string.Join(",", item.BusinessPartnerIds)">@item.Name</option> }</select>
                 </label>
                 <label>施工班组
-                    <select asp-for="SwitchInput.CrewBusinessPartnerId"><option value="">不选择</option>@foreach (var item in Model.Options.Crews) { <option value="@item.Id">@item.Name</option> }</select>
+                    <select asp-for="SwitchInput.CrewBusinessPartnerId" data-affiliation-crew><option value="">不选择</option>@foreach (var item in Model.Options.Crews) { <option value="@item.Id" data-legal-entity-id="" data-business-partner-id="@item.Id" data-role="crew">@item.Name</option> }</select>
                 </label>
                 <label>岗位<input asp-for="SwitchInput.PositionTitle" /></label>
-                <label>生效日期<input asp-for="SwitchInput.EffectiveDate" type="date" required /></label>
+                <label>生效日期<input asp-for="SwitchInput.EffectiveDate" type="date" max="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" required /></label>
                 <label class="form-span-2">修改原因<input asp-for="SwitchInput.Reason" required /></label>
                 <div class="form-actions form-span-2"><button class="button button--primary" type="submit">确认切换身份</button></div>
             </form>

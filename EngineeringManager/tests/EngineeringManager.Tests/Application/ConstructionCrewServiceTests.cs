@@ -1,6 +1,7 @@
 using EngineeringManager.Application.ConstructionCrews;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.ConstructionCrews;
 using EngineeringManager.Infrastructure.Data;
@@ -28,6 +29,137 @@ public sealed class ConstructionCrewServiceTests
         var engagement = await fixture.Db.PersonnelEngagementHistories.SingleAsync();
         engagement.BusinessPartnerId.Should().Be(fixture.FirstCrew.Id);
         engagement.CrewBusinessPartnerId.Should().Be(fixture.FirstCrew.Id);
+    }
+
+    [Fact]
+    public async Task AddingWorkerForExistingInternalPersonRequiresUnifiedScopeSwitch()
+    {
+        await using var fixture = await CrewFixture.CreateAsync();
+        const string identityNumber = "110101199001010099";
+        var person = new Person
+        {
+            PersonNumber = "PER-INTERNAL",
+            Name = "既有内部人员",
+            IdentityNumber = identityNumber,
+            IdentityNumberNormalized = identityNumber
+        };
+        person.Employee = new Employee
+        {
+            Person = person,
+            EmployeeNumber = "E-INTERNAL",
+            Name = person.Name,
+            EmployeeType = EmployeeType.Formal,
+            IdentityNumber = identityNumber
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.Internal,
+            InternalType = EmployeeType.Formal,
+            StartDate = new DateOnly(2026, 1, 1),
+            IsPrimary = true,
+            Reason = "既有内部身份"
+        });
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var action = () => fixture.Service.AddWorkerAsync(
+            "admin",
+            new CreateConstructionWorkerRequest(
+                fixture.FirstCrew.Id,
+                person.Name,
+                identityNumber,
+                null,
+                null,
+                null,
+                "木工",
+                new DateOnly(2026, 7, 1),
+                null,
+                "尝试绕过身份切换"),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("该身份证号已存在内部人员档案，请在人员管理中使用身份切换。");
+        (await fixture.Db.PersonnelEngagementHistories.CountAsync()).Should().Be(1);
+        (await fixture.Db.ConstructionWorkers.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AddingWorkerForExistingExternalPartnerPersonRequiresUnifiedAffiliationSwitch()
+    {
+        await using var fixture = await CrewFixture.CreateAsync();
+        const string identityNumber = "110101199001010088";
+        var person = new Person
+        {
+            PersonNumber = "PER-EXTERNAL",
+            Name = "既有合作单位人员",
+            IdentityNumber = identityNumber,
+            IdentityNumberNormalized = identityNumber
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.BusinessPartner,
+            BusinessPartnerId = fixture.Supplier.Id,
+            StartDate = new DateOnly(2026, 1, 1),
+            IsPrimary = true,
+            Reason = "既有合作单位归属"
+        });
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var action = () => fixture.Service.AddWorkerAsync(
+            "admin",
+            new CreateConstructionWorkerRequest(
+                fixture.FirstCrew.Id,
+                person.Name,
+                identityNumber,
+                null,
+                null,
+                null,
+                "木工",
+                new DateOnly(2026, 7, 1),
+                null,
+                "尝试绕过外部归属切换"),
+            CancellationToken.None);
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("该身份证号已有生效或未来的人员归属，请在人员管理中使用身份切换。");
+        (await fixture.Db.PersonnelEngagementHistories.CountAsync()).Should().Be(1);
+        (await fixture.Db.ConstructionWorkers.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CrewProjectCountIncludesConstructionRecordsWithoutDoubleCountingProjectLinks()
+    {
+        await using var fixture = await CrewFixture.CreateAsync();
+        var recordOnlyProject = new Project { ProjectNumber = "CREW-PROJECT-COUNT-1", Name = "仅施工记录项目" };
+        recordOnlyProject.ConstructionRecords.Add(new ProjectConstructionRecord
+        {
+            Project = recordOnlyProject,
+            RecordType = ProjectConstructionRecordType.ConstructionCrew,
+            CrewBusinessPartnerId = fixture.FirstCrew.Id
+        });
+        var linkedProject = new Project { ProjectNumber = "CREW-PROJECT-COUNT-2", Name = "重复来源项目" };
+        linkedProject.ConstructionRecords.Add(new ProjectConstructionRecord
+        {
+            Project = linkedProject,
+            RecordType = ProjectConstructionRecordType.ConstructionCrew,
+            CrewBusinessPartnerId = fixture.FirstCrew.Id
+        });
+        linkedProject.Partners.Add(new ProjectPartner
+        {
+            Project = linkedProject,
+            BusinessPartnerId = fixture.FirstCrew.Id,
+            RoleType = BusinessPartnerRoleType.ConstructionCrew
+        });
+        fixture.Db.Projects.AddRange(recordOnlyProject, linkedProject);
+        await fixture.Db.SaveChangesAsync();
+
+        var crews = await fixture.Service.ListAsync(false, CancellationToken.None);
+
+        crews.Single(item => item.Id == fixture.FirstCrew.Id).ProjectCount.Should().Be(2);
     }
 
     [Fact]

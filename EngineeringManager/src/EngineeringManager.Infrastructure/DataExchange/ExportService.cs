@@ -748,7 +748,7 @@ public sealed class ExportService : IExportService
             ["_system_id"] = item.Id.ToString(),
             ["_person_id"] = item.PersonId?.ToString(),
             ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString(),
-            ["is_active"] = item.IsActive,
+            ["is_active"] = ExportedEmployeeActiveStatus(item),
             ["notes"] = item.Notes
         }).ToArray();
         if (!request.UseRoundTripWorkbook)
@@ -832,6 +832,21 @@ public sealed class ExportService : IExportService
             .Select(item => (PersonnelScope?)item.Scope)
             .FirstOrDefault();
         return (scope ?? fallbackScope) == PersonnelScope.External ? "外部人员" : "内部人员";
+    }
+
+    private static bool ExportedEmployeeActiveStatus(Employee employee)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var currentScope = employee.Person?.EngagementHistory
+            .Where(item => item.IsPrimary
+                && item.StartDate <= today
+                && (!item.EndDate.HasValue || item.EndDate.Value >= today))
+            .OrderByDescending(item => item.StartDate)
+            .Select(item => (PersonnelScope?)item.Scope)
+            .FirstOrDefault();
+        return currentScope == PersonnelScope.External
+            ? employee.Person?.IsActive ?? employee.IsActive
+            : employee.IsActive;
     }
 
     private async Task<ExportFileResult> ExportPartnersAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)

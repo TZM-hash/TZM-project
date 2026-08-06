@@ -105,6 +105,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("系统ID", "_system_id", false),
             new("人员主档ID", "_person_id", false),
             new("并发版本", "_concurrency_stamp", false),
+            new("状态", "is_active", false),
             new("备注", "notes", false)
         ],
         [ExportDataset.Payroll] =
@@ -527,7 +528,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             {
                 foreach (var row in importRows)
                 {
-                    AddOrUpdateEntity(batch.Dataset, row.Values, batch.Mode);
+                    await AddOrUpdateEntityAsync(batch.Dataset, row.Values, batch.Mode, cancellationToken);
                 }
             }
         }
@@ -563,7 +564,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             {
                 foreach (var row in importRows)
                 {
-                    AddOrUpdateEntity(batch.Dataset, row.Values, batch.Mode);
+                    await AddOrUpdateEntityAsync(batch.Dataset, row.Values, batch.Mode, cancellationToken);
                 }
             }
         }
@@ -1712,6 +1713,16 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         return IsClearMarker(value) ? null : value;
     }
 
+    private static bool ImportBooleanUpdate(Dictionary<string, string?> values, string key, bool current)
+    {
+        if (!values.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value) || IsClearMarker(value))
+        {
+            return current;
+        }
+
+        return ParseBoolean(value);
+    }
+
     private static decimal? NullableImportDecimal(Dictionary<string, string?> values, string key)
     {
         var value = values.GetValueOrDefault(key);
@@ -1724,9 +1735,13 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         return IsClearMarker(value) ? null : ParseDecimal(value, current ?? 0m);
     }
 
-    private void AddOrUpdateEntity(ExportDataset dataset, Dictionary<string, string?> values, ImportMode mode)
+    private async Task AddOrUpdateEntityAsync(
+        ExportDataset dataset,
+        Dictionary<string, string?> values,
+        ImportMode mode,
+        CancellationToken cancellationToken)
     {
-        if (mode != ImportMode.New && TryUpdateEntity(dataset, values)) return;
+        if (mode != ImportMode.New && await TryUpdateEntityAsync(dataset, values, cancellationToken)) return;
         switch (dataset)
         {
             case ExportDataset.Employees:
@@ -1734,6 +1749,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 {
                     throw new InvalidOperationException("已通过预览的员工类型无法解析。");
                 }
+                var importedIsActive = ImportBooleanUpdate(values, "is_active", true);
                 var person = new Person
                 {
                     PersonNumber = string.IsNullOrWhiteSpace(values.GetValueOrDefault("person_number"))
@@ -1750,7 +1766,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     DefaultMonthlySalary = NullableImportDecimal(values, "default_monthly_salary"),
                     DefaultDailyRate = NullableImportDecimal(values, "default_daily_rate"),
                     DefaultHourlyRate = NullableImportDecimal(values, "default_hourly_rate"),
-                    DefaultPieceworkRate = NullableImportDecimal(values, "default_piecework_rate")
+                    DefaultPieceworkRate = NullableImportDecimal(values, "default_piecework_rate"),
+                    IsActive = importedIsActive
                 };
                 person.Employee = employee;
                 PersonPublicDataSynchronizer.Apply(
@@ -1761,7 +1778,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     NullableImportValue(values, "bank_account_number"),
                     NullableImportValue(values, "bank_name"),
                     NullableImportValue(values, "notes"),
-                    true);
+                    importedIsActive);
                 person.EngagementHistory.Add(new PersonnelEngagementHistory
                 {
                     Person = person,
@@ -2251,7 +2268,10 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
 
     private static ImportMappingTemplateDto ToMappingDto(ImportMappingTemplate template) => new(template.Id, template.OwnerUserId, template.Name, template.Dataset, template.Scope, template.DatasetVersion, JsonSerializer.Deserialize<Dictionary<string, string>>(template.MappingJson) ?? []);
 
-    private bool TryUpdateEntity(ExportDataset dataset, Dictionary<string, string?> values)
+    private async Task<bool> TryUpdateEntityAsync(
+        ExportDataset dataset,
+        Dictionary<string, string?> values,
+        CancellationToken cancellationToken)
     {
         var systemId = Guid.TryParse(values.GetValueOrDefault("_system_id"), out var parsedId) ? parsedId : (Guid?)null;
         switch (dataset)
@@ -2267,6 +2287,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     person = db.People
                         .Include(item => item.Employee)
                         .Include(item => item.ConstructionWorker)
+                        .Include(item => item.EngagementHistory)
                         .SingleOrDefault(item => item.PersonNumber == personNumber);
                 }
                 else if (personId.HasValue)
@@ -2274,6 +2295,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     person = db.People
                         .Include(item => item.Employee)
                         .Include(item => item.ConstructionWorker)
+                        .Include(item => item.EngagementHistory)
                         .SingleOrDefault(item => item.Id == personId.Value);
                 }
 
@@ -2283,6 +2305,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     employee = db.Employees
                         .Include(item => item.Person)
                         .ThenInclude(item => item!.ConstructionWorker)
+                        .Include(item => item.Person)
+                        .ThenInclude(item => item!.EngagementHistory)
                         .SingleOrDefault(item => systemId.HasValue
                             ? item.Id == systemId.Value
                             : item.EmployeeNumber == values.GetValueOrDefault("employee_number"));
@@ -2321,8 +2345,37 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     db.People.Add(person);
                 }
 
-                if (TryParseEmployeeType(values.GetValueOrDefault("employee_type") ?? string.Empty, out var type)) employee.EmployeeType = type;
-                employee.PositionTitle = NullableImportUpdate(values, "position", employee.PositionTitle);
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var currentAffiliation = person.EngagementHistory
+                    .Where(item => item.IsPrimary && item.StartDate <= today && (item.EndDate is null || item.EndDate >= today))
+                    .OrderByDescending(item => item.StartDate)
+                    .FirstOrDefault();
+                var currentInternalAffiliation = currentAffiliation?.Scope == PersonnelScope.Internal
+                    ? currentAffiliation
+                    : null;
+                var profileIsActive = ImportBooleanUpdate(values, "is_active", person.IsActive);
+                if (TryParseEmployeeType(values.GetValueOrDefault("employee_type") ?? string.Empty, out var type))
+                {
+                    if (currentInternalAffiliation is not null)
+                    {
+                        employee.EmployeeType = type;
+                        currentInternalAffiliation.InternalType = type;
+                    }
+                    else if (currentAffiliation is null)
+                    {
+                        employee.EmployeeType = type;
+                    }
+                }
+                var positionTitle = NullableImportUpdate(values, "position", employee.PositionTitle);
+                if (currentInternalAffiliation is not null)
+                {
+                    employee.PositionTitle = positionTitle;
+                    currentInternalAffiliation.PositionTitle = positionTitle;
+                }
+                else if (currentAffiliation is null)
+                {
+                    employee.PositionTitle = positionTitle;
+                }
                 employee.DefaultMonthlySalary = NullableImportDecimalUpdate(values, "default_monthly_salary", employee.DefaultMonthlySalary);
                 employee.DefaultDailyRate = NullableImportDecimalUpdate(values, "default_daily_rate", employee.DefaultDailyRate);
                 employee.DefaultHourlyRate = NullableImportDecimalUpdate(values, "default_hourly_rate", employee.DefaultHourlyRate);
@@ -2335,14 +2388,32 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     NullableImportUpdate(values, "bank_account_number", person.BankAccountNumber),
                     NullableImportUpdate(values, "bank_name", person.BankName),
                     NullableImportUpdate(values, "notes", person.Notes),
-                    person.IsActive);
+                    profileIsActive);
+                PersonPublicDataSynchronizer.ApplyActiveProfile(person, profileIsActive, currentAffiliation);
                 return true;
             case ExportDataset.Partners:
-                var partnerQuery = db.BusinessPartners.Include(item => item.Roles);
+                var partnerQuery = db.BusinessPartners.Include(item => item.Roles).Include(item => item.ProjectLinks);
                 var partner = systemId.HasValue ? partnerQuery.SingleOrDefault(item => item.Id == systemId.Value) : partnerQuery.SingleOrDefault(item => item.PartnerNumber == values.GetValueOrDefault("partner_number"));
                 if (partner is null) return false;
-                partner.Name = values.GetValueOrDefault("name") ?? partner.Name;
-                partner.ShortName = values.GetValueOrDefault("short_name") ?? partner.ShortName;
+                var previousPartnerName = partner.Name;
+                var previousPartnerShortName = partner.ShortName;
+                var partnerName = values.GetValueOrDefault("name") ?? partner.Name;
+                var partnerShortName = values.GetValueOrDefault("short_name") ?? partner.ShortName;
+                var automaticGeneralContractorProjectIds = partner.ProjectLinks
+                    .Where(item => item.Notes?.Contains(BusinessPartnerDirectorySynchronizer.AutoGeneralContractorNote, StringComparison.Ordinal) == true)
+                    .Select(item => item.ProjectId)
+                    .Distinct()
+                    .ToArray();
+                await BusinessPartnerAutomaticNameSynchronizer.UpdateAsync(
+                    db,
+                    automaticGeneralContractorProjectIds,
+                    previousPartnerName,
+                    previousPartnerShortName,
+                    partnerName,
+                    partnerShortName,
+                    cancellationToken);
+                partner.Name = partnerName;
+                partner.ShortName = partnerShortName;
                 if (values.TryGetValue("roles", out var importedRoleValue) && importedRoleValue is not null)
                 {
                     IReadOnlyList<BusinessPartnerRoleType> importedRoleTypes = IsClearMarker(importedRoleValue)
@@ -2351,18 +2422,10 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                             ? parsedRoleTypes
                             : [];
                     var requestedRoles = importedRoleTypes.ToHashSet();
-                    var removedRoles = partner.Roles.Where(item => !requestedRoles.Contains(item.RoleType)).ToArray();
-                    db.BusinessPartnerRoles.RemoveRange(removedRoles);
-                    foreach (var removedRole in removedRoles)
-                    {
-                        partner.Roles.Remove(removedRole);
-                    }
-                    foreach (var roleType in requestedRoles.Where(roleType => partner.Roles.All(item => item.RoleType != roleType)))
-                    {
-                        var importedRole = new BusinessPartnerRole { Partner = partner, RoleType = roleType };
-                        partner.Roles.Add(importedRole);
-                        db.BusinessPartnerRoles.Add(importedRole);
-                    }
+                    await new BusinessPartnerRoleChangeCoordinator(db).ApplyImportedRoleSetAsync(
+                        partner,
+                        requestedRoles,
+                        cancellationToken);
                 }
                 partner.ConcurrencyStamp = Guid.NewGuid();
                 return true;

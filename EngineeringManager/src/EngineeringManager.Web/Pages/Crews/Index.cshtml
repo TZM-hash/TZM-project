@@ -143,7 +143,7 @@
                             receivable = financialSummary.Receivable,
                             payable = financialSummary.Payable
                         }, financeJsonOptions);
-                        <tr>
+                        <tr data-row-group="crew-@partner.Id">
                             <td data-column-key="crew" data-sort-value="@partner.PartnerNumber"><strong class="partner-name-clamp crew-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary partner-cell-ellipsis crew-cell-ellipsis" title="@partner.PartnerNumber · @partner.ShortName">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary crew-notes-summary partner-cell-ellipsis crew-cell-ellipsis" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
                             <td data-column-key="role_trade"><strong class="partner-cell-ellipsis crew-cell-ellipsis" title="施工班组">施工班组</strong><span class="table-secondary partner-cell-ellipsis crew-cell-ellipsis" title="@item.TradeCategory">@item.TradeCategory</span></td>
                             <td data-column-key="contact"><strong class="partner-cell-ellipsis crew-cell-ellipsis" title="@(contact?.Name ?? "未设置")">@(contact?.Name ?? "未设置")</strong><span class="table-secondary partner-cell-ellipsis crew-cell-ellipsis" title="@(contact?.Phone ?? "未设置电话")">@(contact?.Phone ?? "未设置电话")</span></td>
@@ -158,7 +158,7 @@
                         </tr>
                         @if (Model.OrganizationSummaries.TryGetValue(partner.Id, out var organizationSummary))
                         {
-                            <tr class="organization-summary-row">
+                            <tr class="organization-summary-row" data-row-group="crew-@partner.Id">
                                 <td colspan="@(6 + financialColumnCount)">
                                     <partial name="_OrganizationSummary" model="new OrganizationSummaryViewModel(organizationSummary, true)" />
                                 </td>

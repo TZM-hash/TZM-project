@@ -85,12 +85,41 @@ function headerCells(table) {
 }
 
 function rowIsFixed(row, columnCount) {
+  if (row.dataset.rowGroup) {
+    row.removeAttribute("data-sort-fixed");
+    return false;
+  }
   if (row.matches("[data-sort-fixed]")) return true;
   const text = normalizedText(row.textContent);
   const singleWideCell = row.cells.length === 1 && Number(row.cells[0]?.colSpan || 1) >= Math.max(columnCount, 2);
   const summary = /^(合计|总计|小计|共计|暂无|当前.*暂无|没有符合)/.test(text);
   if (singleWideCell || summary) row.setAttribute("data-sort-fixed", "");
   return singleWideCell || summary;
+}
+
+function rowGroupsFor(body, columnCount) {
+  const groups = [];
+  const groupsByKey = new Map();
+  const fixedRows = [];
+  Array.from(body.rows).forEach((row) => {
+    if (rowIsFixed(row, columnCount)) {
+      fixedRows.push(row);
+      return;
+    }
+    const key = row.dataset.rowGroup;
+    if (!key) {
+      groups.push({ sortRow: row, rows: [row] });
+      return;
+    }
+    let group = groupsByKey.get(key);
+    if (!group) {
+      group = { sortRow: row, rows: [] };
+      groupsByKey.set(key, group);
+      groups.push(group);
+    }
+    group.rows.push(row);
+  });
+  return { groups, fixedRows };
 }
 
 function ensureOriginalIndexes(table) {
@@ -149,11 +178,13 @@ function sortTable(table, key, descending) {
   let orderChanged = false;
   Array.from(table.tBodies).forEach((body) => {
     const allRows = Array.from(body.rows);
-    const fixedRows = allRows.filter((row) => rowIsFixed(row, headers.length));
-    const rows = allRows.filter((row) => !fixedRows.includes(row));
-    if (rows.length < 2) return;
+    const { groups, fixedRows } = rowGroupsFor(body, headers.length);
+    const rows = groups.map((group) => group.sortRow);
+    if (groups.length < 2) return;
     const kind = header ? valueKind(header, rows) : "original";
-    rows.sort((left, right) => {
+    groups.sort((leftGroup, rightGroup) => {
+      const left = leftGroup.sortRow;
+      const right = rightGroup.sortRow;
       const leftOriginal = Number(left.dataset.listSortOriginalIndex || 0);
       const rightOriginal = Number(right.dataset.listSortOriginalIndex || 0);
       let result;
@@ -168,7 +199,7 @@ function sortTable(table, key, descending) {
       }
       return result || leftOriginal - rightOriginal;
     });
-    const orderedRows = [...rows, ...fixedRows];
+    const orderedRows = [...groups.flatMap((group) => group.rows), ...fixedRows];
     if (!rowsMatchOrder(allRows, orderedRows)) {
       orderedRows.forEach((row) => body.appendChild(row));
       orderChanged = true;
@@ -303,7 +334,8 @@ function initWorkbench(workbench) {
 
 function businessRows(table) {
   const columnCount = headerCells(table).length;
-  return Array.from(table.tBodies).flatMap((body) => Array.from(body.rows)).filter((row) => !rowIsFixed(row, columnCount));
+  return Array.from(table.tBodies)
+    .flatMap((body) => rowGroupsFor(body, columnCount).groups.map((group) => group.sortRow));
 }
 
 function workbenchForTable(table) {

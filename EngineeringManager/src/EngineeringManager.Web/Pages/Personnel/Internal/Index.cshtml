@@ -10,7 +10,6 @@
 <nav class="page-tabs page-tabs--buttons employee-sub-navigation" aria-label="人员管理子导航">
     <a class="button button--secondary button--small is-active" asp-page="/Personnel/Internal/Index" aria-current="page">内部人员</a>
     <a class="button button--secondary button--small" asp-page="/Personnel/External/Index">外部人员</a>
-    <a class="button button--secondary button--small" asp-page="/Employees/Index">员工业务档案</a>
 </nav>
 
 <div class="employee-workspace-page personnel-workbench">
@@ -20,7 +19,7 @@
             <h1>内部人员</h1>
             <p class="page-lead">统一查看正式员工、劳务员工和特殊临时人员的当前公司、部门、项目与班组归属。</p>
         </div>
-        <div class="page-actions-inline"><a class="button button--primary button--action" asp-page="/Employees/Index">维护员工业务档案</a></div>
+        <div class="page-actions-inline"><a class="button button--secondary button--action" asp-page="/Employees/Index">维护员工业务档案</a><a class="button button--primary button--action" asp-page="/Personnel/Create" asp-route-scope="Internal">新增内部人员</a></div>
     </section>
 
     <form method="get" class="panel filter-bar personnel-filter-bar" aria-label="内部人员筛选">
@@ -35,12 +34,12 @@
                 }
             </select>
         </label>
-        <label>关联单位
-            <select name="BusinessPartnerId">
-                <option value="">全部单位</option>
-                @foreach (var item in Model.Options.BusinessPartners)
+        <label>当前班组
+            <select name="CrewBusinessPartnerId">
+                <option value="">全部班组</option>
+                @foreach (var item in Model.Options.Crews)
                 {
-                    if (Model.BusinessPartnerId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
+                    if (Model.CrewBusinessPartnerId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
                     else { <option value="@item.Id">@item.Name</option> }
                 }
             </select>

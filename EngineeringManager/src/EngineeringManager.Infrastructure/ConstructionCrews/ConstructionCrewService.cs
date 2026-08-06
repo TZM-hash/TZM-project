@@ -78,6 +78,7 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
             .GroupBy(item => item.CrewBusinessPartnerId)
             .Select(group => new { CrewId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.CrewId, item => item.Count, cancellationToken);
+        var projectCounts = await LoadActiveProjectCountsAsync(crewIds, cancellationToken);
         var payments = await db.PayrollPayments.AsNoTracking()
             .Where(item => item.CrewBusinessPartnerId.HasValue && crewIds.Contains(item.CrewBusinessPartnerId.Value) && item.Batch.Status != PayrollBatchStatus.Voided)
             .Select(item => new { CrewId = item.CrewBusinessPartnerId!.Value, Date = item.Batch.PaymentDate ?? item.PaymentDate, item.Amount })
@@ -95,7 +96,7 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
                 contact?.Name,
                 contact?.Phone,
                 currentCounts.GetValueOrDefault(crew.Id),
-                crew.ProjectLinks.Count,
+                projectCounts.GetValueOrDefault(crew.Id),
                 crewPayments.Sum(item => item.Amount),
                 crewPayments.Where(item => item.Date.HasValue).Select(item => item.Date!.Value).OrderByDescending(item => item).Cast<DateOnly?>().FirstOrDefault(),
                 crew.IsActive);
@@ -174,10 +175,22 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
             : await db.People
                 .Include(item => item.Employee)
                 .Include(item => item.ConstructionWorker)
+                .Include(item => item.EngagementHistory)
                 .SingleOrDefaultAsync(item => item.IdentityNumberNormalized == normalizedIdentityNumber, cancellationToken);
         if (person?.ConstructionWorker is not null)
         {
             throw new InvalidOperationException("该身份证号已存在施工班组人员档案。");
+        }
+        if (person is not null
+            && (person.Employee is not null
+                || person.EngagementHistory.Any(item => item.Scope == PersonnelScope.Internal)))
+        {
+            throw new InvalidOperationException("该身份证号已存在内部人员档案，请在人员管理中使用身份切换。");
+        }
+        if (person?.EngagementHistory.Any(item => item.IsPrimary
+                && (item.EndDate is null || item.EndDate >= request.StartDate)) == true)
+        {
+            throw new InvalidOperationException("该身份证号已有生效或未来的人员归属，请在人员管理中使用身份切换。");
         }
         person ??= new Person { PersonNumber = $"PER-{Guid.NewGuid():N}" };
         PersonPublicDataSynchronizer.Apply(person, request.Name, request.Phone, request.IdentityNumber, request.BankAccountNumber, request.BankName, request.Notes, true);
@@ -295,6 +308,33 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
         {
             throw new InvalidOperationException("施工班组不存在、已停用或没有施工班组角色。");
         }
+    }
+
+    private async Task<Dictionary<Guid, int>> LoadActiveProjectCountsAsync(
+        Guid[] crewIds,
+        CancellationToken cancellationToken)
+    {
+        if (crewIds.Length == 0)
+        {
+            return [];
+        }
+
+        var linkedProjects = await db.ProjectPartners.AsNoTracking()
+            .Where(item => crewIds.Contains(item.BusinessPartnerId) && item.IsActive && item.Project.IsActive)
+            .Select(item => new { CrewId = item.BusinessPartnerId, item.ProjectId })
+            .ToArrayAsync(cancellationToken);
+        var constructionProjects = await db.ProjectConstructionRecords.AsNoTracking()
+            .Where(item => item.CrewBusinessPartnerId.HasValue
+                && crewIds.Contains(item.CrewBusinessPartnerId.Value)
+                && item.Project.IsActive)
+            .Select(item => new { CrewId = item.CrewBusinessPartnerId!.Value, item.ProjectId })
+            .ToArrayAsync(cancellationToken);
+
+        return linkedProjects
+            .Concat(constructionProjects)
+            .Distinct()
+            .GroupBy(item => item.CrewId)
+            .ToDictionary(group => group.Key, group => group.Count());
     }
 
     private void AddAudit(string userId, string action, Guid id, string reason, object? before, object after) => db.AuditLogs.Add(new AuditLog

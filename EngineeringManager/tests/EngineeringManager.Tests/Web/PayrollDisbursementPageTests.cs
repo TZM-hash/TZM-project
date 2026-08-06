@@ -103,13 +103,16 @@ public sealed class PayrollDisbursementPageTests
     }
 
     [Fact]
-    public void SidebarKeepsEmployeePayrollAndCrewEntriesWithoutTemporaryWorkerEntryPoint()
+    public void SidebarKeepsPersonnelPayrollAndUnifiedPartnerEntriesWithoutLegacyEntryPoints()
     {
         var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
 
-        layout.Should().Contain("asp-page=\"/Employees/Index\"");
+        layout.Should().Contain("asp-page=\"/Personnel/Internal/Index\"")
+            .And.Contain("asp-page=\"/Personnel/External/Index\"")
+            .And.NotContain("asp-page=\"/Employees/Index\"");
         layout.Should().Contain("asp-page=\"/Payroll/Index\"");
-        layout.Should().Contain("asp-page=\"/Crews/Index\"");
+        layout.Should().Contain("asp-page=\"/Partners/Index\"");
+        layout.Should().NotContain("asp-page=\"/Crews/Index\"");
         layout.Should().NotContain("/TemporaryWorkers");
     }
 

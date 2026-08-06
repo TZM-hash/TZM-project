@@ -3,6 +3,7 @@ using EngineeringManager.Application.Payroll;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Web.Pages.Payroll;
@@ -84,6 +85,54 @@ public sealed class PayrollEditPageModelTests
         model.Input.CrewLines.Should().ContainSingle(item => item.Selected).Which.Should().Match<PayrollPersonLineInput>(item =>
             item.PaymentId == paymentId && item.CrewBusinessPartnerId == secondCrew.Id && item.Amount == 4_000m);
         model.Input.CrewLines.Single(item => item.CrewBusinessPartnerId == firstCrew.Id).PaymentId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersonEngagementAtPaymentDatePreventsDuplicateEmployeeAndCrewCandidates()
+    {
+        await using var fixture = await PageFixture.CreateAsync();
+        var crew = CreateCrew("PAGE-SCOPE-C", "身份切换班组");
+        var person = new Person { PersonNumber = "PAGE-SCOPE-P", Name = "身份切换人员" };
+        var employee = new Employee { Person = person, EmployeeNumber = "PAGE-SCOPE-E", Name = person.Name, IsActive = true };
+        var worker = new ConstructionWorker { Person = person, Name = person.Name, IsActive = true };
+        worker.Memberships.Add(new ConstructionCrewMembership
+        {
+            Worker = worker,
+            CrewBusinessPartner = crew,
+            StartDate = new DateOnly(2026, 7, 1),
+            IsPrimary = true
+        });
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.Internal,
+            InternalType = EmployeeType.Formal,
+            StartDate = new DateOnly(2026, 1, 1),
+            EndDate = new DateOnly(2026, 6, 30),
+            IsPrimary = true,
+            Reason = "初始内部身份"
+        });
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.ConstructionCrew,
+            BusinessPartner = crew,
+            CrewBusinessPartner = crew,
+            StartDate = new DateOnly(2026, 7, 1),
+            IsPrimary = true,
+            Reason = "转为班组人员"
+        });
+        fixture.Db.AddRange(crew, person, employee, worker);
+        await fixture.Db.SaveChangesAsync();
+        fixture.Service.Details = CreateDetails([], []);
+        var model = CreateModel(fixture);
+
+        await model.LoadEditorAsync(CancellationToken.None);
+
+        model.Input.EmployeeLines.Should().NotContain(item => item.PersonId == employee.Id);
+        model.Input.CrewLines.Should().ContainSingle(item =>
+            item.PersonId == worker.Id && item.CrewBusinessPartnerId == crew.Id);
     }
 
     private static IndexModel CreateModel(PageFixture fixture)

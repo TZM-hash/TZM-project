@@ -1,0 +1,104 @@
+@page
+@model EngineeringManager.Web.Pages.Personnel.CreateModel
+@using EngineeringManager.Domain.Employees
+@using EngineeringManager.Domain.Personnel
+@using EngineeringManager.Web.Presentation
+@{
+    ViewData["Title"] = "新增人员";
+}
+
+@section Scripts { <script type="module" src="~/js/pages/personnel-affiliation.js" asp-append-version="true"></script> }
+
+<nav class="page-tabs page-tabs--buttons employee-sub-navigation" aria-label="人员管理子导航">
+    <a class="button button--secondary button--small" asp-page="/Personnel/Internal/Index">内部人员</a>
+    <a class="button button--secondary button--small" asp-page="/Personnel/External/Index">外部人员</a>
+</nav>
+
+<div class="personnel-detail-workspace personnel-create-page">
+    <section class="page-heading compact-page-heading">
+        <div><p class="eyebrow">统一人员主档</p><h1>新增人员</h1><p class="page-lead">公共资料只创建一份；内部、外部身份与公司、单位、部门、项目、班组从首条生效归属开始留痕。</p></div>
+    </section>
+
+    <div asp-validation-summary="ModelOnly" class="validation-summary-errors"></div>
+
+    <form method="post" class="panel form-grid personnel-affiliation-editor" data-personnel-affiliation>
+        <input type="hidden" asp-for="Input.LegalEntityId" data-affiliation-legal-entity />
+        <input type="hidden" asp-for="Input.BusinessPartnerId" data-affiliation-business-partner />
+        <div class="panel-heading form-span-2"><div><p class="eyebrow">人员资料与首条归属</p><h2>统一新增</h2></div></div>
+        <label>人员编号<input asp-for="Input.PersonNumber" required /></label>
+        <label>姓名<input asp-for="Input.Name" required /></label>
+        <label>人员范围
+            <select asp-for="Input.Scope" data-affiliation-scope>
+                <option value="Internal">内部人员</option>
+                <option value="External">外部人员</option>
+            </select>
+        </label>
+        <label>内部人员类型
+            <select asp-for="Input.InternalType" data-affiliation-internal-type data-default-value="Formal">
+                <option value="">不适用</option>
+                @foreach (var value in Enum.GetValues<EmployeeType>()) { <option value="@value">@value.ToChinese()</option> }
+            </select>
+        </label>
+        <label>外部人员类型
+            <select asp-for="Input.ExternalType" data-affiliation-external-type data-default-value="BusinessPartner">
+                <option value="">不适用</option>
+                <option value="ConstructionCrew">施工班组人员</option>
+                <option value="BusinessPartner">合作单位人员</option>
+                <option value="Other">其他外部人员</option>
+            </select>
+        </label>
+        <label>联系电话<input asp-for="Input.Phone" /></label>
+        <label>身份证号<input asp-for="Input.IdentityNumber" /></label>
+        <label>银行卡号<input asp-for="Input.BankAccountNumber" /></label>
+        <label>开户行<input asp-for="Input.BankName" /></label>
+        <label>当前公司 / 单位
+            <select asp-for="Input.OwnerKey" data-affiliation-owner required>
+                <option value="">请选择公司或单位</option>
+                <optgroup label="自有公司">
+                @foreach (var item in Model.Options.LegalEntities)
+                {
+                    <option value="legal:@item.Id" data-owner-scope="Internal" data-legal-entity-id="@item.Id" data-business-partner-id="" data-role="company">@item.Name</option>
+                }
+                </optgroup>
+                <optgroup label="合作单位 / 施工班组">
+                @foreach (var item in Model.Options.BusinessPartners)
+                {
+                    <option value="partner:@item.Id" data-owner-scope="External" data-legal-entity-id="" data-business-partner-id="@item.Id" data-role="@(item.IsCrew ? "crew" : "partner")">@item.Name</option>
+                }
+                </optgroup>
+            </select>
+        </label>
+        <label>当前部门
+            <select asp-for="Input.OrganizationUnitId" data-affiliation-department>
+                <option value="">未归属部门</option>
+                @foreach (var item in Model.Options.Departments)
+                {
+                    <option value="@item.Id" data-legal-entity-id="@item.LegalEntityId" data-business-partner-id="@item.BusinessPartnerId">@item.Name</option>
+                }
+            </select>
+        </label>
+        <label>当前项目
+            <select asp-for="Input.ProjectId" data-affiliation-project>
+                <option value="">未归属项目</option>
+                @foreach (var item in Model.Options.Projects)
+                {
+                    <option value="@item.Id" data-legal-entity-id="@string.Join(",", item.LegalEntityIds)" data-business-partner-id="@string.Join(",", item.BusinessPartnerIds)">@item.Name</option>
+                }
+            </select>
+        </label>
+        <label>当前班组
+            <select asp-for="Input.CrewBusinessPartnerId" data-affiliation-crew>
+                <option value="">未归属班组</option>
+                @foreach (var item in Model.Options.Crews)
+                {
+                    <option value="@item.Id" data-legal-entity-id="" data-business-partner-id="@item.Id" data-role="crew">@item.Name</option>
+                }
+            </select>
+        </label>
+        <label>岗位 / 工种<input asp-for="Input.PositionTitle" /></label>
+        <label>生效日期<input asp-for="Input.EffectiveDate" type="date" max="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" required /></label>
+        <label class="form-span-2">备注<textarea asp-for="Input.Notes" rows="3"></textarea></label>
+        <label class="form-span-2">新增原因<input asp-for="Input.Reason" required /></label>
+        <div class="form-actions form-span-2"><a class="button button--secondary" asp-page="@(Model.Input.Scope == PersonnelScope.Internal ? "/Personnel/Internal/Index" : "/Personnel/External/Index")">取消</a><button class="button button--primary" type="submit">保存人员</button></div>
+    </form>
+</div>

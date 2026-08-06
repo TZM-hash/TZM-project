@@ -34,6 +34,18 @@ public sealed class ListPaginationAssetTests
     }
 
     [Fact]
+    public void SharedPaginationCountsAndShowsGroupedRowsAsOneBusinessRecord()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "list-pagination.js");
+
+        script.Should().Contain("function rowGroupsFor(table)")
+            .And.Contain("if (row.dataset.rowGroup)")
+            .And.Contain("group.rows.forEach((row) => { row.hidden = hidden; })")
+            .And.Contain("const business = groups.filter((group) => !group.fixed)")
+            .And.Contain("renderNavigation(state, business.length, totalPages, state.page)");
+    }
+
+    [Fact]
     public void EverySharedPresetAllowsPageSizeSelection()
     {
         var presets = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "DataWorkbenchPresets.cs");

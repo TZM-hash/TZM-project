@@ -376,6 +376,8 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
         var employees = await db.Employees
             .Include(item => item.Person)
             .ThenInclude(item => item!.ConstructionWorker)
+            .Include(item => item.Person)
+            .ThenInclude(item => item!.EngagementHistory)
             .ToListAsync(cancellationToken);
         var employeeByKey = BuildEmployeeMap(employees);
         var sourceName = Path.GetFileName(sourceFileName);
@@ -605,6 +607,18 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
     private void ApplyEmployeeProfile(Employee employee, EmployeeWorkbookMasterRow master, Guid? defaultLegalEntityId)
     {
         var person = EnsurePerson(employee, master.Name, master.IdentityNumber, master.Phone, master.BankAccountNumber);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var currentAffiliation = person.EngagementHistory
+            .Where(item => item.IsPrimary && item.StartDate <= today && (item.EndDate is null || item.EndDate >= today))
+            .OrderByDescending(item => item.StartDate)
+            .FirstOrDefault();
+        var currentExternalAffiliation = currentAffiliation?.Scope == PersonnelScope.External
+            ? currentAffiliation
+            : null;
+        var currentInternalAffiliation = currentAffiliation?.Scope == PersonnelScope.Internal
+            ? currentAffiliation
+            : null;
+        var profileIsActive = currentExternalAffiliation is not null ? person.IsActive : employee.IsActive;
         PersonPublicDataSynchronizer.Apply(
             person,
             master.Name,
@@ -613,10 +627,14 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
             string.IsNullOrWhiteSpace(master.BankAccountNumber) ? person.BankAccountNumber : master.BankAccountNumber,
             person.BankName,
             person.Notes,
-            employee.IsActive);
-        employee.PositionTitle = string.IsNullOrWhiteSpace(master.PositionTitle) ? employee.PositionTitle : master.PositionTitle;
-        employee.HireDate = master.StartDate ?? employee.HireDate;
-        employee.LeaveDate = master.EndDate ?? employee.LeaveDate;
+            profileIsActive);
+        PersonPublicDataSynchronizer.ApplyActiveProfile(person, profileIsActive, currentAffiliation);
+        if (currentExternalAffiliation is null)
+        {
+            employee.PositionTitle = string.IsNullOrWhiteSpace(master.PositionTitle) ? employee.PositionTitle : master.PositionTitle;
+            employee.HireDate = master.StartDate ?? employee.HireDate;
+            employee.LeaveDate = master.EndDate ?? employee.LeaveDate;
+        }
         if (master.SalaryAmount.HasValue)
         {
             var unit = master.SalaryUnit;
@@ -630,6 +648,15 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
         if (!employee.DefaultLegalEntityId.HasValue && defaultLegalEntityId.HasValue)
         {
             employee.DefaultLegalEntityId = defaultLegalEntityId;
+        }
+
+        if (currentInternalAffiliation is not null)
+        {
+            currentInternalAffiliation.PositionTitle = employee.PositionTitle;
+            if (!currentInternalAffiliation.LegalEntityId.HasValue && employee.DefaultLegalEntityId.HasValue)
+            {
+                currentInternalAffiliation.LegalEntityId = employee.DefaultLegalEntityId;
+            }
         }
 
         employee.UpdatedAt = DateTimeOffset.UtcNow;

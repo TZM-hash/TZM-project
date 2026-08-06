@@ -28,7 +28,9 @@ public sealed class PersonnelResponsiveUiTests
             .And.Contain("@media (max-width: 680px)")
             .And.Contain(".employee-project-detail-page .personnel-affiliation-readonly { grid-template-columns: minmax(0, 1fr); }")
             .And.Contain(".employee-project-detail-page .personnel-affiliation-actions { align-items: stretch; flex-direction: column; }")
-            .And.Contain(".employee-project-detail-page .personnel-affiliation-form :is(input, select) { width: 100%; min-width: 0; }");
+            .And.Contain(".employee-project-detail-page .personnel-affiliation-form :is(input, select) { width: 100%; min-width: 0; }")
+            .And.Contain(".personnel-detail-workspace .personnel-affiliation-form")
+            .And.Contain(".personnel-detail-workspace .personnel-affiliation-actions");
     }
 
     [Fact]
@@ -59,6 +61,20 @@ public sealed class PersonnelResponsiveUiTests
             .And.Contain(".partner-table-wrap, .crew-table-wrap")
             .And.Contain("max-width: 100%")
             .And.Contain("overflow-x: auto");
+    }
+
+    [Fact]
+    public void OrganizationListPagesUseBatchSummaryLoading()
+    {
+        foreach (var pageModel in new[]
+        {
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Companies", "Index.cshtml.cs"),
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Crews", "Index.cshtml.cs"),
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml.cs")
+        })
+        {
+            pageModel.Should().Contain("organizationSummaryService.GetManyAsync(");
+        }
     }
 
     private static string ReadFile(params string[] parts) =>

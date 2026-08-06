@@ -20,9 +20,14 @@ public sealed class CreateModel(IBusinessPartnerService partnerService) : PageMo
     [BindProperty] public string Name { get; set; } = string.Empty;
     [BindProperty] public string ShortName { get; set; } = string.Empty;
     [BindProperty] public BusinessPartnerRoleType RoleType { get; set; } = BusinessPartnerRoleType.ConstructionCrew;
+    [BindProperty] public BusinessPartnerRoleType? PreviousRoleType { get; set; }
     [BindProperty] public string? TradeCategory { get; set; }
+    [BindProperty] public string? PricingRule { get; set; }
+    [BindProperty] public string? SettlementTerms { get; set; }
     [BindProperty] public string? ContactName { get; set; }
     [BindProperty] public string? ContactPhone { get; set; }
+    [BindProperty] public string? ContactEmail { get; set; }
+    [BindProperty] public string? ContactAddress { get; set; }
     [BindProperty] public string? ContactNotes { get; set; }
     [BindProperty] public string? UnifiedSocialCreditCode { get; set; }
     [BindProperty] public string? Notes { get; set; }
@@ -47,9 +52,9 @@ public sealed class CreateModel(IBusinessPartnerService partnerService) : PageMo
         var partner = await partnerService.GetAsync(sourceId.Value, token);
         if (partner is null) return NotFound();
         Id = partner.Id; PartnerNumber = partner.PartnerNumber; Name = partner.Name; ShortName = partner.ShortName; UnifiedSocialCreditCode = partner.UnifiedSocialCreditCode; Notes = partner.Notes; IsActive = partner.IsActive; ConcurrencyStamp = partner.ConcurrencyStamp;
-        var role = partner.Roles.Count > 0 ? partner.Roles[0] : null; if (role is not null) { RoleType = role.RoleType; TradeCategory = role.TradeCategory; }
-        var contact = partner.Contacts.FirstOrDefault(item => item.IsPrimary) ?? (partner.Contacts.Count > 0 ? partner.Contacts[0] : null); if (contact is not null) { ContactName = contact.Name; ContactPhone = contact.Phone; ContactNotes = contact.Notes; }
-        if (copyFrom.HasValue) { Id = null; PartnerNumber = suggestedPartnerNumber; Name = ShortDisplayName.Copy(Name, 200); ShortName = ShortDisplayName.Copy(ShortName, 100); UnifiedSocialCreditCode = null; ContactName = null; ContactPhone = null; ConcurrencyStamp = Guid.Empty; Reason = "复制合作单位"; }
+        var role = partner.Roles.Count > 0 ? partner.Roles[0] : null; if (role is not null) { RoleType = role.RoleType; PreviousRoleType = role.RoleType; TradeCategory = role.TradeCategory; PricingRule = role.PricingRule; SettlementTerms = role.SettlementTerms; }
+        var contact = partner.Contacts.FirstOrDefault(item => item.IsPrimary) ?? (partner.Contacts.Count > 0 ? partner.Contacts[0] : null); if (contact is not null) { ContactName = contact.Name; ContactPhone = contact.Phone; ContactEmail = contact.Email; ContactAddress = contact.Address; ContactNotes = contact.Notes; }
+        if (copyFrom.HasValue) { Id = null; PreviousRoleType = null; PartnerNumber = suggestedPartnerNumber; Name = ShortDisplayName.Copy(Name, 200); ShortName = ShortDisplayName.Copy(ShortName, 100); UnifiedSocialCreditCode = null; ContactName = null; ContactPhone = null; ContactEmail = null; ContactAddress = null; ConcurrencyStamp = Guid.Empty; Reason = "复制合作单位"; }
         return Page();
     }
 
@@ -58,9 +63,9 @@ public sealed class CreateModel(IBusinessPartnerService partnerService) : PageMo
         try
         {
             if (Id.HasValue)
-                await partnerService.UpdateAsync(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", new UpdateBusinessPartnerRequest(Id.Value, PartnerNumber, Name, ShortName, UnifiedSocialCreditCode, Notes, new PartnerRoleRequest(RoleType, TradeCategory, null, null), string.IsNullOrWhiteSpace(ContactName) ? null : new PartnerContactRequest(ContactName, ContactPhone, null, null, true, ContactNotes), IsActive, ConcurrencyStamp, Reason), cancellationToken);
+                await partnerService.UpdateAsync(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown", new UpdateBusinessPartnerRequest(Id.Value, PartnerNumber, Name, ShortName, UnifiedSocialCreditCode, Notes, new PartnerRoleRequest(RoleType, TradeCategory, PricingRule, SettlementTerms), string.IsNullOrWhiteSpace(ContactName) ? null : new PartnerContactRequest(ContactName, ContactPhone, ContactEmail, ContactAddress, true, ContactNotes), IsActive, ConcurrencyStamp, Reason, PreviousRoleType), cancellationToken);
             else
-                await partnerService.CreateAsync(new CreateBusinessPartnerRequest(PartnerNumber, Name, ShortName, UnifiedSocialCreditCode, Notes, [new PartnerRoleRequest(RoleType, TradeCategory, null, null)], string.IsNullOrWhiteSpace(ContactName) ? [] : [new PartnerContactRequest(ContactName, ContactPhone, null, null, true, ContactNotes)]), cancellationToken);
+                await partnerService.CreateAsync(new CreateBusinessPartnerRequest(PartnerNumber, Name, ShortName, UnifiedSocialCreditCode, Notes, [new PartnerRoleRequest(RoleType, TradeCategory, PricingRule, SettlementTerms)], string.IsNullOrWhiteSpace(ContactName) ? [] : [new PartnerContactRequest(ContactName, ContactPhone, ContactEmail, ContactAddress, true, ContactNotes)]), cancellationToken);
             return RedirectToPage("/Partners/Index");
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)

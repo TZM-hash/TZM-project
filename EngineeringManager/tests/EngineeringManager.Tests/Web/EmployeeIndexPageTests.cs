@@ -175,6 +175,24 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Fact]
+    public void ExistingEmployeeEditorDelegatesClassificationAndAffiliationFieldsToUnifiedPersonnelProfile()
+    {
+        var dialog = ReadPage("Employees", "_EmployeeEditor.cshtml");
+        var script = ReadAsset("wwwroot", "js", "pages", "employee-workspace.js");
+        var details = ReadPage("Employees", "Details.cshtml");
+
+        dialog.Should().Contain("data-employee-affiliation-managed-fields")
+            .And.Contain("data-employee-affiliation-readonly")
+            .And.Contain("请在统一人员档案的当前归属中维护");
+        script.Should().Contain("affiliationManagedFields")
+            .And.Contain("affiliationReadonly");
+        details.Should().Contain("type=\"hidden\" name=\"EmployeeInput.EmployeeType\"")
+            .And.Contain("type=\"hidden\" name=\"EmployeeInput.PositionTitle\"")
+            .And.NotContain("<select data-inline-edit-control class=\"inline-cell-control\" name=\"EmployeeInput.EmployeeType\"")
+            .And.NotContain("<input data-inline-edit-control class=\"inline-cell-control\" name=\"EmployeeInput.PositionTitle\"");
+    }
+
+    [Fact]
     public void EmployeeIndexModelExposesDialogEditorAndSaveHandler()
     {
         typeof(IndexModel).GetProperty("Editor").Should().NotBeNull();
@@ -205,6 +223,12 @@ public sealed class EmployeeIndexPageTests
     private static string ReadPage(params string[] parts)
     {
         var path = Path.Combine(new[] { RepositoryRoot(), "src", "EngineeringManager.Web", "Pages" }.Concat(parts).ToArray());
+        return File.ReadAllText(path);
+    }
+
+    private static string ReadAsset(params string[] parts)
+    {
+        var path = Path.Combine(new[] { RepositoryRoot(), "src", "EngineeringManager.Web" }.Concat(parts).ToArray());
         return File.ReadAllText(path);
     }
 

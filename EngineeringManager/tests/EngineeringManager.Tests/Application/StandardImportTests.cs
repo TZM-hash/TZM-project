@@ -1,12 +1,16 @@
 using EngineeringManager.Application.DataExchange;
+using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.DataExchange;
+using EngineeringManager.Infrastructure.Employees;
+using EngineeringManager.Infrastructure.Partners;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -74,6 +78,17 @@ public sealed class StandardImportTests
             CancellationToken.None);
         createPreview.Errors.Should().BeEmpty();
         await fixture.Service.ConfirmAsync(createPreview.BatchId, CancellationToken.None);
+        var importedPartner = await fixture.Db.BusinessPartners.SingleAsync(item => item.PartnerNumber == "HZ-ROLE");
+        var linkedProject = new Project { ProjectNumber = "P-ROLE-IMPORT", Name = "导入角色联动项目" };
+        linkedProject.Partners.Add(new ProjectPartner
+        {
+            Project = linkedProject,
+            Partner = importedPartner,
+            RoleType = BusinessPartnerRoleType.ConstructionCrew,
+            Notes = "保留导入关联"
+        });
+        fixture.Db.Projects.Add(linkedProject);
+        await fixture.Db.SaveChangesAsync();
 
         var updateWorkbook = new SimpleXlsxWorkbook();
         updateWorkbook.AddWorksheet(
@@ -88,6 +103,9 @@ public sealed class StandardImportTests
 
         var roles = await fixture.Db.BusinessPartnerRoles.Select(item => item.RoleType).ToListAsync();
         roles.Should().Equal(BusinessPartnerRoleType.CustomerOrGeneralContractor);
+        var projectLink = await fixture.Db.ProjectPartners.SingleAsync(item => item.ProjectId == linkedProject.Id);
+        projectLink.RoleType.Should().Be(BusinessPartnerRoleType.CustomerOrGeneralContractor);
+        projectLink.Notes.Should().Be("保留导入关联");
     }
 
     [Fact]
@@ -340,6 +358,40 @@ public sealed class StandardImportTests
     }
 
     [Fact]
+    public async Task ImportedEmployeeCanReceiveFirstDetailedAffiliation()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet("员工导入", ["员工编号", "姓名", "员工类型"], [["IMPORT-AFF-001", "导入归属员工", "正式员工"]]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("import-affiliation", ExportDataset.Employees, "员工归属.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+
+        var employee = await fixture.Db.Employees.SingleAsync(item => item.EmployeeNumber == "IMPORT-AFF-001");
+        employee.PersonId.Should().NotBeNull();
+        (await fixture.Db.EmployeeAffiliationHistories.CountAsync(item => item.EmployeeId == employee.Id)).Should().Be(0);
+        var importedEngagement = await fixture.Db.PersonnelEngagementHistories.SingleAsync(item => item.PersonId == employee.PersonId);
+        importedEngagement.Reason.Should().Be("员工导入");
+        importedEngagement.Scope.Should().Be(EngineeringManager.Domain.Personnel.PersonnelScope.Internal);
+        importedEngagement.IsPrimary.Should().BeTrue();
+        importedEngagement.StartDate.Should().Be(DateOnly.FromDateTime(DateTime.Today));
+        var employeeService = new EmployeeService(fixture.Db);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        await employeeService.AddAffiliationAsync(
+            new CreateEmployeeAffiliationRequest(employee.Id, today, null, null, null, null, null, "导入岗位", true, null),
+            CancellationToken.None);
+
+        (await fixture.Db.EmployeeAffiliationHistories.CountAsync(item => item.EmployeeId == employee.Id)).Should().Be(1);
+        var engagement = await fixture.Db.PersonnelEngagementHistories.SingleAsync(item => item.PersonId == employee.PersonId);
+        engagement.StartDate.Should().Be(today);
+        engagement.Reason.Should().Be("员工业务档案归属维护");
+        engagement.PositionTitle.Should().Be("导入岗位");
+    }
+
+    [Fact]
     public async Task EmployeeImportAcceptsStableChineseAndEnglishTypeLabels()
     {
         await using var fixture = await ImportFixture.CreateAsync();
@@ -372,6 +424,42 @@ public sealed class StandardImportTests
     }
 
     [Fact]
+    public async Task PartnerImportRenameUpdatesAutomaticGeneralContractorSourceWithoutDuplicates()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var project = new Project
+        {
+            ProjectNumber = "IMPORT-PARTNER-RENAME",
+            Name = "导入总包改名项目",
+            GeneralContractorName = "旧总包有限公司"
+        };
+        fixture.Db.Projects.Add(project);
+        await fixture.Db.SaveChangesAsync();
+
+        var synchronizer = new BusinessPartnerDirectorySynchronizer(fixture.Db);
+        await synchronizer.SynchronizeAsync(project.Id, CancellationToken.None);
+        var partner = await fixture.Db.BusinessPartners.SingleAsync(item => item.Name == "旧总包有限公司");
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "合作单位导入",
+            ["单位编号", "单位名称", "简称", "业务角色"],
+            [[partner.PartnerNumber, "新总包有限公司", "新总包", "甲方/总包"]]);
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("partner-rename", ExportDataset.Partners, "合作单位改名.xlsx", workbook.ToArray(), null, ImportMode.Update),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+
+        await synchronizer.SynchronizeAsync(project.Id, CancellationToken.None);
+
+        (await fixture.Db.BusinessPartners.CountAsync()).Should().Be(1);
+        (await fixture.Db.BusinessPartners.SingleAsync()).Name.Should().Be("新总包有限公司");
+        (await fixture.Db.Projects.SingleAsync(item => item.Id == project.Id)).GeneralContractorName.Should().Be("新总包有限公司");
+        (await fixture.Db.ProjectPartners.CountAsync(item => item.ProjectId == project.Id)).Should().Be(1);
+    }
+
+    [Fact]
     public async Task MixedImportUpdatesExistingEmployeeAndPreservesAllOrNothingOnConcurrencyConflict()
     {
         await using var fixture = await ImportFixture.CreateAsync();
@@ -393,6 +481,206 @@ public sealed class StandardImportTests
         stalePreview.Errors.Should().ContainSingle(item => item.ColumnName == "并发版本");
         await confirmStale.Should().ThrowAsync<InvalidOperationException>().WithMessage("*错误*");
         (await fixture.Db.Employees.SingleAsync(item => item.Id == employee.Id)).Name.Should().Be(before);
+    }
+
+    [Fact]
+    public async Task StandardEmployeeImportStatusUpdatesCurrentExternalIdentityWithoutReactivatingEmployee()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var partner = new BusinessPartner
+        {
+            PartnerNumber = "EXT-IMPORT-CREW",
+            Name = "导入班组",
+            ShortName = "导入班组"
+        };
+        partner.Roles.Add(new BusinessPartnerRole
+        {
+            Partner = partner,
+            RoleType = BusinessPartnerRoleType.ConstructionCrew
+        });
+        var person = new Person
+        {
+            PersonNumber = "PER-STATUS-EXTERNAL",
+            Name = "外部导入前",
+            IsActive = true,
+            Employee = new Employee
+            {
+                EmployeeNumber = "STATUS-EXT-001",
+                Name = "外部导入前",
+                EmployeeType = EmployeeType.Labor,
+                IsActive = false
+            },
+            ConstructionWorker = new ConstructionWorker
+            {
+                Name = "外部导入前",
+                IsActive = true
+            }
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.ConstructionCrew,
+            BusinessPartnerId = partner.Id,
+            CrewBusinessPartnerId = partner.Id,
+            StartDate = today.AddDays(-1),
+            IsPrimary = true,
+            Reason = "测试外部身份"
+        });
+        fixture.Db.BusinessPartners.Add(partner);
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工",
+            ["员工编号", "统一人员编号", "姓名", "员工类型", "状态", "并发版本"],
+            [[person.Employee!.EmployeeNumber, person.PersonNumber, "外部导入后", "正式员工", "否", person.Employee.ConcurrencyStamp.ToString()]]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("status-import", ExportDataset.Employees, "员工状态导入.xlsx", workbook.ToArray(), null, ImportMode.Update),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        fixture.Db.ChangeTracker.Clear();
+
+        var updated = await fixture.Db.People
+            .Include(item => item.Employee)
+            .Include(item => item.ConstructionWorker)
+            .SingleAsync(item => item.PersonNumber == person.PersonNumber);
+        updated.IsActive.Should().BeFalse();
+        updated.Employee!.IsActive.Should().BeFalse();
+        updated.ConstructionWorker!.IsActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EmployeeRoundTripExportsUnifiedActiveStatusForCurrentExternalPerson()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var partner = new BusinessPartner
+        {
+            PartnerNumber = "EXT-ROUNDTRIP-CREW",
+            Name = "往返班组",
+            ShortName = "往返班组"
+        };
+        partner.Roles.Add(new BusinessPartnerRole
+        {
+            Partner = partner,
+            RoleType = BusinessPartnerRoleType.ConstructionCrew
+        });
+        var person = new Person
+        {
+            PersonNumber = "PER-ROUNDTRIP-EXTERNAL",
+            Name = "往返外部人员",
+            IsActive = true,
+            Employee = new Employee
+            {
+                EmployeeNumber = "ROUNDTRIP-EXT-001",
+                Name = "往返外部人员",
+                EmployeeType = EmployeeType.Labor,
+                IsActive = false
+            },
+            ConstructionWorker = new ConstructionWorker
+            {
+                Name = "往返外部人员",
+                IsActive = true
+            }
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.ConstructionCrew,
+            BusinessPartnerId = partner.Id,
+            CrewBusinessPartnerId = partner.Id,
+            StartDate = today.AddDays(-1),
+            IsPrimary = true,
+            Reason = "测试往返状态"
+        });
+        fixture.Db.BusinessPartners.Add(partner);
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var export = await new ExportService(
+                fixture.Db,
+                new EngineeringManager.Infrastructure.Finance.FinanceLedgerService(fixture.Db))
+            .ExportAsync(
+                new ExportRequest(
+                    ExportDataset.Employees,
+                    "员工往返状态",
+                    ["employee_number", "person_number", "personnel_scope", "name", "employee_type", "is_active"],
+                    null,
+                    UseRoundTripWorkbook: true),
+                CancellationToken.None);
+        var sheet = SimpleXlsxReader.Read(export.Content).Single(item => item.Name == "员工");
+        var headers = sheet.Rows[0].Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty).ToArray();
+        var row = sheet.Rows[1];
+        var statusIndex = Array.IndexOf(headers, "状态");
+        statusIndex.Should().BeGreaterThanOrEqualTo(0);
+        Convert.ToBoolean(row[statusIndex], System.Globalization.CultureInfo.InvariantCulture).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task StandardEmployeeImportStatusAppliesToExistingAndNewInternalPeople()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var person = new Person
+        {
+            PersonNumber = "PER-STATUS-INTERNAL",
+            Name = "内部导入前",
+            IsActive = true,
+            Employee = new Employee
+            {
+                EmployeeNumber = "STATUS-INT-001",
+                Name = "内部导入前",
+                EmployeeType = EmployeeType.Labor,
+                IsActive = true
+            }
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.Internal,
+            InternalType = EmployeeType.Labor,
+            StartDate = today.AddDays(-1),
+            IsPrimary = true,
+            Reason = "测试内部身份"
+        });
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工",
+            ["员工编号", "统一人员编号", "姓名", "员工类型", "状态", "并发版本"],
+            [
+                [person.Employee!.EmployeeNumber, person.PersonNumber, "内部导入后", "正式员工", "否", person.Employee.ConcurrencyStamp.ToString()],
+                ["STATUS-INT-NEW", null, "新增停用内部人员", "特殊临时人员", "否", null]
+            ]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("status-import", ExportDataset.Employees, "员工状态新增导入.xlsx", workbook.ToArray(), null, ImportMode.Mixed),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        fixture.Db.ChangeTracker.Clear();
+
+        var updated = await fixture.Db.People
+            .Include(item => item.Employee)
+            .Include(item => item.EngagementHistory)
+            .SingleAsync(item => item.PersonNumber == person.PersonNumber);
+        updated.IsActive.Should().BeFalse();
+        updated.Employee!.IsActive.Should().BeFalse();
+        updated.EngagementHistory.Single().Scope.Should().Be(PersonnelScope.Internal);
+
+        var created = await fixture.Db.Employees
+            .Include(item => item.Person)
+            .SingleAsync(item => item.EmployeeNumber == "STATUS-INT-NEW");
+        created.IsActive.Should().BeFalse();
+        created.Person!.IsActive.Should().BeFalse();
     }
 
     [Fact]

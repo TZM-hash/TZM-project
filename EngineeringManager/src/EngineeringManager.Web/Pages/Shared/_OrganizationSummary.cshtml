@@ -14,6 +14,10 @@
     var activePersonnelUrl = isCompany
         ? OrganizationSummaryLinks.InternalPersonnel(ownerId)
         : OrganizationSummaryLinks.ExternalPersonnel(ownerId);
+    var departmentReturnPage = isCompany
+        ? "/Companies/Details"
+        : summary.IsConstructionCrew ? "/Crews/Details" : "/Partners/Details";
+    var departmentUrl = $"{OrganizationSummaryLinks.Departments(ownerKind, ownerId)}&ReturnPage={Uri.EscapeDataString(departmentReturnPage)}";
 }
 
 <section class="organization-summary @(Model.Compact ? "organization-summary--compact" : string.Empty)" aria-label="组织项目、人员和部门统计">
@@ -58,7 +62,7 @@
         <div class="organization-summary__group organization-summary__group--departments">
             <h3>部门</h3>
             <div class="organization-summary__metrics">
-                <a class="organization-summary__metric organization-summary__metric--department" href="@OrganizationSummaryLinks.Departments(ownerKind, ownerId)"><span>启用 / 总部门</span><strong>@summary.Departments.ActiveCount / @summary.Departments.TotalCount</strong></a>
+                <a class="organization-summary__metric organization-summary__metric--department" href="@departmentUrl"><span>启用 / 总部门</span><strong>@summary.Departments.ActiveCount / @summary.Departments.TotalCount</strong></a>
             </div>
         </div>
     </div>

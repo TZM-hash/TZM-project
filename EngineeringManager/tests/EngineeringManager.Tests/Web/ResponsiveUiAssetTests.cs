@@ -257,6 +257,23 @@ public sealed class ResponsiveUiAssetTests
     }
 
     [Fact]
+    public void CompanyDirectoryClampsLongTextColumnsAndKeepsFullValuesAvailable()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Companies", "Index.cshtml");
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        page.Should().Contain("class=\"company-name-link company-name-clamp\"")
+            .And.Contain("title=\"@company.Name\"")
+            .And.Contain("class=\"company-cell-clamp\"")
+            .And.Contain("class=\"company-notes-clamp\"")
+            .And.Contain("title=\"@company.Notes\"");
+
+        css.Should().Contain(".company-name-clamp, .company-cell-clamp, .company-notes-clamp")
+            .And.Contain("-webkit-line-clamp: 2;")
+            .And.Contain("overflow-wrap: anywhere;");
+    }
+
+    [Fact]
     public void EquipmentUploadAndDownloadHandlersEnforceWebBoundaryChecks()
     {
         var pageModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Equipment", "Index.cshtml.cs");
@@ -264,6 +281,17 @@ public sealed class ResponsiveUiAssetTests
         pageModel.Should().Contain("QualificationAttachmentFile.Length is <= 0 or > CertificateAttachmentUpload.MaxSizeBytes")
             .And.Contain("catch (KeyNotFoundException)")
             .And.Contain("return NotFound()");
+    }
+
+    [Fact]
+    public void ColumnSettingsKeepSingleCellSummaryRowsAlignedWithVisibleColumns()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "data-table.js");
+
+        script.Should().Contain("const visibleColumnCount = Math.max(1, columns.filter((column) => column.visible).length);")
+            .And.Contain("row.children.length === 1")
+            .And.Contain("!wideCell.dataset.columnKey")
+            .And.Contain("wideCell.colSpan = visibleColumnCount");
     }
 
     private static string ReadCss()

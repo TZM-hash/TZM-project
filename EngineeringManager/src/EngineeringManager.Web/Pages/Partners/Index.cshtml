@@ -20,11 +20,20 @@
     };
     inlineFilters.Add(new("Search", "搜索", Model.Search, Placeholder: "搜索名称、编号、联系人或专业"));
     inlineFilters.Add(new("IsActive", "状态", Model.IsActive?.ToString().ToLowerInvariant(), DataWorkbenchFilterKind.Select, statusOptions));
+    var isAllPartnerScope = Model.Category is null;
+    var useCustomerFinancialDirectionForScope = Model.Role.HasValue
+        ? Model.Role.Value == BusinessPartnerRoleType.CustomerOrGeneralContractor
+        : Model.IsCustomerScope;
+    var isMixedFinancialScope = isAllPartnerScope && !Model.Role.HasValue;
     var financialColumnKeys = new HashSet<string>(StringComparer.Ordinal) { "receipts", "invoices", "payments" };
-    var visibleFinancialColumnKeys = Model.IsCustomerScope
+    var visibleFinancialColumnKeys = isMixedFinancialScope || useCustomerFinancialDirectionForScope
         ? new HashSet<string>(StringComparer.Ordinal) { "receipts", "invoices" }
         : new HashSet<string>(StringComparer.Ordinal) { "payments", "invoices" };
-    var invoiceColumnLabel = Model.IsCustomerScope ? "进项票" : "销项票";
+    var financialColumnLabel = isMixedFinancialScope ? "资金往来" : useCustomerFinancialDirectionForScope ? "应收" : "应付";
+    var invoiceColumnLabel = isMixedFinancialScope ? "票据往来" : useCustomerFinancialDirectionForScope ? "进项票" : "销项票";
+    var headerFinancialColumnKey = isMixedFinancialScope
+        ? "receipts"
+        : useCustomerFinancialDirectionForScope ? "receipts" : "payments";
     var partnerPreset = DataWorkbenchPresets.Partners;
     var tableId = partnerPreset.TableId;
     var workbench = partnerPreset with
@@ -33,10 +42,21 @@
         TableId = tableId,
         Columns = partnerPreset.Columns
             .Where(column => !financialColumnKeys.Contains(column.Key) || (Model.CanViewFinance && visibleFinancialColumnKeys.Contains(column.Key)))
-            .Select(column => column.Key == "invoices" ? column with { Label = invoiceColumnLabel } : column)
+            .Select(column => column.Key switch
+            {
+                "receipts" => column with { Label = financialColumnLabel },
+                "payments" => column with { Label = financialColumnLabel },
+                "invoices" => column with { Label = invoiceColumnLabel },
+                _ => column
+            })
             .ToArray(),
         InlineFilters = inlineFilters,
-        Filters = inlineFilters
+        Filters = inlineFilters,
+        PreservedQueryParameters = new Dictionary<string, string?>
+        {
+            ["Category"] = Model.Category
+        },
+        ClearFiltersUrl = Url.Page("/Partners/Index", new { Category = Model.Category })
     };
     var scopeName = Model.Role?.ToChinese()
         ?? (Model.IsActive.HasValue
@@ -46,8 +66,8 @@
     var financeJsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     var returnUrl = Request.Path + Request.QueryString;
     var crewCategoryCount = Model.CategorySummaries.FirstOrDefault(item => item.Category == "crews")?.Count ?? 0;
+    var supplierCategoryCount = Model.CategorySummaries.FirstOrDefault(item => item.Category == "suppliers")?.Count ?? 0;
     var customerCategoryCount = Model.CategorySummaries.FirstOrDefault(item => item.Category == "customers")?.Count ?? 0;
-    var otherCategoryCount = Model.CategorySummaries.FirstOrDefault(item => item.Category == "other")?.Count ?? 0;
 
     static string FinancialProgressState(decimal target, decimal completed)
     {
@@ -98,11 +118,16 @@
         @if (Model.CanManage) { <button class="button button--primary" type="button" data-partner-dialog-open="create">新增@(Model.EntityLabel)</button> }
     </section>
 
+    @if (TempData["SuccessMessage"] is string successMessage)
+    {
+        <div class="alert alert--success">@successMessage</div>
+    }
+
     <nav class="partner-category-tabs" data-partner-category-tabs aria-label="合作单位分类">
-        <a class="partner-category-tab @(Model.Category is null ? "is-active" : string.Empty)" aria-current="@(Model.Category is null ? "page" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>全部合作单位</span><strong>@Model.AllPartners.Count</strong></a>
-        <a class="partner-category-tab @(Model.Category == "crews" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "crews" ? "page" : null)" asp-page="Index" asp-route-category="crews" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>施工班组</span><strong>@crewCategoryCount</strong></a>
-        <a class="partner-category-tab @(Model.Category == "customers" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "customers" ? "page" : null)" asp-page="Index" asp-route-category="customers" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>甲方/总包</span><strong>@customerCategoryCount</strong></a>
-        <a class="partner-category-tab @(Model.Category == "other" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "other" ? "page" : null)" asp-page="Index" asp-route-category="other" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>其他合作单位</span><strong>@otherCategoryCount</strong></a>
+        <a class="partner-category-tab @(Model.Category is null ? "is-active" : string.Empty)" aria-current="@(Model.Category is null ? "page" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-isActive="@Model.IsActive"><span>全部合作单位</span><strong>@Model.AllPartners.Count</strong></a>
+        <a class="partner-category-tab @(Model.Category == "crews" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "crews" ? "page" : null)" asp-page="Index" asp-route-category="crews" asp-route-search="@Model.Search" asp-route-isActive="@Model.IsActive"><span>施工班组</span><strong>@crewCategoryCount</strong></a>
+        <a class="partner-category-tab @(Model.Category == "suppliers" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "suppliers" ? "page" : null)" asp-page="Index" asp-route-category="suppliers" asp-route-search="@Model.Search" asp-route-isActive="@Model.IsActive"><span>材料供应商</span><strong>@supplierCategoryCount</strong></a>
+        <a class="partner-category-tab @(Model.Category == "customers" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "customers" ? "page" : null)" asp-page="Index" asp-route-category="customers" asp-route-search="@Model.Search" asp-route-isActive="@Model.IsActive"><span>甲方/总包</span><strong>@customerCategoryCount</strong></a>
     </nav>
 
     <section class="partner-workspace-layout">
@@ -138,31 +163,45 @@
             </div>
             <div class="table-wrap partner-table-wrap">
                 <table class="data-table partner-workspace-table @(Model.CanViewFinance ? "partner-workspace-table--financial" : string.Empty)" id="@tableId">
-                    <thead><tr><th data-column-key="partner">单位</th><th data-column-key="role_trade">角色 / 专业</th><th data-column-key="contact">主要联系人</th><th data-column-key="projects">参与项目</th>@if (Model.CanViewFinance) { @if (Model.IsCustomerScope) { <th data-column-key="receipts">应收</th> } else { <th data-column-key="payments">应付</th> } <th data-column-key="invoices">@invoiceColumnLabel</th> }<th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead>
+                    <thead><tr><th data-column-key="partner">单位</th><th data-column-key="role_trade">角色 / 专业</th><th data-column-key="contact">主要联系人</th><th data-column-key="projects">参与项目</th>@if (Model.CanViewFinance) { <th data-column-key="@headerFinancialColumnKey">@financialColumnLabel</th><th data-column-key="invoices">@invoiceColumnLabel</th> }<th data-column-key="status">状态</th><th data-column-key="actions">操作</th></tr></thead>
                     <tbody>
                     @if (Model.Partners.Count == 0) { <tr><td colspan="@(6 + financialColumnCount)" class="empty-state">当前筛选范围暂无@(Model.EntityLabel)。</td></tr> }
                     @foreach (var partner in Model.Partners)
                     {
+                        var exclusiveCategoryRole = partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew)
+                            ?? partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor)
+                            ?? partner.Roles.FirstOrDefault(item => item.RoleType is BusinessPartnerRoleType.MaterialSupplier or BusinessPartnerRoleType.MiscellaneousSupplier)
+                            ?? partner.Roles.FirstOrDefault();
                         var primaryRole = Model.Role.HasValue
                             ? partner.Roles.FirstOrDefault(item => item.RoleType == Model.Role.Value)
                             : Model.Category switch
                             {
                                 "crews" => partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew),
+                                "suppliers" => partner.Roles.FirstOrDefault(item => item.RoleType is BusinessPartnerRoleType.MaterialSupplier or BusinessPartnerRoleType.MiscellaneousSupplier),
                                 "customers" => partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor),
-                                _ => partner.Roles.FirstOrDefault()
+                                _ => exclusiveCategoryRole
                             };
                         var primaryContact = partner.Contacts.FirstOrDefault(contact => contact.IsPrimary) ?? partner.Contacts.FirstOrDefault();
                         var role = primaryRole?.RoleType ?? Model.DefaultRole;
                         var roleLabel = primaryRole is null ? "未分类" : role.ToChinese();
-                        var isConstructionCrew = partner.Roles.Any(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew);
+                        var isConstructionCrew = exclusiveCategoryRole?.RoleType == BusinessPartnerRoleType.ConstructionCrew;
+                        var useCustomerFinancialDirection = Model.Role.HasValue
+                            ? Model.Role.Value == BusinessPartnerRoleType.CustomerOrGeneralContractor
+                            : Model.IsCustomerScope
+                                || (isAllPartnerScope
+                                    && exclusiveCategoryRole?.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor);
+                        var financialColumnKey = isMixedFinancialScope
+                            ? "receipts"
+                            : useCustomerFinancialDirection ? "receipts" : "payments";
                         var financialSummary = Model.PartnerFinancialSummaries.GetValueOrDefault(partner.Id) ?? PartnerLedgerSummaryDto.Empty(partner.Id);
                         var receivableTotal = financialSummary.Receivable.ActualAmount;
                         var payableTotal = financialSummary.Payable.ActualAmount;
-                        var invoiceSummary = Model.IsCustomerScope ? financialSummary.Payable : financialSummary.Receivable;
+                        var invoiceSummary = useCustomerFinancialDirection ? financialSummary.Payable : financialSummary.Receivable;
                         var invoiceTotal = invoiceSummary.ShouldInvoiceAmount;
-                        var invoiceTargetLabel = Model.IsCustomerScope ? "应收票" : "应开票";
-                        var invoiceCompletedLabel = Model.IsCustomerScope ? "已收票" : "已开票";
-                        var invoicePendingLabel = Model.IsCustomerScope ? "未收票" : "未开票";
+                        var rowInvoiceColumnLabel = useCustomerFinancialDirection ? "进项票" : "销项票";
+                        var invoiceTargetLabel = useCustomerFinancialDirection ? "应收票" : "应开票";
+                        var invoiceCompletedLabel = useCustomerFinancialDirection ? "已收票" : "已开票";
+                        var invoicePendingLabel = useCustomerFinancialDirection ? "未收票" : "未开票";
                         var receivableProgressState = FinancialProgressState(receivableTotal, financialSummary.Receivable.CashAmount);
                         var payableProgressState = FinancialProgressState(payableTotal, financialSummary.Payable.CashAmount);
                         var invoiceProgressState = FinancialProgressState(invoiceTotal, invoiceSummary.InvoicedAmount);
@@ -180,8 +219,12 @@
                             previousRoleType = primaryRole is null ? null : (int?)primaryRole.RoleType,
                             roleLabel,
                             tradeCategory = primaryRole?.TradeCategory,
+                            pricingRule = primaryRole?.PricingRule,
+                            settlementTerms = primaryRole?.SettlementTerms,
                             contactName = primaryContact?.Name,
                             contactPhone = primaryContact?.Phone,
+                            contactEmail = primaryContact?.Email,
+                            contactAddress = primaryContact?.Address,
                             contactNotes = primaryContact?.Notes,
                             notes = partner.Notes,
                             isActive = partner.IsActive,
@@ -198,30 +241,30 @@
                             receivable = financialSummary.Receivable,
                             payable = financialSummary.Payable
                         }, financeJsonOptions);
-                        <tr>
+                        <tr data-row-group="partner-@partner.Id">
                             <td data-column-key="partner" data-sort-value="@partner.PartnerNumber"><strong class="partner-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary partner-cell-ellipsis" title="@partner.PartnerNumber · @partner.ShortName">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary partner-cell-ellipsis" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
                             <td data-column-key="role_trade"><strong class="partner-cell-ellipsis" title="@roleLabel">@roleLabel</strong><span class="table-secondary partner-cell-ellipsis" title="@primaryRole?.TradeCategory">@(primaryRole?.TradeCategory ?? "未填写专业")</span></td>
                             <td data-column-key="contact"><strong class="partner-cell-ellipsis" title="@(primaryContact?.Name ?? "未设置")">@(primaryContact?.Name ?? "未设置")</strong><span class="table-secondary partner-cell-ellipsis" title="@(primaryContact?.Phone ?? "未设置电话")">@(primaryContact?.Phone ?? "未设置电话")</span></td>
                             <td data-column-key="projects"><strong class="partner-project-count">@partner.ProjectCount</strong></td>
                             @if (Model.CanViewFinance)
                             {
-                                @if (Model.IsCustomerScope)
+                                @if (useCustomerFinancialDirection)
                                 {
-                                    <td class="partner-financial-cell partner-financial-cell--receivable partner-financial-cell--state-@receivableProgressState" data-column-key="receipts" data-partner-financial-summary data-progress-state="@receivableProgressState">
+                                    <td class="partner-financial-cell partner-financial-cell--receivable partner-financial-cell--state-@receivableProgressState" data-column-key="@financialColumnKey" data-partner-financial-summary data-progress-state="@receivableProgressState">
                                         <div class="partner-financial-lines"><span class="partner-financial-line partner-financial-line--target @(receivableTotal == 0m ? "is-zero" : string.Empty)"><small>应收</small><strong>@receivableTotal.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--completed @(financialSummary.Receivable.CashAmount == 0m ? "is-zero" : string.Empty)"><small>已收</small><strong>@financialSummary.Receivable.CashAmount.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--pending @(financialSummary.Receivable.UncollectedOrUnpaid == 0m ? "is-zero" : string.Empty)"><small>未收</small><strong>@financialSummary.Receivable.UncollectedOrUnpaid.ToString("N2")</strong></span></div>
                                         <div class="partner-financial-progress-shell"><progress class="partner-financial-progress partner-financial-progress--receivable" role="progressbar" aria-label="应收完成进度" aria-valuetext="@receivableProgressLabel，已收 @financialSummary.Receivable.CashAmount.ToString("N2")，应收 @receivableTotal.ToString("N2")" value="@FinancialProgressValue(receivableTotal, financialSummary.Receivable.CashAmount)" max="@(receivableTotal > 0m ? receivableTotal : 1m)"></progress><span class="partner-financial-progress-value" aria-hidden="true">@receivableProgressLabel</span></div>
                                     </td>
                                 }
                                 else
                                 {
-                                    <td class="partner-financial-cell partner-financial-cell--payable partner-financial-cell--state-@payableProgressState" data-column-key="payments" data-partner-financial-summary data-progress-state="@payableProgressState">
+                                    <td class="partner-financial-cell partner-financial-cell--payable partner-financial-cell--state-@payableProgressState" data-column-key="@financialColumnKey" data-partner-financial-summary data-progress-state="@payableProgressState">
                                         <div class="partner-financial-lines"><span class="partner-financial-line partner-financial-line--target @(payableTotal == 0m ? "is-zero" : string.Empty)"><small>应付</small><strong>@payableTotal.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--completed @(financialSummary.Payable.CashAmount == 0m ? "is-zero" : string.Empty)"><small>已付</small><strong>@financialSummary.Payable.CashAmount.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--pending @(financialSummary.Payable.UncollectedOrUnpaid == 0m ? "is-zero" : string.Empty)"><small>未付</small><strong>@financialSummary.Payable.UncollectedOrUnpaid.ToString("N2")</strong></span></div>
                                         <div class="partner-financial-progress-shell"><progress class="partner-financial-progress partner-financial-progress--payable" role="progressbar" aria-label="应付完成进度" aria-valuetext="@payableProgressLabel，已付 @financialSummary.Payable.CashAmount.ToString("N2")，应付 @payableTotal.ToString("N2")" value="@FinancialProgressValue(payableTotal, financialSummary.Payable.CashAmount)" max="@(payableTotal > 0m ? payableTotal : 1m)"></progress><span class="partner-financial-progress-value" aria-hidden="true">@payableProgressLabel</span></div>
                                     </td>
                                 }
                                 <td class="partner-financial-cell partner-financial-cell--invoice partner-financial-cell--state-@invoiceProgressState" data-column-key="invoices" data-progress-state="@invoiceProgressState">
                                     <div class="partner-financial-lines"><span class="partner-financial-line partner-financial-line--target @(invoiceTotal == 0m ? "is-zero" : string.Empty)"><small>@invoiceTargetLabel</small><strong>@invoiceTotal.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--completed @(invoiceSummary.InvoicedAmount == 0m ? "is-zero" : string.Empty)"><small>@invoiceCompletedLabel</small><strong>@invoiceSummary.InvoicedAmount.ToString("N2")</strong></span><span class="partner-financial-line partner-financial-line--pending @(invoiceSummary.Uninvoiced == 0m ? "is-zero" : string.Empty)"><small>@invoicePendingLabel</small><strong>@invoiceSummary.Uninvoiced.ToString("N2")</strong></span></div>
-                                    <div class="partner-financial-progress-shell"><progress class="partner-financial-progress partner-financial-progress--invoice" role="progressbar" aria-label="@(invoiceColumnLabel + "完成进度")" aria-valuetext="@invoiceProgressLabel，@invoiceCompletedLabel @invoiceSummary.InvoicedAmount.ToString("N2")，@invoiceTargetLabel @invoiceTotal.ToString("N2")" value="@FinancialProgressValue(invoiceTotal, invoiceSummary.InvoicedAmount)" max="@(invoiceTotal > 0m ? invoiceTotal : 1m)"></progress><span class="partner-financial-progress-value" aria-hidden="true">@invoiceProgressLabel</span></div>
+                                    <div class="partner-financial-progress-shell"><progress class="partner-financial-progress partner-financial-progress--invoice" role="progressbar" aria-label="@(rowInvoiceColumnLabel + "完成进度")" aria-valuetext="@invoiceProgressLabel，@invoiceCompletedLabel @invoiceSummary.InvoicedAmount.ToString("N2")，@invoiceTargetLabel @invoiceTotal.ToString("N2")" value="@FinancialProgressValue(invoiceTotal, invoiceSummary.InvoicedAmount)" max="@(invoiceTotal > 0m ? invoiceTotal : 1m)"></progress><span class="partner-financial-progress-value" aria-hidden="true">@invoiceProgressLabel</span></div>
                                 </td>
                             }
                             <td data-column-key="status"><span class="partner-status partner-status--@(partner.IsActive ? "active" : "inactive")">@(partner.IsActive ? "启用" : "停用")</span></td>
@@ -246,7 +289,7 @@
                         </tr>
                         @if (Model.OrganizationSummaries.TryGetValue(partner.Id, out var organizationSummary))
                         {
-                            <tr class="organization-summary-row">
+                            <tr class="organization-summary-row" data-row-group="partner-@partner.Id">
                                 <td colspan="@(6 + financialColumnCount)">
                                     <partial name="_OrganizationSummary" model="new OrganizationSummaryViewModel(organizationSummary, true)" />
                                 </td>
@@ -265,6 +308,7 @@
             <form method="post" asp-page-handler="Save" asp-route-category="@Model.Category" data-partner-editor-form>
                 <input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="Role" value="@Model.Role" /><input type="hidden" name="IsActive" value="@Model.IsActive" />
                 <input type="hidden" asp-for="Editor.Id" /><input type="hidden" asp-for="Editor.ConcurrencyStamp" /><input type="hidden" asp-for="Editor.PreviousRoleType" />
+                <input type="hidden" asp-for="Editor.PricingRule" /><input type="hidden" asp-for="Editor.SettlementTerms" /><input type="hidden" asp-for="Editor.ContactEmail" /><input type="hidden" asp-for="Editor.ContactAddress" />
                 <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-partner-editor-title>新增@(Model.EntityLabel)</strong><span>@(Model.EntityLabel) 主档</span></div><button type="button" class="dialog-close" aria-label="关闭@(Model.EntityLabel)编辑窗口" data-partner-dialog-close>×</button></div>
                 <div class="partner-editor-grid">
                     <section><h3>单位资料</h3><label>单位编号<input asp-for="Editor.PartnerNumber" required /><span asp-validation-for="Editor.PartnerNumber"></span></label><label>单位全称<input asp-for="Editor.Name" required /><span asp-validation-for="Editor.Name"></span></label><label>单位简称<input asp-for="Editor.ShortName" required /><span asp-validation-for="Editor.ShortName"></span></label><label>统一社会信用代码<input asp-for="Editor.UnifiedSocialCreditCode" /></label></section>

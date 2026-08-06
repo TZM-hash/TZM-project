@@ -42,13 +42,34 @@ public sealed class PersonnelAffiliationPageTests
 
         script.Should().Contain("selectedOwner.dataset.legalEntityId")
             .And.Contain("selectedOwner.dataset.businessPartnerId")
+            .And.Contain("data-affiliation-scope")
+            .And.Contain("data-affiliation-internal-type")
+            .And.Contain("data-affiliation-external-type")
+            .And.Contain("option.dataset.ownerScope")
+            .And.Contain("typeSelect.dataset.defaultValue")
+            .And.Contain("typeSelect.disabled")
             .And.Contain("option.hidden = !matchesOwner")
             .And.Contain("departmentSelect.value = ''")
             .And.Contain("projectSelect.value = ''")
             .And.Contain("selectedOwner.dataset.role === 'crew'")
-            .And.Contain("crewSelect.value = businessPartnerId")
+            .And.Contain("crewSelect.value = forcedCrewId")
+            .And.Contain("externalTypeSelect.addEventListener")
+            .And.Contain("projectSelect.addEventListener")
+            .And.Contain("selectedProject.dataset.businessPartnerId")
+            .And.Contain("filterCrewSelect")
+            .And.Contain("crewSelect.disabled")
             .And.Contain("legalEntityInput.value")
             .And.Contain("businessPartnerInput.value");
+    }
+
+    [Fact]
+    public void EmployeeDetailsAffiliationEditorDeclaresScopeOnOwnersForClientFiltering()
+    {
+        var page = ReadPage("Employees", "Details.cshtml");
+
+        page.Should().Contain("data-personnel-scope=\"@personnelAffiliation.Scope\"")
+            .And.Contain("data-owner-scope=\"Internal\"")
+            .And.Contain("data-owner-scope=\"External\"");
     }
 
     [Fact]

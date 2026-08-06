@@ -20,13 +20,13 @@ public sealed class IndexModel(
     IBusinessPartnerService partnerService,
     ICentralLedgerQueryService ledgerQueryService,
     ApplicationDbContext db,
-    IOrganizationSummaryService? organizationSummaryService = null,
-    IBusinessPartnerDirectorySynchronizer? directorySynchronizer = null) : PageModel
+    IOrganizationSummaryService? organizationSummaryService = null) : PageModel
 {
     public const string CustomerScope = "customers";
     public const string CrewCategory = "crews";
+    public const string SupplierCategory = "suppliers";
     public const string CustomerCategory = "customers";
-    public const string OtherCategory = "other";
+    private const string LegacyOtherCategory = "other";
 
     public IReadOnlyList<BusinessPartnerDto> AllPartners { get; private set; } = [];
     public IReadOnlyList<BusinessPartnerDto> Partners { get; private set; } = [];
@@ -46,8 +46,8 @@ public sealed class IndexModel(
     public string CategoryLabel => Category switch
     {
         CrewCategory => "施工班组",
+        SupplierCategory => "材料供应商",
         CustomerCategory => "甲方/总包",
-        OtherCategory => "其他合作单位",
         _ => "全部合作单位"
     };
     public BusinessPartnerRoleType DefaultRole => Category switch
@@ -68,10 +68,6 @@ public sealed class IndexModel(
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         NormalizeCategory();
-        if (directorySynchronizer is not null)
-        {
-            await directorySynchronizer.SynchronizeAsync(null, cancellationToken);
-        }
         await LoadAsync(cancellationToken);
     }
 
@@ -89,10 +85,10 @@ public sealed class IndexModel(
 
         try
         {
-            var role = new PartnerRoleRequest(Editor.RoleType, Editor.TradeCategory, null, null);
+            var role = new PartnerRoleRequest(Editor.RoleType, Editor.TradeCategory, Editor.PricingRule, Editor.SettlementTerms);
             var contact = string.IsNullOrWhiteSpace(Editor.ContactName)
                 ? null
-                : new PartnerContactRequest(Editor.ContactName, Editor.ContactPhone, null, null, true, Editor.ContactNotes);
+                : new PartnerContactRequest(Editor.ContactName, Editor.ContactPhone, Editor.ContactEmail, Editor.ContactAddress, true, Editor.ContactNotes);
 
             if (Editor.Id.HasValue)
             {
@@ -151,23 +147,20 @@ public sealed class IndexModel(
         CategorySummaries =
         [
             new PartnerCategorySummary(CrewCategory, "施工班组", ApplyCategory(allPartners, CrewCategory).Count()),
-            new PartnerCategorySummary(CustomerCategory, "甲方/总包", ApplyCategory(allPartners, CustomerCategory).Count()),
-            new PartnerCategorySummary(OtherCategory, "其他合作单位", ApplyCategory(allPartners, OtherCategory).Count())
+            new PartnerCategorySummary(SupplierCategory, "材料供应商", ApplyCategory(allPartners, SupplierCategory).Count()),
+            new PartnerCategorySummary(CustomerCategory, "甲方/总包", ApplyCategory(allPartners, CustomerCategory).Count())
         ];
+        var categoryPartners = ApplyCategory(allPartners).ToArray();
         RoleSummaries = AvailableRoles
-            .Select(role => new PartnerRoleSummary(role, AllPartners.Count(item => HasRole(item, role))))
+            .Select(role => new PartnerRoleSummary(role, categoryPartners.Count(item => HasRole(item, role))))
             .ToArray();
         if (organizationSummaryService is not null)
         {
-            var summaries = new Dictionary<Guid, OrganizationSummaryDto>();
             var asOf = DateOnly.FromDateTime(DateTime.Today);
-            foreach (var partner in Partners)
-            {
-                summaries[partner.Id] = await organizationSummaryService.GetAsync(
-                    new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, partner.Id, asOf),
-                    cancellationToken);
-            }
-            OrganizationSummaries = summaries;
+            OrganizationSummaries = (await organizationSummaryService.GetManyAsync(
+                    Partners.Select(item => new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, item.Id, asOf)).ToArray(),
+                    cancellationToken))
+                .ToDictionary(item => item.Query.Id);
         }
         if (CanViewFinance && Partners.Count > 0)
         {
@@ -186,9 +179,12 @@ public sealed class IndexModel(
         category switch
         {
             CrewCategory => partners.Where(item => HasRole(item, BusinessPartnerRoleType.ConstructionCrew)),
-            CustomerCategory => partners.Where(item => HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor)),
-            OtherCategory => partners.Where(item => !HasRole(item, BusinessPartnerRoleType.ConstructionCrew)
-                && !HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor)),
+            SupplierCategory => partners.Where(item => !HasRole(item, BusinessPartnerRoleType.ConstructionCrew)
+                && !HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor)
+                && (HasRole(item, BusinessPartnerRoleType.MaterialSupplier)
+                    || HasRole(item, BusinessPartnerRoleType.MiscellaneousSupplier))),
+            CustomerCategory => partners.Where(item => !HasRole(item, BusinessPartnerRoleType.ConstructionCrew)
+                && HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor)),
             _ => partners
         };
 
@@ -202,8 +198,9 @@ public sealed class IndexModel(
         Category = Category?.Trim().ToLowerInvariant() switch
         {
             CrewCategory => CrewCategory,
+            SupplierCategory => SupplierCategory,
             CustomerCategory => CustomerCategory,
-            OtherCategory => OtherCategory,
+            LegacyOtherCategory => SupplierCategory,
             _ => null
         };
     }
@@ -224,8 +221,12 @@ public sealed class IndexModel(
         public BusinessPartnerRoleType? PreviousRoleType { get; set; }
         public BusinessPartnerRoleType RoleType { get; set; } = BusinessPartnerRoleType.MaterialSupplier;
         [StringLength(100)] public string? TradeCategory { get; set; }
+        [StringLength(500)] public string? PricingRule { get; set; }
+        [StringLength(500)] public string? SettlementTerms { get; set; }
         [StringLength(100)] public string? ContactName { get; set; }
         [StringLength(50)] public string? ContactPhone { get; set; }
+        [StringLength(200)] public string? ContactEmail { get; set; }
+        [StringLength(500)] public string? ContactAddress { get; set; }
         [StringLength(500)] public string? ContactNotes { get; set; }
         [StringLength(1000)] public string? Notes { get; set; }
         public bool IsActive { get; set; } = true;

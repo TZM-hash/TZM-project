@@ -19,7 +19,7 @@ public sealed class IndexModel(IPersonnelService personnelService) : PageModel
 
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? LegalEntityId { get; set; }
-    [BindProperty(SupportsGet = true)] public Guid? BusinessPartnerId { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid? CrewBusinessPartnerId { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? DepartmentId { get; set; }
     [BindProperty(SupportsGet = true)] public EmployeeType? InternalType { get; set; }
     [BindProperty(SupportsGet = true)] public bool? IsActive { get; set; }
@@ -33,12 +33,13 @@ public sealed class IndexModel(IPersonnelService personnelService) : PageModel
                 PersonnelScope.Internal,
                 Search,
                 LegalEntityId,
-                BusinessPartnerId,
+                null,
                 DepartmentId,
                 InternalType,
                 null,
                 IsActive,
-                AsOf),
+                AsOf,
+                CrewBusinessPartnerId),
             CanViewSensitive,
             cancellationToken);
     }

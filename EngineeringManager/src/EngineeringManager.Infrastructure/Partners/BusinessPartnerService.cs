@@ -1,5 +1,6 @@
 using EngineeringManager.Application.Partners;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
@@ -84,32 +85,44 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
         var creditCode = NormalizeOptional(request.UnifiedSocialCreditCode);
         if (creditCode is not null && await db.BusinessPartners.AnyAsync(item => item.Id != request.Id && item.UnifiedSocialCreditCode == creditCode, cancellationToken)) throw new InvalidOperationException("统一社会信用代码已存在。");
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
+        var previousRoleType = request.PreviousRoleType ?? request.Role.RoleType;
+        var previousRole = partner.Roles.FirstOrDefault(item => item.RoleType == previousRoleType);
+        var previousName = partner.Name;
+        var previousShortName = partner.ShortName;
+        var name = NormalizeRequired(request.Name, nameof(request.Name));
+        var shortName = NormalizeRequired(request.ShortName, nameof(request.ShortName));
+        var automaticGeneralContractorProjectIds = partner.ProjectLinks
+            .Where(item => item.Notes?.Contains(BusinessPartnerDirectorySynchronizer.AutoGeneralContractorNote, StringComparison.Ordinal) == true)
+            .Select(item => item.ProjectId)
+            .Distinct()
+            .ToArray();
         var before = Snapshot(partner);
+        if (previousRole is not null && previousRole.RoleType != request.Role.RoleType)
+        {
+            await new BusinessPartnerRoleChangeCoordinator(db).ReplaceAsync(
+                partner,
+                previousRole,
+                request.Role.RoleType,
+                cancellationToken);
+        }
+        await BusinessPartnerAutomaticNameSynchronizer.UpdateAsync(
+            db,
+            automaticGeneralContractorProjectIds,
+            previousName,
+            previousShortName,
+            name,
+            shortName,
+            cancellationToken);
         partner.PartnerNumber = number;
-        partner.Name = NormalizeRequired(request.Name, nameof(request.Name));
-        partner.ShortName = NormalizeRequired(request.ShortName, nameof(request.ShortName));
+        partner.Name = name;
+        partner.ShortName = shortName;
         partner.UnifiedSocialCreditCode = creditCode;
         partner.Notes = NormalizeOptional(request.Notes);
         partner.IsActive = request.IsActive;
         partner.UpdatedAt = DateTimeOffset.UtcNow;
         db.Entry(partner).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
         partner.ConcurrencyStamp = Guid.NewGuid();
-        var previousRoleType = request.PreviousRoleType ?? request.Role.RoleType;
-        var previousRole = partner.Roles.FirstOrDefault(item => item.RoleType == previousRoleType);
         var role = partner.Roles.FirstOrDefault(item => item.RoleType == request.Role.RoleType);
-        if (previousRole is not null && previousRole.RoleType != request.Role.RoleType)
-        {
-            if (role is null)
-            {
-                previousRole.RoleType = request.Role.RoleType;
-                role = previousRole;
-            }
-            else
-            {
-                partner.Roles.Remove(previousRole);
-                db.BusinessPartnerRoles.Remove(previousRole);
-            }
-        }
         if (role is null)
         {
             role = new BusinessPartnerRole { Partner = partner, RoleType = request.Role.RoleType };
@@ -130,7 +143,8 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
         }
         db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "UpdateBusinessPartner", EntityType = nameof(BusinessPartner), EntityId = partner.Id.ToString(), Reason = reason, BeforeJson = JsonSerializer.Serialize(before), AfterJson = JsonSerializer.Serialize(Snapshot(partner)) });
         await db.SaveChangesAsync(cancellationToken);
-        return ToDto(partner);
+        var projectCounts = await LoadActiveProjectCountsAsync([partner.Id], cancellationToken);
+        return ToDto(partner, projectCounts.GetValueOrDefault(partner.Id));
     }
 
     public async Task LinkToProjectAsync(LinkPartnerToProjectRequest request, CancellationToken cancellationToken)
@@ -253,7 +267,8 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
         }
 
         var partners = await query.OrderBy(item => item.PartnerNumber).ToListAsync(cancellationToken);
-        return partners.Select(ToDto).ToArray();
+        var projectCounts = await LoadActiveProjectCountsAsync(partners.Select(item => item.Id).ToArray(), cancellationToken);
+        return partners.Select(item => ToDto(item, projectCounts.GetValueOrDefault(item.Id))).ToArray();
     }
 
     public async Task<BusinessPartnerDto?> GetAsync(Guid partnerId, CancellationToken cancellationToken)
@@ -263,7 +278,13 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
             .Include(item => item.Contacts)
             .Include(item => item.ProjectLinks)
             .SingleOrDefaultAsync(item => item.Id == partnerId && item.IsActive, cancellationToken);
-        return partner is null ? null : ToDto(partner);
+        if (partner is null)
+        {
+            return null;
+        }
+
+        var projectCounts = await LoadActiveProjectCountsAsync([partner.Id], cancellationToken);
+        return ToDto(partner, projectCounts.GetValueOrDefault(partner.Id));
     }
 
     private static void AddRoles(BusinessPartner partner, IEnumerable<PartnerRoleRequest> roles)
@@ -281,7 +302,7 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
         }
     }
 
-    private static BusinessPartnerDto ToDto(BusinessPartner partner) =>
+    private static BusinessPartnerDto ToDto(BusinessPartner partner, int? projectCount = null) =>
         new(
             partner.Id,
             partner.PartnerNumber,
@@ -291,9 +312,36 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
             partner.Notes,
             partner.Roles.OrderBy(role => role.RoleType).Select(role => new PartnerRoleDto(role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms)).ToArray(),
             partner.Contacts.OrderByDescending(contact => contact.IsPrimary).ThenBy(contact => contact.Name).Select(contact => new PartnerContactDto(contact.Id, contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary, contact.Notes)).ToArray(),
-            partner.ProjectLinks.Count(link => link.IsActive),
+            projectCount ?? partner.ProjectLinks.Count(link => link.IsActive),
             partner.IsActive,
             partner.ConcurrencyStamp);
+
+    private async Task<Dictionary<Guid, int>> LoadActiveProjectCountsAsync(
+        Guid[] partnerIds,
+        CancellationToken cancellationToken)
+    {
+        if (partnerIds.Length == 0)
+        {
+            return [];
+        }
+
+        var linkedProjects = await db.ProjectPartners.AsNoTracking()
+            .Where(item => partnerIds.Contains(item.BusinessPartnerId) && item.IsActive && item.Project.IsActive)
+            .Select(item => new { PartnerId = item.BusinessPartnerId, item.ProjectId })
+            .ToArrayAsync(cancellationToken);
+        var constructionProjects = await db.ProjectConstructionRecords.AsNoTracking()
+            .Where(item => item.CrewBusinessPartnerId.HasValue
+                && partnerIds.Contains(item.CrewBusinessPartnerId.Value)
+                && item.Project.IsActive)
+            .Select(item => new { PartnerId = item.CrewBusinessPartnerId!.Value, item.ProjectId })
+            .ToArrayAsync(cancellationToken);
+
+        return linkedProjects
+            .Concat(constructionProjects)
+            .Distinct()
+            .GroupBy(item => item.PartnerId)
+            .ToDictionary(group => group.Key, group => group.Count());
+    }
 
     private static object Snapshot(BusinessPartner item) => new { item.PartnerNumber, item.Name, item.ShortName, item.UnifiedSocialCreditCode, item.Notes, item.IsActive, Roles = item.Roles.Select(role => new { role.RoleType, role.TradeCategory, role.PricingRule, role.SettlementTerms }).ToArray(), Contacts = item.Contacts.Select(contact => new { contact.Name, contact.Phone, contact.Email, contact.Address, contact.IsPrimary, contact.Notes }).ToArray() };
 

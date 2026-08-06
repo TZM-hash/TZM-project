@@ -72,6 +72,16 @@ public sealed class OrganizationDepartmentPageTests
         }
     }
 
+    [Fact]
+    public void OrganizationSummaryDepartmentLinkReturnsCrewOwnersToCrewDetails()
+    {
+        var partial = ReadPage("Shared", "_OrganizationSummary.cshtml");
+
+        partial.Should().Contain("summary.IsConstructionCrew ? \"/Crews/Details\" : \"/Partners/Details\"")
+            .And.Contain("ReturnPage=")
+            .And.Contain("Uri.EscapeDataString");
+    }
+
     private static string ReadPage(params string[] parts)
     {
         var path = Path.Combine(new[] { RepositoryRoot(), "src", "EngineeringManager.Web", "Pages" }.Concat(parts).ToArray());

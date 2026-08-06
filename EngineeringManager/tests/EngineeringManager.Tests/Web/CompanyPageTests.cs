@@ -391,7 +391,7 @@ public sealed class CompanyPageTests
 
         var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies"));
 
-        html.Should().Contain($"class=\"company-name-link\" href=\"/Companies/Details/{FakeCompanyService.CompanyId}?tab=overview\"");
+        html.Should().Contain($"class=\"company-name-link company-name-clamp\" title=\"测试自有公司\" href=\"/Companies/Details/{FakeCompanyService.CompanyId}?tab=overview\"");
     }
 
     [Fact]

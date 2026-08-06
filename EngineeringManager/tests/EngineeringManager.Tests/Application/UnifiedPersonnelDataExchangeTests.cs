@@ -174,6 +174,214 @@ public sealed class UnifiedPersonnelDataExchangeTests
     }
 
     [Fact]
+    public async Task EmployeeImportPreservesHistoricalEmployeeClassificationForCurrentExternalPerson()
+    {
+        await using var fixture = await ExchangeFixture.CreateAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var person = new Person
+        {
+            PersonNumber = "PER-EXTERNAL-IMPORT",
+            Name = "外部人员",
+            Employee = new Employee
+            {
+                EmployeeNumber = "YG-EXTERNAL-IMPORT",
+                Name = "外部人员",
+                EmployeeType = EmployeeType.Labor,
+                PositionTitle = "历史岗位",
+                IsActive = false
+            },
+            ConstructionWorker = new ConstructionWorker
+            {
+                Name = "外部人员",
+                IsActive = true
+            }
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.ConstructionCrew,
+            PositionTitle = "班组工人",
+            StartDate = today.AddDays(-1),
+            IsPrimary = true,
+            Reason = "身份切换"
+        });
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工导入",
+            ["员工编号", "统一人员编号", "姓名", "员工类型", "岗位"],
+            [["YG-EXTERNAL-IMPORT", "PER-EXTERNAL-IMPORT", "外部人员更新", "正式员工", "新岗位"]]);
+
+        var preview = await fixture.ImportService.PreviewAsync(
+            new ImportPreviewRequest(
+                "test-user",
+                ExportDataset.Employees,
+                "外部人员员工档案更新.xlsx",
+                workbook.ToArray(),
+                null,
+                ImportMode.Update),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+
+        await fixture.ImportService.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        fixture.Db.ChangeTracker.Clear();
+
+        var updated = await fixture.Db.People
+            .Include(item => item.Employee)
+            .Include(item => item.ConstructionWorker)
+            .Include(item => item.EngagementHistory)
+            .SingleAsync(item => item.PersonNumber == "PER-EXTERNAL-IMPORT");
+        updated.Name.Should().Be("外部人员更新");
+        updated.Employee!.EmployeeType.Should().Be(EmployeeType.Labor);
+        updated.Employee.PositionTitle.Should().Be("历史岗位");
+        updated.Employee.IsActive.Should().BeFalse();
+        updated.ConstructionWorker!.IsActive.Should().BeTrue();
+        updated.EngagementHistory.Single().Scope.Should().Be(PersonnelScope.External);
+    }
+
+    [Fact]
+    public async Task EmployeeImportUpdatesCurrentInternalEngagementClassification()
+    {
+        await using var fixture = await ExchangeFixture.CreateAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var person = new Person
+        {
+            PersonNumber = "PER-INTERNAL-IMPORT",
+            Name = "内部人员",
+            Employee = new Employee
+            {
+                EmployeeNumber = "YG-INTERNAL-IMPORT",
+                Name = "内部人员",
+                EmployeeType = EmployeeType.Labor,
+                PositionTitle = "原岗位",
+                IsActive = true
+            },
+            ConstructionWorker = new ConstructionWorker
+            {
+                Name = "内部人员",
+                IsActive = false
+            }
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.Internal,
+            InternalType = EmployeeType.Labor,
+            PositionTitle = "原岗位",
+            StartDate = today.AddDays(-1),
+            IsPrimary = true,
+            Reason = "员工档案创建"
+        });
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工导入",
+            ["员工编号", "统一人员编号", "姓名", "员工类型", "岗位"],
+            [["YG-INTERNAL-IMPORT", "PER-INTERNAL-IMPORT", "内部人员更新", "正式员工", "项目经理"]]);
+
+        var preview = await fixture.ImportService.PreviewAsync(
+            new ImportPreviewRequest(
+                "test-user",
+                ExportDataset.Employees,
+                "内部人员员工档案更新.xlsx",
+                workbook.ToArray(),
+                null,
+                ImportMode.Update),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+
+        await fixture.ImportService.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        fixture.Db.ChangeTracker.Clear();
+
+        var updated = await fixture.Db.People
+            .Include(item => item.Employee)
+            .Include(item => item.ConstructionWorker)
+            .Include(item => item.EngagementHistory)
+            .SingleAsync(item => item.PersonNumber == "PER-INTERNAL-IMPORT");
+        var current = updated.EngagementHistory.Single();
+        updated.Employee!.EmployeeType.Should().Be(EmployeeType.Formal);
+        updated.Employee.PositionTitle.Should().Be("项目经理");
+        updated.Employee.IsActive.Should().BeTrue();
+        updated.ConstructionWorker!.IsActive.Should().BeFalse();
+        current.InternalType.Should().Be(EmployeeType.Formal);
+        current.PositionTitle.Should().Be("项目经理");
+    }
+
+    [Fact]
+    public async Task CompleteEmployeeWorkbookPreservesCurrentExternalIdentityAndInternalEmployeeHistory()
+    {
+        await using var fixture = await ExchangeFixture.CreateAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var person = new Person
+        {
+            PersonNumber = "PER-EXTERNAL-WB",
+            Name = "外部工作簿人员",
+            IdentityNumber = "EXT-WB-001",
+            IdentityNumberNormalized = "EXTWB001",
+            IsActive = true,
+            Employee = new Employee
+            {
+                EmployeeNumber = "YG-EXTERNAL-WB",
+                Name = "外部工作簿人员",
+                IdentityNumber = "EXT-WB-001",
+                EmployeeType = EmployeeType.Labor,
+                PositionTitle = "历史内部岗位",
+                HireDate = new DateOnly(2020, 1, 1),
+                IsActive = false
+            },
+            ConstructionWorker = new ConstructionWorker
+            {
+                Name = "外部工作簿人员",
+                IdentityNumber = "EXT-WB-001",
+                IsActive = true
+            }
+        };
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.ConstructionCrew,
+            PositionTitle = "当前班组岗位",
+            StartDate = today.AddDays(-1),
+            IsPrimary = true,
+            Reason = "身份切换"
+        });
+        fixture.Db.People.Add(person);
+        await fixture.Db.SaveChangesAsync();
+
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "员工总表",
+            ["姓名", "身份证号", "实际应付工资", "已付", "未付", "工种", "开工时间"],
+            [["外部工作簿更新", "EXT-WB-001", 0m, 0m, 0m, "不应覆盖岗位", "2026-02-01"]]);
+
+        var preview = await fixture.ImportService.PreviewAsync(
+            new ImportPreviewRequest("external-workbook", ExportDataset.Employees, "完整外部工作簿.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.ImportService.ConfirmAsync(preview.BatchId, CancellationToken.None);
+        fixture.Db.ChangeTracker.Clear();
+
+        var updated = await fixture.Db.People
+            .Include(item => item.Employee)
+            .Include(item => item.ConstructionWorker)
+            .Include(item => item.EngagementHistory)
+            .SingleAsync(item => item.PersonNumber == "PER-EXTERNAL-WB");
+        updated.Name.Should().Be("外部工作簿更新");
+        updated.IsActive.Should().BeTrue();
+        updated.Employee!.IsActive.Should().BeFalse();
+        updated.Employee.PositionTitle.Should().Be("历史内部岗位");
+        updated.Employee.HireDate.Should().Be(new DateOnly(2020, 1, 1));
+        updated.ConstructionWorker!.IsActive.Should().BeTrue();
+        updated.EngagementHistory.Single().Scope.Should().Be(PersonnelScope.External);
+    }
+
+    [Fact]
     public async Task EmployeeImportPreviewReportsNormalizedIdentityConflictWithoutMergingPeople()
     {
         await using var fixture = await ExchangeFixture.CreateAsync();

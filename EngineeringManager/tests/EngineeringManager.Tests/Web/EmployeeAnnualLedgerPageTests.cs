@@ -221,12 +221,14 @@ public sealed class EmployeeAnnualLedgerPageTests
     }
 
     [Fact]
-    public void SidebarKeepsEmployeeManagementAndRestoresPayrollWhileEmployeesStayOutOfPrivateCache()
+    public void SidebarUsesTwoPersonnelCategoriesAndRestoresPayrollWhileEmployeesStayOutOfPrivateCache()
     {
         var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
         var worker = ReadFile("src", "EngineeringManager.Web", "wwwroot", "service-worker.js");
 
-        layout.Should().Contain("asp-page=\"/Employees/Index\"");
+        layout.Should().Contain("asp-page=\"/Personnel/Internal/Index\"")
+            .And.Contain("asp-page=\"/Personnel/External/Index\"")
+            .And.NotContain("asp-page=\"/Employees/Index\"");
         layout.Should().NotContain("asp-page=\"/Employees/Certificates/Index\"");
         layout.Should().Contain("asp-page=\"/Payroll/Index\"");
         layout.Should().NotContain("asp-page=\"/EmployeeLedger/Index\"");
@@ -285,6 +287,16 @@ public sealed class EmployeeAnnualLedgerPageTests
         script.Should().Contain("data-payroll-dependent-fields");
         script.Should().Contain("data-personal-account-fields");
         script.Should().Contain("data-line-payment-category");
+    }
+
+    [Fact]
+    public void EmployeeDetailsReloadsCurrentAffiliationAfterOtherFormErrors()
+    {
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml.cs");
+
+        model.Should().Contain("var hasSubmittedAffiliationInput = ModelState.Keys.Any(key => key.StartsWith(\"AffiliationInput.\", StringComparison.Ordinal));")
+            .And.Contain("if (loaded && !hasSubmittedAffiliationInput)")
+            .And.Contain("InitializeAffiliationInput();");
     }
 
     [Fact]

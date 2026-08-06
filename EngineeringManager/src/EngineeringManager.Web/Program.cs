@@ -62,6 +62,10 @@ namespace EngineeringManager.Web;
 public sealed class Program
 {
     private static readonly JsonSerializerOptions MaintenanceReportJsonOptions = new() { WriteIndented = true };
+    private static readonly Action<ILogger, Exception?> LogPartnerDirectorySyncUnavailable = LoggerMessage.Define(
+        LogLevel.Warning,
+        new EventId(1001, nameof(LogPartnerDirectorySyncUnavailable)),
+        "合作单位目录启动同步暂不可用，应用将继续启动并由就绪检查报告数据库状态。");
 
     public static async Task Main(string[] args)
     {
@@ -266,6 +270,19 @@ public sealed class Program
         {
             await using var scope = app.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<IDevelopmentSampleDataSeeder>().SeedAsync(app.Environment.EnvironmentName, app.Environment.ContentRootPath, CancellationToken.None);
+        }
+        if (!app.Environment.IsEnvironment("Testing"))
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            try
+            {
+                await scope.ServiceProvider.GetRequiredService<IBusinessPartnerDirectorySynchronizer>()
+                    .SynchronizeAsync(null, CancellationToken.None);
+            }
+            catch (System.Data.Common.DbException exception)
+            {
+                LogPartnerDirectorySyncUnavailable(app.Logger, exception);
+            }
         }
 
         if (app.Environment.IsDevelopment())

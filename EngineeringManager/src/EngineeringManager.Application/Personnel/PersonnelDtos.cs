@@ -62,7 +62,8 @@ public sealed record SwitchPersonnelScopeRequest(
     Guid? CrewBusinessPartnerId,
     string? PositionTitle,
     DateOnly EffectiveDate,
-    string Reason);
+    string Reason,
+    Guid? ConcurrencyStamp = null);
 
 public sealed record PersonnelListQuery(
     PersonnelScope Scope,
@@ -73,7 +74,8 @@ public sealed record PersonnelListQuery(
     EmployeeType? InternalType = null,
     ExternalPersonnelType? ExternalType = null,
     bool? IsActive = null,
-    DateOnly? AsOf = null);
+    DateOnly? AsOf = null,
+    Guid? CrewBusinessPartnerId = null);
 
 public sealed record PersonnelAffiliationDto(
     Guid Id,

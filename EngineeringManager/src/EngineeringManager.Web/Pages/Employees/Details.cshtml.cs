@@ -364,10 +364,16 @@ public sealed class DetailsModel(
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
         {
+            var hasSubmittedAffiliationInput = ModelState.Keys.Any(key => key.StartsWith("AffiliationInput.", StringComparison.Ordinal));
             ModelState.AddModelError(string.Empty, exception.Message);
             Tab = targetTab;
             Edit = edit;
-            return await LoadAsync(cancellationToken) ? Page() : NotFound();
+            var loaded = await LoadAsync(cancellationToken);
+            if (loaded && !hasSubmittedAffiliationInput)
+            {
+                InitializeAffiliationInput();
+            }
+            return loaded ? Page() : NotFound();
         }
     }
 

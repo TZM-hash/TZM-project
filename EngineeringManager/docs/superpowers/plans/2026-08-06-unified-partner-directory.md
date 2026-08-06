@@ -4,7 +4,7 @@
 
 **Goal:** Merge construction crews and customer/general-contractor views into one categorized partner workspace, synchronize project-derived names and roles, and remove the partner/crew layout collisions.
 
-**Architecture:** Keep `BusinessPartnerRoleType` as the only classification source. Add one idempotent infrastructure synchronizer for project-derived partner records, preserve legacy list routes through redirects, and let the Razor Page derive the four UI categories from roles without a database migration.
+**Architecture:** Keep `BusinessPartnerRoleType` as the only classification source. Add one idempotent infrastructure synchronizer for project-derived partner records, preserve legacy list routes through redirects, and let the Razor Page derive “all + three mutually exclusive categories” from roles without a database migration.
 
 **Tech Stack:** ASP.NET Core Razor Pages, .NET 10, Entity Framework Core, xUnit, FluentAssertions, vanilla JavaScript, CSS, in-app Browser.
 
@@ -192,14 +192,14 @@ git commit -m 'feat: keep partner classifications in sync'
 
 - [ ] **Step 1: Write failing page-model and markup tests**
 
-Add category tests for `all`, `crews`, `customers`, and `other` using fake partners with roles and no roles. Assert the page invokes the directory synchronizer before listing. Update static page tests to require:
+Add category tests for `all`, `crews`, `suppliers`, and `customers` using fake partners with single roles, multiple roles, and no roles. Assert the three small categories are mutually exclusive with `ConstructionCrew > CustomerOrGeneralContractor > supplier` priority. Update static page tests to require:
 
 ```text
 data-partner-category-tabs
 Category
 施工班组
 甲方/总包
-其他合作单位
+材料供应商
 PreviousRoleType
 /Crews/Details
 ```
@@ -222,23 +222,23 @@ Add constants and a GET-bound category:
 ```csharp
 public const string CrewCategory = "crews";
 public const string CustomerCategory = "customers";
-public const string OtherCategory = "other";
+public const string SupplierCategory = "suppliers";
 [BindProperty(SupportsGet = true)] public string? Category { get; set; }
 ```
 
-Normalize the legacy `scope=customers` route into the customer category. `ApplyCategory` must implement the design rules, and `CategorySummaries` must count against `AllPartners`. Call `directorySynchronizer.SynchronizeAsync(null, cancellationToken)` before loading.
+Normalize the legacy `scope=customers` route into the customer category and legacy `category=other` into suppliers. `ApplyCategory` must implement the mutually exclusive design rules, and `CategorySummaries` must count against `AllPartners`. Historical synchronization runs at application startup so the GET handler remains read-only.
 
 Pass `Editor.PreviousRoleType` into `UpdateBusinessPartnerRequest`, preserve `Category` in redirects and form routes, and stop rejecting customer roles on the unified page.
 
 - [ ] **Step 4: Implement the tabs and unified row actions**
 
-Render four accessible links before the workspace layout. For partners with a construction-crew role, add a `班组档案` action pointing to:
+Render the accessible “全部 / 施工班组 / 材料供应商 / 甲方·总包” links before the workspace layout. For partners with a construction-crew role, add a `班组档案` action pointing to:
 
 ```csharp
 Url.Page("/Crews/Details", new { id = partner.Id, ReturnUrl = returnUrl })
 ```
 
-Do not default a no-role partner to `ConstructionCrew`; display `未分类` and place it in the other category. Add a hidden `Editor.PreviousRoleType` field and populate it from the edit payload in `partner-workspace.js`.
+Do not default a no-role partner to `ConstructionCrew`; display `未分类` only in the all view. Add a hidden `Editor.PreviousRoleType` field and populate it from the edit payload in `partner-workspace.js`.
 
 - [ ] **Step 5: Add legacy redirects and consolidate navigation**
 
@@ -429,7 +429,7 @@ Apply or inspect data only against `EngineeringManager_Test`. Confirm the synchr
 
 At 1440, 1366, and 390 pixels verify:
 
-- `/Partners` has the four category tabs and no page-level horizontal overflow.
+- `/Partners` has all plus the three mutually exclusive category tabs and no page-level horizontal overflow.
 - Switching categories changes the rows and preserves search/status filters.
 - Editing one unit from construction crew to another role moves it to the correct category after save.
 - A construction crew row opens the retained crew detail page.

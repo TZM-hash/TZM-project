@@ -21,6 +21,8 @@ public sealed class PartnerWorkspacePageTests
         searchFilterPosition.Should().BeLessThan(statusFilterPosition);
 
         page.Should().Contain("data-partner-workspace")
+            .And.Contain("TempData[\"SuccessMessage\"]")
+            .And.Contain("alert alert--success")
             .And.Contain("partner-workspace-layout")
             .And.Contain("partner-cell-ellipsis")
             .And.Contain("equipment-list-toolbar equipment-list-toolbar--integrated partner-list-toolbar")
@@ -29,14 +31,14 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain("data-column-key=\"partner\"")
             .And.Contain("data-column-key=\"role_trade\"")
             .And.Contain("data-column-key=\"contact\"")
-            .And.Contain("data-column-key=\"receipts\"")
+            .And.Contain("data-column-key=\"@headerFinancialColumnKey\"")
             .And.Contain("data-column-key=\"invoices\"")
-            .And.Contain("data-column-key=\"payments\"")
+            .And.Contain("data-column-key=\"@financialColumnKey\"")
             .And.Contain("data-partner-financial-summary")
             .And.Contain("role=\"progressbar\"")
             .And.Contain("aria-label=\"应收完成进度\"")
             .And.Contain("aria-label=\"应付完成进度\"")
-            .And.Contain("invoiceColumnLabel + \"完成进度\"")
+            .And.Contain("rowInvoiceColumnLabel + \"完成进度\"")
             .And.Contain("var receivableProgressState = FinancialProgressState")
             .And.Contain("var payableProgressState = FinancialProgressState")
             .And.Contain("var invoiceProgressState = FinancialProgressState")
@@ -146,17 +148,23 @@ public sealed class PartnerWorkspacePageTests
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
 
-        page.Should().Contain("var visibleFinancialColumnKeys = Model.IsCustomerScope")
+        page.Should().Contain("var isAllPartnerScope = Model.Category is null;")
+            .And.Contain("var useCustomerFinancialDirectionForScope = Model.Role.HasValue")
+            .And.Contain("var isMixedFinancialScope = isAllPartnerScope && !Model.Role.HasValue;")
+            .And.Contain("var visibleFinancialColumnKeys = isMixedFinancialScope || useCustomerFinancialDirectionForScope")
             .And.Contain("new HashSet<string>(StringComparer.Ordinal) { \"receipts\", \"invoices\" }")
             .And.Contain("new HashSet<string>(StringComparer.Ordinal) { \"payments\", \"invoices\" }")
-            .And.Contain("var invoiceColumnLabel = Model.IsCustomerScope ? \"进项票\" : \"销项票\"")
+            .And.Contain("var financialColumnLabel = isMixedFinancialScope ? \"资金往来\"")
+            .And.Contain("var invoiceColumnLabel = isMixedFinancialScope ? \"票据往来\"")
+            .And.Contain("var headerFinancialColumnKey = isMixedFinancialScope")
             .And.Contain("column with { Label = invoiceColumnLabel }")
-            .And.Contain("@if (Model.IsCustomerScope)")
-            .And.Contain("<th data-column-key=\"receipts\">应收</th>")
-            .And.Contain("<th data-column-key=\"payments\">应付</th>")
+            .And.Contain("@if (useCustomerFinancialDirection)")
+            .And.Contain("var financialColumnKey = isMixedFinancialScope")
+            .And.Contain("data-column-key=\"@financialColumnKey\"")
+            .And.Contain("<th data-column-key=\"@headerFinancialColumnKey\">@financialColumnLabel</th>")
             .And.Contain("<th data-column-key=\"invoices\">@invoiceColumnLabel</th>")
-            .And.Contain("var invoiceSummary = Model.IsCustomerScope ? financialSummary.Payable : financialSummary.Receivable")
-            .And.Contain("var invoiceTargetLabel = Model.IsCustomerScope ? \"应收票\" : \"应开票\"")
+            .And.Contain("var invoiceSummary = useCustomerFinancialDirection ? financialSummary.Payable : financialSummary.Receivable")
+            .And.Contain("var invoiceTargetLabel = useCustomerFinancialDirection ? \"应收票\" : \"应开票\"")
             .And.Contain("invoiceSummary.ShouldInvoiceAmount")
             .And.Contain("invoiceSummary.InvoicedAmount")
             .And.Contain("invoiceSummary.Uninvoiced")
@@ -284,36 +292,52 @@ public sealed class PartnerWorkspacePageTests
         var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml.cs");
         var details = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Details.cshtml");
         var layout = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_Layout.cshtml");
+        var program = ReadFile("src", "EngineeringManager.Web", "Program.cs");
         var script = ReadFileIfExists("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "partner-workspace.js");
 
         page.Should().Contain("@page \"{scope?}\"")
             .And.Contain("data-partner-category-tabs")
             .And.Contain("asp-route-category")
             .And.Contain("施工班组")
+            .And.Contain("材料供应商")
             .And.Contain("甲方/总包")
-            .And.Contain("其他合作单位")
+            .And.NotContain("<span>其他合作单位</span>")
             .And.Contain("Editor.PreviousRoleType")
+            .And.Contain("Editor.PricingRule")
+            .And.Contain("Editor.SettlementTerms")
+            .And.Contain("Editor.ContactEmail")
+            .And.Contain("Editor.ContactAddress")
             .And.Contain("Url.Page(\"/Crews/Details\"")
             .And.Contain("id=\"@tableId\"")
             .And.Contain("data-default-role")
             .And.Contain("data-entity-label");
+        var categoryTabsStart = page.IndexOf("<nav class=\"partner-category-tabs\"", StringComparison.Ordinal);
+        var categoryTabsEnd = page.IndexOf("</nav>", categoryTabsStart, StringComparison.Ordinal);
+        page[categoryTabsStart..categoryTabsEnd].Should().NotContain("asp-route-role");
 
         model.Should().Contain("public const string CustomerScope = \"customers\";")
             .And.Contain("public const string CrewCategory = \"crews\";")
+            .And.Contain("public const string SupplierCategory = \"suppliers\";")
             .And.Contain("public const string CustomerCategory = \"customers\";")
-            .And.Contain("public const string OtherCategory = \"other\";")
             .And.Contain("public string? Category")
             .And.Contain("CategorySummaries")
             .And.Contain("BusinessPartnerRoleType.CustomerOrGeneralContractor")
             .And.Contain("ApplyCategory(")
-            .And.Contain("directorySynchronizer.SynchronizeAsync(null, cancellationToken)")
+            .And.Contain("organizationSummaryService.GetManyAsync(")
             .And.Contain("partnerService.ListForManagementAsync(null, null, cancellationToken)")
-            .And.Contain("Editor.PreviousRoleType");
+            .And.Contain("Editor.PreviousRoleType")
+            .And.NotContain("directorySynchronizer.SynchronizeAsync(null, cancellationToken)");
+
+        program.Should().Contain("if (!app.Environment.IsEnvironment(\"Testing\"))")
+            .And.Contain("GetRequiredService<IBusinessPartnerDirectorySynchronizer>()")
+            .And.Contain("SynchronizeAsync(null, CancellationToken.None)");
 
         script.Should().Contain("const defaultRole = Number.parseInt(page.dataset.defaultRole")
             .And.Contain("const entityLabel = page.dataset.entityLabel")
             .And.Contain("payload.roleType ?? defaultRole")
-            .And.Contain("setField(\"PreviousRoleType\"");
+            .And.Contain("setField(\"PreviousRoleType\"")
+            .And.Contain("setField(\"PricingRule\"")
+            .And.Contain("setField(\"ContactEmail\"");
 
         details.Should().Contain("Request.Query[\"ReturnUrl\"]")
             .And.Contain("Url.IsLocalUrl(requestedReturnUrl)")
@@ -325,7 +349,54 @@ public sealed class PartnerWorkspacePageTests
         layout.Should().NotContain(">施工班组</span>")
             .And.NotContain(">甲方/总包</span>")
             .And.Contain("currentPage.StartsWith(\"/Crews\"")
-            .And.Contain("asp-page=\"/Partners/Index\"");
+             .And.Contain("asp-page=\"/Partners/Index\"");
+    }
+
+    [Fact]
+    public void PartnerInlineFiltersPreserveTheActiveCategoryQueryParameter()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
+        var workbenchModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "DataWorkbenchViewModel.cs");
+        var workbench = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_DataWorkbench.cshtml");
+
+        page.Should().Contain("PreservedQueryParameters")
+            .And.Contain("[\"Category\"] = Model.Category");
+        workbenchModel.Should().Contain("PreservedQueryParameters");
+        workbench.Should().Contain("Model.PreservedQueryParameters")
+            .And.Contain("data-preserved-query-parameter");
+    }
+
+    [Fact]
+    public void PartnerFilterClearKeepsTheActiveCategoryTab()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
+        var workbenchModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "DataWorkbenchViewModel.cs");
+        var workbench = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_DataWorkbench.cshtml");
+
+        page.Should().Contain("ClearFiltersUrl = Url.Page(\"/Partners/Index\", new { Category = Model.Category })");
+        workbenchModel.Should().Contain("string? ClearFiltersUrl = null");
+        workbench.Should().Contain("Model.ClearFiltersUrl ?? Context.Request.Path");
+    }
+
+    [Fact]
+    public void AllPartnerViewUsesEachRowsExclusiveCategoryForFinancialDirection()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
+
+        page.Should().Contain("var isAllPartnerScope = Model.Category is null;")
+            .And.Contain("isMixedFinancialScope ? \"资金往来\"")
+            .And.Contain("isMixedFinancialScope ? \"票据往来\"")
+            .And.Contain("var exclusiveCategoryRole = partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew)")
+            .And.Contain("?? partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor)")
+            .And.Contain("_ => exclusiveCategoryRole")
+            .And.Contain("var useCustomerFinancialDirection = Model.Role.HasValue")
+            .And.Contain("? Model.Role.Value == BusinessPartnerRoleType.CustomerOrGeneralContractor")
+            .And.Contain(": Model.IsCustomerScope")
+            .And.Contain("exclusiveCategoryRole?.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor")
+            .And.Contain("var financialColumnKey = isMixedFinancialScope")
+            .And.Contain("var invoiceSummary = useCustomerFinancialDirection")
+            .And.NotContain("var invoiceSummary = Model.IsCustomerScope ?")
+            .And.NotContain("&& hasCustomerRole");
     }
 
     [Fact]
