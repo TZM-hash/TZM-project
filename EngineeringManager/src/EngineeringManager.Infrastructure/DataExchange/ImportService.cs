@@ -7,9 +7,11 @@ using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Finance;
+using EngineeringManager.Infrastructure.Personnel;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.DataExchange;
@@ -85,6 +87,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         [ExportDataset.Employees] =
         [
             new("员工编号", "employee_number", true),
+            new("统一人员编号", "person_number", false),
+            new("当前人员分类", "personnel_scope", false),
             new("姓名", "name", true),
             new("员工类型", "employee_type", true),
             new("岗位", "position", false),
@@ -97,6 +101,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("默认时工资", "default_hourly_rate", false),
             new("默认计件单价", "default_piecework_rate", false),
             new("系统ID", "_system_id", false),
+            new("人员主档ID", "_person_id", false),
             new("并发版本", "_concurrency_stamp", false),
             new("备注", "notes", false)
         ],
@@ -115,6 +120,10 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             new("付款方式", "payment_method", false),
             new("员工编号", "employee_number", false),
             new("人员来源", "recipient_type", false),
+            new("统一人员编号", "person_number", false),
+            new("当前人员分类", "personnel_scope", false),
+            new("人员主档ID", "_person_id", false),
+            new("班组编号", "crew_number", false),
             new("人员姓名", "recipient_name", false),
             new("个人金额", "amount", false),
             new("备注", "notes", false)
@@ -1177,6 +1186,7 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
     {
         var errors = new List<ImportErrorDto>();
         var seenNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenEmployeeIdentityNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var numberKey = dataset switch
         {
             ExportDataset.Employees => "employee_number",
@@ -1213,6 +1223,23 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             if (dataset == ExportDataset.Employees && values.TryGetValue("employee_type", out var type) && !string.IsNullOrWhiteSpace(type) && !TryParseEmployeeType(type, out _))
             {
                 errors.Add(new ImportErrorDto(excelRow, "员工类型", "员工类型必须是正式员工、劳务员工或特殊临时人员。", type));
+            }
+            if (dataset == ExportDataset.Employees
+                && !IsClearMarker(values.GetValueOrDefault("identity_number"))
+                && PersonPublicDataSynchronizer.NormalizeIdentityNumber(values.GetValueOrDefault("identity_number")) is { } normalizedIdentityNumber)
+            {
+                if (seenEmployeeIdentityNumbers.TryGetValue(normalizedIdentityNumber, out var firstRow))
+                {
+                    errors.Add(new ImportErrorDto(
+                        excelRow,
+                        "身份证号",
+                        $"身份证号冲突：与文件第 {firstRow} 行属于同一标准化证件号，系统不会自动合并。",
+                        values.GetValueOrDefault("identity_number")));
+                }
+                else
+                {
+                    seenEmployeeIdentityNumbers[normalizedIdentityNumber] = excelRow;
+                }
             }
             if (dataset is ExportDataset.Employees or ExportDataset.Projects && Guid.TryParse(values.GetValueOrDefault("_concurrency_stamp"), out var expectedStamp))
             {
@@ -1376,6 +1403,11 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         ImportMode requestMode,
         CancellationToken cancellationToken)
     {
+        if (dataset == ExportDataset.Employees)
+        {
+            await ValidateEmployeeIdentityConflictAsync(values, row, errors, cancellationToken);
+        }
+
         if (dataset == ExportDataset.Payroll)
         {
             if (requestMode == ImportMode.New && await db.PayrollBatches.AnyAsync(item => item.BatchNumber == values.GetValueOrDefault("batch_number"), cancellationToken))
@@ -1390,9 +1422,58 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("payment_method")) && !TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out _)) errors.Add(new ImportErrorDto(row, "付款方式", "付款方式无法识别。", values.GetValueOrDefault("payment_method")));
             if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("project_number")) && !await db.Projects.AnyAsync(item => item.ProjectNumber == values.GetValueOrDefault("project_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "项目编号", "项目编号不存在。", values.GetValueOrDefault("project_number")));
             if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("legal_entity_code")) && !await db.LegalEntities.AnyAsync(item => item.Code == values.GetValueOrDefault("legal_entity_code"), cancellationToken)) errors.Add(new ImportErrorDto(row, "公司编码", "公司编码不存在。", values.GetValueOrDefault("legal_entity_code")));
-            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("employee_number")) && !await db.Employees.AnyAsync(item => item.EmployeeNumber == values.GetValueOrDefault("employee_number"), cancellationToken)) errors.Add(new ImportErrorDto(row, "员工编号", "员工编号不存在。", values.GetValueOrDefault("employee_number")));
             ValidateDecimal(values.GetValueOrDefault("amount"), row, "个人金额", errors);
-            if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("employee_number")) && !TryParsePayrollRecipientType(values.GetValueOrDefault("recipient_type"), out _)) errors.Add(new ImportErrorDto(row, "人员来源", "人员来源必须是员工或班组工人。", values.GetValueOrDefault("recipient_type")));
+            var hasRecipient = !string.IsNullOrWhiteSpace(values.GetValueOrDefault("employee_number"))
+                || !string.IsNullOrWhiteSpace(values.GetValueOrDefault("person_number"))
+                || !string.IsNullOrWhiteSpace(values.GetValueOrDefault("_person_id"))
+                || !string.IsNullOrWhiteSpace(values.GetValueOrDefault("recipient_name"));
+            var recipientType = default(PayrollRecipientType);
+            if (hasRecipient && !TryParsePayrollRecipientType(values.GetValueOrDefault("recipient_type"), out recipientType))
+            {
+                errors.Add(new ImportErrorDto(row, "人员来源", "人员来源必须是员工或班组工人。", values.GetValueOrDefault("recipient_type")));
+            }
+            else if (hasRecipient && recipientType == PayrollRecipientType.Employee)
+            {
+                var personNumber = values.GetValueOrDefault("person_number");
+                var employeeNumber = values.GetValueOrDefault("employee_number");
+                var exists = !string.IsNullOrWhiteSpace(personNumber)
+                    ? await db.People.AnyAsync(item => item.PersonNumber == personNumber && item.Employee != null, cancellationToken)
+                    : !string.IsNullOrWhiteSpace(employeeNumber)
+                        && await db.Employees.AnyAsync(item => item.EmployeeNumber == employeeNumber, cancellationToken);
+                if (!exists)
+                {
+                    errors.Add(new ImportErrorDto(row, "员工编号", "找不到对应的内部人员员工档案。", employeeNumber ?? personNumber));
+                }
+            }
+            else if (hasRecipient && recipientType == PayrollRecipientType.CrewWorker)
+            {
+                var personNumber = values.GetValueOrDefault("person_number");
+                var personId = Guid.TryParse(values.GetValueOrDefault("_person_id"), out var parsedPersonId) ? parsedPersonId : (Guid?)null;
+                var workerId = !string.IsNullOrWhiteSpace(personNumber)
+                    ? await db.People.Where(item => item.PersonNumber == personNumber).Select(item => item.ConstructionWorker == null ? (Guid?)null : item.ConstructionWorker.Id).SingleOrDefaultAsync(cancellationToken)
+                    : personId.HasValue
+                        ? await db.People.Where(item => item.Id == personId.Value).Select(item => item.ConstructionWorker == null ? (Guid?)null : item.ConstructionWorker.Id).SingleOrDefaultAsync(cancellationToken)
+                        : null;
+                if (!workerId.HasValue)
+                {
+                    errors.Add(new ImportErrorDto(row, "统一人员编号", "找不到对应的班组工人档案。", personNumber ?? values.GetValueOrDefault("_person_id")));
+                }
+
+                var crewNumber = values.GetValueOrDefault("crew_number");
+                var crewId = string.IsNullOrWhiteSpace(crewNumber)
+                    ? null
+                    : await db.BusinessPartners.Where(item => item.PartnerNumber == crewNumber).Select(item => (Guid?)item.Id).SingleOrDefaultAsync(cancellationToken);
+                if (!crewId.HasValue)
+                {
+                    errors.Add(new ImportErrorDto(row, "班组编号", "班组编号不存在。", crewNumber));
+                }
+                else if (workerId.HasValue && !await db.ConstructionCrewMemberships.AnyAsync(
+                    item => item.ConstructionWorkerId == workerId.Value && item.CrewBusinessPartnerId == crewId.Value,
+                    cancellationToken))
+                {
+                    errors.Add(new ImportErrorDto(row, "班组编号", "该人员不属于指定施工班组。", crewNumber));
+                }
+            }
         }
 
         if (dataset is ExportDataset.Collections or ExportDataset.Payments)
@@ -1490,6 +1571,61 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         }
     }
 
+    private async Task ValidateEmployeeIdentityConflictAsync(
+        IReadOnlyDictionary<string, string?> values,
+        int row,
+        List<ImportErrorDto> errors,
+        CancellationToken cancellationToken)
+    {
+        var rawIdentityNumber = values.GetValueOrDefault("identity_number");
+        if (string.IsNullOrWhiteSpace(rawIdentityNumber) || IsClearMarker(rawIdentityNumber)) return;
+
+        var normalizedIdentityNumber = PersonPublicDataSynchronizer.NormalizeIdentityNumber(rawIdentityNumber);
+        if (normalizedIdentityNumber is null) return;
+
+        Guid? targetPersonId = null;
+        var personNumber = values.GetValueOrDefault("person_number")?.Trim();
+        if (!string.IsNullOrWhiteSpace(personNumber))
+        {
+            targetPersonId = await db.People
+                .Where(item => item.PersonNumber == personNumber)
+                .Select(item => (Guid?)item.Id)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+        else if (Guid.TryParse(values.GetValueOrDefault("_person_id"), out var personId))
+        {
+            targetPersonId = personId;
+        }
+        else if (Guid.TryParse(values.GetValueOrDefault("_system_id"), out var employeeId))
+        {
+            targetPersonId = await db.Employees
+                .Where(item => item.Id == employeeId)
+                .Select(item => item.PersonId)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(values.GetValueOrDefault("employee_number")))
+        {
+            var employeeNumber = values.GetValueOrDefault("employee_number");
+            targetPersonId = await db.Employees
+                .Where(item => item.EmployeeNumber == employeeNumber)
+                .Select(item => item.PersonId)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
+        var conflicts = await db.People.AnyAsync(
+            item => item.IdentityNumberNormalized == normalizedIdentityNumber
+                && (!targetPersonId.HasValue || item.Id != targetPersonId.Value),
+            cancellationToken);
+        if (conflicts)
+        {
+            errors.Add(new ImportErrorDto(
+                row,
+                "身份证号",
+                "身份证号冲突：该证件已属于其他人员主档，系统不会自动合并。",
+                rawIdentityNumber));
+        }
+    }
+
     private async Task ValidateEmployeeReferenceAsync(IReadOnlyDictionary<string, string?> values, int row, List<ImportErrorDto> errors, CancellationToken cancellationToken)
     {
         var employeeNumber = values.GetValueOrDefault("employee_number");
@@ -1505,6 +1641,13 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         var mapping = provided is null
             ? GetColumns(dataset).Where(column => headers.Contains(column.Header, StringComparer.Ordinal)).ToDictionary(column => column.Header, column => column.Key, StringComparer.Ordinal)
             : new Dictionary<string, string>(provided, StringComparer.Ordinal);
+        if (provided is null
+            && dataset == ExportDataset.Payroll
+            && headers.Contains("批次实际总额", StringComparer.Ordinal)
+            && !mapping.ContainsValue("actual_amount"))
+        {
+            mapping["批次实际总额"] = "actual_amount";
+        }
         var validKeys = GetColumns(dataset).Select(item => item.Key).ToHashSet(StringComparer.Ordinal);
         if (allowTechnical)
         {
@@ -1576,22 +1719,45 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 {
                     throw new InvalidOperationException("已通过预览的员工类型无法解析。");
                 }
-                db.Employees.Add(new Employee
+                var person = new Person
                 {
+                    PersonNumber = string.IsNullOrWhiteSpace(values.GetValueOrDefault("person_number"))
+                        ? $"PER-{Guid.NewGuid():N}"
+                        : values["person_number"]!.Trim()
+                };
+                var employee = new Employee
+                {
+                    Person = person,
+                    PersonId = person.Id,
                     EmployeeNumber = values["employee_number"]!,
-                    Name = values["name"]!,
                     EmployeeType = employeeType,
                     PositionTitle = NullableImportValue(values, "position"),
-                    Phone = NullableImportValue(values, "phone"),
-                    IdentityNumber = NullableImportValue(values, "identity_number"),
-                    BankAccountNumber = NullableImportValue(values, "bank_account_number"),
-                    BankName = NullableImportValue(values, "bank_name"),
                     DefaultMonthlySalary = NullableImportDecimal(values, "default_monthly_salary"),
                     DefaultDailyRate = NullableImportDecimal(values, "default_daily_rate"),
                     DefaultHourlyRate = NullableImportDecimal(values, "default_hourly_rate"),
-                    DefaultPieceworkRate = NullableImportDecimal(values, "default_piecework_rate"),
-                    Notes = NullableImportValue(values, "notes")
+                    DefaultPieceworkRate = NullableImportDecimal(values, "default_piecework_rate")
+                };
+                person.Employee = employee;
+                PersonPublicDataSynchronizer.Apply(
+                    person,
+                    values["name"]!,
+                    NullableImportValue(values, "phone"),
+                    NullableImportValue(values, "identity_number"),
+                    NullableImportValue(values, "bank_account_number"),
+                    NullableImportValue(values, "bank_name"),
+                    NullableImportValue(values, "notes"),
+                    true);
+                person.EngagementHistory.Add(new PersonnelEngagementHistory
+                {
+                    Person = person,
+                    Scope = PersonnelScope.Internal,
+                    InternalType = employeeType,
+                    PositionTitle = employee.PositionTitle,
+                    StartDate = DateOnly.FromDateTime(DateTime.Today),
+                    IsPrimary = true,
+                    Reason = "员工导入"
                 });
+                db.People.Add(person);
                 break;
             case ExportDataset.Payroll:
                 AddPayrollBatch(values);
@@ -1760,46 +1926,120 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             db.PayrollBatches.Add(batch);
         }
 
-        var employeeNumber = values.GetValueOrDefault("employee_number");
-        if (string.IsNullOrWhiteSpace(employeeNumber)) return;
-        if (!TryParsePayrollRecipientType(values.GetValueOrDefault("recipient_type"), out var recipientType) || recipientType != PayrollRecipientType.Employee) throw new InvalidOperationException("工资导入目前只支持员工收款行。");
-        var employee = FindEmployee(employeeNumber);
-        var recipientKey = $"employee:{employee.Id:N}";
+        var hasRecipient = !string.IsNullOrWhiteSpace(values.GetValueOrDefault("employee_number"))
+            || !string.IsNullOrWhiteSpace(values.GetValueOrDefault("person_number"))
+            || !string.IsNullOrWhiteSpace(values.GetValueOrDefault("_person_id"))
+            || !string.IsNullOrWhiteSpace(values.GetValueOrDefault("recipient_name"));
+        if (!hasRecipient) return;
+        if (!TryParsePayrollRecipientType(values.GetValueOrDefault("recipient_type"), out var recipientType))
+            throw new InvalidOperationException("已通过预览的工资人员来源无法解析。");
+
+        Employee? employee = null;
+        ConstructionWorker? worker = null;
+        BusinessPartner? crew = null;
+        string recipientKey;
+        if (recipientType == PayrollRecipientType.Employee)
+        {
+            var personNumber = values.GetValueOrDefault("person_number");
+            if (!string.IsNullOrWhiteSpace(personNumber))
+            {
+                employee = db.People.Include(item => item.Employee)
+                    .Single(item => item.PersonNumber == personNumber).Employee
+                    ?? throw new InvalidOperationException("统一人员没有员工档案。");
+            }
+            else if (Guid.TryParse(values.GetValueOrDefault("_person_id"), out var personId))
+            {
+                employee = db.People.Include(item => item.Employee)
+                    .Single(item => item.Id == personId).Employee
+                    ?? throw new InvalidOperationException("人员主档没有员工档案。");
+            }
+            else
+            {
+                employee = FindEmployee(values.GetValueOrDefault("employee_number")!);
+            }
+            recipientKey = $"employee:{employee.Id:N}";
+        }
+        else
+        {
+            Person person;
+            var personNumber = values.GetValueOrDefault("person_number");
+            if (!string.IsNullOrWhiteSpace(personNumber))
+            {
+                person = db.People.Include(item => item.ConstructionWorker)
+                    .Single(item => item.PersonNumber == personNumber);
+            }
+            else if (Guid.TryParse(values.GetValueOrDefault("_person_id"), out var personId))
+            {
+                person = db.People.Include(item => item.ConstructionWorker)
+                    .Single(item => item.Id == personId);
+            }
+            else
+            {
+                throw new InvalidOperationException("班组工人工资必须提供统一人员编号或人员主档ID。");
+            }
+
+            worker = person.ConstructionWorker ?? throw new InvalidOperationException("统一人员没有班组工人档案。");
+            var crewNumber = values.GetValueOrDefault("crew_number");
+            crew = db.BusinessPartners.Single(item => item.PartnerNumber == crewNumber);
+            if (!db.ConstructionCrewMemberships.Any(item =>
+                    item.ConstructionWorkerId == worker.Id && item.CrewBusinessPartnerId == crew.Id))
+                throw new InvalidOperationException("该人员不属于指定施工班组。");
+            recipientKey = $"crew-worker:{worker.Id:N}";
+        }
+
         var payment = batch.Payments.FirstOrDefault(item => item.RecipientKey == recipientKey)
             ?? db.PayrollPayments.Local.FirstOrDefault(item => item.PayrollBatchId == batch.Id && item.RecipientKey == recipientKey)
             ?? (batch.Id == Guid.Empty ? null : db.PayrollPayments.SingleOrDefault(item => item.PayrollBatchId == batch.Id && item.RecipientKey == recipientKey));
+        batch.IsUnifiedDisbursement = true;
+        var recipientName = values.GetValueOrDefault("recipient_name") ?? employee?.Name ?? worker!.Name;
         if (payment is null)
         {
             payment = new PayrollPayment
             {
                 Batch = batch,
-                RecipientType = PayrollRecipientType.Employee,
+                RecipientType = recipientType,
                 PaymentCategory = PayrollPaymentCategory.Wage,
                 RecipientKey = recipientKey,
                 Employee = employee,
+                ConstructionWorker = worker,
+                CrewBusinessPartner = crew,
+                Project = project,
                 Account = account,
                 PaymentDate = paymentDate,
                 Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? 0m,
                 PaymentMethod = paymentMethod,
-                PayeeType = PayrollPayeeType.Employee,
-                PayeeName = values.GetValueOrDefault("recipient_name") ?? employee.Name,
-                RecipientNameSnapshot = values.GetValueOrDefault("recipient_name") ?? employee.Name
+                PayeeType = recipientType == PayrollRecipientType.Employee ? PayrollPayeeType.Employee : PayrollPayeeType.CrewLeader,
+                PayeeName = recipientName,
+                RecipientNameSnapshot = recipientName,
+                IdentityNumberSnapshot = worker?.IdentityNumber,
+                PhoneSnapshot = worker?.Phone,
+                BankAccountSnapshot = worker?.BankAccountNumber,
+                TradeSnapshot = worker?.Trade,
+                CrewNameSnapshot = crew?.Name
             };
             batch.Payments.Add(payment);
         }
         else
         {
             payment.Batch = batch;
-            payment.RecipientType = PayrollRecipientType.Employee;
+            payment.RecipientType = recipientType;
             payment.PaymentCategory = PayrollPaymentCategory.Wage;
             payment.Employee = employee;
+            payment.ConstructionWorker = worker;
+            payment.CrewBusinessPartner = crew;
+            payment.Project = project;
             payment.Account = account;
             payment.PaymentDate = paymentDate;
             payment.Amount = ParseDecimal(values.GetValueOrDefault("amount")) ?? payment.Amount;
             payment.PaymentMethod = paymentMethod;
-            payment.PayeeType = PayrollPayeeType.Employee;
-            payment.PayeeName = values.GetValueOrDefault("recipient_name") ?? employee.Name;
-            payment.RecipientNameSnapshot = values.GetValueOrDefault("recipient_name") ?? employee.Name;
+            payment.PayeeType = recipientType == PayrollRecipientType.Employee ? PayrollPayeeType.Employee : PayrollPayeeType.CrewLeader;
+            payment.PayeeName = recipientName;
+            payment.RecipientNameSnapshot = recipientName;
+            payment.IdentityNumberSnapshot = worker?.IdentityNumber;
+            payment.PhoneSnapshot = worker?.Phone;
+            payment.BankAccountSnapshot = worker?.BankAccountNumber;
+            payment.TradeSnapshot = worker?.Trade;
+            payment.CrewNameSnapshot = crew?.Name;
         }
     }
 
@@ -1994,22 +2234,85 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         switch (dataset)
         {
             case ExportDataset.Employees:
-                var employee = systemId.HasValue ? db.Employees.SingleOrDefault(item => item.Id == systemId.Value) : db.Employees.SingleOrDefault(item => item.EmployeeNumber == values.GetValueOrDefault("employee_number"));
+                var personNumber = values.GetValueOrDefault("person_number")?.Trim();
+                var personId = Guid.TryParse(values.GetValueOrDefault("_person_id"), out var parsedPersonId)
+                    ? parsedPersonId
+                    : (Guid?)null;
+                Person? person = null;
+                if (!string.IsNullOrWhiteSpace(personNumber))
+                {
+                    person = db.People
+                        .Include(item => item.Employee)
+                        .Include(item => item.ConstructionWorker)
+                        .SingleOrDefault(item => item.PersonNumber == personNumber);
+                }
+                else if (personId.HasValue)
+                {
+                    person = db.People
+                        .Include(item => item.Employee)
+                        .Include(item => item.ConstructionWorker)
+                        .SingleOrDefault(item => item.Id == personId.Value);
+                }
+
+                var employee = person?.Employee;
+                if (employee is null)
+                {
+                    employee = db.Employees
+                        .Include(item => item.Person)
+                        .ThenInclude(item => item!.ConstructionWorker)
+                        .SingleOrDefault(item => systemId.HasValue
+                            ? item.Id == systemId.Value
+                            : item.EmployeeNumber == values.GetValueOrDefault("employee_number"));
+                    person = employee?.Person;
+                }
                 if (employee is null) return false;
                 EnsureConcurrency(employee.ConcurrencyStamp, values.GetValueOrDefault("_concurrency_stamp"), "员工");
-                employee.Name = values.GetValueOrDefault("name") ?? employee.Name;
+                if (person is null)
+                {
+                    person = new Person
+                    {
+                        PersonNumber = string.IsNullOrWhiteSpace(personNumber) ? $"PER-{Guid.NewGuid():N}" : personNumber,
+                        Employee = employee
+                    };
+                    employee.Person = person;
+                    employee.PersonId = person.Id;
+                    PersonPublicDataSynchronizer.Apply(
+                        person,
+                        employee.Name,
+                        employee.Phone,
+                        employee.IdentityNumber,
+                        employee.BankAccountNumber,
+                        employee.BankName,
+                        employee.Notes,
+                        employee.IsActive);
+                    person.EngagementHistory.Add(new PersonnelEngagementHistory
+                    {
+                        Person = person,
+                        Scope = PersonnelScope.Internal,
+                        InternalType = employee.EmployeeType,
+                        PositionTitle = employee.PositionTitle,
+                        StartDate = employee.HireDate ?? DateOnly.FromDateTime(DateTime.Today),
+                        IsPrimary = true,
+                        Reason = "员工导入补建人员主档"
+                    });
+                    db.People.Add(person);
+                }
+
                 if (TryParseEmployeeType(values.GetValueOrDefault("employee_type") ?? string.Empty, out var type)) employee.EmployeeType = type;
                 employee.PositionTitle = NullableImportUpdate(values, "position", employee.PositionTitle);
-                employee.Phone = NullableImportUpdate(values, "phone", employee.Phone);
-                employee.IdentityNumber = NullableImportUpdate(values, "identity_number", employee.IdentityNumber);
-                employee.BankAccountNumber = NullableImportUpdate(values, "bank_account_number", employee.BankAccountNumber);
-                employee.BankName = NullableImportUpdate(values, "bank_name", employee.BankName);
                 employee.DefaultMonthlySalary = NullableImportDecimalUpdate(values, "default_monthly_salary", employee.DefaultMonthlySalary);
                 employee.DefaultDailyRate = NullableImportDecimalUpdate(values, "default_daily_rate", employee.DefaultDailyRate);
                 employee.DefaultHourlyRate = NullableImportDecimalUpdate(values, "default_hourly_rate", employee.DefaultHourlyRate);
                 employee.DefaultPieceworkRate = NullableImportDecimalUpdate(values, "default_piecework_rate", employee.DefaultPieceworkRate);
-                employee.Notes = NullableImportUpdate(values, "notes", employee.Notes);
-                employee.ConcurrencyStamp = Guid.NewGuid();
+                PersonPublicDataSynchronizer.Apply(
+                    person,
+                    values.GetValueOrDefault("name") ?? person.Name,
+                    NullableImportUpdate(values, "phone", person.Phone),
+                    NullableImportUpdate(values, "identity_number", person.IdentityNumber),
+                    NullableImportUpdate(values, "bank_account_number", person.BankAccountNumber),
+                    NullableImportUpdate(values, "bank_name", person.BankName),
+                    NullableImportUpdate(values, "notes", person.Notes),
+                    person.IsActive);
                 return true;
             case ExportDataset.Partners:
                 var partner = systemId.HasValue ? db.BusinessPartners.SingleOrDefault(item => item.Id == systemId.Value) : db.BusinessPartners.SingleOrDefault(item => item.PartnerNumber == values.GetValueOrDefault("partner_number"));
@@ -2055,6 +2358,12 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 batch.PaymentDate = ParseDate(values.GetValueOrDefault("payment_date"));
                 batch.Project = ResolveProject(values.GetValueOrDefault("project_number"));
                 batch.LegalEntity = ResolveLegalEntityOptional(values.GetValueOrDefault("legal_entity_code"), null);
+                if (values.ContainsKey("account_number"))
+                {
+                    batch.Account = batch.LegalEntity is null
+                        ? null
+                        : ResolveAccount(batch.LegalEntity.Id, values.GetValueOrDefault("account_number"), null);
+                }
                 batch.ActualAmount = ParseDecimal(values.GetValueOrDefault("actual_amount"), batch.ActualAmount);
                 if (TryParsePaymentMethod(values.GetValueOrDefault("payment_method"), out var batchPaymentMethod)) batch.PaymentMethod = batchPaymentMethod;
                 batch.Notes = values.GetValueOrDefault("notes") ?? batch.Notes;

@@ -4,7 +4,9 @@ using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Personnel;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.DataExchange;
@@ -371,7 +373,10 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
             db.BusinessYears.Add(businessYear);
         }
 
-        var employees = await db.Employees.ToListAsync(cancellationToken);
+        var employees = await db.Employees
+            .Include(item => item.Person)
+            .ThenInclude(item => item!.ConstructionWorker)
+            .ToListAsync(cancellationToken);
         var employeeByKey = BuildEmployeeMap(employees);
         var sourceName = Path.GetFileName(sourceFileName);
         var detailByEmployee = analysis.Details
@@ -597,13 +602,19 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
         adjustment.Notes = Limit($"{marker};Excel未付={master.UnpaidAmount:0.00};导入后未付校正", 1000);
     }
 
-    private static void ApplyEmployeeProfile(Employee employee, EmployeeWorkbookMasterRow master, Guid? defaultLegalEntityId)
+    private void ApplyEmployeeProfile(Employee employee, EmployeeWorkbookMasterRow master, Guid? defaultLegalEntityId)
     {
-        employee.Name = master.Name;
-        employee.IdentityNumber = string.IsNullOrWhiteSpace(master.IdentityNumber) ? employee.IdentityNumber : master.IdentityNumber;
-        employee.Phone = string.IsNullOrWhiteSpace(master.Phone) ? employee.Phone : master.Phone;
+        var person = EnsurePerson(employee, master.Name, master.IdentityNumber, master.Phone, master.BankAccountNumber);
+        PersonPublicDataSynchronizer.Apply(
+            person,
+            master.Name,
+            string.IsNullOrWhiteSpace(master.Phone) ? person.Phone : master.Phone,
+            string.IsNullOrWhiteSpace(master.IdentityNumber) ? person.IdentityNumber : master.IdentityNumber,
+            string.IsNullOrWhiteSpace(master.BankAccountNumber) ? person.BankAccountNumber : master.BankAccountNumber,
+            person.BankName,
+            person.Notes,
+            employee.IsActive);
         employee.PositionTitle = string.IsNullOrWhiteSpace(master.PositionTitle) ? employee.PositionTitle : master.PositionTitle;
-        employee.BankAccountNumber = string.IsNullOrWhiteSpace(master.BankAccountNumber) ? employee.BankAccountNumber : master.BankAccountNumber;
         employee.HireDate = master.StartDate ?? employee.HireDate;
         employee.LeaveDate = master.EndDate ?? employee.LeaveDate;
         if (master.SalaryAmount.HasValue)
@@ -622,7 +633,6 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
         }
 
         employee.UpdatedAt = DateTimeOffset.UtcNow;
-        employee.ConcurrencyStamp = Guid.NewGuid();
     }
 
     private static Dictionary<string, Employee> BuildEmployeeMap(IEnumerable<Employee> employees)
@@ -630,15 +640,10 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
         var map = new Dictionary<string, Employee>(StringComparer.OrdinalIgnoreCase);
         foreach (var employee in employees)
         {
-            if (!string.IsNullOrWhiteSpace(employee.IdentityNumber))
+            var identityKey = IdentityKey(employee.Person?.IdentityNumber ?? employee.IdentityNumber);
+            if (identityKey is not null)
             {
-                map[EmployeeKey(employee.IdentityNumber, employee.Name)] = employee;
-            }
-
-            var nameKey = EmployeeKey(null, employee.Name);
-            if (!map.ContainsKey(nameKey))
-            {
-                map[nameKey] = employee;
+                map[identityKey] = employee;
             }
         }
 
@@ -646,45 +651,77 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
     }
 
     private Employee FindOrCreateEmployee(
-        IDictionary<string, Employee> employeeByKey,
+        Dictionary<string, Employee> employeeByKey,
         string name,
         string identityNumber,
         string? phone,
         string? position,
         string? bankAccountNumber)
     {
-        var identityKey = EmployeeKey(identityNumber, name);
-        if (employeeByKey.TryGetValue(identityKey, out var employee))
+        var identityKey = IdentityKey(identityNumber);
+        if (identityKey is not null && employeeByKey.TryGetValue(identityKey, out var employee))
         {
             return employee;
         }
 
-        var nameKey = EmployeeKey(null, name);
-        if (employeeByKey.TryGetValue(nameKey, out employee))
+        var person = new Person
         {
-            employeeByKey[identityKey] = employee;
-            return employee;
-        }
-
+            PersonNumber = $"PER-{Guid.NewGuid():N}"
+        };
         employee = new Employee
         {
-            EmployeeNumber = NextEmployeeNumber(employeeByKey.Values),
-            Name = name,
-            IdentityNumber = string.IsNullOrWhiteSpace(identityNumber) ? null : identityNumber.Trim(),
-            Phone = phone,
+            Person = person,
+            PersonId = person.Id,
+            EmployeeNumber = NextEmployeeNumber(),
             PositionTitle = position,
-            BankAccountNumber = bankAccountNumber,
             EmployeeType = EmployeeType.Labor
         };
-        db.Employees.Add(employee);
-        employeeByKey[identityKey] = employee;
-        employeeByKey[nameKey] = employee;
+        person.Employee = employee;
+        PersonPublicDataSynchronizer.Apply(person, name, phone, identityNumber, bankAccountNumber, null, null, true);
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.Internal,
+            InternalType = EmployeeType.Labor,
+            PositionTitle = position,
+            StartDate = DateOnly.FromDateTime(DateTime.Today),
+            IsPrimary = true,
+            Reason = "完整员工工作簿导入"
+        });
+        db.People.Add(person);
+        if (identityKey is not null) employeeByKey[identityKey] = employee;
         return employee;
     }
 
-    private static string NextEmployeeNumber(IEnumerable<Employee> employees)
+    private Person EnsurePerson(Employee employee, string name, string identityNumber, string? phone, string? bankAccountNumber)
     {
-        var used = employees.Select(item => item.EmployeeNumber).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (employee.Person is not null) return employee.Person;
+
+        var person = new Person
+        {
+            PersonNumber = $"PER-{Guid.NewGuid():N}",
+            Employee = employee
+        };
+        employee.Person = person;
+        employee.PersonId = person.Id;
+        PersonPublicDataSynchronizer.Apply(person, name, phone, identityNumber, bankAccountNumber, employee.BankName, employee.Notes, employee.IsActive);
+        person.EngagementHistory.Add(new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.Internal,
+            InternalType = employee.EmployeeType,
+            PositionTitle = employee.PositionTitle,
+            StartDate = employee.HireDate ?? DateOnly.FromDateTime(DateTime.Today),
+            IsPrimary = true,
+            Reason = "完整员工工作簿补建人员主档"
+        });
+        db.People.Add(person);
+        return person;
+    }
+
+    private string NextEmployeeNumber()
+    {
+        var used = db.Employees.Local.Select(item => item.EmployeeNumber).ToHashSet(StringComparer.OrdinalIgnoreCase);
         for (var index = 1; ; index++)
         {
             var number = $"YG{index:0000}";
@@ -697,8 +734,14 @@ internal sealed class EmployeeWorkbookImporter(ApplicationDbContext db)
 
     private static string EmployeeKey(string? identityNumber, string name) =>
         !string.IsNullOrWhiteSpace(identityNumber)
-            ? $"身份证:{identityNumber.Trim().ToUpperInvariant()}"
+            ? IdentityKey(identityNumber)!
             : $"姓名:{name.Trim()}";
+
+    private static string? IdentityKey(string? identityNumber)
+    {
+        var normalized = PersonPublicDataSynchronizer.NormalizeIdentityNumber(identityNumber);
+        return normalized is null ? null : $"身份证:{normalized}";
+    }
 
     private static string Marker(string sourceFileName, string sheetName, int rowNumber, string kind) =>
         $"[员工导入:{sourceFileName}|{sheetName}|第{rowNumber}行|{kind}]";

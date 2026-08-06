@@ -6,6 +6,7 @@ using EngineeringManager.Application.Finance;
 using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Projects;
 using EngineeringManager.Infrastructure.Files;
@@ -73,6 +74,8 @@ public sealed class ExportService : IExportService
             [ExportDataset.Employees] =
             [
                 new("employee_number", "员工编号", ExportFieldDataType.Text, true),
+                new("person_number", "统一人员编号", ExportFieldDataType.Text, true),
+                new("personnel_scope", "当前人员分类", ExportFieldDataType.Text, true),
                 new("name", "姓名", ExportFieldDataType.Text, true),
                 new("employee_type", "员工类型", ExportFieldDataType.Text, true),
                 new("position", "岗位", ExportFieldDataType.Text, true),
@@ -85,6 +88,7 @@ public sealed class ExportService : IExportService
                 new("default_hourly_rate", "默认时工资", ExportFieldDataType.Number, false, true, true, true),
                 new("default_piecework_rate", "默认计件单价", ExportFieldDataType.Number, false, true, true, true),
                 new("_system_id", "系统ID", ExportFieldDataType.Text, false, true, true, false, false, true),
+                new("_person_id", "人员主档ID", ExportFieldDataType.Text, false, true, true, false, false, true),
                 new("_concurrency_stamp", "并发版本", ExportFieldDataType.Text, false, true, true, false, false, true),
                 new("is_active", "状态", ExportFieldDataType.Boolean, true),
                 new("notes", "备注", ExportFieldDataType.Text, false)
@@ -141,13 +145,21 @@ public sealed class ExportService : IExportService
                 new("start_date", "开始日期", ExportFieldDataType.Date, true),
                 new("end_date", "结束日期", ExportFieldDataType.Date, true),
                 new("payment_date", "发放日期", ExportFieldDataType.Date, true),
+                new("project_number", "项目编号", ExportFieldDataType.Text, true),
                 new("project", "发放项目", ExportFieldDataType.Text, false),
+                new("legal_entity_code", "公司编码", ExportFieldDataType.Text, true),
                 new("legal_entity", "发放公司", ExportFieldDataType.Text, false),
+                new("account_number", "账户账号", ExportFieldDataType.Text, true),
                 new("account", "付款账户", ExportFieldDataType.Text, false),
+                new("payment_method", "付款方式", ExportFieldDataType.Text, true),
                 new("recipient_type", "人员来源", ExportFieldDataType.Text, true),
                 new("employee_number", "员工编号", ExportFieldDataType.Text, false),
+                new("person_number", "统一人员编号", ExportFieldDataType.Text, true),
+                new("personnel_scope", "当前人员分类", ExportFieldDataType.Text, true),
+                new("_person_id", "人员主档ID", ExportFieldDataType.Text, false, true, true, false, false, true),
                 new("recipient_name", "人员姓名", ExportFieldDataType.Text, true),
                 new("crew", "施工班组", ExportFieldDataType.Text, false),
+                new("crew_number", "班组编号", ExportFieldDataType.Text, true),
                 new("amount", "个人金额", ExportFieldDataType.Number, true, true, true, true),
                 new("actual_amount", "批次实际总额", ExportFieldDataType.Number, true, true, true, true),
                 new("payable_amount", "应发工资", ExportFieldDataType.Number, true, true, true, true),
@@ -712,10 +724,16 @@ public sealed class ExportService : IExportService
         Guid exportBatchId,
         CancellationToken cancellationToken)
     {
-        var employees = await db.Employees.AsNoTracking().OrderBy(item => item.EmployeeNumber).ToListAsync(cancellationToken);
+        var employees = await db.Employees.AsNoTracking()
+            .Include(item => item.Person)
+            .ThenInclude(item => item!.EngagementHistory)
+            .OrderBy(item => item.EmployeeNumber)
+            .ToListAsync(cancellationToken);
         var values = employees.Select(item => new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["employee_number"] = item.EmployeeNumber,
+            ["person_number"] = item.Person?.PersonNumber,
+            ["personnel_scope"] = CurrentPersonnelScopeLabel(item),
             ["name"] = item.Name,
             ["employee_type"] = EmployeeTypeLabel(item.EmployeeType),
             ["position"] = item.PositionTitle,
@@ -728,6 +746,7 @@ public sealed class ExportService : IExportService
             ["default_hourly_rate"] = item.DefaultHourlyRate,
             ["default_piecework_rate"] = item.DefaultPieceworkRate,
             ["_system_id"] = item.Id.ToString(),
+            ["_person_id"] = item.PersonId?.ToString(),
             ["_concurrency_stamp"] = item.ConcurrencyStamp.ToString(),
             ["is_active"] = item.IsActive,
             ["notes"] = item.Notes
@@ -799,6 +818,22 @@ public sealed class ExportService : IExportService
 
     private static string EmployeeTypeLabel(EmployeeType employeeType) => DataExchangeValueLabels.LabelEmployeeType(employeeType);
 
+    private static string CurrentPersonnelScopeLabel(Employee employee) =>
+        CurrentPersonnelScopeLabel(employee.Person, PersonnelScope.Internal);
+
+    private static string CurrentPersonnelScopeLabel(Person? person, PersonnelScope fallbackScope)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var scope = person?.EngagementHistory
+            .Where(item => item.IsPrimary
+                && item.StartDate <= today
+                && (!item.EndDate.HasValue || item.EndDate.Value >= today))
+            .OrderByDescending(item => item.StartDate)
+            .Select(item => (PersonnelScope?)item.Scope)
+            .FirstOrDefault();
+        return (scope ?? fallbackScope) == PersonnelScope.External ? "外部人员" : "内部人员";
+    }
+
     private async Task<ExportFileResult> ExportPartnersAsync(IReadOnlyList<ExportFieldDefinition> fields, CancellationToken cancellationToken)
     {
         var partners = await db.BusinessPartners.AsNoTracking().Include(item => item.Roles).OrderBy(item => item.PartnerNumber).ToListAsync(cancellationToken);
@@ -817,7 +852,10 @@ public sealed class ExportService : IExportService
     {
         var query = db.PayrollBatches.AsNoTracking()
             .Include(item => item.Items)
-            .Include(item => item.Payments)
+            .Include(item => item.Payments).ThenInclude(item => item.Employee).ThenInclude(item => item!.Person).ThenInclude(item => item!.EngagementHistory)
+            .Include(item => item.Payments).ThenInclude(item => item.ConstructionWorker).ThenInclude(item => item!.Person).ThenInclude(item => item!.EngagementHistory)
+            .Include(item => item.Payments).ThenInclude(item => item.CrewBusinessPartner)
+            .Include(item => item.Payments).ThenInclude(item => item.Account)
             .Include(item => item.Project)
             .Include(item => item.LegalEntity)
             .Include(item => item.Account)
@@ -847,7 +885,13 @@ public sealed class ExportService : IExportService
         return CreateSingleSheet("工资", fields, rows, "工资台账");
     }
 
-    private static Dictionary<string, object?> PayrollValues(PayrollBatch batch, PayrollSummary summary, PayrollPayment? payment) =>
+    private static Dictionary<string, object?> PayrollValues(PayrollBatch batch, PayrollSummary summary, PayrollPayment? payment)
+    {
+        var person = payment?.Employee?.Person ?? payment?.ConstructionWorker?.Person;
+        var fallbackScope = payment?.RecipientType == PayrollRecipientType.CrewWorker
+            ? PersonnelScope.External
+            : PersonnelScope.Internal;
+        return
         new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["batch_number"] = batch.BatchNumber,
@@ -856,13 +900,21 @@ public sealed class ExportService : IExportService
             ["start_date"] = batch.StartDate,
             ["end_date"] = batch.EndDate,
             ["payment_date"] = batch.PaymentDate ?? payment?.PaymentDate,
+            ["project_number"] = batch.Project?.ProjectNumber,
             ["project"] = batch.Project?.Name,
+            ["legal_entity_code"] = batch.LegalEntity?.Code,
             ["legal_entity"] = batch.LegalEntity?.ShortName,
+            ["account_number"] = payment?.Account?.AccountNumber ?? batch.Account?.AccountNumber,
             ["account"] = batch.Account?.AccountName ?? payment?.Account?.AccountName,
+            ["payment_method"] = DataExchangeValueLabels.LabelPaymentMethod(payment?.PaymentMethod ?? batch.PaymentMethod),
             ["recipient_type"] = payment is null ? null : DataExchangeValueLabels.LabelPayrollRecipientType(payment.RecipientType),
             ["employee_number"] = payment?.Employee?.EmployeeNumber,
+            ["person_number"] = person?.PersonNumber,
+            ["personnel_scope"] = payment is null ? null : CurrentPersonnelScopeLabel(person, fallbackScope),
+            ["_person_id"] = person?.Id.ToString(),
             ["recipient_name"] = payment?.RecipientNameSnapshot ?? payment?.PayeeName,
             ["crew"] = payment?.CrewNameSnapshot,
+            ["crew_number"] = payment?.CrewBusinessPartner?.PartnerNumber,
             ["amount"] = payment?.Amount,
             ["actual_amount"] = batch.IsUnifiedDisbursement ? batch.ActualAmount : summary.PaidAmount,
             ["payable_amount"] = summary.PayableAmount,
@@ -870,6 +922,7 @@ public sealed class ExportService : IExportService
             ["unpaid_amount"] = summary.UnpaidAmount,
             ["notes"] = payment?.Notes ?? batch.Notes
         };
+    }
 
     private async Task<ExportFileResult> ExportEmployeeWagesAsync(IReadOnlyList<ExportFieldDefinition> fields, DateOnly? cutoffDate, CancellationToken cancellationToken)
     {

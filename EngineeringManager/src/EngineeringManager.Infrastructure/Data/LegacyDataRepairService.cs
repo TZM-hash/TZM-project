@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Reminders;
+using EngineeringManager.Infrastructure.Personnel;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Data;
@@ -13,8 +14,23 @@ public sealed record LegacyDataRepairMapping(
     string OldValue,
     string NewValue);
 
-public sealed record LegacyDataRepairResult(IReadOnlyList<LegacyDataRepairMapping> Mappings)
+public sealed record LegacyPersonnelConflict(
+    string NormalizedIdentityNumber,
+    IReadOnlyList<Guid> PersonIds,
+    IReadOnlyList<string> PersonNumbers);
+
+public sealed record LegacyDataRepairResult
 {
+    public LegacyDataRepairResult(
+        IReadOnlyList<LegacyDataRepairMapping> mappings,
+        IReadOnlyList<LegacyPersonnelConflict>? personnelConflicts = null)
+    {
+        Mappings = mappings;
+        PersonnelConflicts = personnelConflicts ?? [];
+    }
+
+    public IReadOnlyList<LegacyDataRepairMapping> Mappings { get; }
+    public IReadOnlyList<LegacyPersonnelConflict> PersonnelConflicts { get; }
     public int TotalChanges => Mappings.Count;
 
     public IReadOnlyDictionary<string, int> Counts => Mappings
@@ -47,7 +63,24 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
         var allCompanies = await db.LegalEntities.ToListAsync(cancellationToken);
         var allAccounts = await db.FinancialAccounts.ToListAsync(cancellationToken);
         var allReminders = await db.ReminderItems.ToListAsync(cancellationToken);
+        var allPeople = await db.People.AsNoTracking().ToListAsync(cancellationToken);
         var projectNames = allProjects.ToDictionary(item => item.Id, item => item.Name);
+        var personnelConflicts = allPeople
+            .Select(item => new
+            {
+                Person = item,
+                NormalizedIdentityNumber = PersonPublicDataSynchronizer.NormalizeIdentityNumber(item.IdentityNumber)
+                    ?? item.IdentityNumberNormalized
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.NormalizedIdentityNumber))
+            .GroupBy(item => item.NormalizedIdentityNumber!, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Select(item => item.Person.Id).Distinct().Count() > 1)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new LegacyPersonnelConflict(
+                group.Key,
+                group.Select(item => item.Person.Id).Distinct().OrderBy(item => item).ToArray(),
+                group.Select(item => item.Person.PersonNumber).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(item => item, StringComparer.OrdinalIgnoreCase).ToArray()))
+            .ToArray();
 
         var projects = allProjects.Where(item => IsLegacyNumber(item.ProjectNumber))
             .OrderBy(item => item.ProjectNumber, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.Id).ToArray();
@@ -229,7 +262,7 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
         }
 
         if (mappings.Count == 0)
-            return new LegacyDataRepairResult([]);
+            return new LegacyDataRepairResult([], personnelConflicts);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         foreach (var item in projects) item.ProjectNumber = TemporaryNumber("P", item.Id);
@@ -334,11 +367,11 @@ public sealed class LegacyDataRepairService(ApplicationDbContext db)
             EntityType = nameof(LegacyDataRepairService),
             EntityId = Guid.Empty.ToString(),
             Reason = "缩短旧资料自动生成编号和名称",
-            AfterJson = JsonSerializer.Serialize(new LegacyDataRepairResult(mappings))
+            AfterJson = JsonSerializer.Serialize(new LegacyDataRepairResult(mappings, personnelConflicts))
         });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new LegacyDataRepairResult(mappings);
+        return new LegacyDataRepairResult(mappings, personnelConflicts);
     }
 
     private static Dictionary<Guid, string> BuildGlobalMappings<T>(
