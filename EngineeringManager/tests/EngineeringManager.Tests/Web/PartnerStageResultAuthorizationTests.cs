@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Application.Organization;
 using EngineeringManager.Application.Partners;
 using EngineeringManager.Application.StageResults;
 using EngineeringManager.Domain.Finance;
@@ -153,13 +154,26 @@ public sealed class PartnerStageResultAuthorizationTests
                 services.RemoveAll<IBusinessPartnerService>();
                 services.RemoveAll<IStageResultService>();
                 services.RemoveAll<ICentralLedgerQueryService>();
+                services.RemoveAll<IOrganizationSummaryService>();
                 services.AddSingleton<IBusinessPartnerService, FakePartnerService>();
                 services.AddSingleton<IStageResultService, FakeStageResultService>();
+                services.AddSingleton<IOrganizationSummaryService, FakeOrganizationSummaryService>();
                 services.AddSingleton(new RecordingCentralLedgerQueryService(zeroTargetOverage));
                 services.AddSingleton<ICentralLedgerQueryService>(provider => provider.GetRequiredService<RecordingCentralLedgerQueryService>());
             });
             builder.UseSetting(TestHandler.RoleSetting, role);
         });
+
+    private sealed class FakeOrganizationSummaryService : IOrganizationSummaryService
+    {
+        public Task<OrganizationSummaryDto> GetAsync(OrganizationSummaryQuery query, CancellationToken cancellationToken) =>
+            Task.FromResult(new OrganizationSummaryDto(
+                query,
+                new OrganizationProjectStatsDto(0, 0, 0, 0, 0, 0, 0),
+                new OrganizationPersonnelStatsDto(0, 0, 0, 0, 0, 0, 0, 0),
+                new OrganizationDepartmentStatsDto(0, 0),
+                false));
+    }
 
     private sealed class FakePartnerService : IBusinessPartnerService
     {

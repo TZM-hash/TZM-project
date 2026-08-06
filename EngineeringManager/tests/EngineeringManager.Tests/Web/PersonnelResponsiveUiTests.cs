@@ -1,0 +1,57 @@
+using FluentAssertions;
+
+namespace EngineeringManager.Tests.Web;
+
+public sealed class PersonnelResponsiveUiTests
+{
+    [Fact]
+    public void AffiliationEditorUsesFingerprintedModuleAndAccessibleWrappedLabels()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml");
+
+        page.Should().Contain("src=\"~/js/pages/personnel-affiliation.js\"")
+            .And.Contain("asp-append-version=\"true\"")
+            .And.Contain("<label><span>当前公司 / 单位</span><select")
+            .And.Contain("<label><span>当前部门</span><select")
+            .And.Contain("<label><span>当前项目</span><select")
+            .And.Contain("<label><span>当前班组</span><select");
+    }
+
+    [Fact]
+    public void PersonnelAndOrganizationPanelsHaveResponsiveGridRules()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        css.Should().Contain(".organization-summary__metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.4rem, 1fr));")
+            .And.Contain("@media (max-width: 1100px)")
+            .And.Contain(".organization-summary__groups, .organization-summary--compact .organization-summary__groups { grid-template-columns: 1fr; }")
+            .And.Contain("@media (max-width: 680px)")
+            .And.Contain(".employee-project-detail-page .personnel-affiliation-readonly { grid-template-columns: minmax(0, 1fr); }")
+            .And.Contain(".employee-project-detail-page .personnel-affiliation-actions { align-items: stretch; flex-direction: column; }")
+            .And.Contain(".employee-project-detail-page .personnel-affiliation-form :is(input, select) { width: 100%; min-width: 0; }");
+    }
+
+    [Fact]
+    public void OrganizationMetricsHaveVisibleLinkTextAndTablesScrollInsideTheirWrappers()
+    {
+        var summary = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_OrganizationSummary.cshtml");
+        var components = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
+
+        summary.Should().Contain("<span>项目总数</span>")
+            .And.Contain("<span>进行中</span>")
+            .And.Contain("<span>当前人员</span>")
+            .And.Contain("<span>启用 / 总部门</span>");
+        components.Should().Contain(".table-wrap, .data-table-wrap")
+            .And.Contain("overflow-x: auto");
+    }
+
+    private static string ReadFile(params string[] parts) =>
+        File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()));
+
+    private static string RepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null && !File.Exists(Path.Combine(current.FullName, "EngineeringManager.sln"))) current = current.Parent;
+        return current?.FullName ?? throw new DirectoryNotFoundException("Cannot locate EngineeringManager.sln.");
+    }
+}

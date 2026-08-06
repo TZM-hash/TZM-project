@@ -34,7 +34,12 @@ public sealed class BusinessYearService(ApplicationDbContext db) : IBusinessYear
     public async Task<BusinessYearDto?> GetByDateAsync(DateOnly businessDate, CancellationToken cancellationToken)
     {
         var item = await db.BusinessYears.AsNoTracking()
-            .SingleOrDefaultAsync(year => year.StartDate <= businessDate && year.EndDate >= businessDate, cancellationToken);
+            .Where(year => year.StartDate <= businessDate && year.EndDate >= businessDate)
+            .OrderByDescending(year => year.StartDate)
+            .ThenBy(year => year.EndDate)
+            .ThenBy(year => year.Name)
+            .ThenBy(year => year.Id)
+            .FirstOrDefaultAsync(cancellationToken);
         return item is null ? null : ToDto(item);
     }
 

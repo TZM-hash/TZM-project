@@ -231,7 +231,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BusinessPartnerId");
+                    b.HasIndex("BusinessPartnerId", "Code")
+                        .IsUnique()
+                        .HasFilter("[BusinessPartnerId] IS NOT NULL");
 
                     b.HasIndex("Code")
                         .IsUnique()
@@ -239,9 +241,9 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
 
                     b.HasIndex("ParentId");
 
-                    b.HasIndex("LegalEntityId", "BusinessPartnerId", "Code")
+                    b.HasIndex("LegalEntityId", "Code")
                         .IsUnique()
-                        .HasFilter("[LegalEntityId] IS NOT NULL OR [BusinessPartnerId] IS NOT NULL");
+                        .HasFilter("[LegalEntityId] IS NOT NULL");
 
                     b.ToTable("OrganizationUnits", t =>
                         {

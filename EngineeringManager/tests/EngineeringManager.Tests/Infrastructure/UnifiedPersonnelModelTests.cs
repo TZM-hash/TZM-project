@@ -5,11 +5,32 @@ using EngineeringManager.Infrastructure.Data;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace EngineeringManager.Tests.Infrastructure;
 
 public sealed class UnifiedPersonnelModelTests
 {
+    [Fact]
+    public void UnifiedPersonnelMigrationUsesSeparateSqlServerOwnerFilters()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer("Server=localhost;Database=EngineeringManager_MigrationScript_Test;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+        using var db = new ApplicationDbContext(options);
+
+        var script = db.GetService<IMigrator>().GenerateScript(
+            "20260804065251_ProjectResponsibleEmployeeLinks",
+            "20260806071258_UnifiedPersonnelAndOrganizationOwnership");
+
+        script.Should().Contain("IX_OrganizationUnits_LegalEntityId_Code")
+            .And.Contain("WHERE [LegalEntityId] IS NOT NULL")
+            .And.Contain("IX_OrganizationUnits_BusinessPartnerId_Code")
+            .And.Contain("WHERE [BusinessPartnerId] IS NOT NULL")
+            .And.NotContain("WHERE [LegalEntityId] IS NOT NULL OR [BusinessPartnerId] IS NOT NULL");
+    }
+
     [Fact]
     public async Task PersonIdentityNumberIsUniqueWhenPresent()
     {

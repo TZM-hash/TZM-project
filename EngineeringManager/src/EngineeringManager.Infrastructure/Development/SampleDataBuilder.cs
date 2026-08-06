@@ -698,13 +698,21 @@ public sealed class SampleDataBuilder(
         const string marker = "演示年度总账";
         if (await db.BusinessYears.AnyAsync(item => item.Name.StartsWith(marker), token)) return;
 
-        var year = new BusinessYear
+        var yearStart = new DateOnly(context.AnchorDate.Year, 1, 1);
+        var yearEnd = new DateOnly(context.AnchorDate.Year, 12, 31);
+        var year = await db.BusinessYears
+            .OrderBy(item => item.Name)
+            .FirstOrDefaultAsync(item => item.StartDate == yearStart && item.EndDate == yearEnd, token);
+        if (year is null)
         {
-            Name = $"{marker} {context.AnchorDate.Year}",
-            StartDate = new DateOnly(context.AnchorDate.Year, 1, 1),
-            EndDate = new DateOnly(context.AnchorDate.Year, 12, 31)
-        };
-        db.BusinessYears.Add(year);
+            year = new BusinessYear
+            {
+                Name = $"{marker} {context.AnchorDate.Year}",
+                StartDate = yearStart,
+                EndDate = yearEnd
+            };
+            db.BusinessYears.Add(year);
+        }
 
         for (var index = 0; index < 3; index++)
         {

@@ -179,9 +179,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(unit => unit.Code)
                 .IsUnique()
                 .HasFilter("[LegalEntityId] IS NULL AND [BusinessPartnerId] IS NULL");
-            entity.HasIndex(unit => new { unit.LegalEntityId, unit.BusinessPartnerId, unit.Code })
+            entity.HasIndex(unit => new { unit.LegalEntityId, unit.Code })
                 .IsUnique()
-                .HasFilter("[LegalEntityId] IS NOT NULL OR [BusinessPartnerId] IS NOT NULL");
+                .HasFilter("[LegalEntityId] IS NOT NULL");
+            entity.HasIndex(unit => new { unit.BusinessPartnerId, unit.Code })
+                .IsUnique()
+                .HasFilter("[BusinessPartnerId] IS NOT NULL");
             entity.HasOne(unit => unit.Parent)
                 .WithMany(unit => unit.Children)
                 .HasForeignKey(unit => unit.ParentId)

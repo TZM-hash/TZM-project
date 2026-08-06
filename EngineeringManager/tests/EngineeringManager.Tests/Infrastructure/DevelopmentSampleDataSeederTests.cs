@@ -133,6 +133,26 @@ public sealed class DevelopmentSampleDataSeederTests
     }
 
     [Fact]
+    public async Task SeederReusesExistingCalendarBusinessYear()
+    {
+        await using var fixture = await SampleSeederFixture.CreateAsync();
+        var yearNumber = DateTime.Today.Year;
+        var existing = new BusinessYear
+        {
+            Name = $"{yearNumber}年度",
+            StartDate = new DateOnly(yearNumber, 1, 1),
+            EndDate = new DateOnly(yearNumber, 12, 31)
+        };
+        fixture.Db.BusinessYears.Add(existing);
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.SeedCompleteAsync();
+
+        (await fixture.Db.BusinessYears.CountAsync()).Should().Be(1);
+        (await fixture.Db.EmployeeWageEntries.Select(item => item.BusinessYearId).Distinct().SingleAsync()).Should().Be(existing.Id);
+    }
+
+    [Fact]
     public void ResetScriptRequiresDevelopmentAndTestSuffix()
     {
         var script = ReadRepositoryFile("scripts", "reset-test-database.ps1");

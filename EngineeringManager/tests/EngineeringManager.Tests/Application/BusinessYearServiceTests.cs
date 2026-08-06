@@ -10,6 +10,33 @@ namespace EngineeringManager.Tests.Application;
 public sealed class BusinessYearServiceTests
 {
     [Fact]
+    public async Task CurrentBusinessYearResolvesLegacyOverlapToLatestStartingPeriod()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var calendarYear = new BusinessYear
+        {
+            Name = "2026年度",
+            StartDate = new DateOnly(2026, 1, 1),
+            EndDate = new DateOnly(2026, 12, 31)
+        };
+        var customYear = new BusinessYear
+        {
+            Name = "2026经营年度",
+            StartDate = new DateOnly(2026, 3, 1),
+            EndDate = new DateOnly(2027, 2, 28)
+        };
+        db.BusinessYears.AddRange(calendarYear, customYear);
+        await db.SaveChangesAsync();
+
+        var current = await new BusinessYearService(db).GetByDateAsync(new DateOnly(2026, 8, 6), CancellationToken.None);
+
+        current!.Id.Should().Be(customYear.Id);
+    }
+
+    [Fact]
     public async Task CurrentBusinessYearUsesCustomDateRangeAndRejectsOverlap()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

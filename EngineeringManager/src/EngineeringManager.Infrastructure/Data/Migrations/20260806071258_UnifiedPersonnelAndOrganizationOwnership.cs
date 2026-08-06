@@ -187,11 +187,6 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                 """);
 
             migrationBuilder.CreateIndex(
-                name: "IX_OrganizationUnits_BusinessPartnerId",
-                table: "OrganizationUnits",
-                column: "BusinessPartnerId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_OrganizationUnits_Code",
                 table: "OrganizationUnits",
                 column: "Code",
@@ -199,11 +194,18 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                 filter: "[LegalEntityId] IS NULL AND [BusinessPartnerId] IS NULL");
 
             migrationBuilder.CreateIndex(
-                name: "IX_OrganizationUnits_LegalEntityId_BusinessPartnerId_Code",
+                name: "IX_OrganizationUnits_BusinessPartnerId_Code",
                 table: "OrganizationUnits",
-                columns: new[] { "LegalEntityId", "BusinessPartnerId", "Code" },
+                columns: new[] { "BusinessPartnerId", "Code" },
                 unique: true,
-                filter: "[LegalEntityId] IS NOT NULL OR [BusinessPartnerId] IS NOT NULL");
+                filter: "[BusinessPartnerId] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OrganizationUnits_LegalEntityId_Code",
+                table: "OrganizationUnits",
+                columns: new[] { "LegalEntityId", "Code" },
+                unique: true,
+                filter: "[LegalEntityId] IS NOT NULL");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_OrganizationUnits_Owner",
@@ -326,15 +328,15 @@ namespace EngineeringManager.Infrastructure.Data.Migrations
                 name: "People");
 
             migrationBuilder.DropIndex(
-                name: "IX_OrganizationUnits_BusinessPartnerId",
-                table: "OrganizationUnits");
-
-            migrationBuilder.DropIndex(
                 name: "IX_OrganizationUnits_Code",
                 table: "OrganizationUnits");
 
             migrationBuilder.DropIndex(
-                name: "IX_OrganizationUnits_LegalEntityId_BusinessPartnerId_Code",
+                name: "IX_OrganizationUnits_BusinessPartnerId_Code",
+                table: "OrganizationUnits");
+
+            migrationBuilder.DropIndex(
+                name: "IX_OrganizationUnits_LegalEntityId_Code",
                 table: "OrganizationUnits");
 
             migrationBuilder.DropCheckConstraint(
