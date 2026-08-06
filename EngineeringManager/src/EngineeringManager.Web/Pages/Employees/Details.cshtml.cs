@@ -5,10 +5,12 @@ using EngineeringManager.Application.EmployeeLedger;
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Application.Organization;
 using EngineeringManager.Application.Partners;
+using EngineeringManager.Application.Personnel;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -27,7 +29,8 @@ public sealed class DetailsModel(
     IEmployeeCertificateService certificateService,
     IOrganizationService organizationService,
     IProjectService projectService,
-    IBusinessPartnerService partnerService) : PageModel
+    IBusinessPartnerService partnerService,
+    IPersonnelService? personnelService = null) : PageModel
 {
     public EmployeeDto Employee { get; private set; } = null!;
     public Guid? PreviousEmployeeId { get; private set; }
@@ -41,6 +44,9 @@ public sealed class DetailsModel(
     public IReadOnlyList<LegalEntityDto> LegalEntities { get; private set; } = [];
     public IReadOnlyList<ProjectListItemDto> Projects { get; private set; } = [];
     public IReadOnlyList<BusinessPartnerDto> LaborPartners { get; private set; } = [];
+    public PersonnelDetailsDto? PersonnelDetails { get; private set; }
+    public PersonnelOptionSetDto AffiliationOptions { get; private set; } = new([], [], [], [], []);
+    public Guid? PersonId { get; private set; }
     public bool CanViewSensitive => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
     public bool CanEditFinancial => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
     public bool CanManageEmployee => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
@@ -59,6 +65,7 @@ public sealed class DetailsModel(
     [BindProperty] public ExpenseEntryInput ExpenseInput { get; set; } = new();
     [BindProperty] public OtherPayableInput OtherInput { get; set; } = new();
     [BindProperty] public EmployeeEditInput EmployeeInput { get; set; } = new();
+    [BindProperty] public PersonnelAffiliationInput AffiliationInput { get; set; } = new();
     [BindProperty] public WageEditInput WageEdit { get; set; } = new();
     [BindProperty] public ExpenseEditInput ExpenseEdit { get; set; } = new();
     [BindProperty] public OtherEditInput OtherEdit { get; set; } = new();
@@ -66,7 +73,9 @@ public sealed class DetailsModel(
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Edit = Edit == "profile" && CanManageEmployee ? "profile" : null;
-        return await LoadAsync(cancellationToken) ? Page() : NotFound();
+        if (!await LoadAsync(cancellationToken)) return NotFound();
+        InitializeAffiliationInput();
+        return Page();
     }
 
     public Task<IActionResult> OnPostUpdateEmployeeAsync(CancellationToken cancellationToken) => ExecuteAsync(async () =>
@@ -99,6 +108,42 @@ public sealed class DetailsModel(
                 EmployeeInput.IsProjectResponsible),
             cancellationToken);
     }, Tab, cancellationToken, "profile");
+
+    public Task<IActionResult> OnPostSaveAffiliationAsync(CancellationToken cancellationToken) => ExecuteAsync(async () =>
+    {
+        if (!CanManageEmployee) throw new UnauthorizedAccessException();
+        if (personnelService is null) throw new InvalidOperationException("统一人员服务尚未启用。");
+
+        var personId = await personnelService.ResolvePersonIdForEmployeeAsync(Id, cancellationToken)
+            ?? throw new InvalidOperationException("当前员工尚未关联统一人员档案。");
+        var person = await personnelService.GetAsync(personId, AffiliationInput.EffectiveDate, CanViewSensitive, cancellationToken)
+            ?? throw new InvalidOperationException("统一人员档案不存在。");
+        var current = person.CurrentAffiliation
+            ?? throw new InvalidOperationException("当前人员没有可变更的有效归属。");
+        var (legalEntityId, businessPartnerId) = ParseOwnerKey(AffiliationInput.OwnerKey);
+        var crewBusinessPartnerId = current.Scope == PersonnelScope.External
+            && current.ExternalType == ExternalPersonnelType.ConstructionCrew
+            ? businessPartnerId
+            : AffiliationInput.CrewBusinessPartnerId;
+
+        await personnelService.SaveAffiliationAsync(
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown",
+            new SavePersonnelAffiliationRequest(
+                personId,
+                current.Scope,
+                current.InternalType,
+                current.ExternalType,
+                legalEntityId,
+                businessPartnerId,
+                AffiliationInput.OrganizationUnitId,
+                AffiliationInput.ProjectId,
+                crewBusinessPartnerId,
+                AffiliationInput.PositionTitle,
+                AffiliationInput.EffectiveDate,
+                AffiliationInput.Reason,
+                AffiliationInput.ConcurrencyStamp),
+            cancellationToken);
+    }, Tab, cancellationToken);
 
     public Task<IActionResult> OnPostAddWageAsync(CancellationToken cancellationToken) => ExecuteAsync(async () =>
     {
@@ -254,7 +299,56 @@ public sealed class DetailsModel(
         LegalEntities = organization.LegalEntities.Where(item => item.IsActive).ToArray();
         Projects = await projectService.ListProjectsAsync(null, null, cancellationToken);
         LaborPartners = await partnerService.ListAsync(null, BusinessPartnerRoleType.ConstructionCrew, cancellationToken);
+        if (personnelService is not null)
+        {
+            PersonId = await personnelService.ResolvePersonIdForEmployeeAsync(Id, cancellationToken);
+            if (PersonId.HasValue)
+            {
+                PersonnelDetails = await personnelService.GetAsync(PersonId.Value, null, CanViewSensitive, cancellationToken);
+                AffiliationOptions = await personnelService.GetOptionsAsync(cancellationToken);
+            }
+        }
         return true;
+    }
+
+    private void InitializeAffiliationInput()
+    {
+        var current = PersonnelDetails?.CurrentAffiliation;
+        if (current is null) return;
+        AffiliationInput = new PersonnelAffiliationInput
+        {
+            OwnerKey = current.LegalEntityId.HasValue
+                ? $"legal:{current.LegalEntityId.Value}"
+                : current.BusinessPartnerId.HasValue
+                    ? $"partner:{current.BusinessPartnerId.Value}"
+                    : null,
+            LegalEntityId = current.LegalEntityId,
+            BusinessPartnerId = current.BusinessPartnerId,
+            OrganizationUnitId = current.OrganizationUnitId,
+            ProjectId = current.ProjectId,
+            CrewBusinessPartnerId = current.CrewBusinessPartnerId,
+            PositionTitle = current.PositionTitle,
+            EffectiveDate = DateOnly.FromDateTime(DateTime.Today),
+            Reason = "调整当前归属",
+            ConcurrencyStamp = current.ConcurrencyStamp
+        };
+    }
+
+    private static (Guid? LegalEntityId, Guid? BusinessPartnerId) ParseOwnerKey(string? ownerKey)
+    {
+        if (string.IsNullOrWhiteSpace(ownerKey)) throw new InvalidOperationException("请选择当前公司或单位。");
+        var parts = ownerKey.Split(':', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 || !Guid.TryParse(parts[1], out var ownerId))
+        {
+            throw new InvalidOperationException("当前公司或单位的选择无效。");
+        }
+
+        return parts[0] switch
+        {
+            "legal" => (ownerId, null),
+            "partner" => (null, ownerId),
+            _ => throw new InvalidOperationException("当前公司或单位的选择无效。")
+        };
     }
 
     private async Task<IActionResult> ExecuteAsync(Func<Task> action, string targetTab, CancellationToken cancellationToken, string? edit = null)
@@ -323,6 +417,20 @@ public sealed class DetailsModel(
         public bool IsProjectResponsible { get; set; }
         public Guid ConcurrencyStamp { get; set; }
         public string Reason { get; set; } = "快捷编辑员工资料";
+    }
+
+    public sealed class PersonnelAffiliationInput
+    {
+        public string? OwnerKey { get; set; }
+        public Guid? LegalEntityId { get; set; }
+        public Guid? BusinessPartnerId { get; set; }
+        public Guid? OrganizationUnitId { get; set; }
+        public Guid? ProjectId { get; set; }
+        public Guid? CrewBusinessPartnerId { get; set; }
+        public string? PositionTitle { get; set; }
+        public DateOnly EffectiveDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public string Reason { get; set; } = "调整当前归属";
+        public Guid? ConcurrencyStamp { get; set; }
     }
 
     public class WageEntryInput

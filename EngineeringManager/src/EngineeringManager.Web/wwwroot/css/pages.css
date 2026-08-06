@@ -1737,6 +1737,23 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-project-detail-page .employee-profile-grid span { color: var(--app-muted); font-size: .8rem; }
 .employee-project-detail-page .employee-profile-grid strong { display: block; margin-top: .28rem; font-size: .9rem; }
 .employee-project-detail-page .employee-profile-grid [data-inline-edit-control] { width: 100%; margin-top: .3rem; }
+.employee-project-detail-page .personnel-affiliation-editor { border-top: 2px solid #f2b84b; background: linear-gradient(180deg, #fffaf0 0%, var(--app-surface) 42%); }
+.employee-project-detail-page .personnel-affiliation-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .72rem .9rem; border-bottom: 1px solid color-mix(in srgb, #f2b84b 42%, var(--app-border)); }
+.employee-project-detail-page .personnel-affiliation-heading > div { display: grid; gap: .15rem; }
+.employee-project-detail-page .personnel-affiliation-heading span,
+.employee-project-detail-page .personnel-affiliation-heading small { color: var(--app-muted); font-size: .78rem; }
+.employee-project-detail-page .personnel-affiliation-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; padding: .8rem .9rem .9rem; }
+.employee-project-detail-page .personnel-affiliation-form label { display: grid; align-content: start; gap: .28rem; min-width: 0; color: var(--app-muted); font-size: .78rem; font-weight: 700; }
+.employee-project-detail-page .personnel-affiliation-form :is(input, select) { width: 100%; min-width: 0; }
+.employee-project-detail-page .personnel-affiliation-form label small { font-size: .72rem; font-weight: 500; line-height: 1.4; }
+.employee-project-detail-page .personnel-affiliation-reason { grid-column: span 2; }
+.employee-project-detail-page .personnel-affiliation-actions { display: flex; align-items: end; justify-content: flex-end; gap: .45rem; grid-column: span 2; }
+.employee-project-detail-page .personnel-affiliation-readonly { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.employee-project-detail-page .personnel-affiliation-readonly > div { min-width: 0; padding: .72rem .8rem; border-right: 1px solid var(--app-border); }
+.employee-project-detail-page .personnel-affiliation-readonly > div:last-child { border-right: 0; }
+.employee-project-detail-page .personnel-affiliation-readonly span { color: var(--app-muted); font-size: .78rem; }
+.employee-project-detail-page .personnel-affiliation-readonly strong { display: block; margin-top: .28rem; overflow-wrap: anywhere; }
+.employee-project-detail-page [data-personnel-affiliation] option[hidden] { display: none; }
 .employee-project-detail-page .employee-profile-panel [data-inline-edit-actions] { margin: 0; padding: .75rem 1rem; border-top: 1px solid var(--app-border); background: var(--app-surface-raised); }
 .employee-project-detail-page .employee-detail-layout { grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem); align-items: stretch; }
 .employee-project-detail-page .employee-detail-layout > main { align-content: start; }
@@ -1765,6 +1782,8 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
   .employee-project-detail-page .employee-profile-grid > div:nth-child(2n) { border-right: 0; }
   .employee-project-detail-page .employee-profile-grid > div:nth-last-child(-n+4) { border-bottom: 1px solid var(--app-border); }
   .employee-project-detail-page .employee-profile-grid > div:nth-last-child(-n+2) { border-bottom: 0; }
+  .employee-project-detail-page .personnel-affiliation-form,
+  .employee-project-detail-page .personnel-affiliation-readonly { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 680px) {
@@ -1780,6 +1799,14 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
   .employee-project-detail-page .employee-profile-grid > div:nth-child(2n),
   .employee-project-detail-page .employee-profile-grid > div:nth-last-child(-n+2) { border-right: 0; border-bottom: 1px solid var(--app-border); }
   .employee-project-detail-page .employee-profile-grid > div:last-child { border-bottom: 0; }
+  .employee-project-detail-page .personnel-affiliation-heading { align-items: flex-start; flex-direction: column; }
+  .employee-project-detail-page .personnel-affiliation-form,
+  .employee-project-detail-page .personnel-affiliation-readonly { grid-template-columns: minmax(0, 1fr); }
+  .employee-project-detail-page .personnel-affiliation-reason,
+  .employee-project-detail-page .personnel-affiliation-actions { grid-column: auto; }
+  .employee-project-detail-page .personnel-affiliation-actions { align-items: stretch; flex-direction: column; }
+  .employee-project-detail-page .personnel-affiliation-readonly > div { border-right: 0; border-bottom: 1px solid var(--app-border); }
+  .employee-project-detail-page .personnel-affiliation-readonly > div:last-child { border-bottom: 0; }
   .employee-project-detail-page .employee-main-tabs a { min-height: 2.85rem; padding-inline: .7rem; }
   .employee-dialog-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .employee-dialog-metrics article:nth-child(3n) { border-right: 1px solid #d8e2ee; }
