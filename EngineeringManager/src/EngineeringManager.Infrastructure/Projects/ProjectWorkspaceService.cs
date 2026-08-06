@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Application.Partners;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
@@ -10,7 +11,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringManager.Infrastructure.Projects;
 
-public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectWorkspaceService
+public sealed class ProjectWorkspaceService(
+    ApplicationDbContext db,
+    IBusinessPartnerDirectorySynchronizer? partnerDirectorySynchronizer = null) : IProjectWorkspaceService
 {
     public async Task<ProjectWorkspaceDto?> GetAsync(Guid projectId, CancellationToken cancellationToken)
     {
@@ -319,6 +322,10 @@ public sealed class ProjectWorkspaceService(ApplicationDbContext db) : IProjectW
         {
             var entityNames = string.Join("、", exception.Entries.Select(entry => entry.Metadata.ClrType.Name).Distinct());
             throw new DbUpdateConcurrencyException($"项目资料保存发生并发冲突：{entityNames}。请刷新后重试。", exception);
+        }
+        if (partnerDirectorySynchronizer is not null)
+        {
+            await partnerDirectorySynchronizer.SynchronizeAsync(project.Id, cancellationToken);
         }
         if (previousStage != project.Stage)
         {

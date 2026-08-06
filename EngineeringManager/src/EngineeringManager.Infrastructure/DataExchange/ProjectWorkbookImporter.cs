@@ -8,6 +8,7 @@ using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Files;
 using EngineeringManager.Infrastructure.Finance;
+using EngineeringManager.Infrastructure.Partners;
 using EngineeringManager.Infrastructure.Projects;
 using EngineeringManager.Domain.StageResults;
 using EngineeringManager.Domain.Partners;
@@ -95,6 +96,7 @@ public sealed class ProjectWorkbookImporter(ApplicationDbContext db, IFileStore?
             await SynchronizeProjectQuantityPostingsAsync(validated.Workbook, actor, cancellationToken);
             await WriteProjectDetailsAsync(validated.Workbook, options.BlankMeansNoChange, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
+            await new BusinessPartnerDirectorySynchronizer(db).SynchronizeAsync(null, cancellationToken);
             await WriteFinanceAsync(validated.Workbook, options.BlankMeansNoChange, actor.UserId, cancellationToken);
             try
             {

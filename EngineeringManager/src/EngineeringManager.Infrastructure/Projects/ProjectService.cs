@@ -1,4 +1,5 @@
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Application.Partners;
 using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Projects;
@@ -10,7 +11,9 @@ using System.Text.Json;
 
 namespace EngineeringManager.Infrastructure.Projects;
 
-public sealed class ProjectService(ApplicationDbContext db) : IProjectService
+public sealed class ProjectService(
+    ApplicationDbContext db,
+    IBusinessPartnerDirectorySynchronizer? partnerDirectorySynchronizer = null) : IProjectService
 {
     public async Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, CancellationToken cancellationToken)
     {
@@ -73,8 +76,14 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             TotalAmount = 0m
         });
 
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         db.Projects.Add(project);
         await db.SaveChangesAsync(cancellationToken);
+        if (partnerDirectorySynchronizer is not null)
+        {
+            await partnerDirectorySynchronizer.SynchronizeAsync(project.Id, cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
         return ToProjectDto(project);
     }
 

@@ -4,6 +4,7 @@ using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.DataExchange;
 using FluentAssertions;
@@ -87,6 +88,33 @@ public sealed class StandardImportTests
 
         var roles = await fixture.Db.BusinessPartnerRoles.Select(item => item.RoleType).ToListAsync();
         roles.Should().Equal(BusinessPartnerRoleType.CustomerOrGeneralContractor);
+    }
+
+    [Fact]
+    public async Task ProjectImportSynchronizesGeneralContractorsIntoPartnerDirectory()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var contractorNames = new[] { "标准导入甲方有限公司", "标准导入总包有限公司" };
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "项目导入",
+            ["项目编号", "项目名称", "项目阶段", "总包单位", "备注"],
+            [["P-STANDARD-DIRECTORY", "标准项目目录同步", "UnderConstruction", ProjectGeneralContractors.Serialize(contractorNames), null]]);
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("project-directory", ExportDataset.Projects, "项目目录.xlsx", workbook.ToArray(), null),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(preview.BatchId, CancellationToken.None);
+
+        var partners = await fixture.Db.BusinessPartners
+            .AsNoTracking()
+            .Include(item => item.Roles)
+            .OrderBy(item => item.Name)
+            .ToListAsync();
+        partners.Select(item => item.Name).Should().BeEquivalentTo(contractorNames);
+        partners.Should().OnlyContain(item => item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor));
+        (await fixture.Db.ProjectPartners.CountAsync(item => item.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor)).Should().Be(2);
     }
 
     [Fact]

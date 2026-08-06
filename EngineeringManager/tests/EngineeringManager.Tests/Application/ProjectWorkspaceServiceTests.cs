@@ -2,8 +2,10 @@ using EngineeringManager.Application.Projects;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Partners;
 using EngineeringManager.Infrastructure.Projects;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
@@ -13,6 +15,43 @@ namespace EngineeringManager.Tests.Application;
 
 public sealed class ProjectWorkspaceServiceTests
 {
+    [Fact]
+    public async Task ProjectUpdateSynchronizesGeneralContractorsIntoPartnerDirectory()
+    {
+        await using var fixture = await ProjectWorkspaceFixture.CreateAsync(synchronizePartners: true);
+        var contractorNames = new[] { "编辑项目甲方有限公司", "编辑项目总包有限公司" };
+        var request = new UpdateProjectRequest(
+            fixture.Project.Id,
+            fixture.Project.ProjectNumber,
+            fixture.Project.Name,
+            fixture.Project.ParentProjectName,
+            ProjectGeneralContractors.Serialize(contractorNames),
+            fixture.Project.GeneralContractorContact,
+            fixture.Project.GeneralContractorPhone,
+            fixture.Project.ResponsibleUserId,
+            fixture.Project.DepartmentId,
+            fixture.Project.BranchId,
+            fixture.Project.Stage,
+            fixture.Project.AffiliationType,
+            [fixture.LegalEntity.Id],
+            fixture.Project.ConcurrencyStamp,
+            "同步总包单位目录");
+
+        await fixture.Service.UpdateAsync(
+            new ProjectWorkspaceActor("workspace-user", "项目管理员"),
+            request,
+            CancellationToken.None);
+
+        var partners = await fixture.Db.BusinessPartners
+            .AsNoTracking()
+            .Include(item => item.Roles)
+            .Where(item => contractorNames.Contains(item.Name))
+            .ToListAsync();
+        partners.Select(item => item.Name).Should().BeEquivalentTo(contractorNames);
+        partners.Should().OnlyContain(item => item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor));
+        (await fixture.Db.ProjectPartners.CountAsync(item => item.ProjectId == fixture.Project.Id && item.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor)).Should().Be(2);
+    }
+
     [Fact]
     public async Task LegalEntityEditOptionsUseFullNamesWhileOverviewUsesShortNames()
     {
@@ -659,11 +698,13 @@ public sealed class ProjectWorkspaceServiceTests
     {
         private readonly SqliteConnection connection;
 
-        private ProjectWorkspaceFixture(SqliteConnection connection, ApplicationDbContext db)
+        private ProjectWorkspaceFixture(SqliteConnection connection, ApplicationDbContext db, bool synchronizePartners)
         {
             this.connection = connection;
             Db = db;
-            Service = new ProjectWorkspaceService(db);
+            Service = new ProjectWorkspaceService(
+                db,
+                synchronizePartners ? new BusinessPartnerDirectorySynchronizer(db) : null);
         }
 
         public ApplicationDbContext Db { get; }
@@ -672,13 +713,13 @@ public sealed class ProjectWorkspaceServiceTests
         public LegalEntity SecondLegalEntity { get; private set; } = null!;
         public Project Project { get; private set; } = null!;
 
-        public static async Task<ProjectWorkspaceFixture> CreateAsync()
+        public static async Task<ProjectWorkspaceFixture> CreateAsync(bool synchronizePartners = false)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
             var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
             await db.Database.EnsureCreatedAsync();
-            var fixture = new ProjectWorkspaceFixture(connection, db);
+            var fixture = new ProjectWorkspaceFixture(connection, db, synchronizePartners);
             await fixture.SeedAsync();
             return fixture;
         }

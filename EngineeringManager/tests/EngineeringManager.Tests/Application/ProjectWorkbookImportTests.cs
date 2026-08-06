@@ -5,6 +5,7 @@ using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Domain.StageResults;
@@ -119,6 +120,33 @@ public sealed class ProjectWorkbookImportTests
         (await fixture.Db.Projects.SingleAsync()).ProjectNumber.Should().Be("IMP-P");
         (await fixture.Db.Contracts.SingleAsync()).ContractNumber.Should().Be("IMP-C");
         (await fixture.Db.ContractLineItems.SingleAsync()).Quantity.Should().Be(2m);
+    }
+
+    [Fact]
+    public async Task ProjectWorkbookImportRepairsPartnerRoleFromProjectLink()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var project = new Project { ProjectNumber = "ROLE-WB-P", Name = "角色修复项目", Stage = ProjectStage.UnderConstruction };
+        var partner = new BusinessPartner { PartnerNumber = "ROLE-WB-BP", Name = "工作簿班组", ShortName = "工作簿班组" };
+        fixture.Db.AddRange(project, partner);
+        await fixture.Db.SaveChangesAsync();
+        var workbook = CreateWorkbook((ProjectWorkbookSheet.Partners, [Row(ProjectWorkbookSheet.Partners, new Dictionary<string, object?>
+        {
+            ["project_number"] = project.ProjectNumber,
+            ["partner_number"] = partner.PartnerNumber,
+            ["role_type"] = "ConstructionCrew",
+            ["is_primary"] = true,
+            ["is_active"] = true
+        })]));
+
+        var preview = await fixture.Service.PreviewAsync(
+            new ProjectWorkbookImportRequest("admin", "角色修复.xlsx", workbook, ImportMode.Mixed, Actor: ProjectWorkbookActor.Administrator("admin")),
+            CancellationToken.None);
+        preview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(ProjectWorkbookActor.Administrator("admin"), preview.BatchId, CancellationToken.None);
+
+        var role = await fixture.Db.BusinessPartnerRoles.SingleAsync(item => item.BusinessPartnerId == partner.Id);
+        role.RoleType.Should().Be(BusinessPartnerRoleType.ConstructionCrew);
     }
 
     [Fact]

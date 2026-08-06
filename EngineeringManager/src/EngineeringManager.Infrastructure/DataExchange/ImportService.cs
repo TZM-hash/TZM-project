@@ -12,6 +12,7 @@ using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.Finance;
+using EngineeringManager.Infrastructure.Partners;
 using EngineeringManager.Infrastructure.Personnel;
 using Microsoft.EntityFrameworkCore;
 
@@ -578,6 +579,10 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         {
             var entityTypes = string.Join(", ", exception.Entries.Select(item => $"{item.Metadata.ClrType.Name}:{item.State}"));
             throw new DbUpdateConcurrencyException($"通用导入写入发生并发冲突：{entityTypes}", exception);
+        }
+        if (batch.Dataset == ExportDataset.Projects)
+        {
+            await new BusinessPartnerDirectorySynchronizer(db).SynchronizeAsync(null, cancellationToken);
         }
         await transaction.CommitAsync(cancellationToken);
     }

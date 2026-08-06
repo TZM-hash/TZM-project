@@ -4,6 +4,7 @@ using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Partners;
 using EngineeringManager.Infrastructure.Projects;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
@@ -14,6 +15,34 @@ namespace EngineeringManager.Tests.Application;
 
 public sealed class ProjectServiceTests
 {
+    [Fact]
+    public async Task CreatingProjectSynchronizesGeneralContractorsIntoPartnerDirectory()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync(synchronizePartners: true);
+        var contractorNames = new[] { "新建项目甲方有限公司", "新建项目总包有限公司" };
+
+        var project = await fixture.Service.CreateProjectAsync(
+            new CreateProjectRequest(
+                "P-DIRECTORY-CREATE",
+                "新建项目目录同步",
+                ProjectGeneralContractors.Serialize(contractorNames),
+                null,
+                null,
+                null,
+                ProjectStage.AwaitingMobilization,
+                []),
+            CancellationToken.None);
+
+        var partners = await fixture.Db.BusinessPartners
+            .AsNoTracking()
+            .Include(item => item.Roles)
+            .OrderBy(item => item.Name)
+            .ToListAsync();
+        partners.Select(item => item.Name).Should().BeEquivalentTo(contractorNames);
+        partners.Should().OnlyContain(item => item.Roles.Any(role => role.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor));
+        (await fixture.Db.ProjectPartners.CountAsync(item => item.ProjectId == project.Id && item.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor)).Should().Be(2);
+    }
+
     [Fact]
     public async Task LineItemWithConfiguredCompanyAndCustomerPostsCentralReceivable()
     {
@@ -374,13 +403,16 @@ public sealed class ProjectServiceTests
         public ApplicationDbContext Db { get; }
         public IProjectService Service { get; }
 
-        public static async Task<ProjectFixture> CreateAsync()
+        public static async Task<ProjectFixture> CreateAsync(bool synchronizePartners = false)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
             var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options);
             await db.Database.EnsureCreatedAsync();
-            return new ProjectFixture(connection, db, new ProjectService(db));
+            return new ProjectFixture(
+                connection,
+                db,
+                new ProjectService(db, synchronizePartners ? new BusinessPartnerDirectorySynchronizer(db) : null));
         }
 
         public async Task<LegalEntity> AddLegalEntityAsync()
