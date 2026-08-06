@@ -9,10 +9,14 @@ public sealed class ProjectContactColumnTests
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml");
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var formatter = ReadFile("src", "EngineeringManager.Application", "Projects", "ProjectContactDisplay.cs");
 
         page.Should().Contain("project-contact-list")
-            .And.Contain("StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries")
-            .And.Contain("data-column-key=\"general_contractor_contact\"");
+            .And.Contain("ProjectContactDisplay.Format")
+            .And.Contain("data-column-key=\"general_contractor_contact\"")
+            .And.Contain("item.Project.GeneralContractorPhone")
+            .And.Contain("总包联系人 / 电话");
+        formatter.Should().Contain("StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries");
         css.Should().Contain("#projects-table [data-column-key=\"general_contractor_contact\"] { width: 11.5rem; min-width: 11.5rem; max-width: 11.5rem; white-space: normal; }")
             .And.Contain(".project-contact-list { display: grid; gap: .1rem; min-width: 0; width: 100%; max-width: 100%; }")
             .And.Contain(".project-contact-list > span { display: block; overflow-wrap: anywhere; white-space: normal; }");

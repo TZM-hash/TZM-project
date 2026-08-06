@@ -12,7 +12,7 @@ public sealed class ProjectColumnLayoutTests
         var dataTable = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "data-table.js");
 
         model.IndexOf("new(\"general_contractor\", \"总包单位\")", StringComparison.Ordinal)
-            .Should().BeLessThan(model.IndexOf("new(\"general_contractor_contact\", \"总包联系人\")", StringComparison.Ordinal));
+            .Should().BeLessThan(model.IndexOf("new(\"general_contractor_contact\", \"总包联系人 / 电话\")", StringComparison.Ordinal));
         css.Should().Contain("#projects-table [data-column-key=\"collection_progress\"], #projects-table [data-column-key=\"payment_progress\"], #projects-table [data-column-key=\"invoice_progress\"] { width: 11rem; min-width: 11rem; max-width: 11rem; }");
         dataTable.Should().Contain("project-contact-after-contractor-v1")
             .And.Contain("general_contractor_contact")

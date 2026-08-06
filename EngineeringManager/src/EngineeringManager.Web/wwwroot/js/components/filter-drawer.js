@@ -1,16 +1,16 @@
+import { deleteSearchParamsIgnoreCase } from "./url-search-params.js";
+
 function removeFilter(key) {
   const url = new URL(window.location.href);
   url.searchParams.delete(key);
-  url.searchParams.delete("page");
-  url.searchParams.delete("pageNumber");
+  deleteSearchParamsIgnoreCase(url.searchParams, ["page", "pageNumber", "savedViewId"]);
   window.location.assign(url);
 }
 
 function clearFilters(root) {
   const url = new URL(window.location.href);
   root.querySelectorAll("[data-filter-key], [data-inline-filter-key]").forEach((control) => url.searchParams.delete(control.dataset.filterKey || control.dataset.inlineFilterKey));
-  url.searchParams.delete("page");
-  url.searchParams.delete("pageNumber");
+  deleteSearchParamsIgnoreCase(url.searchParams, ["page", "pageNumber", "savedViewId"]);
   window.location.assign(url);
 }
 

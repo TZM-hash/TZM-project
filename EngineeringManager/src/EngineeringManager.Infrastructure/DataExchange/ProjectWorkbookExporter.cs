@@ -53,7 +53,7 @@ public sealed class ProjectWorkbookExporter(
             [[ProjectWorkbookVersions.Workbook, DateTimeOffset.UtcNow, projects.Count, request.Scope.Query.Search, string.Join(",", projectIds), string.Join("、", selectedSheets.Select(item => ProjectWorkbookCatalog.Get(item).WorksheetName))]]);
         workbook.AddWorksheet("_metadata", ["WorkbookVersion", "DatasetVersion", "SelectedSheets"],
             [[ProjectWorkbookVersions.Workbook, ProjectWorkbookVersions.Dataset, string.Join(",", selectedSheets)]],
-            new XlsxWorksheetOptions([], ProtectSheet: true, HiddenSheet: true));
+            new XlsxWorksheetOptions([], HiddenSheet: true));
 
         var rowCount = 0;
         foreach (var sheet in selectedSheets)
@@ -83,7 +83,7 @@ public sealed class ProjectWorkbookExporter(
             var materialized = rows.ToArray();
             rowCount += materialized.Length;
             workbook.AddWorksheet(definition.WorksheetName, fields.Select(item => item.Header).ToArray(), materialized,
-                new XlsxWorksheetOptions(fields.Select((field, index) => (field, index)).Where(item => item.field.IsHidden).Select(item => item.index).ToArray(), ProtectSheet: true));
+                new XlsxWorksheetOptions(fields.Select((field, index) => (field, index)).Where(item => item.field.IsHidden).Select(item => item.index).ToArray()));
         }
 
         var workbookBytes = workbook.ToArray();
@@ -117,7 +117,7 @@ public sealed class ProjectWorkbookExporter(
             "项目清单",
             page.Headers,
             page.Rows,
-            new XlsxWorksheetOptions([], ProtectSheet: true));
+            ProjectListWorkbookExporter.CreateWorksheetOptions(page.ColumnKeys, page.TotalRow));
 
         var attachmentRowCount = 0;
         if (request.IncludeAttachments)
@@ -131,7 +131,7 @@ public sealed class ProjectWorkbookExporter(
                 "附件清单",
                 fields.Select(item => item.Header).ToArray(),
                 rows,
-                new XlsxWorksheetOptions(fields.Select((field, index) => (field, index)).Where(item => item.field.IsHidden).Select(item => item.index).ToArray(), ProtectSheet: true));
+                new XlsxWorksheetOptions(fields.Select((field, index) => (field, index)).Where(item => item.field.IsHidden).Select(item => item.index).ToArray()));
         }
 
         var workbookBytes = workbook.ToArray();

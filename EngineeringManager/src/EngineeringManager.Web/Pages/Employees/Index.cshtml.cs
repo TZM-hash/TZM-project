@@ -24,6 +24,7 @@ public sealed class IndexModel(
     public decimal CurrentYearPayableTotal => AnnualSummaries.Values.Sum(item => item.CurrentYearNewPayable);
     public decimal CurrentYearPaidTotal => AnnualSummaries.Values.Sum(item => item.ReceivedAmount);
     public decimal CurrentYearUnpaidTotal => CurrentYearPayableTotal - CurrentYearPaidTotal;
+    public int SummaryTotalCount { get; private set; }
     public int TotalCount { get; private set; }
     public int FormalCount { get; private set; }
     public int LaborCount { get; private set; }
@@ -109,17 +110,20 @@ public sealed class IndexModel(
         PageNumber = Math.Max(1, PageNumber);
         var allEmployees = await employeeService.ListAsync(null, CanManage, cancellationToken);
         NextEmployeeNumber = ShortBusinessNumber.Next(allEmployees.Select(item => item.EmployeeNumber), "YG");
-        var all = string.IsNullOrWhiteSpace(Search)
+        var filteredEmployees = string.IsNullOrWhiteSpace(Search)
             ? allEmployees
             : await employeeService.ListAsync(Search, CanManage, cancellationToken);
-        all = EmployeeType.HasValue
-            ? all.Where(employee => employee.EmployeeType == EmployeeType.Value).ToArray()
-            : all;
+
+        SummaryTotalCount = allEmployees.Count;
+        FormalCount = allEmployees.Count(employee => employee.EmployeeType == global::EngineeringManager.Domain.Employees.EmployeeType.Formal);
+        LaborCount = allEmployees.Count(employee => employee.EmployeeType == global::EngineeringManager.Domain.Employees.EmployeeType.Labor);
+        TemporaryCount = allEmployees.Count(employee => employee.EmployeeType == global::EngineeringManager.Domain.Employees.EmployeeType.Temporary);
+        ActiveCount = allEmployees.Count(employee => employee.IsActive);
+
+        var all = EmployeeType.HasValue
+            ? filteredEmployees.Where(employee => employee.EmployeeType == EmployeeType.Value).ToArray()
+            : filteredEmployees;
         TotalCount = all.Count;
-        FormalCount = all.Count(employee => employee.EmployeeType == global::EngineeringManager.Domain.Employees.EmployeeType.Formal);
-        LaborCount = all.Count(employee => employee.EmployeeType == global::EngineeringManager.Domain.Employees.EmployeeType.Labor);
-        TemporaryCount = all.Count(employee => employee.EmployeeType == global::EngineeringManager.Domain.Employees.EmployeeType.Temporary);
-        ActiveCount = all.Count(employee => employee.IsActive);
 
         if (businessYearService is not null && annualLedgerService is not null)
         {
@@ -131,7 +135,7 @@ public sealed class IndexModel(
                 CurrentBusinessYearId = current.Id;
                 var summaries = new Dictionary<Guid, EmployeeAnnualLedgerSummary>();
                 var penalties = new Dictionary<Guid, decimal>();
-                foreach (var employee in all)
+                foreach (var employee in allEmployees)
                 {
                     var ledger = await annualLedgerService.GetAnnualLedgerAsync(employee.Id, current.Id, cancellationToken);
                     summaries[employee.Id] = ledger.Summary;

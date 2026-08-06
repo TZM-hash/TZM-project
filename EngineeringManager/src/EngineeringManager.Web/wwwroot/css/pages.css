@@ -85,6 +85,8 @@
 .overview-strip strong { display: block; margin-top: .28rem; overflow: hidden; font-size: clamp(1.05rem, 1.4vw, 1.28rem); font-variant-numeric: tabular-nums; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
 .project-index-heading { margin-bottom: .8rem; }
 .project-index-heading h1 { font-size: clamp(1.45rem, 2.2vw, 1.9rem); }
+.project-overview-strip { grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
+.project-overview-strip strong { overflow: visible; font-size: 1rem; text-overflow: clip; }
 #projects-table { width: max-content; min-width: 100%; }
 #projects-table [data-column-key="stage"] { width: 7.2rem; max-width: 7.2rem; }
 #projects-table [data-column-key="settlement_status"] { width: 5.8rem; max-width: 5.8rem; }

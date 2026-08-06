@@ -70,6 +70,10 @@ public sealed class Program
             Args = args,
             WebRootPath = Directory.Exists(bundledWebRootPath) ? bundledWebRootPath : null
         });
+        if (!builder.Environment.IsDevelopment())
+        {
+            builder.WebHost.UseStaticWebAssets();
+        }
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
 

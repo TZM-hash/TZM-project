@@ -83,6 +83,22 @@ public sealed class EmployeeIndexPageTests
     }
 
     [Fact]
+    public async Task EmployeeTypeFilterDoesNotChangeEmployeeSummaryCounts()
+    {
+        var service = new RecordingEmployeeService();
+        var model = new IndexModel(service) { EmployeeType = EmployeeType.Formal };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        model.Employees.Should().ContainSingle();
+        model.SummaryTotalCount.Should().Be(3);
+        model.FormalCount.Should().Be(1);
+        model.LaborCount.Should().Be(1);
+        model.TemporaryCount.Should().Be(1);
+        model.ActiveCount.Should().Be(3);
+    }
+
+    [Fact]
     public void EmployeeIndexOffersAllEmployeeTypeLabelsInSharedInlineFilter()
     {
         var razor = ReadPage("Employees", "Index.cshtml");
@@ -118,6 +134,7 @@ public sealed class EmployeeIndexPageTests
             .And.Contain("人员经营台账")
             .And.Contain("_EmployeeSubNavigation")
             .And.Contain("当前业务年度应付总额")
+            .And.Contain("SummaryTotalCount")
             .And.Contain("data-column-key=\"phone\"")
             .And.Contain("data-column-key=\"payable\"")
             .And.Contain("data-column-key=\"paid\"")

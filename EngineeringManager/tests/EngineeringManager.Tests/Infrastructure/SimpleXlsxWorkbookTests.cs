@@ -120,4 +120,43 @@ public sealed class SimpleXlsxWorkbookTests
         row[1].Should().BeNull();
         row[2].Should().Be("id");
     }
+
+    [Fact]
+    public void StyledWorksheetWritesReadableLayoutMetadata()
+    {
+        var workbook = new SimpleXlsxWorkbook();
+        workbook.AddWorksheet(
+            "项目清单",
+            ["序号", "项目名称", "合同金额"],
+            [[1, "这是一个需要换行显示的项目名称", 1234.5m]],
+            new XlsxWorksheetOptions(
+                ColumnOptions: new Dictionary<int, XlsxColumnOptions>
+                {
+                    [0] = new(Width: 8, HorizontalAlignment: XlsxHorizontalAlignment.Center),
+                    [1] = new(Width: 30, WrapText: true, HorizontalAlignment: XlsxHorizontalAlignment.Left),
+                    [2] = new(Width: 16, HorizontalAlignment: XlsxHorizontalAlignment.Right, NumberFormat: "#,##0.00")
+                },
+                FreezeTopRow: true,
+                AutoFilter: true,
+                AutoFitWrappedRows: true,
+                HideGridLines: true,
+                ProtectSheet: true));
+
+        using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(workbook.ToArray()), System.IO.Compression.ZipArchiveMode.Read);
+        var worksheet = XDocument.Load(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        var styles = XDocument.Load(archive.GetEntry("xl/styles.xml")!.Open());
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+        worksheet.Descendants(spreadsheet + "col").Single(column => (string?)column.Attribute("min") == "2")
+            .Attribute("width")!.Value.Should().Be("30");
+        worksheet.Descendants(spreadsheet + "row").Skip(1).Single().Attribute("ht")!.Value.Should().Be("30");
+        worksheet.Descendants(spreadsheet + "pane").Single().Attribute("state")!.Value.Should().Be("frozen");
+        worksheet.Descendants(spreadsheet + "autoFilter").Single().Attribute("ref")!.Value.Should().Be("A1:C2");
+        worksheet.Descendants(spreadsheet + "sheetView").Single().Attribute("showGridLines")!.Value.Should().Be("0");
+        worksheet.Descendants(spreadsheet + "c").Single(cell => (string?)cell.Attribute("r") == "B2")
+            .Attribute("s").Should().NotBeNull();
+        styles.Descendants(spreadsheet + "alignment").Should().Contain(item => (string?)item.Attribute("wrapText") == "1");
+        styles.Descendants(spreadsheet + "border").Should().Contain(item => item.Elements().Any());
+        styles.Descendants(spreadsheet + "numFmt").Should().Contain(item => (string?)item.Attribute("formatCode") == "#,##0.00");
+    }
 }

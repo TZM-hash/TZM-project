@@ -23,16 +23,70 @@ public sealed class IndexModel(
     ISavedDataViewService savedViewService,
     IProjectWorkbookService projectWorkbookService) : PageModel
 {
+    private const string ExportViewKey = "projects-export";
+    private const string ExportViewName = "项目清单导出列";
+    private const string NoExportableProjectsMessage = "没有可导出的项目。";
+    private const string ExportColumnModeContent = "content";
+    private const string ExportColumnModeTable = "table";
+    private static readonly DataWorkbenchColumn[] ProjectExportColumnDefinitions =
+    [
+        new("serial_number", "序号"),
+        new("project_number", "项目编号"),
+        new("project_name", "项目名称"),
+        new("stage", "阶段"),
+        new("contract_signing_status", "合同签订"),
+        new("affiliation_type", "合作方式"),
+        new("parent_project", "上级项目"),
+        new("general_contractor", "总包单位"),
+        new("general_contractor_contact", "总包联系人 / 电话"),
+        new("responsible_user", "项目负责人"),
+        new("department", "部门"),
+        new("branch", "分支机构"),
+        new("legal_entities", "签约公司"),
+        new("actual_start_date", "实际开始日期"),
+        new("actual_completion_date", "实际完工日期"),
+        new("contract_amount", "合同金额"),
+        new("estimated_amount", "预计金额"),
+        new("settled_amount", "已结算金额"),
+        new("current_project_amount", "当前工程金额"),
+        new("settlement_status", "结算状态"),
+        new("contract_count", "合同数量"),
+        new("line_item_count", "清单项数量"),
+        new("collection_rate", "收款率"),
+        new("collection_receivable_amount", "应收金额"),
+        new("collection_collected_amount", "已收金额"),
+        new("collection_uncollected_amount", "未收金额"),
+        new("payment_rate", "付款率"),
+        new("payment_payable_amount", "应付金额"),
+        new("payment_paid_amount", "已付金额"),
+        new("payment_unpaid_amount", "未付金额"),
+        new("invoice_rate", "开票率"),
+        new("invoice_invoiced_amount", "已开票金额"),
+        new("invoice_uninvoiced_amount", "未开票金额"),
+        new("notes", "备注摘要")
+    ];
+    private static readonly string[] ProjectExportColumnKeys = ProjectExportColumnDefinitions.Select(column => column.Key).ToArray();
+
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
         new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "ResponsibleEmployeeId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
-        new HashSet<string>(["serial_number", "project_number", "project_name", "stage", "contract_signing_status", "affiliation_type", "parent_project", "general_contractor", "general_contractor_contact", "responsible_user", "department", "branch", "legal_entities", "actual_start_date", "actual_completion_date", "contract_amount", "estimated_amount", "settled_amount", "current_project_amount", "settlement_status", "contract_count", "line_item_count", "collection_progress", "payment_progress", "invoice_progress", "notes", "actions"], StringComparer.Ordinal),
+        new HashSet<string>(ProjectExportColumnKeys.Append("actions"), StringComparer.Ordinal),
         new HashSet<string>(["ProjectNumber", "Name", "Stage", "ContractAmount", "CurrentAmount", "SettlementStatus"], StringComparer.Ordinal));
+
+    private static readonly DataViewDefinition ExportViewDefinition = new(
+        ExportViewKey,
+        new HashSet<string>(StringComparer.Ordinal),
+        new HashSet<string>(ProjectExportColumnKeys, StringComparer.Ordinal),
+        new HashSet<string>(StringComparer.Ordinal));
 
     public ProjectListPageDto Result { get; private set; } = new([], new ProjectListAggregateDto(0, 0m, 0m, 0), 1, 20, 0, 1, []);
     public FinanceProjectSummaryDto FinanceTotal { get; private set; } = EmptyFinanceSummary();
     public IReadOnlyDictionary<Guid, FinanceProjectSummaryDto> FinanceByProjectId { get; private set; } = new Dictionary<Guid, FinanceProjectSummaryDto>();
     public DataWorkbenchViewModel Workbench { get; private set; } = null!;
+    public IReadOnlyList<DataWorkbenchColumn> ProjectExportColumns => ProjectExportColumnDefinitions;
+    public IReadOnlyList<DataWorkbenchFilterField> ProjectExportFilters { get; private set; } = [];
+    public bool UsesTableExportColumns => string.Equals(NormalizeExportColumnMode(ExportColumnMode), ExportColumnModeTable, StringComparison.Ordinal);
+    public bool UsesContentExportColumns => !UsesTableExportColumns;
     public bool CanExportWorkbook => WorkbookActor().CanExport;
     public bool CanExportFullWorkbook => WorkbookActor().CanExportFullWorkbook;
     public bool CanExportWorkbookAttachments => WorkbookActor().CanExportAttachments;
@@ -54,6 +108,17 @@ public sealed class IndexModel(
     [BindProperty] public List<Guid> SelectedProjectIds { get; set; } = [];
     [BindProperty] public bool SelectAllMatching { get; set; }
     [BindProperty] public List<string> ExportColumns { get; set; } = [];
+    [BindProperty] public List<string> TableExportColumns { get; set; } = [];
+    [BindProperty] public string ExportColumnMode { get; set; } = ExportColumnModeContent;
+    [BindProperty] public bool ExportFiltersInitialized { get; set; }
+    [BindProperty] public string? ExportSearch { get; set; }
+    [BindProperty] public List<ProjectStage> ExportStages { get; set; } = [];
+    [BindProperty] public Guid? ExportLegalEntityId { get; set; }
+    [BindProperty] public string? ExportResponsibleUserId { get; set; }
+    [BindProperty] public Guid? ExportResponsibleEmployeeId { get; set; }
+    [BindProperty] public ProjectAffiliationType? ExportAffiliationType { get; set; }
+    [BindProperty] public decimal? ExportMinimumCurrentAmount { get; set; }
+    [BindProperty] public decimal? ExportMaximumCurrentAmount { get; set; }
     [BindProperty] public bool IncludeWorkbookAttachments { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
@@ -74,21 +139,41 @@ public sealed class IndexModel(
     public async Task<IActionResult> OnPostExportWorkbookAsync(CancellationToken cancellationToken)
     {
         if (!CanExportWorkbook) return Forbid();
+        ExportColumnMode = NormalizeExportColumnMode(ExportColumnMode);
         if (SelectedProjectIds.Count > 0) SelectAllMatching = false;
         if (!SelectAllMatching && SelectedProjectIds.Count == 0)
         {
             ModelState.AddModelError(string.Empty, "请至少勾选一个项目，或选择导出当前筛选命中的全部项目。");
-            await LoadAsync(cancellationToken);
+            await LoadAsync(cancellationToken, loadExportColumns: false, applyDefaultSavedView: false);
             return Page();
         }
+        var requestedColumns = UsesTableExportColumns ? TableExportColumns : ExportColumns;
+        ExportColumns = NormalizeExportColumns(requestedColumns).ToList();
+        if (ExportColumns.Count == 0)
+        {
+            ModelState.AddModelError(nameof(ExportColumns), "请至少选择一列导出。");
+            await LoadAsync(cancellationToken, loadExportColumns: false, applyDefaultSavedView: false);
+            return Page();
+        }
+        if (UsesContentExportColumns) await SaveExportColumnsAsync(cancellationToken);
+        var exportQuery = SelectAllMatching ? ExportQuery() : Query();
         var request = new ProjectWorkbookExportRequest(
-            new ProjectWorkbookScope(Actor(), Query(), SelectAllMatching, SelectedProjectIds),
+            new ProjectWorkbookScope(Actor(), exportQuery, SelectAllMatching, SelectedProjectIds),
             [ProjectWorkbookSheet.ProjectMaster],
             IncludeAttachments: IncludeWorkbookAttachments,
             Actor: WorkbookActor(),
             ProjectListColumns: ExportColumns);
-        var file = await projectWorkbookService.ExportAsync(request, cancellationToken);
-        return File(file.Content, file.ContentType, file.FileName);
+        try
+        {
+            var file = await projectWorkbookService.ExportAsync(request, cancellationToken);
+            return File(file.Content, file.ContentType, file.FileName);
+        }
+        catch (InvalidOperationException exception) when (string.Equals(exception.Message, NoExportableProjectsMessage, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError(string.Empty, "当前筛选没有可导出的项目，请调整筛选条件后重试。");
+            await LoadAsync(cancellationToken, loadExportColumns: false, applyDefaultSavedView: false);
+            return Page();
+        }
     }
 
     public string PageUrl(int page)
@@ -99,17 +184,23 @@ public sealed class IndexModel(
         return $"{Request.Path}{QueryString.Create(pairs)}";
     }
 
-    private async Task LoadAsync(CancellationToken cancellationToken)
+    private async Task LoadAsync(CancellationToken cancellationToken, bool loadExportColumns = true, bool applyDefaultSavedView = true)
     {
         PageSize = NormalizePageSize(PageSize);
         PageNumber = Math.Max(1, PageNumber);
         var views = await savedViewService.ListAsync(UserId(), ViewDefinition, cancellationToken);
-        var selected = SavedViewId.HasValue ? views.FirstOrDefault(item => item.Id == SavedViewId) : Request.Query.Count == 0 ? views.FirstOrDefault(item => item.IsDefault) : null;
+        if (loadExportColumns && CanExportWorkbook) await LoadExportColumnsAsync(cancellationToken);
+        var selected = SavedViewId.HasValue
+            ? views.FirstOrDefault(item => item.Id == SavedViewId)
+            : applyDefaultSavedView && Request.Query.Count == 0
+                ? views.FirstOrDefault(item => item.IsDefault)
+                : null;
         if (selected is not null)
         {
             SavedViewId = selected.Id;
             ApplySavedView(selected);
         }
+        InitializeExportFiltersForGet();
 
         var actor = Actor();
         Result = await projectService.SearchProjectsAsync(actor, Query(), cancellationToken);
@@ -120,7 +211,114 @@ public sealed class IndexModel(
         FinanceByProjectId = financeItems.ToDictionary(item => item.ProjectId, item => item.Summary);
         FinanceTotal = SumFinance(financeItems.Select(item => item.Summary));
         var options = await projectService.GetListOptionsAsync(actor, cancellationToken);
+        ProjectExportFilters = BuildProjectExportFilters(options);
         Workbench = BuildWorkbench(views, options, selected);
+    }
+
+    private void InitializeExportFiltersForGet()
+    {
+        if (!HttpMethods.IsGet(Request.Method)) return;
+
+        ExportFiltersInitialized = true;
+        ExportSearch = Search;
+        ExportStages = [.. Stages];
+        ExportLegalEntityId = LegalEntityId;
+        ExportResponsibleUserId = ResponsibleUserId;
+        ExportResponsibleEmployeeId = ResponsibleEmployeeId;
+        ExportAffiliationType = AffiliationType;
+        ExportMinimumCurrentAmount = MinimumCurrentAmount;
+        ExportMaximumCurrentAmount = MaximumCurrentAmount;
+    }
+
+    private async Task LoadExportColumnsAsync(CancellationToken cancellationToken)
+    {
+        var savedViews = await savedViewService.ListAsync(UserId(), ExportViewDefinition, cancellationToken);
+        var saved = savedViews.FirstOrDefault(item => string.Equals(item.Name, ExportViewName, StringComparison.Ordinal));
+        var requested = ProjectExportColumnKeys;
+        if (saved is not null)
+        {
+            try
+            {
+                requested = JsonSerializer.Deserialize<string[]>(saved.ColumnJson) ?? [];
+            }
+            catch (JsonException)
+            {
+                requested = [];
+            }
+        }
+
+        ExportColumns = NormalizeExportColumns(requested).ToList();
+        if (ExportColumns.Count == 0) ExportColumns = ProjectExportColumnKeys.ToList();
+    }
+
+    private async Task SaveExportColumnsAsync(CancellationToken cancellationToken)
+    {
+        await savedViewService.SaveAsync(
+            UserId(),
+            new SaveDataViewRequest(
+                null,
+                ExportViewKey,
+                ExportViewName,
+                true,
+                "{}",
+                JsonSerializer.Serialize(ExportColumns),
+                null,
+                false,
+                TableDensity.Standard,
+                20),
+            ExportViewDefinition,
+            cancellationToken);
+    }
+
+    private static string[] NormalizeExportColumns(IEnumerable<string>? columns)
+    {
+        var requested = columns?.ToHashSet(StringComparer.Ordinal) ?? [];
+        return ProjectExportColumnKeys.Where(requested.Contains).ToArray();
+    }
+
+    private static string NormalizeExportColumnMode(string? mode) =>
+        string.Equals(mode, ExportColumnModeTable, StringComparison.OrdinalIgnoreCase)
+            ? ExportColumnModeTable
+            : ExportColumnModeContent;
+
+    private ProjectListQuery ExportQuery() => new(
+        ExportFiltersInitialized ? ExportSearch : Search,
+        ExportFiltersInitialized ? ExportStages : Stages,
+        ExportFiltersInitialized ? ExportLegalEntityId : LegalEntityId,
+        ExportFiltersInitialized ? ExportResponsibleUserId : ResponsibleUserId,
+        ExportFiltersInitialized ? ExportMinimumCurrentAmount : MinimumCurrentAmount,
+        ExportFiltersInitialized ? ExportMaximumCurrentAmount : MaximumCurrentAmount,
+        SortKey,
+        SortDescending,
+        1,
+        100,
+        ExportFiltersInitialized ? ExportAffiliationType : AffiliationType,
+        false,
+        ExportFiltersInitialized ? ExportResponsibleEmployeeId : ResponsibleEmployeeId);
+
+    private IReadOnlyList<DataWorkbenchFilterField> BuildProjectExportFilters(ProjectListOptionsDto options) =>
+    [
+        new("ExportSearch", "关键词", ExportFiltersInitialized ? ExportSearch : Search, Placeholder: "项目、合同、清单、公司、合作单位、备注"),
+        new("ExportStages", "项目阶段", ExportStageValue(), DataWorkbenchFilterKind.Select,
+            Enum.GetValues<ProjectStage>().Select(value => new DataWorkbenchFilterOption(((int)value).ToString(System.Globalization.CultureInfo.InvariantCulture), StageLabel(value))).ToArray()),
+        new("ExportLegalEntityId", "签约公司", (ExportFiltersInitialized ? ExportLegalEntityId : LegalEntityId)?.ToString(), DataWorkbenchFilterKind.Select,
+            options.LegalEntities.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
+        new("ExportResponsibleUserId", "负责人账号", ExportFiltersInitialized ? ExportResponsibleUserId : ResponsibleUserId, DataWorkbenchFilterKind.Select,
+            options.ResponsibleUsers.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
+        new("ExportResponsibleEmployeeId", "员工负责人", (ExportFiltersInitialized ? ExportResponsibleEmployeeId : ResponsibleEmployeeId)?.ToString(), DataWorkbenchFilterKind.Select,
+            (options.ResponsibleEmployees ?? []).Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
+        new("ExportAffiliationType", "合作方式", (ExportFiltersInitialized ? ExportAffiliationType : AffiliationType) is { } affiliation ? ((int)affiliation).ToString(System.Globalization.CultureInfo.InvariantCulture) : null, DataWorkbenchFilterKind.Select,
+            [new("1", "自营项目"), new("2", "他方挂靠我方"), new("3", "我方挂靠他方")]),
+        new("ExportMinimumCurrentAmount", "最低当前金额", (ExportFiltersInitialized ? ExportMinimumCurrentAmount : MinimumCurrentAmount)?.ToString(System.Globalization.CultureInfo.InvariantCulture), DataWorkbenchFilterKind.Number),
+        new("ExportMaximumCurrentAmount", "最高当前金额", (ExportFiltersInitialized ? ExportMaximumCurrentAmount : MaximumCurrentAmount)?.ToString(System.Globalization.CultureInfo.InvariantCulture), DataWorkbenchFilterKind.Number)
+    ];
+
+    private string? ExportStageValue()
+    {
+        var stages = ExportFiltersInitialized ? ExportStages : Stages;
+        return stages.Count > 0
+            ? ((int)stages[0]).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : null;
     }
 
     private ProjectListQuery Query() => new(
@@ -186,7 +384,7 @@ public sealed class IndexModel(
                 new("affiliation_type", "合作方式"),
                 new("parent_project", "上级项目"),
                 new("general_contractor", "总包单位"),
-                new("general_contractor_contact", "总包联系人"),
+                new("general_contractor_contact", "总包联系人 / 电话"),
                 new("responsible_user", "项目负责人"),
                 new("department", "部门"),
                 new("branch", "分支机构"),

@@ -54,6 +54,38 @@ public sealed class SavedDataViewServiceTests
         saved.SortKey.Should().BeNull();
     }
 
+    [Fact]
+    public async Task ColumnObjectStateIsSanitizedAndRestored()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var saved = await fixture.Service.SaveAsync(
+            "u1",
+            new SaveDataViewRequest(
+                null,
+                "projects",
+                "列配置",
+                false,
+                "{}",
+                "[{\"key\":\"Name\",\"visible\":false,\"fixed\":false,\"order\":1},{\"key\":\"ProjectNumber\",\"visible\":true,\"fixed\":true,\"order\":0},{\"key\":\"RemovedColumn\",\"visible\":true,\"order\":2}]",
+                null,
+                false,
+                TableDensity.Standard,
+                20),
+            Definition,
+            default);
+
+        using var columns = JsonDocument.Parse(saved.ColumnJson);
+        columns.RootElement.GetArrayLength().Should().Be(2);
+        columns.RootElement[0].GetProperty("key").GetString().Should().Be("ProjectNumber");
+        columns.RootElement[0].GetProperty("visible").GetBoolean().Should().BeTrue();
+        columns.RootElement[0].GetProperty("fixed").GetBoolean().Should().BeTrue();
+        columns.RootElement[1].GetProperty("key").GetString().Should().Be("Name");
+        columns.RootElement[1].GetProperty("visible").GetBoolean().Should().BeFalse();
+
+        var listed = await fixture.Service.ListAsync("u1", Definition, default);
+        listed.Should().ContainSingle().Which.ColumnJson.Should().Be(saved.ColumnJson);
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

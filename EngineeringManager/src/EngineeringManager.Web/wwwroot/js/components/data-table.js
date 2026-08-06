@@ -44,7 +44,11 @@ function readColumnState(root) {
 
 function normalizeColumns(root, requested) {
   const defaults = readColumnState(root);
-  const requestedMap = new Map((Array.isArray(requested) ? requested : []).map((item) => [item.key, item]));
+  const requestedMap = new Map();
+  (Array.isArray(requested) ? requested : []).forEach((item, index) => {
+    const column = typeof item === "string" ? { key: item, visible: true, fixed: false, order: index } : item;
+    if (column?.key) requestedMap.set(column.key, column);
+  });
   return defaults
     .map((item, fallbackOrder) => {
       const saved = requestedMap.get(item.key);

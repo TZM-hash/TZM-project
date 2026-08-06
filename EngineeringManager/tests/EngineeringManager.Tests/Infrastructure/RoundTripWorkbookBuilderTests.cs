@@ -10,7 +10,7 @@ namespace EngineeringManager.Tests.Infrastructure;
 public sealed class RoundTripWorkbookBuilderTests
 {
     [Fact]
-    public void StandardWorkbookContainsDirectoryDescriptionAndProtectedControlColumns()
+    public void StandardWorkbookContainsDirectoryDescriptionAndEditableControlColumns()
     {
         var builder = new RoundTripWorkbookBuilder();
         var bytes = builder.Build(new RoundTripWorkbookRequest(
@@ -48,9 +48,33 @@ public sealed class RoundTripWorkbookBuilderTests
         using var archive = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
         var sheetXml = XDocument.Load(archive.GetEntry("xl/worksheets/sheet3.xml")!.Open());
         XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-        sheetXml.Root!.Element(spreadsheet + "sheetProtection").Should().NotBeNull();
+        sheetXml.Root!.Element(spreadsheet + "sheetProtection").Should().BeNull();
         sheetXml.Descendants(spreadsheet + "col").Should().HaveCount(6);
         sheetXml.Descendants(spreadsheet + "col").Should().OnlyContain(column => (string?)column.Attribute("hidden") == "1");
+    }
+
+    [Fact]
+    public void StandardWorkbookLeavesAllSheetsEditable()
+    {
+        var builder = new RoundTripWorkbookBuilder();
+        var bytes = builder.Build(new RoundTripWorkbookRequest(
+            "export-batch-editable",
+            [new RoundTripWorkbookSheet(
+                ExportDataset.Employees,
+                "员工",
+                [new ExportFieldDefinition("name", "姓名", ExportFieldDataType.Text, true)],
+                [new RoundTripWorkbookRow(
+                    new Dictionary<string, object?> { ["name"] = "张三" },
+                    RecordId: "record-001",
+                    BusinessKey: "E-001",
+                    RowVersion: "7")])],
+            DatasetVersion: "employees/1"));
+
+        using var archive = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        archive.Entries.Where(entry => entry.FullName.StartsWith("xl/worksheets/sheet", StringComparison.Ordinal))
+            .Select(entry => XDocument.Load(entry.Open()))
+            .Should().OnlyContain(document => document.Root!.Element(spreadsheet + "sheetProtection") == null);
     }
 
     [Fact]

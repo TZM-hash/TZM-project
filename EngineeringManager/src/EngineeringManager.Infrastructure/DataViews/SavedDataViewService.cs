@@ -9,6 +9,7 @@ namespace EngineeringManager.Infrastructure.DataViews;
 public sealed class SavedDataViewService(ApplicationDbContext db) : ISavedDataViewService
 {
     private static readonly HashSet<int> AllowedPageSizes = [20, 50, 100];
+    private static readonly JsonSerializerOptions ColumnJsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IReadOnlyList<SavedDataViewDto>> ListAsync(string userId, DataViewDefinition definition, CancellationToken token)
     {
@@ -111,19 +112,88 @@ public sealed class SavedDataViewService(ApplicationDbContext db) : ISavedDataVi
         {
             using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "[]" : json);
             if (document.RootElement.ValueKind != JsonValueKind.Array) return "[]";
-            var columns = document.RootElement.EnumerateArray()
-                .Where(item => item.ValueKind == JsonValueKind.String)
-                .Select(item => item.GetString())
-                .Where(item => item is not null && allowedKeys.Contains(item))
-                .Distinct(StringComparer.Ordinal)
+            var items = document.RootElement.EnumerateArray().ToArray();
+            if (items.All(item => item.ValueKind == JsonValueKind.String))
+            {
+                var legacyColumns = items
+                    .Select(item => item.GetString())
+                    .Where(item => item is not null && allowedKeys.Contains(item))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                return JsonSerializer.Serialize(legacyColumns);
+            }
+
+            var columns = items
+                .Select((item, index) => ParseColumn(item, index, allowedKeys))
+                .Where(item => item is not null)
+                .Select(item => item!)
+                .GroupBy(item => item.Key, StringComparer.Ordinal)
+                .Select(group => group.OrderBy(item => item.Order).ThenBy(item => item.SourceIndex).First())
+                .OrderBy(item => item.Order)
+                .ThenBy(item => item.SourceIndex)
+                .Select((item, order) => new SanitizedColumnValue(item.Key, item.Visible, item.Fixed, order))
                 .ToArray();
-            return JsonSerializer.Serialize(columns);
+            return JsonSerializer.Serialize(columns, ColumnJsonOptions);
         }
         catch (JsonException)
         {
             return "[]";
         }
     }
+
+    private static ParsedColumn? ParseColumn(JsonElement item, int sourceIndex, IReadOnlySet<string> allowedKeys)
+    {
+        string? key;
+        bool visible = true;
+        bool isFixed = false;
+        var order = sourceIndex;
+        if (item.ValueKind == JsonValueKind.String)
+        {
+            key = item.GetString();
+        }
+        else if (item.ValueKind == JsonValueKind.Object && TryGetProperty(item, "key", out var keyElement) && keyElement.ValueKind == JsonValueKind.String)
+        {
+            key = keyElement.GetString();
+            if (TryGetProperty(item, "visible", out var visibleElement) && visibleElement.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                visible = visibleElement.GetBoolean();
+            }
+            if (TryGetProperty(item, "fixed", out var fixedElement) && fixedElement.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                isFixed = fixedElement.GetBoolean();
+            }
+            if (TryGetProperty(item, "order", out var orderElement) && orderElement.TryGetInt32(out var requestedOrder))
+            {
+                order = requestedOrder;
+            }
+        }
+        else
+        {
+            return null;
+        }
+
+        return key is not null && allowedKeys.Contains(key)
+            ? new ParsedColumn(key, visible, isFixed, order, sourceIndex)
+            : null;
+    }
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private sealed record ParsedColumn(string Key, bool Visible, bool Fixed, int Order, int SourceIndex);
+    private sealed record SanitizedColumnValue(string Key, bool Visible, bool Fixed, int Order);
 
     private static void ValidateIdentity(string userId, string pageKey)
     {

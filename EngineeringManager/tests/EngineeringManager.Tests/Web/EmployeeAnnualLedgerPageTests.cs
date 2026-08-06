@@ -58,6 +58,26 @@ public sealed class EmployeeAnnualLedgerPageTests
     }
 
     [Fact]
+    public void EmployeeDetailsExposeAdjacentEmployeeNavigation()
+    {
+        var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml");
+        var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml.cs");
+
+        page.Should().Contain("employee-detail-navigation")
+            .And.Contain("上一页")
+            .And.Contain("下一页")
+            .And.Contain("Model.PreviousEmployeeId")
+            .And.Contain("Model.NextEmployeeId")
+            .And.Contain("asp-route-businessYearId")
+            .And.Contain("asp-route-wageSubtab")
+            .And.Contain("asp-route-paymentSubtab")
+            .And.Contain("asp-route-dividendSubtab")
+            .And.Contain("asp-route-edit");
+        model.Should().Contain("EmployeeNavigationResolver.Resolve")
+            .And.Contain("OrderByDescending");
+    }
+
+    [Fact]
     public void EmployeeProfileEditUsesTheDetailGridWithoutDuplicateBackNavigation()
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml");

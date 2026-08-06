@@ -1,8 +1,10 @@
-const CACHE_NAME = 'engineering-manager-shell-v8';
+const CACHE_NAME = 'engineering-manager-shell-v10';
 const SHELL = [
   '/css/base.css', '/css/components.css', '/css/pages.css', '/css/themes.css',
   '/js/site.js', '/js/core/shell.js', '/js/core/effects.js', '/js/pages/settings.js',
   '/js/components/data-table.js', '/js/components/saved-views.js', '/js/components/filter-drawer.js', '/js/components/charts.js', '/js/components/quick-edit.js',
+  '/js/components/check-selector.js', '/js/components/list-sorting.js', '/js/components/list-pagination.js', '/js/components/url-search-params.js',
+  '/js/components/conflict-notice.js', '/js/components/collapsible-nav.js',
   '/js/offline-stage-results.js', '/js/offline-equipment.js', '/img/icons.svg', '/manifest.webmanifest'
 ];
 const SENSITIVE_PREFIXES = ['/api/', '/Finance', '/Payroll', '/EmployeeLedger', '/Employees', '/Crews', '/DataExchange', '/Backups', '/Reminders', '/Projects/Contracts', '/Equipment/Settlement'];

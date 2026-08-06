@@ -31,6 +31,9 @@
 .button--text { min-height: 34px; padding: .35rem .5rem; border-color: transparent; color: var(--app-primary); background: transparent; box-shadow: none; }
 .button--action { min-width: 6.25rem; }
 .button--back { min-width: 6.8rem; justify-content: flex-start; }
+.button.is-loading { cursor: wait; opacity: .78; }
+.button.is-loading::before { width: .82rem; height: .82rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; content: ""; animation: button-loading-spin .7s linear infinite; }
+@keyframes button-loading-spin { to { transform: rotate(360deg); } }
 .page-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1.25rem; }
 .pill { display: inline-flex; align-items: center; padding: .28rem .6rem; border-radius: 999px; font-size: .76rem; font-weight: 650; }
 .pill--success { color: #047857; background: #d1fae5; }
@@ -328,7 +331,7 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .project-workbook-export-chevron { width: .42rem; height: .42rem; margin-left: .08rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-.1rem) rotate(45deg); transition: transform 150ms ease; }
 .project-workbook-export-menu[open] .project-workbook-export-trigger { border-color: var(--app-primary-hover); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
 .project-workbook-export-menu[open] .project-workbook-export-chevron { transform: translateY(.12rem) rotate(225deg); }
-.project-workbook-export-popover { position: absolute; z-index: 90; top: auto; right: 0; bottom: calc(100% + .4rem); display: grid; width: min(22rem, calc(100vw - 2rem)); max-height: min(28rem, var(--project-export-max-height, calc(100vh - 5rem))); gap: .7rem; padding: .78rem; overflow-y: auto; border: 1px solid var(--app-border); border-radius: 9px; background: var(--app-surface); box-shadow: 0 20px 50px rgba(15,23,42,.2); }
+.project-workbook-export-popover { position: absolute; z-index: 90; top: auto; right: 0; bottom: calc(100% + .4rem); display: grid; width: min(22rem, calc(100vw - 2rem)); max-height: min(28rem, var(--project-export-max-height, calc(100vh - 5rem))); gap: .7rem; padding: .78rem; overflow-y: auto; border: 1px solid var(--app-border); border-radius: 9px; background: #fff; box-shadow: 0 20px 50px rgba(15,23,42,.24); }
 .project-workbook-export-menu.project-export-opens-down .project-workbook-export-popover { top: calc(100% + .4rem); bottom: auto; }
 .project-workbook-export-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .8rem; padding: .08rem .08rem .65rem; border-bottom: 1px solid var(--app-border); }
 .project-workbook-export-heading > div { display: grid; min-width: 0; gap: .18rem; }
@@ -339,9 +342,36 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .project-workbook-export-section { display: grid; gap: .42rem; margin: 0; }
 .project-workbook-export-section-title { color: var(--app-muted); font-size: .66rem; font-weight: 750; letter-spacing: .04em; }
 .project-workbook-export-section > p { margin: -.05rem 0 0 1.52rem; color: var(--app-muted); font-size: .66rem; line-height: 1.45; }
-.project-workbook-export-page-format { display: grid; gap: .12rem; padding: .55rem .58rem; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface-raised); }
-.project-workbook-export-page-format strong { color: var(--app-text); font-size: .73rem; }
+.project-workbook-export-columns-details { display: grid; gap: .42rem; }
+.project-workbook-export-columns-details > summary { list-style: none; cursor: pointer; }
+.project-workbook-export-columns-details > summary::-webkit-details-marker { display: none; }
+.project-workbook-export-columns-details > summary::after { width: .42rem; height: .42rem; margin-left: .1rem; border-right: 1.5px solid var(--app-muted); border-bottom: 1.5px solid var(--app-muted); content: ""; transform: translateY(-.1rem) rotate(45deg); transition: transform 150ms ease; }
+.project-workbook-export-columns-details[open] > summary::after { transform: translateY(.12rem) rotate(225deg); }
+.project-workbook-export-filters-details { display: grid; gap: .42rem; }
+.project-workbook-export-filters-details > summary { list-style: none; cursor: pointer; }
+.project-workbook-export-filters-details > summary::-webkit-details-marker { display: none; }
+.project-workbook-export-filters-details > summary::after { width: .42rem; height: .42rem; margin-left: .1rem; border-right: 1.5px solid var(--app-muted); border-bottom: 1.5px solid var(--app-muted); content: ""; transform: translateY(-.1rem) rotate(45deg); transition: transform 150ms ease; }
+.project-workbook-export-filters-details[open] > summary::after { transform: translateY(.12rem) rotate(225deg); }
+.project-workbook-export-filters-body { display: grid; gap: .48rem; }
+.project-workbook-export-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .48rem .55rem; padding: .55rem; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface-raised); }
+.project-workbook-export-filter-grid label { display: grid; min-width: 0; gap: .2rem; color: var(--app-muted); font-size: .66rem; font-weight: 650; }
+.project-workbook-export-filter-grid input, .project-workbook-export-filter-grid select { width: 100%; min-width: 0; min-height: 2rem; padding: .32rem .42rem; border: 1px solid var(--app-border); border-radius: 5px; background: #fff; color: var(--app-text); font-size: .7rem; }
+.project-workbook-export-filters-body > p { margin: 0; color: var(--app-muted); font-size: .66rem; line-height: 1.45; }
+.project-workbook-export-column-mode-list { display: grid; gap: .35rem; }
+.project-workbook-export-column-mode-list .project-workbook-export-option { padding: .48rem .55rem; }
+.project-workbook-export-columns-body { display: grid; gap: .42rem; }
+.project-workbook-export-page-format { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .6rem; padding: .55rem .58rem; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface-raised); }
+.project-workbook-export-page-format > div { display: grid; min-width: 0; gap: .12rem; }
+.project-workbook-export-page-format > strong { flex: 0 0 auto; color: var(--app-primary); font-size: .66rem; white-space: nowrap; }
+.project-workbook-export-page-format > div > strong { color: var(--app-text); font-size: .73rem; }
 .project-workbook-export-page-format small { color: var(--app-muted); font-size: .66rem; line-height: 1.4; }
+.project-workbook-export-column-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; color: var(--app-muted); font-size: .66rem; font-weight: 700; }
+.project-workbook-export-column-heading > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; }
+.project-workbook-export-column-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 14rem; gap: .15rem .3rem; padding: .4rem; overflow-y: auto; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface-raised); }
+.project-workbook-export-column-grid label { display: flex; min-width: 0; align-items: flex-start; gap: .38rem; padding: .34rem .38rem; border-radius: 5px; color: var(--app-text-soft); font-size: .68rem; line-height: 1.35; cursor: pointer; }
+.project-workbook-export-column-grid label:hover { background: var(--app-primary-soft); }
+.project-workbook-export-column-grid input { width: 1rem; min-width: 1rem; height: 1rem; min-height: 1rem; margin-top: .08rem; padding: 0; accent-color: var(--app-primary); }
+.project-workbook-export-columns-error, .project-workbook-export-scope-error { margin: -.12rem 0 0; color: var(--app-danger, #b42318); font-size: .66rem; line-height: 1.35; }
 .project-workbook-export-option { display: flex; min-width: 0; align-items: flex-start; gap: .52rem; padding: .55rem .58rem; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface-raised); cursor: pointer; }
 .project-workbook-export-option:hover { border-color: color-mix(in srgb, var(--app-primary) 38%, var(--app-border)); background: var(--app-primary-soft); }
 .project-workbook-export-option input, .project-workbook-export-sheet-grid input { width: 1rem; min-width: 1rem; height: 1rem; min-height: 1rem; margin-top: .08rem; padding: 0; accent-color: var(--app-primary); }
@@ -388,6 +418,8 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
   .project-workbook-export-trigger { justify-content: center; width: 100%; }
   .project-workbook-export-popover { position: fixed; top: auto; right: .75rem; bottom: .75rem; left: .75rem; width: auto; max-height: min(78vh, 32rem); }
   .project-workbook-export-sheet-grid { grid-template-columns: 1fr; }
+  .project-workbook-export-filter-grid { grid-template-columns: 1fr; }
+  .project-workbook-export-column-grid { grid-template-columns: 1fr; max-height: 12rem; }
 
   [data-project-workbook] .exchange-card {
     min-width: 0;

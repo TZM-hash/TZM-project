@@ -536,13 +536,15 @@ public sealed class ProjectAuthorizationTests
         managerHtml.Should().Contain("ExportWorkbook")
             .And.Contain("data-project-workbook-export-menu")
             .And.Contain("导出项目清单")
-            .And.Contain("按当前页面筛选、排序和列管理结果生成 Excel")
+            .And.Contain("按列管理导出")
+            .And.Contain("按内容筛选导出")
             .And.NotContain("导出当前视图")
             .And.NotContain("project-workbook-export-form panel compact-form-grid");
         staffHtml.Should().NotContain("ExportWorkbook")
             .And.NotContain("data-project-workbook-export-menu")
             .And.NotContain("导出项目清单")
-            .And.NotContain("按当前页面筛选、排序和列管理结果生成 Excel");
+            .And.NotContain("按列管理导出")
+            .And.NotContain("按内容筛选导出");
     }
 
     [Fact]
@@ -561,7 +563,8 @@ public sealed class ProjectAuthorizationTests
             .And.Contain("data-project-workbook-export-menu")
             .And.Contain("导出项目清单")
             .And.Contain("name=\"ExportColumns\"")
-            .And.Contain("column.Key != \"actions\"")
+            .And.Contain("@foreach (var column in Model.ProjectExportColumns)")
+            .And.Contain("Model.Workbench.Columns")
             .And.Contain("不勾选时只导出项目清单 Excel");
         script.Should().Contain("data-project-export-all-matching")
             .And.Contain("data-project-export-item")
@@ -580,7 +583,7 @@ public sealed class ProjectAuthorizationTests
 
         page.Should().Contain("data-column-key=\"serial_number\"")
             .And.Contain("序号")
-            .And.Contain("<td data-column-key=\"project_name\"><a asp-page=\"/Projects/Details\" asp-route-id=\"@item.Project.Id\">@item.Project.Name</a></td>")
+            .And.Contain("<td data-column-key=\"project_name\"><a asp-page=\"/Projects/Details\" asp-route-id=\"@item.Project.Id\" title=\"@item.Project.Name\">@item.Project.Name</a></td>")
             .And.Contain("data-column-key=\"general_contractor\"")
             .And.Contain("data-column-key=\"contract_signing_status\"")
             .And.Contain("data-column-key=\"actual_start_date\"")

@@ -89,7 +89,7 @@
             <div class="project-workbook-project-list">@foreach (var project in Model.ProjectWorkbookProjects.Items) { <label><input type="checkbox" name="SelectedProjectIds" value="@project.Project.Id" data-project-export-item /> @project.Project.ProjectNumber · @project.Project.Name</label> }</div>
             @if (Model.CanExportProjectWorkbookAttachments) { <label class="check-label"><input asp-for="IncludeProjectAttachments" data-project-export-attachments /> 包含附件文件并生成 ZIP</label> }
             <details class="selection-dropdown"><summary>选择项目细项</summary><div class="check-grid">@foreach (var sheet in Model.ProjectWorkbookSheets.Where(sheet => Model.CanExportFullProjectWorkbook || sheet.Sheet != ProjectWorkbookSheet.ProjectSummary && sheet.Sheet != ProjectWorkbookSheet.Attachments)) { var isSelected = Model.SelectedProjectSheets.Count > 0 ? Model.SelectedProjectSheets.Contains(sheet.Sheet) : sheet.Sheet != ProjectWorkbookSheet.Attachments || Model.IncludeProjectAttachments; <label><input type="checkbox" name="SelectedProjectSheets" value="@sheet.Sheet" checked="@(isSelected ? "checked" : null)" /> @sheet.WorksheetName@(sheet.CanImport ? null : " · 只读")</label> }</div></details>
-            <button class="button button--primary" type="submit">生成项目工作簿</button>
+            <button class="button button--primary" type="submit" data-project-export-submit>生成项目工作簿</button>
         </form>
     }
 </section>

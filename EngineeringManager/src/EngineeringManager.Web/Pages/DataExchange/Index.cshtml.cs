@@ -19,6 +19,8 @@ public sealed class IndexModel(
     IProjectWorkbookService projectWorkbookService,
     IProjectService projectService) : PageModel
 {
+    private const string NoExportableProjectsMessage = "没有可导出的项目。";
+
     public IReadOnlyList<EngineeringManager.Domain.DataExchange.ExportFieldDefinition> Fields { get; private set; } = [];
     public IReadOnlyList<ExportTemplateDto> Templates { get; private set; } = [];
     public IReadOnlyList<ExportDataset> ImportableDatasets => importService.ImportableDatasets;
@@ -101,12 +103,21 @@ public sealed class IndexModel(
             return Page();
         }
         var query = new ProjectListQuery(ProjectSearch, ProjectStages, ProjectLegalEntityId, ProjectResponsibleUserId, ProjectMinimumCurrentAmount, ProjectMaximumCurrentAmount, "ProjectNumber", true, AffiliationType: ProjectAffiliationType, IncludeInactive: true);
-        var file = await projectWorkbookService.ExportAsync(new ProjectWorkbookExportRequest(
-            new ProjectWorkbookScope(ProjectActor(), query, SelectAllMatchingProjects, SelectedProjectIds),
-            SelectedProjectSheets,
-            IncludeAttachments: IncludeProjectAttachments,
-            Actor: WorkbookActor()), cancellationToken);
-        return File(file.Content, file.ContentType, file.FileName);
+        try
+        {
+            var file = await projectWorkbookService.ExportAsync(new ProjectWorkbookExportRequest(
+                new ProjectWorkbookScope(ProjectActor(), query, SelectAllMatchingProjects, SelectedProjectIds),
+                SelectedProjectSheets,
+                IncludeAttachments: IncludeProjectAttachments,
+                Actor: WorkbookActor()), cancellationToken);
+            return File(file.Content, file.ContentType, file.FileName);
+        }
+        catch (InvalidOperationException exception) when (string.Equals(exception.Message, NoExportableProjectsMessage, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError(string.Empty, "当前筛选没有可导出的项目，请调整筛选条件后重试。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
     }
 
     public async Task<IActionResult> OnPostPreviewProjectWorkbookAsync(CancellationToken cancellationToken)

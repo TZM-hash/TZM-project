@@ -1,5 +1,7 @@
 using EngineeringManager.Application.DataExchange;
 using EngineeringManager.Application.Projects;
+using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Organization;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Security;
@@ -14,6 +16,7 @@ using EngineeringManager.Infrastructure.Files;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml.Linq;
 
 namespace EngineeringManager.Tests.Application;
 
@@ -173,21 +176,337 @@ public sealed class ProjectWorkbookExportTests
                 true),
             [ProjectWorkbookSheet.ProjectMaster],
             Actor: ProjectWorkbookActor.Administrator("administrator"),
-            ProjectListColumns: ["project_number", "project_name", "stage", "actual_start_date", "contract_amount", "collection_progress", "notes"]), CancellationToken.None);
+            ProjectListColumns: ["project_number", "project_name", "stage", "actual_start_date", "contract_amount", "collection_rate", "notes"]), CancellationToken.None);
 
         var sheets = SimpleXlsxReader.Read(file.Content);
         sheets.Select(item => item.Name).Should().Equal("项目清单");
         var rows = sheets.Single().Rows;
-        rows[0].Should().Equal("项目编号", "项目名称", "阶段", "实际开始日期", "合同金额", "收款率（应 / 已 / 未）", "备注摘要");
+        rows[0].Should().Equal("项目编号", "项目名称", "阶段", "实际开始日期", "合同金额", "收款率", "备注摘要");
         rows[1][0].Should().Be("WB-LIST-003");
         rows[1][1].Should().Be("最新项目");
         rows[1][2].Should().Be("施工中");
         rows[1][3].Should().Be(new DateOnly(2026, 8, 1));
-        rows[1][4].Should().Be("0.00");
-        rows[1][5].Should().Be("0%（0.00 / 0.00 / 0.00）");
+        rows[1][4].Should().Be(0m);
+        rows[1][5].Should().Be(0m);
         rows[1][6].Should().Be("这是一个页面导出测试备注");
         rows[3][0].Should().Be("WB-LIST-001");
         rows[3][6].Should().Be("—");
+    }
+
+    [Fact]
+    public async Task PageListExportSplitsFinanceProgressIntoIndependentEditableValues()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-RATES", "费率拆分项目", null);
+        var company = new LegalEntity { Code = "WB-RATES-LE", Name = "费率测试公司", ShortName = "费率公司" };
+        var partner = new BusinessPartner { PartnerNumber = "WB-RATES-BP", Name = "费率测试单位", ShortName = "费率单位" };
+        var account = new FinancialAccount { LegalEntity = company, AccountName = "费率测试账户", AccountType = FinancialAccountType.Bank };
+        var contract = new Contract { Project = project, BusinessPartner = partner, ContractNumber = "WB-RATES-C", Name = "费率测试合同", TotalAmount = 100m };
+        project.Contracts.Add(contract);
+        project.LegalEntities.Add(new ProjectLegalEntity { Project = project, LegalEntity = company, IsPrimary = true });
+
+        var receivable = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = project,
+            Contract = contract,
+            BusinessDate = new DateOnly(2026, 8, 1),
+            OriginalAmount = 100m,
+            OriginalInvoiceAmount = 100m
+        };
+        var payable = new FinanceSettlement
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Payable,
+            SettlementState = LedgerSettlementState.Final,
+            SourceType = LedgerSourceType.CentralLedger,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = project,
+            Contract = contract,
+            BusinessDate = new DateOnly(2026, 8, 1),
+            OriginalAmount = 80m,
+            OriginalInvoiceAmount = 80m
+        };
+        var collection = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            CashType = LedgerCashType.Collection,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Account = account,
+            Project = project,
+            Contract = contract,
+            BusinessDate = new DateOnly(2026, 8, 2),
+            Amount = 40m
+        };
+        collection.Allocations.Add(new FinanceCashAllocation
+        {
+            CashEntry = collection,
+            Settlement = receivable,
+            Project = project,
+            Contract = contract,
+            Amount = 40m,
+            AllocationOrder = 1
+        });
+        var payment = new FinanceCashEntry
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Payable,
+            CashType = LedgerCashType.Payment,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Account = account,
+            Project = project,
+            Contract = contract,
+            BusinessDate = new DateOnly(2026, 8, 3),
+            Amount = 25m
+        };
+        payment.Allocations.Add(new FinanceCashAllocation
+        {
+            CashEntry = payment,
+            Settlement = payable,
+            Project = project,
+            Contract = contract,
+            Amount = 25m,
+            AllocationOrder = 1
+        });
+        var invoice = new FinanceInvoice
+        {
+            Scope = LedgerScope.External,
+            Direction = LedgerDirection.Receivable,
+            LegalEntity = company,
+            BusinessPartner = partner,
+            Project = project,
+            Contract = contract,
+            InvoiceNumber = "WB-RATES-INV",
+            InvoiceDate = new DateOnly(2026, 8, 4),
+            Amount = 30m
+        };
+        invoice.Allocations.Add(new FinanceInvoiceAllocation
+        {
+            Invoice = invoice,
+            Settlement = receivable,
+            Project = project,
+            Contract = contract,
+            Amount = 30m,
+            AllocationOrder = 1
+        });
+        fixture.Db.AddRange(company, partner, account, receivable, payable, collection, payment, invoice);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns:
+            [
+                "project_number",
+                "collection_rate", "collection_receivable_amount", "collection_collected_amount", "collection_uncollected_amount",
+                "payment_rate", "payment_payable_amount", "payment_paid_amount", "payment_unpaid_amount",
+                "invoice_rate", "invoice_invoiced_amount", "invoice_uninvoiced_amount"
+            ]), CancellationToken.None);
+
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+        rows[0].Should().Equal(
+            "项目编号",
+            "收款率", "应收金额", "已收金额", "未收金额",
+            "付款率", "应付金额", "已付金额", "未付金额",
+            "开票率", "已开票金额", "未开票金额");
+        rows[1].Should().Equal(
+            "WB-RATES",
+            0.4m, 100m, 40m, 60m,
+            0.3125m, 80m, 25m, 55m,
+            0.3m, 30m, 70m);
+    }
+
+    [Fact]
+    public async Task PageListExportAppliesReferenceLayoutWithoutChangingSelectedColumnOrder()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-LAYOUT", "这是一个较长的项目名称，用于验证导出换行", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["project_name", "project_number", "contract_amount"]), CancellationToken.None);
+
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+        rows[0].Should().Equal("项目名称", "项目编号", "合同金额");
+
+        using var archive = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        var worksheet = XDocument.Load(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+        worksheet.Descendants(spreadsheet + "col").Single(column => (string?)column.Attribute("min") == "1")
+            .Attribute("width")!.Value.Should().Be("21.847619047619");
+        worksheet.Descendants(spreadsheet + "autoFilter").Single().Attribute("ref")!.Value.Should().Be("A1:C3");
+        worksheet.Descendants(spreadsheet + "pane").Single().Attribute("state")!.Value.Should().Be("frozen");
+    }
+
+    [Fact]
+    public async Task PageListExportMatchesReferencePrintLayoutAndAddsEditableTotalRow()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var first = AddProject(fixture.Db, "WB-REFERENCE-001", "参考格式项目一", null);
+        var second = AddProject(fixture.Db, "WB-REFERENCE-002", "参考格式项目二", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery("WB-REFERENCE", [], null, null, null, null, null, false),
+                true),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns:
+            [
+                "serial_number", "project_name", "general_contractor", "general_contractor_contact",
+                "collection_rate", "collection_receivable_amount", "collection_collected_amount",
+                "collection_uncollected_amount", "invoice_invoiced_amount", "invoice_uninvoiced_amount", "notes"
+            ]), CancellationToken.None);
+
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+        rows.Should().HaveCount(4);
+        rows[0].Should().Equal(
+            "序号", "项目名称", "总包单位", "总包联系人 / 电话", "收款率",
+            "应收金额", "已收金额", "未收金额", "已开票金额", "未开票金额", "备注摘要");
+        rows[^1].Should().BeEquivalentTo(new object?[] { null, "合计", null, null, null, 0m, 0m, 0m, 0m, 0m, null });
+
+        using var archive = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        var worksheet = XDocument.Load(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        var workbook = XDocument.Load(archive.GetEntry("xl/workbook.xml")!.Open());
+        var styles = XDocument.Load(archive.GetEntry("xl/styles.xml")!.Open());
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        var cellXfCount = int.Parse(styles.Descendants(spreadsheet + "cellXfs").Single().Attribute("count")!.Value, System.Globalization.CultureInfo.InvariantCulture);
+
+        worksheet.Descendants(spreadsheet + "row").Select(row => row.Attribute("ht")!.Value)
+            .Should().Equal("30", "25", "25", "25");
+        worksheet.Descendants(spreadsheet + "c").Select(cell => int.Parse(cell.Attribute("s")!.Value, System.Globalization.CultureInfo.InvariantCulture))
+            .Should().OnlyContain(styleIndex => styleIndex < cellXfCount);
+        worksheet.Descendants(spreadsheet + "col").Select(column => column.Attribute("width")!.Value)
+            .Should().Equal("5.28571428571429", "21.847619047619", "13.2190476190476", "17.7142857142857", "6.71428571428571", "10", "10", "10", "10.7142857142857", "10.7142857142857", "32.2857142857143");
+        worksheet.Descendants(spreadsheet + "pageMargins").Single().Attributes()
+            .ToDictionary(attribute => attribute.Name.LocalName, attribute => attribute.Value)
+            .Should().Contain(new Dictionary<string, string>
+            {
+                ["left"] = "0.0388888888888889",
+                ["right"] = "0.0388888888888889",
+                ["top"] = "0.196527777777778",
+                ["bottom"] = "0.196527777777778",
+                ["header"] = "0.5",
+                ["footer"] = "0.5"
+            });
+        worksheet.Descendants(spreadsheet + "pageSetup").Single().Attributes()
+            .ToDictionary(attribute => attribute.Name.LocalName, attribute => attribute.Value)
+            .Should().Contain(new Dictionary<string, string>
+            {
+                ["paperSize"] = "9",
+                ["orientation"] = "landscape",
+                ["horizontalDpi"] = "600",
+                ["fitToWidth"] = "1",
+                ["fitToHeight"] = "0"
+            });
+        worksheet.Descendants(spreadsheet + "pageSetUpPr").Single()
+            .Attribute("fitToPage")!.Value.Should().Be("1");
+        worksheet.Descendants(spreadsheet + "sheetView").Single()
+            .Attribute("zoomScale")!.Value.Should().Be("115");
+        worksheet.Descendants(spreadsheet + "c").Single(cell => (string?)cell.Attribute("r") == "F4")
+            .Element(spreadsheet + "f")!.Value.Should().Be("SUM(F2:F3)");
+        workbook.Descendants(spreadsheet + "definedName")
+            .Any(item => (string?)item.Attribute("name") == "_xlnm.Print_Titles" && item.Value == "'项目清单'!$1:$1")
+            .Should().BeTrue();
+        styles.Descendants(spreadsheet + "font")
+            .Any(font => (string?)font.Element(spreadsheet + "name")?.Attribute("val") == "宋体"
+                && (string?)font.Element(spreadsheet + "sz")?.Attribute("val") == "10"
+                && font.Element(spreadsheet + "b") is not null
+                && (string?)font.Element(spreadsheet + "color")?.Attribute("rgb") == "FF1F4E78")
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ProjectListExportLeavesWorksheetEditable()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-EDITABLE-LIST", "可编辑项目", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["project_name"]), CancellationToken.None);
+
+        using var archive = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        var worksheet = XDocument.Load(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        worksheet.Root!.Element(spreadsheet + "sheetProtection").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task StandardProjectWorkbookLeavesBusinessSheetsEditable()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-EDITABLE-STANDARD", "标准可编辑项目", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator")), CancellationToken.None);
+
+        using var archive = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        var worksheet = XDocument.Load(archive.GetEntry("xl/worksheets/sheet3.xml")!.Open());
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        worksheet.Root!.Element(spreadsheet + "sheetProtection").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PageListExportCombinesGeneralContractorContactAndPhone()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-LIST-CONTACT", "联系人项目", null);
+        project.GeneralContractorContact = "张三";
+        project.GeneralContractorPhone = "13800138000";
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["general_contractor_contact"]), CancellationToken.None);
+
+        var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
+        rows[0].Should().Equal("总包联系人 / 电话");
+        rows[1].Should().Equal("张三 · 13800138000");
     }
 
     [Fact]
@@ -271,9 +590,9 @@ public sealed class ProjectWorkbookExportTests
             ProjectListColumns: ["project_number"]), CancellationToken.None);
 
         var rows = SimpleXlsxReader.Read(file.Content).Single().Rows;
-        rows.Should().HaveCount(102);
+        rows.Should().HaveCount(103);
         rows[1][0].Should().Be("WB-BULK-101");
-        rows[^1][0].Should().Be("WB-BULK-001");
+        rows[^2][0].Should().Be("WB-BULK-001");
     }
 
     [Fact]

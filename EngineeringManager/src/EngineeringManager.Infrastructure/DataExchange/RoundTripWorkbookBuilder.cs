@@ -66,11 +66,11 @@ public sealed class RoundTripWorkbookBuilder
             request.ExportBatchId
         ]).ToArray();
         workbook.AddWorksheet("目录", ["数据集", "工作表", "记录数", "来源页面", "导出批次"], directoryRows,
-            new XlsxWorksheetOptions([], ProtectSheet: true));
+            new XlsxWorksheetOptions([]));
 
         var descriptionRows = BuildDescriptionRows(request.Sheets);
         workbook.AddWorksheet("数据说明", ["工作表", "字段", "说明", "类型", "必填", "可回导", "计算字段", "控制列"], descriptionRows,
-            new XlsxWorksheetOptions([], ProtectSheet: true));
+            new XlsxWorksheetOptions([]));
 
         foreach (var sheet in request.Sheets)
         {
@@ -111,7 +111,7 @@ public sealed class RoundTripWorkbookBuilder
 
         var hiddenIndexes = Enumerable.Range(headers.Length - ControlColumnKeys.Count, ControlColumnKeys.Count).ToArray();
         workbook.AddWorksheet(sheet.WorksheetName, headers, rows,
-            new XlsxWorksheetOptions(hiddenIndexes, ProtectSheet: true));
+            new XlsxWorksheetOptions(hiddenIndexes));
     }
 
     private static IEnumerable<IReadOnlyList<object?>> BuildDescriptionRows(IReadOnlyList<RoundTripWorkbookSheet> sheets)

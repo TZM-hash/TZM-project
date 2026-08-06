@@ -54,7 +54,14 @@ if (document.querySelector("[data-central-ledger-nav]")) {
 }
 
 function scheduleIdle(task) {
-  const run = () => Promise.resolve().then(task).catch(() => undefined);
+  const run = () => Promise.resolve().then(task).catch((error) => {
+    console.error("页面功能加载失败", error);
+    const status = document.querySelector("[data-pwa-status]");
+    if (status) {
+      status.textContent = "部分页面功能加载失败，请刷新后重试。";
+      status.classList.add("is-error");
+    }
+  });
   if (typeof window.requestIdleCallback === "function") {
     window.requestIdleCallback(run, { timeout: 500 });
     return;
@@ -376,9 +383,13 @@ function initCompanyAccountEntries() {
 async function initPwaStatus() {
   const badge = document.querySelector("[data-pwa-badge]");
   const status = document.querySelector("[data-pwa-status]");
-  const showStatus = (message) => {
+  let statusTimer;
+  const showStatus = (message, persistent = false) => {
     if (badge) badge.textContent = message;
-    if (status) status.textContent = message;
+    if (!status) return;
+    window.clearTimeout(statusTimer);
+    status.textContent = message;
+    if (!persistent) statusTimer = window.setTimeout(() => { status.textContent = ""; }, 4000);
   };
   if (!("serviceWorker" in navigator) || !(window.isSecureContext || window.location.hostname === "localhost")) {
     showStatus("在线模式");
@@ -386,10 +397,10 @@ async function initPwaStatus() {
   }
   try {
     const registration = await navigator.serviceWorker.register("/service-worker.js");
-    showStatus(registration.waiting ? "发现新版本，请刷新页面" : "离线外壳可用");
+    showStatus(registration.waiting ? "发现新版本，请刷新页面" : "离线外壳可用", Boolean(registration.waiting));
     registration.addEventListener("updatefound", () => {
       registration.installing?.addEventListener("statechange", (event) => {
-        if (event.target.state === "installed" && navigator.serviceWorker.controller) showStatus("发现新版本，请刷新页面");
+        if (event.target.state === "installed" && navigator.serviceWorker.controller) showStatus("发现新版本，请刷新页面", true);
       });
     });
   } catch {

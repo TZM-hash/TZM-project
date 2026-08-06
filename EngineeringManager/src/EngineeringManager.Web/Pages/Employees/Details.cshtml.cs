@@ -30,6 +30,8 @@ public sealed class DetailsModel(
     IBusinessPartnerService partnerService) : PageModel
 {
     public EmployeeDto Employee { get; private set; } = null!;
+    public Guid? PreviousEmployeeId { get; private set; }
+    public Guid? NextEmployeeId { get; private set; }
     public EmployeeAnnualLedgerDto? Ledger { get; private set; }
     public IReadOnlyList<EmployeeWageEntryDto> WageEntries { get; private set; } = [];
     public IReadOnlyList<EmployeeExpenseDto> Expenses { get; private set; } = [];
@@ -219,6 +221,14 @@ public sealed class DetailsModel(
     {
         var employee = await employeeService.GetAsync(Id, cancellationToken);
         if (employee is null) return false;
+        var orderedEmployeeIds = (await employeeService.ListAsync(null, CanViewSensitive, cancellationToken))
+            .OrderByDescending(item => item.EmployeeNumber)
+            .ThenByDescending(item => item.Id)
+            .Select(item => item.Id)
+            .ToArray();
+        var adjacentEmployees = EmployeeNavigationResolver.Resolve(orderedEmployeeIds, Id);
+        PreviousEmployeeId = adjacentEmployees.PreviousEmployeeId;
+        NextEmployeeId = adjacentEmployees.NextEmployeeId;
         Employee = CanViewSensitive
             ? employee
             : employee with

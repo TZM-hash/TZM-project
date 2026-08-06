@@ -24,6 +24,8 @@ Questions to answer:
 
 <!-- How should queries be written? Batch operations? -->
 
+- Treat `SavedDataView.ColumnJson` as a backward-compatible persistence boundary. Column-state sanitization must accept both legacy string arrays and object entries shaped like `{ key, visible, fixed, order }`, discard unknown keys, and preserve the canonical server-defined order where the consuming feature does not support custom ordering.
+- Saved view data must remain isolated by both authenticated user ID and page key. Feature-specific preferences such as project-export columns must use their own page key instead of sharing the list page's table-view key.
 - Finance workbook imports must first group each logical ledger header with all of its allocation rows, then delegate validation and persistence to `CentralLedgerCommandService`. Importers must not reimplement central-ledger ownership, allocation-total, project-scope, or status rules.
 - Records owned by a source module (for example equipment settlement or payroll) may be projected into the central ledger, but they must only be modified or reversed through that source module. Central-ledger pages and workbook imports must reject direct mutation of source-owned records.
 - Invoice-number uniqueness checks must inspect both persisted rows and `FinanceInvoices.Local`. This prevents duplicate numbers when multiple invoices are added to the same `DbContext` before `SaveChangesAsync`.

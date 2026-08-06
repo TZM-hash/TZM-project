@@ -12,6 +12,7 @@ public sealed class DataWorkbenchAssetTests
         var razor = ReadRazor();
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "components.css");
         var savedViews = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "saved-views.js");
+        var filterDrawer = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "filter-drawer.js");
 
         js.Should().Contain("data-column-key");
         dataTable.Should().Contain("event.target === dialog")
@@ -49,6 +50,7 @@ public sealed class DataWorkbenchAssetTests
             .And.Contain("url.searchParams.set(\"sortDescending\"")
             .And.NotContain("url.searchParams.set(\"sort\"")
             .And.NotContain("url.searchParams.set(\"descending\"");
+        filterDrawer.Should().Contain("savedViewId");
 
         css.Should().Contain(".data-workbench-toolbar")
             .And.Contain(".column-manager-list")
@@ -82,6 +84,15 @@ public sealed class DataWorkbenchAssetTests
             .And.Contain("persistAfterInit")
             .And.Contain("localColumns");
         razor.Should().Contain("data-current-saved-view-id=\"@Model.CurrentSavedViewId\"");
+    }
+
+    [Fact]
+    public void WorkbenchRestoresLegacyStringColumnSelections()
+    {
+        var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "data-table.js");
+
+        script.Should().Contain("typeof item === \"string\"")
+            .And.Contain("key: item");
     }
 
     private static string ReadJavaScript()

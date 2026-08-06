@@ -1,6 +1,14 @@
 @model EngineeringManager.Web.Pages.Projects.IndexModel
 @using EngineeringManager.Application.DataExchange
 @using EngineeringManager.Web.Pages.DataExchange
+@using EngineeringManager.Web.Workbenches
+@{
+    var exportScopeError = ViewData.ModelState[string.Empty]?.Errors.FirstOrDefault()?.ErrorMessage;
+    var exportColumnError = ViewData.ModelState[nameof(Model.ExportColumns)]?.Errors.FirstOrDefault()?.ErrorMessage;
+    var hasExportColumnError = !string.IsNullOrWhiteSpace(exportColumnError);
+    var hasExportError = !string.IsNullOrWhiteSpace(exportScopeError) || !string.IsNullOrWhiteSpace(exportColumnError);
+    var exportColumnKeys = Model.ProjectExportColumns.Select(column => column.Key).ToHashSet(StringComparer.Ordinal);
+}
 
 <form id="projects-table-workbook-export-form" method="post" asp-page-handler="ExportWorkbook" class="project-workbook-export-toolbar" data-project-export-scope>
     <input type="hidden" asp-for="Search" />
@@ -12,12 +20,13 @@
     <input type="hidden" asp-for="MaximumCurrentAmount" />
     <input type="hidden" asp-for="SortKey" />
     <input type="hidden" asp-for="SortDescending" />
+    <input type="hidden" asp-for="ExportFiltersInitialized" />
     @foreach (var stage in Model.Stages)
     {
         <input type="hidden" name="Stages" value="@stage" />
     }
 
-    <details class="project-workbook-export-menu" data-project-workbook-export-menu data-check-selector>
+    <details class="project-workbook-export-menu" data-project-workbook-export-menu data-check-selector data-check-selector-persist open="@(hasExportError ? "open" : null)">
         <summary class="button button--primary workbench-tool-button project-workbook-export-trigger">
             <span>导出项目清单</span>
             <span class="project-workbook-export-chevron" aria-hidden="true"></span>
@@ -35,18 +44,90 @@
                 <div class="project-workbook-export-section-title" id="project-export-scope-title">导出范围</div>
                 <label class="project-workbook-export-option">
                     <input asp-for="SelectAllMatching" data-project-export-all-matching />
-                    <span><strong>当前筛选的全部项目</strong><small>共 @Model.Result.TotalCount 个；开启后会清除表格勾选</small></span>
+                    <span><strong>当前筛选的全部项目</strong><small>当前页面 @Model.Result.TotalCount 项；提交时按导出筛选重新计算</small></span>
                 </label>
                 <p>未开启时，仅导出表格中已勾选的项目。</p>
+                <p class="project-workbook-export-scope-error" data-project-export-scope-error aria-live="polite" role="alert" hidden="@string.IsNullOrWhiteSpace(exportScopeError)">@(exportScopeError ?? "请至少勾选一个项目，或选择导出当前筛选命中的全部项目。")</p>
             </section>
+
+            <details class="project-workbook-export-filters-details" data-project-export-filter-details>
+                <summary class="project-workbook-export-page-format">
+                    <div><strong>导出筛选</strong><small>只影响本次导出，不改变页面当前筛选</small></div>
+                    <strong data-project-export-filter-count>0 项</strong>
+                </summary>
+                <div class="project-workbook-export-filters-body">
+                    <div class="project-workbook-export-column-heading">
+                        <span>按照高级筛选条件缩小导出范围</span>
+                        <button type="button" class="button button--ghost button--small" data-project-export-filter-clear>清除筛选</button>
+                    </div>
+                    <div class="project-workbook-export-filter-grid">
+                    @foreach (var field in Model.ProjectExportFilters)
+                    {
+                        <label>
+                            <span>@field.Label</span>
+                            @if (field.Kind == DataWorkbenchFilterKind.Select)
+                            {
+                                <select name="@field.Key" data-project-export-filter>
+                                    <option value="">全部</option>
+                                    @foreach (var option in field.Options ?? [])
+                                    {
+                                        <option value="@option.Value" selected="@(option.Value == field.Value ? "selected" : null)">@option.Label</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                var inputType = field.Kind == DataWorkbenchFilterKind.Number ? "number" : "search";
+                                <input type="@inputType" name="@field.Key" value="@field.Value" placeholder="@field.Placeholder" data-project-export-filter />
+                            }
+                        </label>
+                    }
+                    </div>
+                    <p>选择“当前筛选的全部项目”时，这些条件会在服务器端重新筛选授权范围内的项目；手动勾选项目时仍以勾选结果为准。</p>
+                </div>
+            </details>
 
             <section class="project-workbook-export-section" aria-labelledby="project-export-content-title">
                 <div class="project-workbook-export-section-title" id="project-export-content-title">导出内容</div>
-                <div class="project-workbook-export-page-format"><strong>项目清单</strong><small>按当前页面筛选、排序和列管理结果生成 Excel</small></div>
-                @foreach (var column in Model.Workbench.Columns.Where(column => column.Key != "actions"))
+                <div class="project-workbook-export-column-mode-list" role="radiogroup" aria-label="导出列来源">
+                    <label class="project-workbook-export-option">
+                        <input type="radio" name="ExportColumnMode" value="table" checked="@(Model.UsesTableExportColumns ? "checked" : null)" data-project-export-column-source="table" />
+                        <span><strong>按列管理导出</strong><small>使用页面“列管理”当前显示的列</small></span>
+                    </label>
+                    <label class="project-workbook-export-option">
+                        <input type="radio" name="ExportColumnMode" value="content" checked="@(Model.UsesContentExportColumns ? "checked" : null)" data-project-export-column-source="content" />
+                        <span><strong>按内容筛选导出</strong><small>使用下方独立勾选的列，并按登录用户保存</small></span>
+                    </label>
+                </div>
+                @foreach (var column in Model.Workbench.Columns.Where(column => exportColumnKeys.Contains(column.Key)))
                 {
-                    <input type="hidden" name="ExportColumns" value="@column.Key" data-export-column-key="@column.Key" />
+                    <input type="hidden" name="TableExportColumns" value="@column.Key" data-export-column-key="@column.Key" data-project-export-column-source="table" />
                 }
+                <details class="project-workbook-export-columns-details" data-project-export-columns-details open="@(hasExportColumnError ? "open" : null)">
+                    <summary class="project-workbook-export-page-format">
+                        <div><strong>项目清单列</strong><small>按内容筛选模式下生效；设置按当前登录用户保存</small></div>
+                        <strong data-check-selector-count>未选择</strong>
+                    </summary>
+                    <div class="project-workbook-export-columns-body">
+                        <div class="project-workbook-export-column-heading">
+                            <span>勾选需要导出的列</span>
+                            <div>
+                                <button type="button" class="button button--ghost button--small" data-check-selector-all>全选</button>
+                                <button type="button" class="button button--ghost button--small" data-check-selector-default>恢复默认</button>
+                            </div>
+                        </div>
+                        <div class="project-workbook-export-column-grid">
+                        @foreach (var column in Model.ProjectExportColumns)
+                        {
+                            <label>
+                                <input type="checkbox" name="ExportColumns" value="@column.Key" checked="@(Model.ExportColumns.Contains(column.Key) ? "checked" : null)" data-check-selector-option data-project-export-columns data-default="true" />
+                                <span>@column.Label</span>
+                            </label>
+                        }
+                        </div>
+                        <p class="project-workbook-export-columns-error" data-project-export-columns-error hidden="@string.IsNullOrWhiteSpace(exportColumnError)">@(exportColumnError ?? "至少选择一列导出。")</p>
+                    </div>
+                </details>
             </section>
 
             @if (Model.CanExportWorkbookAttachments)
@@ -57,7 +138,7 @@
                 </label>
             }
 
-            <button class="button button--primary project-workbook-export-submit" type="submit">生成项目工作簿</button>
+            <button class="button button--primary project-workbook-export-submit" type="submit" data-project-export-submit>生成项目工作簿</button>
         </div>
     </details>
 </form>
