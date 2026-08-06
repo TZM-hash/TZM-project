@@ -13,6 +13,24 @@ namespace EngineeringManager.Tests.Application;
 public sealed class ConstructionCrewServiceTests
 {
     [Fact]
+    public async Task AddWorkerBuildsUnifiedPersonAndExternalEngagement()
+    {
+        await using var fixture = await CrewFixture.CreateAsync();
+
+        var worker = await fixture.Service.AddWorkerAsync(
+            "admin",
+            new CreateConstructionWorkerRequest(fixture.FirstCrew.Id, "统一工人", null, null, null, null, "木工", new DateOnly(2026, 7, 1), null, "建立班组名册"),
+            CancellationToken.None);
+
+        var entity = await fixture.Db.ConstructionWorkers.Include(item => item.Person).SingleAsync(item => item.Id == worker.Id);
+        entity.PersonId.Should().NotBeNull();
+        entity.Person!.Name.Should().Be("统一工人");
+        var engagement = await fixture.Db.PersonnelEngagementHistories.SingleAsync();
+        engagement.BusinessPartnerId.Should().Be(fixture.FirstCrew.Id);
+        engagement.CrewBusinessPartnerId.Should().Be(fixture.FirstCrew.Id);
+    }
+
+    [Fact]
     public async Task CrewListUsesPartnerRoleAndWorkerCanTransferWithoutRewritingHistory()
     {
         await using var fixture = await CrewFixture.CreateAsync();

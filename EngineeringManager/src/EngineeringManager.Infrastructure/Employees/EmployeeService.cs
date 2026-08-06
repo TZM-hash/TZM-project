@@ -1,7 +1,9 @@
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Personnel;
 using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -21,13 +23,28 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
 
         ValidateRates(request.DefaultMonthlySalary, request.DefaultDailyRate, request.DefaultHourlyRate, request.DefaultPieceworkRate);
         await ValidateLegalEntityAsync(request.DefaultLegalEntityId, cancellationToken);
+        var identityNumber = NormalizeOptional(request.IdentityNumber);
+        var normalizedIdentityNumber = PersonPublicDataSynchronizer.NormalizeIdentityNumber(identityNumber);
+        var person = normalizedIdentityNumber is null
+            ? null
+            : await db.People
+                .Include(item => item.Employee)
+                .Include(item => item.ConstructionWorker)
+                .SingleOrDefaultAsync(item => item.IdentityNumberNormalized == normalizedIdentityNumber, cancellationToken);
+        if (person?.Employee is not null)
+        {
+            throw new InvalidOperationException("该身份证号已存在内部人员档案。");
+        }
+        person ??= new Person { PersonNumber = $"PER-{Guid.NewGuid():N}" };
+        PersonPublicDataSynchronizer.Apply(person, name, request.Phone, identityNumber, request.BankAccountNumber, request.BankName, request.Notes, request.IsActive);
         var employee = new Employee
         {
+            Person = person,
             EmployeeNumber = number,
             Name = name,
             EmployeeType = request.EmployeeType,
             Phone = NormalizeOptional(request.Phone),
-            IdentityNumber = NormalizeOptional(request.IdentityNumber),
+            IdentityNumber = identityNumber,
             BankAccountNumber = NormalizeOptional(request.BankAccountNumber),
             BankName = NormalizeOptional(request.BankName),
             HireDate = request.HireDate,
@@ -42,7 +59,23 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
             IsActive = request.IsActive,
             IsProjectResponsible = request.IsProjectResponsible
         };
+        var engagement = new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.Internal,
+            InternalType = request.EmployeeType,
+            LegalEntityId = request.DefaultLegalEntityId,
+            PositionTitle = NormalizeOptional(request.PositionTitle),
+            StartDate = request.HireDate ?? DateOnly.FromDateTime(DateTime.Today),
+            EndDate = request.LeaveDate,
+            IsPrimary = true,
+            Notes = NormalizeOptional(request.Notes),
+            Reason = "员工档案创建"
+        };
+        person.EngagementHistory.Add(engagement);
+        if (db.Entry(person).State == EntityState.Detached) db.People.Add(person);
         db.Employees.Add(employee);
+        db.PersonnelEngagementHistories.Add(engagement);
         await db.SaveChangesAsync(cancellationToken);
         return ToDto(employee);
     }
@@ -69,7 +102,10 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
 
     public async Task<EmployeeDto> UpdateAsync(string userId, UpdateEmployeeRequest request, CancellationToken cancellationToken)
     {
-        var employee = await db.Employees.Include(item => item.AffiliationHistory).SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
+        var employee = await db.Employees
+            .Include(item => item.AffiliationHistory)
+            .Include(item => item.Person).ThenInclude(item => item!.ConstructionWorker)
+            .SingleOrDefaultAsync(item => item.Id == request.Id, cancellationToken)
             ?? throw new InvalidOperationException("员工不存在。");
         if (employee.ConcurrencyStamp != request.ConcurrencyStamp) throw new DbUpdateConcurrencyException("员工资料已被其他用户修改，请刷新后重试。");
         var number = NormalizeRequired(request.EmployeeNumber, nameof(request.EmployeeNumber));
@@ -79,6 +115,16 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
         await ValidateLegalEntityAsync(request.DefaultLegalEntityId, cancellationToken);
         var reason = NormalizeRequired(request.Reason, nameof(request.Reason));
         var before = Snapshot(employee);
+        var normalizedIdentityNumber = PersonPublicDataSynchronizer.NormalizeIdentityNumber(request.IdentityNumber);
+        if (normalizedIdentityNumber is not null && await db.People.AnyAsync(item => item.Id != employee.PersonId && item.IdentityNumberNormalized == normalizedIdentityNumber, cancellationToken))
+        {
+            throw new InvalidOperationException("身份证号已被其他人员档案使用。");
+        }
+        if (employee.Person is null)
+        {
+            employee.Person = new Person { PersonNumber = $"PER-{Guid.NewGuid():N}" };
+            db.People.Add(employee.Person);
+        }
         employee.EmployeeNumber = number;
         employee.Name = NormalizeRequired(request.Name, nameof(request.Name));
         employee.EmployeeType = request.EmployeeType;
@@ -98,6 +144,7 @@ public sealed class EmployeeService(ApplicationDbContext db) : IEmployeeService
         employee.IsActive = request.IsActive;
         employee.IsProjectResponsible = request.IsProjectResponsible;
         employee.UpdatedAt = DateTimeOffset.UtcNow;
+        PersonPublicDataSynchronizer.Apply(employee.Person, employee.Name, employee.Phone, employee.IdentityNumber, employee.BankAccountNumber, employee.BankName, employee.Notes, employee.IsActive);
         db.Entry(employee).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
         employee.ConcurrencyStamp = Guid.NewGuid();
         db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "UpdateEmployee", EntityType = nameof(Employee), EntityId = employee.Id.ToString(), Reason = reason, BeforeJson = JsonSerializer.Serialize(before), AfterJson = JsonSerializer.Serialize(Snapshot(employee)) });

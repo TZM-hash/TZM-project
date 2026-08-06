@@ -15,6 +15,25 @@ namespace EngineeringManager.Tests.Application;
 public sealed class EmployeeServiceTests
 {
     [Fact]
+    public async Task CreateBuildsUnifiedPersonAndInternalEngagement()
+    {
+        await using var fixture = await EmployeeFixture.CreateAsync();
+
+        var employee = await fixture.Service.CreateAsync(
+            CreateRequest("E-PERSON", "统一员工") with
+            {
+                DefaultLegalEntityId = fixture.LegalEntity.Id,
+                HireDate = new DateOnly(2026, 1, 1)
+            },
+            CancellationToken.None);
+
+        var entity = await fixture.Db.Employees.Include(item => item.Person).SingleAsync(item => item.Id == employee.Id);
+        entity.PersonId.Should().NotBeNull();
+        entity.Person!.Name.Should().Be("统一员工");
+        (await fixture.Db.PersonnelEngagementHistories.SingleAsync()).PersonId.Should().Be(entity.PersonId!.Value);
+    }
+
+    [Fact]
     public async Task DuplicateEmployeeNumberIsRejected()
     {
         await using var fixture = await EmployeeFixture.CreateAsync();

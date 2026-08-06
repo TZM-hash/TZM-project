@@ -3,7 +3,9 @@ using EngineeringManager.Application.ConstructionCrews;
 using EngineeringManager.Application.Employees;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Partners;
+using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Infrastructure.Data;
+using EngineeringManager.Infrastructure.Personnel;
 using EngineeringManager.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
@@ -166,8 +168,22 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
     {
         await EnsureCrewAsync(request.CrewBusinessPartnerId, cancellationToken);
         var reason = Required(request.Reason);
+        var normalizedIdentityNumber = PersonPublicDataSynchronizer.NormalizeIdentityNumber(request.IdentityNumber);
+        var person = normalizedIdentityNumber is null
+            ? null
+            : await db.People
+                .Include(item => item.Employee)
+                .Include(item => item.ConstructionWorker)
+                .SingleOrDefaultAsync(item => item.IdentityNumberNormalized == normalizedIdentityNumber, cancellationToken);
+        if (person?.ConstructionWorker is not null)
+        {
+            throw new InvalidOperationException("该身份证号已存在施工班组人员档案。");
+        }
+        person ??= new Person { PersonNumber = $"PER-{Guid.NewGuid():N}" };
+        PersonPublicDataSynchronizer.Apply(person, request.Name, request.Phone, request.IdentityNumber, request.BankAccountNumber, request.BankName, request.Notes, true);
         var worker = new ConstructionWorker
         {
+            Person = person,
             Name = Required(request.Name),
             IdentityNumber = Optional(request.IdentityNumber),
             Phone = Optional(request.Phone),
@@ -183,7 +199,23 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
             StartDate = request.StartDate,
             IsPrimary = true
         });
+        var engagement = new PersonnelEngagementHistory
+        {
+            Person = person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.ConstructionCrew,
+            BusinessPartnerId = request.CrewBusinessPartnerId,
+            CrewBusinessPartnerId = request.CrewBusinessPartnerId,
+            PositionTitle = Optional(request.Trade),
+            StartDate = request.StartDate,
+            IsPrimary = true,
+            Notes = Optional(request.Notes),
+            Reason = reason
+        };
+        person.EngagementHistory.Add(engagement);
+        if (db.Entry(person).State == EntityState.Detached) db.People.Add(person);
         db.ConstructionWorkers.Add(worker);
+        db.PersonnelEngagementHistories.Add(engagement);
         AddAudit(userId, "CreateConstructionWorker", worker.Id, reason, null, new { worker.Name, request.CrewBusinessPartnerId, request.StartDate });
         await db.SaveChangesAsync(cancellationToken);
         return new ConstructionWorkerDto(worker.Id, worker.Name, worker.IdentityNumber, worker.Phone, worker.BankAccountNumber, worker.BankName, worker.Trade, request.CrewBusinessPartnerId, request.StartDate, null, worker.IsActive, worker.Notes, worker.ConcurrencyStamp);
@@ -192,7 +224,9 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
     public async Task TransferWorkerAsync(string userId, TransferConstructionWorkerRequest request, CancellationToken cancellationToken)
     {
         await EnsureCrewAsync(request.NewCrewBusinessPartnerId, cancellationToken);
-        var worker = await db.ConstructionWorkers.Include(item => item.Memberships)
+        var worker = await db.ConstructionWorkers
+            .Include(item => item.Memberships)
+            .Include(item => item.Person).ThenInclude(item => item!.EngagementHistory)
             .SingleOrDefaultAsync(item => item.Id == request.ConstructionWorkerId, cancellationToken)
             ?? throw new InvalidOperationException("班组人员不存在。");
         var current = worker.Memberships.SingleOrDefault(item => item.IsPrimary && !item.EndDate.HasValue)
@@ -219,6 +253,36 @@ public sealed class ConstructionCrewService(ApplicationDbContext db) : IConstruc
         };
         worker.Memberships.Add(newMembership);
         db.ConstructionCrewMemberships.Add(newMembership);
+        if (worker.Person is null)
+        {
+            worker.Person = new Person { PersonNumber = $"PER-{Guid.NewGuid():N}" };
+            PersonPublicDataSynchronizer.Apply(worker.Person, worker.Name, worker.Phone, worker.IdentityNumber, worker.BankAccountNumber, worker.BankName, worker.Notes, worker.IsActive);
+            db.People.Add(worker.Person);
+        }
+        var currentEngagement = worker.Person.EngagementHistory
+            .Where(item => item.IsPrimary && item.StartDate <= request.TransferDate && (item.EndDate is null || item.EndDate >= request.TransferDate))
+            .OrderByDescending(item => item.StartDate)
+            .FirstOrDefault();
+        if (currentEngagement is not null && currentEngagement.StartDate < request.TransferDate)
+        {
+            currentEngagement.EndDate = request.TransferDate.AddDays(-1);
+            currentEngagement.ConcurrencyStamp = Guid.NewGuid();
+        }
+        var engagement = new PersonnelEngagementHistory
+        {
+            Person = worker.Person,
+            Scope = PersonnelScope.External,
+            ExternalType = ExternalPersonnelType.ConstructionCrew,
+            BusinessPartnerId = request.NewCrewBusinessPartnerId,
+            CrewBusinessPartnerId = request.NewCrewBusinessPartnerId,
+            PositionTitle = worker.Trade,
+            StartDate = request.TransferDate,
+            IsPrimary = true,
+            Notes = reason,
+            Reason = reason
+        };
+        worker.Person.EngagementHistory.Add(engagement);
+        db.PersonnelEngagementHistories.Add(engagement);
         worker.UpdatedAt = DateTimeOffset.UtcNow;
         worker.ConcurrencyStamp = Guid.NewGuid();
         AddAudit(userId, "TransferConstructionWorker", worker.Id, reason, before, new { request.NewCrewBusinessPartnerId, request.TransferDate });
