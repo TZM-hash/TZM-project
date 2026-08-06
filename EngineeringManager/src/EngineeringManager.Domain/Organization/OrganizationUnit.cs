@@ -16,6 +16,12 @@ public sealed class OrganizationUnit
 
     public ICollection<OrganizationUnit> Children { get; set; } = [];
 
+    public Guid? LegalEntityId { get; set; }
+
+    public Guid? BusinessPartnerId { get; set; }
+
+    public bool IsAuthorizationScope { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

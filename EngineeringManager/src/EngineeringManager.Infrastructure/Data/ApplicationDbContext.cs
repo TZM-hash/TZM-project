@@ -91,6 +91,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<FinanceDeletionLog> FinanceDeletionLogs => Set<FinanceDeletionLog>();
     public DbSet<FinanceLegacyMap> FinanceLegacyMaps => Set<FinanceLegacyMap>();
     public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<Person> People => Set<Person>();
+    public DbSet<PersonnelEngagementHistory> PersonnelEngagementHistories => Set<PersonnelEngagementHistory>();
     public DbSet<PersonnelMigrationMap> PersonnelMigrationMaps => Set<PersonnelMigrationMap>();
     public DbSet<BusinessYear> BusinessYears => Set<BusinessYear>();
     public DbSet<EmployeeWageEntry> EmployeeWageEntries => Set<EmployeeWageEntry>();
@@ -174,11 +176,27 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasKey(unit => unit.Id);
             entity.Property(unit => unit.Code).HasMaxLength(50).IsRequired();
             entity.Property(unit => unit.Name).HasMaxLength(200).IsRequired();
-            entity.HasIndex(unit => unit.Code).IsUnique();
+            entity.HasIndex(unit => unit.Code)
+                .IsUnique()
+                .HasFilter("[LegalEntityId] IS NULL AND [BusinessPartnerId] IS NULL");
+            entity.HasIndex(unit => new { unit.LegalEntityId, unit.BusinessPartnerId, unit.Code })
+                .IsUnique()
+                .HasFilter("[LegalEntityId] IS NOT NULL OR [BusinessPartnerId] IS NOT NULL");
             entity.HasOne(unit => unit.Parent)
                 .WithMany(unit => unit.Children)
                 .HasForeignKey(unit => unit.ParentId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LegalEntity>()
+                .WithMany()
+                .HasForeignKey(unit => unit.LegalEntityId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BusinessPartner>()
+                .WithMany()
+                .HasForeignKey(unit => unit.BusinessPartnerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_OrganizationUnits_Owner",
+                "NOT ([LegalEntityId] IS NOT NULL AND [BusinessPartnerId] IS NOT NULL)"));
         });
 
         builder.Entity<LegalEntity>(entity =>
@@ -300,6 +318,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         ConfigureProjectModel(builder);
         ConfigureFinanceModel(builder);
         ConfigureEmployeeModel(builder);
+        ConfigurePersonnelModel(builder);
         ConfigureEmployeeAnnualLedgerModel(builder);
         ConfigurePayrollModel(builder);
         ConfigureEmployeeLedgerModel(builder);
@@ -839,6 +858,54 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasIndex(item => new { item.ExpiresOn, item.IsDeleted });
             entity.HasOne(item => item.Employee).WithMany(employee => employee.Certificates).HasForeignKey(item => item.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Attachment).WithMany().HasForeignKey(item => item.AttachmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigurePersonnelModel(ModelBuilder builder)
+    {
+        builder.Entity<Person>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.PersonNumber).HasMaxLength(60).IsRequired();
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.IdentityNumber).HasMaxLength(50);
+            entity.Property(item => item.IdentityNumberNormalized).HasMaxLength(50);
+            entity.Property(item => item.Phone).HasMaxLength(50);
+            entity.Property(item => item.BankAccountNumber).HasMaxLength(100);
+            entity.Property(item => item.BankName).HasMaxLength(150);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => item.PersonNumber).IsUnique();
+            entity.HasIndex(item => item.IdentityNumberNormalized)
+                .IsUnique()
+                .HasFilter("[IdentityNumberNormalized] IS NOT NULL");
+            entity.HasOne(item => item.Employee)
+                .WithOne(item => item.Person)
+                .HasForeignKey<Employee>(item => item.PersonId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ConstructionWorker)
+                .WithOne(item => item.Person)
+                .HasForeignKey<ConstructionWorker>(item => item.PersonId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<PersonnelEngagementHistory>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.PositionTitle).HasMaxLength(100);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.Property(item => item.Reason).HasMaxLength(500);
+            entity.Property(item => item.ConcurrencyStamp).IsConcurrencyToken();
+            entity.HasIndex(item => new { item.PersonId, item.StartDate, item.IsPrimary });
+            entity.HasOne(item => item.Person).WithMany(item => item.EngagementHistory).HasForeignKey(item => item.PersonId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.LegalEntity).WithMany().HasForeignKey(item => item.LegalEntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.BusinessPartner).WithMany().HasForeignKey(item => item.BusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.OrganizationUnit).WithMany().HasForeignKey(item => item.OrganizationUnitId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CrewBusinessPartner).WithMany().HasForeignKey(item => item.CrewBusinessPartnerId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_PersonnelEngagementHistory_Scope",
+                "(([Scope] = 1 AND [InternalType] IS NOT NULL AND [ExternalType] IS NULL) OR ([Scope] = 2 AND [InternalType] IS NULL AND [ExternalType] IS NOT NULL)) AND NOT ([LegalEntityId] IS NOT NULL AND [BusinessPartnerId] IS NOT NULL)"));
         });
     }
 

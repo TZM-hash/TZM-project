@@ -28,6 +28,8 @@ public sealed class Employee
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public Guid ConcurrencyStamp { get; set; } = Guid.NewGuid();
+    public Guid? PersonId { get; set; }
+    public Person? Person { get; set; }
     public ICollection<EmployeeAffiliationHistory> AffiliationHistory { get; set; } = [];
     public ICollection<EmployeeCertificate> Certificates { get; set; } = [];
 }
