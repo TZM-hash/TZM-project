@@ -123,6 +123,7 @@ public sealed class Program
         builder.Services.AddScoped<IProjectConstructionService, ProjectConstructionService>();
         builder.Services.AddScoped<IProjectRecordAttachmentService, ProjectRecordAttachmentService>();
         builder.Services.AddScoped<IBusinessPartnerService, BusinessPartnerService>();
+        builder.Services.AddScoped<IBusinessPartnerDirectorySynchronizer, BusinessPartnerDirectorySynchronizer>();
         builder.Services.AddScoped<IStageResultService, StageResultService>();
         builder.Services.AddScoped<IFinanceLedgerService, FinanceLedgerService>();
         builder.Services.AddScoped<CentralLedgerAllocationService>();
