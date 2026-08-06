@@ -116,10 +116,10 @@ public sealed class ConstructionCrewPageTests
             .And.Contain("data-crew-finance-chart=\"salesInvoice\"")
             .And.Contain("data-crew-finance-chart=\"purchaseInvoice\"");
 
-        css.Should().Contain(".crew-workspace-table.partner-workspace-table--financial { min-width: 73rem; }")
-            .And.Contain("th[data-column-key=\"crew\"] { width: 14.5rem; }")
-            .And.Contain("th[data-column-key=\"role_trade\"] { width: 8rem; }")
-            .And.Contain("th[data-column-key=\"contact\"] { width: 8rem; }")
+        css.Should().Contain(".crew-workspace-table.partner-workspace-table--financial { min-width: 79rem; }")
+            .And.Contain("th[data-column-key=\"crew\"] { width: 16rem; }")
+            .And.Contain("th[data-column-key=\"role_trade\"] { width: 8.5rem; }")
+            .And.Contain("th[data-column-key=\"contact\"] { width: 8.5rem; }")
             .And.Contain("th[data-column-key=\"projects\"] { width: 4.5rem; }")
             .And.Contain("th[data-column-key=\"payments\"] { width: 9rem; }");
     }
@@ -136,6 +136,7 @@ public sealed class ConstructionCrewPageTests
 
         index.Should().Contain("data-crew-workspace")
             .And.Contain("crew-workspace-layout")
+            .And.Contain("crew-cell-ellipsis")
             .And.Contain("data-crew-dialog-open=\"create\"")
             .And.Contain("data-crew-dialog-open=\"details\"")
             .And.Contain("data-crew-dialog-open=\"edit\"")
@@ -170,9 +171,12 @@ public sealed class ConstructionCrewPageTests
         css.Should().Contain(".crew-workspace-layout")
             .And.Contain(".crew-workspace-table")
             .And.Contain(".crew-row-actions")
+            .And.Contain(".partner-name-clamp, .crew-name-clamp")
+            .And.Contain(".partner-cell-ellipsis, .crew-cell-ellipsis")
             .And.Contain(".partner-financial-progress-value { position: absolute; inset: 0; display: grid; place-items: center; color: #111827;")
             .And.Contain(".partner-finance-chart-heading > strong { color: #111827;")
-            .And.Contain(".crew-workspace-layout { grid-template-columns: 1fr; }");
+            .And.Contain("@media (max-width: 1280px)")
+            .And.Contain(".partner-workspace-layout, .crew-workspace-layout { grid-template-columns: 1fr; }");
     }
 
     [Fact]

@@ -45,6 +45,22 @@ public sealed class PersonnelResponsiveUiTests
             .And.Contain("overflow-x: auto");
     }
 
+    [Fact]
+    public void PartnerAndCrewTablesKeepResponsiveOverflowInsideTheirWorkspaces()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        css.Should().Contain("@media (max-width: 1280px)")
+            .And.Contain(".partner-workspace-layout, .crew-workspace-layout { grid-template-columns: 1fr; }")
+            .And.Contain(".partner-name-clamp, .crew-name-clamp")
+            .And.Contain("white-space: normal")
+            .And.Contain(".partner-cell-ellipsis, .crew-cell-ellipsis")
+            .And.Contain("text-overflow: ellipsis")
+            .And.Contain(".partner-table-wrap, .crew-table-wrap")
+            .And.Contain("max-width: 100%")
+            .And.Contain("overflow-x: auto");
+    }
+
     private static string ReadFile(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()));
 

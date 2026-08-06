@@ -199,9 +199,9 @@
                             payable = financialSummary.Payable
                         }, financeJsonOptions);
                         <tr>
-                            <td data-column-key="partner" data-sort-value="@partner.PartnerNumber"><strong class="partner-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
-                            <td data-column-key="role_trade"><strong>@roleLabel</strong><span class="table-secondary partner-name-clamp" title="@primaryRole?.TradeCategory">@(primaryRole?.TradeCategory ?? "未填写专业")</span></td>
-                            <td data-column-key="contact"><strong>@(primaryContact?.Name ?? "未设置")</strong><span class="table-secondary">@(primaryContact?.Phone ?? "未设置电话")</span></td>
+                            <td data-column-key="partner" data-sort-value="@partner.PartnerNumber"><strong class="partner-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary partner-cell-ellipsis" title="@partner.PartnerNumber · @partner.ShortName">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary partner-cell-ellipsis" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
+                            <td data-column-key="role_trade"><strong class="partner-cell-ellipsis" title="@roleLabel">@roleLabel</strong><span class="table-secondary partner-cell-ellipsis" title="@primaryRole?.TradeCategory">@(primaryRole?.TradeCategory ?? "未填写专业")</span></td>
+                            <td data-column-key="contact"><strong class="partner-cell-ellipsis" title="@(primaryContact?.Name ?? "未设置")">@(primaryContact?.Name ?? "未设置")</strong><span class="table-secondary partner-cell-ellipsis" title="@(primaryContact?.Phone ?? "未设置电话")">@(primaryContact?.Phone ?? "未设置电话")</span></td>
                             <td data-column-key="projects"><strong class="partner-project-count">@partner.ProjectCount</strong></td>
                             @if (Model.CanViewFinance)
                             {
