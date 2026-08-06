@@ -5,7 +5,7 @@
 @using EngineeringManager.Web.Presentation
 @using EngineeringManager.Web.Workbenches
 @{
-    ViewData["Title"] = "员工管理";
+    ViewData["Title"] = "人员管理 - 员工业务档案";
     var workbench = DataWorkbenchPresets.Employees with
     {
         CurrentSortKey = Model.SortKey,
@@ -45,7 +45,7 @@
 
 <div class="employee-workspace-page" data-employee-workspace data-next-employee-number="@Model.NextEmployeeNumber">
     <section class="page-heading compact-page-heading employee-workspace-heading">
-        <div><p class="eyebrow">人员经营台账</p><h1>员工管理</h1><p class="page-lead">集中维护员工主档、当前归属、应付和付款数据</p></div>
+        <div><p class="eyebrow">人员经营台账</p><h1>员工业务档案</h1><p class="page-lead">内部人员的工资、证书、应付和付款仍在此维护，人员主档与身份切换统一进入人员管理。</p></div>
         <div class="page-actions-inline">@if (Model.CanManage) { <button class="button button--primary button--action" type="button" data-employee-dialog-open="create">新增员工</button> }</div>
     </section>
 

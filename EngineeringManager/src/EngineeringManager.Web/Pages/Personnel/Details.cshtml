@@ -1,0 +1,127 @@
+@page
+@model EngineeringManager.Web.Pages.Personnel.DetailsModel
+@using EngineeringManager.Domain.Employees
+@using EngineeringManager.Domain.Personnel
+@using EngineeringManager.Web.Presentation
+@{
+    ViewData["Title"] = $"人员档案 - {Model.Person.Name}";
+    var affiliation = Model.Person.CurrentAffiliation;
+    string ScopeLabel(PersonnelScope scope) => scope == PersonnelScope.Internal ? "内部人员" : "外部人员";
+    string ExternalTypeLabel(ExternalPersonnelType? value) => value switch
+    {
+        ExternalPersonnelType.ConstructionCrew => "施工班组人员",
+        ExternalPersonnelType.BusinessPartner => "合作单位人员",
+        ExternalPersonnelType.Other => "其他外部人员",
+        _ => "未设置"
+    };
+}
+
+<nav class="page-tabs page-tabs--buttons employee-sub-navigation" aria-label="人员管理子导航">
+    <a class="button button--secondary button--small" asp-page="/Personnel/Internal/Index">内部人员</a>
+    <a class="button button--secondary button--small" asp-page="/Personnel/External/Index">外部人员</a>
+    <a class="button button--secondary button--small" asp-page="/Employees/Index">员工业务档案</a>
+</nav>
+
+<div class="employee-detail-workspace personnel-detail-workspace">
+    <section class="page-heading compact-page-heading">
+        <div><p class="eyebrow">统一人员档案 · @Model.Person.PersonNumber</p><h1>@Model.Person.Name</h1><p class="page-lead">公共资料只保留一份，内部/外部身份及公司、部门、项目、班组归属按生效日期留痕。</p></div>
+        <div class="page-actions-inline"><span class="status-chip @(Model.Person.IsActive ? "status-chip--success" : "status-chip--muted")">@(Model.Person.IsActive ? "启用" : "停用")</span></div>
+    </section>
+
+    @if (TempData["SuccessMessage"] is string successMessage)
+    {
+        <div class="alert alert--success">@successMessage</div>
+    }
+
+    <div asp-validation-summary="ModelOnly" class="validation-summary-errors"></div>
+
+    <section class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">人员主档</p><h2>公共资料</h2></div><div class="page-actions-inline">
+            @if (Model.Person.EmployeeId.HasValue) { <a class="button button--secondary button--small" asp-page="/Employees/Details" asp-route-id="@Model.Person.EmployeeId">员工业务档案</a> }
+            @if (affiliation?.CrewBusinessPartnerId.HasValue == true) { <a class="button button--secondary button--small" asp-page="/Crews/Details" asp-route-id="@affiliation.CrewBusinessPartnerId">施工班组名册</a> }
+        </div></div>
+        <div class="detail-grid">
+            <div><span>人员编号</span><strong>@Model.Person.PersonNumber</strong></div>
+            <div><span>姓名</span><strong>@Model.Person.Name</strong></div>
+            <div><span>联系电话</span><strong>@(Model.Person.Phone ?? "未填写")</strong></div>
+            <div><span>身份证号</span><strong>@(Model.Person.IdentityNumber ?? "未填写或无权限查看")</strong></div>
+            <div><span>银行卡号</span><strong>@(Model.Person.BankAccountNumber ?? "未填写或无权限查看")</strong></div>
+            <div><span>开户行</span><strong>@(Model.Person.BankName ?? "未填写")</strong></div>
+            <div><span>备注</span><strong>@(Model.Person.Notes ?? "无")</strong></div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">当前有效记录</p><h2>当前身份与归属</h2></div><small>@(affiliation is null ? "尚未设置" : $"自 {affiliation.StartDate:yyyy-MM-dd} 生效")</small></div>
+        <div class="detail-grid">
+            <div><span>人员范围</span><strong>@(affiliation is null ? "未设置" : ScopeLabel(affiliation.Scope))</strong></div>
+            <div><span>人员类型</span><strong>@(affiliation?.Scope == PersonnelScope.Internal ? affiliation.InternalType?.ToChinese() : ExternalTypeLabel(affiliation?.ExternalType))</strong></div>
+            <div><span>公司 / 单位</span><strong>@(affiliation?.LegalEntityName ?? affiliation?.BusinessPartnerName ?? "未设置")</strong></div>
+            <div><span>部门</span><strong>@(affiliation?.OrganizationUnitName ?? "未设置")</strong></div>
+            <div><span>当前项目</span><strong>@(affiliation?.ProjectName ?? "未设置")</strong></div>
+            <div><span>施工班组</span><strong>@(affiliation?.CrewBusinessPartnerName ?? "未设置")</strong></div>
+            <div><span>岗位</span><strong>@(affiliation?.PositionTitle ?? "未设置")</strong></div>
+        </div>
+    </section>
+
+    @if (Model.CanManage)
+    {
+        <section class="panel">
+            <div class="panel-heading"><div><p class="eyebrow">有生效日期的变更</p><h2>内部 / 外部身份切换</h2></div><small>旧身份自动截止并保留历史</small></div>
+            <form method="post" asp-page-handler="SwitchScope" class="form-grid">
+                <input type="hidden" asp-for="PersonId" />
+                <input type="hidden" asp-for="AsOf" />
+                <label>切换为
+                    <select asp-for="SwitchInput.Scope">
+                        <option value="Internal">内部人员</option>
+                        <option value="External">外部人员</option>
+                    </select>
+                </label>
+                <label>内部人员类型
+                    <select asp-for="SwitchInput.InternalType">
+                        <option value="">不适用</option>
+                        @foreach (var value in Enum.GetValues<EmployeeType>()) { <option value="@value">@value.ToChinese()</option> }
+                    </select>
+                </label>
+                <label>外部人员类型
+                    <select asp-for="SwitchInput.ExternalType">
+                        <option value="">不适用</option>
+                        <option value="ConstructionCrew">施工班组人员</option>
+                        <option value="BusinessPartner">合作单位人员</option>
+                        <option value="Other">其他外部人员</option>
+                    </select>
+                </label>
+                <label>自有公司
+                    <select asp-for="SwitchInput.LegalEntityId"><option value="">不选择</option>@foreach (var item in Model.Options.LegalEntities) { <option value="@item.Id">@item.Name</option> }</select>
+                </label>
+                <label>合作单位
+                    <select asp-for="SwitchInput.BusinessPartnerId"><option value="">不选择</option>@foreach (var item in Model.Options.BusinessPartners) { <option value="@item.Id">@item.Name</option> }</select>
+                </label>
+                <label>部门
+                    <select asp-for="SwitchInput.OrganizationUnitId"><option value="">不选择</option>@foreach (var item in Model.Options.Departments) { <option value="@item.Id">@item.Name</option> }</select>
+                </label>
+                <label>当前项目
+                    <select asp-for="SwitchInput.ProjectId"><option value="">不选择</option>@foreach (var item in Model.Options.Projects) { <option value="@item.Id">@item.Name</option> }</select>
+                </label>
+                <label>施工班组
+                    <select asp-for="SwitchInput.CrewBusinessPartnerId"><option value="">不选择</option>@foreach (var item in Model.Options.Crews) { <option value="@item.Id">@item.Name</option> }</select>
+                </label>
+                <label>岗位<input asp-for="SwitchInput.PositionTitle" /></label>
+                <label>生效日期<input asp-for="SwitchInput.EffectiveDate" type="date" required /></label>
+                <label class="form-span-2">修改原因<input asp-for="SwitchInput.Reason" required /></label>
+                <div class="form-actions form-span-2"><button class="button button--primary" type="submit">确认切换身份</button></div>
+            </form>
+        </section>
+    }
+
+    <section class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">时间轴</p><h2>归属历史</h2></div><strong>@Model.Person.EngagementHistory.Count 条</strong></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>生效区间</th><th>身份</th><th>公司 / 单位</th><th>部门</th><th>项目</th><th>班组</th><th>岗位</th></tr></thead><tbody>
+        @if (Model.Person.EngagementHistory.Count == 0) { <tr><td colspan="7" class="empty-state">暂无归属历史。</td></tr> }
+        @foreach (var item in Model.Person.EngagementHistory)
+        {
+            <tr><td>@item.StartDate.ToString("yyyy-MM-dd") ～ @(item.EndDate?.ToString("yyyy-MM-dd") ?? "至今")</td><td>@ScopeLabel(item.Scope)</td><td>@(item.LegalEntityName ?? item.BusinessPartnerName ?? "未设置")</td><td>@(item.OrganizationUnitName ?? "未设置")</td><td>@(item.ProjectName ?? "未设置")</td><td>@(item.CrewBusinessPartnerName ?? "未设置")</td><td>@(item.PositionTitle ?? "未设置")</td></tr>
+        }
+        </tbody></table></div>
+    </section>
+</div>

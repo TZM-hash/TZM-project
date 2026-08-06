@@ -1,0 +1,127 @@
+@page
+@model EngineeringManager.Web.Pages.Personnel.External.IndexModel
+@using EngineeringManager.Domain.Personnel
+@{
+    ViewData["Title"] = "人员管理 - 外部人员";
+    var activeCount = Model.Personnel.Count(item => item.IsActive);
+    string ExternalTypeLabel(ExternalPersonnelType? value) => value switch
+    {
+        ExternalPersonnelType.ConstructionCrew => "施工班组人员",
+        ExternalPersonnelType.BusinessPartner => "合作单位人员",
+        ExternalPersonnelType.Other => "其他外部人员",
+        _ => "外部人员"
+    };
+}
+
+<nav class="page-tabs page-tabs--buttons employee-sub-navigation" aria-label="人员管理子导航">
+    <a class="button button--secondary button--small" asp-page="/Personnel/Internal/Index">内部人员</a>
+    <a class="button button--secondary button--small is-active" asp-page="/Personnel/External/Index" aria-current="page">外部人员</a>
+    <a class="button button--secondary button--small" asp-page="/Employees/Index">员工业务档案</a>
+</nav>
+
+<div class="employee-workspace-page personnel-workbench">
+    <section class="page-heading compact-page-heading employee-workspace-heading">
+        <div>
+            <p class="eyebrow">统一人员主档</p>
+            <h1>外部人员</h1>
+            <p class="page-lead">集中管理施工班组人员、合作单位人员和其他外部人员，并保留身份与归属历史。</p>
+        </div>
+        <div class="page-actions-inline"><a class="button button--secondary button--action" asp-page="/Crews/Index">维护施工班组</a><a class="button button--primary button--action" asp-page="/Partners/Index">维护合作单位</a></div>
+    </section>
+
+    <form method="get" class="panel filter-bar personnel-filter-bar" aria-label="外部人员筛选">
+        <label>搜索<input name="Search" value="@Model.Search" placeholder="姓名、编号、电话、项目" /></label>
+        <label>关联自有公司
+            <select name="LegalEntityId">
+                <option value="">全部公司</option>
+                @foreach (var item in Model.Options.LegalEntities)
+                {
+                    if (Model.LegalEntityId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
+                    else { <option value="@item.Id">@item.Name</option> }
+                }
+            </select>
+        </label>
+        <label>合作单位 / 班组
+            <select name="BusinessPartnerId">
+                <option value="">全部单位</option>
+                @foreach (var item in Model.Options.BusinessPartners)
+                {
+                    if (Model.BusinessPartnerId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
+                    else { <option value="@item.Id">@item.Name</option> }
+                }
+            </select>
+        </label>
+        <label>部门
+            <select name="DepartmentId">
+                <option value="">全部部门</option>
+                @foreach (var item in Model.Options.Departments)
+                {
+                    if (Model.DepartmentId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
+                    else { <option value="@item.Id">@item.Name</option> }
+                }
+            </select>
+        </label>
+        <label>外部类型
+            <select name="ExternalType">
+                <option value="">全部类型</option>
+                @foreach (var value in Enum.GetValues<ExternalPersonnelType>())
+                {
+                    if (Model.ExternalType == value) { <option value="@value" selected>@ExternalTypeLabel(value)</option> }
+                    else { <option value="@value">@ExternalTypeLabel(value)</option> }
+                }
+            </select>
+        </label>
+        <label>状态
+            <select name="IsActive">
+                <option value="">全部状态</option>
+                @if (Model.IsActive == true) { <option value="true" selected>启用</option> } else { <option value="true">启用</option> }
+                @if (Model.IsActive == false) { <option value="false" selected>停用</option> } else { <option value="false">停用</option> }
+            </select>
+        </label>
+        <label>归属日期<input type="date" name="AsOf" value="@Model.AsOf?.ToString("yyyy-MM-dd")" /></label>
+        <div class="page-actions-inline"><button class="button button--primary" type="submit">筛选</button><a class="button button--secondary" asp-page="/Personnel/External/Index">重置</a></div>
+    </form>
+
+    <section class="employee-workspace-layout">
+        <aside class="employee-workspace-summary">
+            <div class="equipment-summary-heading"><span>外部人员概览</span><strong>@Model.Personnel.Count</strong></div>
+            <div class="overview-strip employee-summary-metrics">
+                <article class="employee-summary-metric--total"><span>当前结果</span><strong>@Model.Personnel.Count</strong></article>
+                <article class="employee-summary-metric--active"><span>启用人员</span><strong>@activeCount</strong></article>
+            </div>
+            <p class="panel-copy">同一个人只保留一份公共主档，通过有生效日期的身份记录在内部与外部之间切换。</p>
+        </aside>
+
+        <section class="employee-workspace-list">
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar"><div><p class="eyebrow">人员清单</p><h2>外部人员工作台</h2></div></div>
+            <div class="table-wrap"><table class="data-table employee-workspace-table"><thead><tr><th>人员</th><th>类型 / 岗位</th><th>单位 / 部门</th><th>项目 / 班组</th><th>状态</th><th>操作</th></tr></thead><tbody>
+            @if (Model.Personnel.Count == 0)
+            {
+                <tr><td colspan="6" class="empty-state">当前筛选条件下暂无外部人员。</td></tr>
+            }
+            @foreach (var item in Model.Personnel)
+            {
+                var affiliation = item.CurrentAffiliation;
+                <tr>
+                    <td><strong>@item.Name</strong><span class="table-secondary">@item.PersonNumber · @(item.Phone ?? "未填写电话")</span></td>
+                    <td><strong>@ExternalTypeLabel(item.ExternalType)</strong><span class="table-secondary">@(affiliation?.PositionTitle ?? "未填写岗位")</span></td>
+                    <td><strong>@(affiliation?.BusinessPartnerName ?? affiliation?.LegalEntityName ?? "未归属单位")</strong><span class="table-secondary">@(affiliation?.OrganizationUnitName ?? "未归属部门")</span></td>
+                    <td><strong>@(affiliation?.ProjectName ?? "未归属项目")</strong><span class="table-secondary">@(affiliation?.CrewBusinessPartnerName ?? "未归属班组")</span></td>
+                    <td><span class="partner-status partner-status--@(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "启用" : "停用")</span></td>
+                    <td><div class="employee-row-actions">
+                        <a class="action-button action-button--view" asp-page="/Personnel/Details" asp-route-personId="@item.Id" asp-route-asOf="@Model.AsOf">统一档案</a>
+                        @if (affiliation?.CrewBusinessPartnerId.HasValue == true)
+                        {
+                            <a class="action-button action-button--edit" asp-page="/Crews/Details" asp-route-id="@affiliation.CrewBusinessPartnerId">班组名册</a>
+                        }
+                        @if (affiliation?.BusinessPartnerId.HasValue == true)
+                        {
+                            <a class="action-button" asp-page="/Partners/Details" asp-route-id="@affiliation.BusinessPartnerId">单位档案</a>
+                        }
+                    </div></td>
+                </tr>
+            }
+            </tbody></table></div>
+        </section>
+    </section>
+</div>
