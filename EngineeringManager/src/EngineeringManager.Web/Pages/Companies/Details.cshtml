@@ -86,6 +86,11 @@
     <article class="@(unpaid > 0m ? "is-danger" : "is-success")"><span>未付款</span><strong class="@(unpaid > 0m ? "company-amount--danger" : null)">@unpaid.ToString("N2")</strong><small>待安排应付余额</small></article>
 </section>
 
+@if (Model.OrganizationSummary is not null)
+{
+    <partial name="_OrganizationSummary" model="new OrganizationSummaryViewModel(Model.OrganizationSummary)" />
+}
+
 <nav class="company-tabs" data-company-tabs aria-label="公司工作台标签">
     <a class="@(Model.ActiveTab == "overview" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="overview">经营概览</a>
     <a class="@(Model.ActiveTab == "profile" ? "is-active" : null)" asp-page="Details" asp-route-id="@Model.Company.Id" asp-route-tab="profile">基本信息</a>

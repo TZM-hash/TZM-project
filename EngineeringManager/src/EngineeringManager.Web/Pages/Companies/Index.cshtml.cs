@@ -1,6 +1,7 @@
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Application.Certificates;
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Application.Organization;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,13 +11,19 @@ using System.ComponentModel.DataAnnotations;
 namespace EngineeringManager.Web.Pages.Companies;
 
 [Authorize(Roles = SystemRoles.SystemAdministrator + "," + SystemRoles.ApplicationAdministrator + "," + SystemRoles.Finance + "," + SystemRoles.ProjectManager + "," + SystemRoles.QueryOnly + "," + SystemRoles.EquipmentManager)]
-public sealed class IndexModel(ICompanyManagementService companyService, ICompanyCertificateService certificateService, ICompanyActorService actorService, IEmployeeService employeeService)
+public sealed class IndexModel(
+    ICompanyManagementService companyService,
+    ICompanyCertificateService certificateService,
+    ICompanyActorService actorService,
+    IEmployeeService employeeService,
+    IOrganizationSummaryService? organizationSummaryService = null)
     : CompanyPageModel(actorService)
 {
     public IReadOnlyList<CompanyListItemDto> Companies { get; private set; } = [];
     public CompanyDashboardDto Dashboard { get; private set; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DateTimeOffset.UtcNow);
     public IReadOnlyList<CompanyCategoryDto> Categories { get; private set; } = [];
     public IReadOnlyDictionary<Guid, CompanyDetailsDto> CompanyDetails { get; private set; } = new Dictionary<Guid, CompanyDetailsDto>();
+    public IReadOnlyDictionary<Guid, OrganizationSummaryDto> OrganizationSummaries { get; private set; } = new Dictionary<Guid, OrganizationSummaryDto>();
     public IReadOnlyList<CompanyCertificateItemDto> CompanyCertificates { get; private set; } = [];
     public int EmployeeCount { get; private set; }
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator);
@@ -142,6 +149,18 @@ public sealed class IndexModel(ICompanyManagementService companyService, ICompan
             details[company.Id] = await companyService.GetAsync(actor, company.Id, cancellationToken);
         }
         CompanyDetails = details;
+        if (organizationSummaryService is not null)
+        {
+            var summaries = new Dictionary<Guid, OrganizationSummaryDto>();
+            var asOf = DateOnly.FromDateTime(DateTime.Today);
+            foreach (var company in Companies)
+            {
+                summaries[company.Id] = await organizationSummaryService.GetAsync(
+                    new OrganizationSummaryQuery(OrganizationOwnerKind.LegalEntity, company.Id, asOf),
+                    cancellationToken);
+            }
+            OrganizationSummaries = summaries;
+        }
         CompanyCertificates = await certificateService.ListAsync(actor, new CertificateFilter(), DateOnly.FromDateTime(DateTime.Today), cancellationToken);
         if (CategoryRows.Count == 0)
         {

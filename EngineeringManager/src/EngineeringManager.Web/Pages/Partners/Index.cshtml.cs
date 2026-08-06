@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Application.Organization;
 using EngineeringManager.Application.Partners;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Security;
@@ -18,7 +19,8 @@ namespace EngineeringManager.Web.Pages.Partners;
 public sealed class IndexModel(
     IBusinessPartnerService partnerService,
     ICentralLedgerQueryService ledgerQueryService,
-    ApplicationDbContext db) : PageModel
+    ApplicationDbContext db,
+    IOrganizationSummaryService? organizationSummaryService = null) : PageModel
 {
     public const string CustomerScope = "customers";
 
@@ -27,6 +29,8 @@ public sealed class IndexModel(
     public IReadOnlyList<PartnerRoleSummary> RoleSummaries { get; private set; } = [];
     public IReadOnlyDictionary<Guid, PartnerLedgerSummaryDto> PartnerFinancialSummaries { get; private set; }
         = new Dictionary<Guid, PartnerLedgerSummaryDto>();
+    public IReadOnlyDictionary<Guid, OrganizationSummaryDto> OrganizationSummaries { get; private set; }
+        = new Dictionary<Guid, OrganizationSummaryDto>();
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
     public bool CanManageFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
     public bool CanViewFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance) || User.IsInRole(SystemRoles.QueryOnly);
@@ -148,6 +152,18 @@ public sealed class IndexModel(
         RoleSummaries = AvailableRoles
             .Select(role => new PartnerRoleSummary(role, AllPartners.Count(item => item.Roles.Any(value => value.RoleType == role))))
             .ToArray();
+        if (organizationSummaryService is not null)
+        {
+            var summaries = new Dictionary<Guid, OrganizationSummaryDto>();
+            var asOf = DateOnly.FromDateTime(DateTime.Today);
+            foreach (var partner in Partners)
+            {
+                summaries[partner.Id] = await organizationSummaryService.GetAsync(
+                    new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, partner.Id, asOf),
+                    cancellationToken);
+            }
+            OrganizationSummaries = summaries;
+        }
         if (CanViewFinance && Partners.Count > 0)
         {
             var actor = await LedgerPageSupport.CreateActorAsync(User, db, cancellationToken);

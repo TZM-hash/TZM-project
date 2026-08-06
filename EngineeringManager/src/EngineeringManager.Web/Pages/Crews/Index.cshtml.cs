@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Claims;
 using EngineeringManager.Application.ConstructionCrews;
 using EngineeringManager.Application.Finance;
+using EngineeringManager.Application.Organization;
 using EngineeringManager.Application.Partners;
 using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Security;
@@ -21,13 +22,16 @@ public sealed class IndexModel(
     IConstructionCrewService crewService,
     IBusinessPartnerService partnerService,
     ICentralLedgerQueryService ledgerQueryService,
-    ApplicationDbContext db) : PageModel
+    ApplicationDbContext db,
+    IOrganizationSummaryService? organizationSummaryService = null) : PageModel
 {
     public IReadOnlyList<CrewWorkspaceRow> AllCrews { get; private set; } = [];
     public IReadOnlyList<CrewWorkspaceRow> Crews { get; private set; } = [];
     public IReadOnlyList<CrewTradeSummary> TradeSummaries { get; private set; } = [];
     public IReadOnlyDictionary<Guid, PartnerLedgerSummaryDto> PartnerFinancialSummaries { get; private set; }
         = new Dictionary<Guid, PartnerLedgerSummaryDto>();
+    public IReadOnlyDictionary<Guid, OrganizationSummaryDto> OrganizationSummaries { get; private set; }
+        = new Dictionary<Guid, OrganizationSummaryDto>();
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator)
         || User.IsInRole(SystemRoles.ApplicationAdministrator)
         || User.IsInRole(SystemRoles.ProjectManager);
@@ -153,6 +157,18 @@ public sealed class IndexModel(
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => new CrewTradeSummary(group.Key, group.Count()))
             .ToArray();
+        if (organizationSummaryService is not null)
+        {
+            var summaries = new Dictionary<Guid, OrganizationSummaryDto>();
+            var asOf = DateOnly.FromDateTime(DateTime.Today);
+            foreach (var crew in Crews)
+            {
+                summaries[crew.Partner.Id] = await organizationSummaryService.GetAsync(
+                    new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, crew.Partner.Id, asOf),
+                    cancellationToken);
+            }
+            OrganizationSummaries = summaries;
+        }
         if (CanViewFinance && Crews.Count > 0)
         {
             var actor = await LedgerPageSupport.CreateActorAsync(User, db, cancellationToken);

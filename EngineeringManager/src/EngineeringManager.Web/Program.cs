@@ -116,6 +116,7 @@ public sealed class Program
         builder.Services.AddRazorPages();
         builder.Services.AddMemoryCache();
         builder.Services.AddScoped<IOrganizationService, OrganizationService>();
+        builder.Services.AddScoped<IOrganizationSummaryService, OrganizationSummaryService>();
         builder.Services.AddScoped<IUserAdministrationService, UserAdministrationService>();
         builder.Services.AddScoped<IProjectService, ProjectService>();
         builder.Services.AddScoped<IProjectWorkspaceService, ProjectWorkspaceService>();

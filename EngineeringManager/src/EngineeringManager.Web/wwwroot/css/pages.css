@@ -87,6 +87,47 @@
 .project-index-heading h1 { font-size: clamp(1.45rem, 2.2vw, 1.9rem); }
 .project-overview-strip { grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
 .project-overview-strip strong { overflow: visible; font-size: 1rem; text-overflow: clip; }
+
+.organization-summary { margin: .85rem 0; padding: .9rem; border: 1px solid rgba(148, 163, 184, .32); border-radius: 12px; background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .94)); box-shadow: var(--app-shadow-soft); }
+.organization-summary__heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+.organization-summary__heading h2, .organization-summary__group h3 { margin: 0; }
+.organization-summary__heading small { color: var(--app-muted); text-align: right; }
+.organization-summary__groups { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.65fr) minmax(8.5rem, .62fr); gap: .72rem; align-items: start; }
+.organization-summary__group { min-width: 0; }
+.organization-summary__group h3 { margin-bottom: .4rem; color: var(--app-muted); font-size: .74rem; font-weight: 700; letter-spacing: .04em; }
+.organization-summary__metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.4rem, 1fr)); gap: .42rem; }
+.organization-summary__metric { display: flex; min-width: 0; min-height: 4.15rem; flex-direction: column; justify-content: space-between; gap: .28rem; padding: .58rem .64rem; border: 1px solid rgba(148, 163, 184, .28); border-top: 3px solid #64748b; border-radius: 9px; color: var(--app-text); background: rgba(255, 255, 255, .92); text-decoration: none; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.organization-summary__metric:hover, .organization-summary__metric:focus-visible { border-color: color-mix(in srgb, var(--app-primary) 52%, #cbd5e1); box-shadow: 0 7px 16px rgba(15, 23, 42, .09); transform: translateY(-1px); }
+.organization-summary__metric span { overflow: hidden; color: var(--app-muted); font-size: .73rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.organization-summary__metric strong { color: var(--app-text); font-size: 1.16rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.organization-summary__metric--project { border-top-color: #2563eb; background: #f8fbff; }
+.organization-summary__metric--personnel { border-top-color: #059669; background: #f7fdfb; }
+.organization-summary__metric--department { border-top-color: #7c3aed; background: #fbf9ff; }
+.organization-summary-row > td { padding: .32rem .45rem .72rem !important; border-top: 0; background: rgba(248, 250, 252, .72); }
+.organization-summary--compact { margin: 0; padding: .5rem; border-radius: 9px; box-shadow: none; }
+.organization-summary--compact .organization-summary__groups { gap: .5rem; }
+.organization-summary--compact .organization-summary__group h3 { margin-bottom: .28rem; font-size: .68rem; }
+.organization-summary--compact .organization-summary__metrics { display: flex; flex-wrap: wrap; gap: .3rem; }
+.organization-summary--compact .organization-summary__metric { min-height: 3.15rem; flex: 1 1 6.8rem; gap: .14rem; padding: .38rem .48rem; border-top-width: 2px; }
+.organization-summary--compact .organization-summary__metric span { font-size: .67rem; }
+.organization-summary--compact .organization-summary__metric strong { font-size: .92rem; }
+
+@media (max-width: 1100px) {
+  .organization-summary__groups, .organization-summary--compact .organization-summary__groups { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .organization-summary { padding: .68rem; }
+  .organization-summary__heading { align-items: start; flex-direction: column; gap: .25rem; }
+  .organization-summary__heading small { text-align: left; }
+  .organization-summary__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .organization-summary--compact .organization-summary__metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .organization-summary__metric, .organization-summary--compact .organization-summary__metric { min-height: 3.45rem; }
+}
+
+@media (max-width: 350px) {
+  .organization-summary__metrics, .organization-summary--compact .organization-summary__metrics { grid-template-columns: 1fr; }
+}
 #projects-table { width: max-content; min-width: 100%; }
 #projects-table [data-column-key="stage"] { width: 7.2rem; max-width: 7.2rem; }
 #projects-table [data-column-key="settlement_status"] { width: 5.8rem; max-width: 5.8rem; }

@@ -156,6 +156,14 @@
                             <td data-column-key="status"><span class="partner-status partner-status--@(partner.IsActive ? "active" : "inactive")">@(partner.IsActive ? "启用" : "停用")</span></td>
                             <td data-column-key="actions"><div class="partner-row-actions crew-row-actions"><button class="action-button action-button--view" type="button" title="查看施工班组" data-crew-dialog-open="details" data-crew-payload="@payload">查看</button>@if (Model.CanManage) { <button class="action-button action-button--edit" type="button" title="编辑施工班组" data-crew-dialog-open="edit" data-crew-payload="@payload">编辑</button><button class="action-button action-button--copy" type="button" title="复制施工班组" data-crew-dialog-open="copy" data-crew-payload="@payload">复制</button> }<button class="action-button action-button--roster" type="button" title="查看人员名册" data-crew-dialog-open="roster" data-crew-payload="@payload">人员</button>@if (Model.CanManageFinance) { <button class="action-button action-button--usage" type="button" title="查看财务汇总" data-crew-dialog-open="finance" data-crew-payload="@financePayload">财务</button> }</div></td>
                         </tr>
+                        @if (Model.OrganizationSummaries.TryGetValue(partner.Id, out var organizationSummary))
+                        {
+                            <tr class="organization-summary-row">
+                                <td colspan="@(6 + financialColumnCount)">
+                                    <partial name="_OrganizationSummary" model="new OrganizationSummaryViewModel(organizationSummary, true)" />
+                                </td>
+                            </tr>
+                        }
                     }
                     </tbody>
                 </table>

@@ -116,6 +116,36 @@ public sealed class ProjectServiceTests
     }
 
     [Fact]
+    public async Task BusinessPartnerFilterUsesPartnerAndCrewConstructionLinksAndIntersectsCompanyFilter()
+    {
+        await using var fixture = await ProjectFixture.CreateAsync();
+        var company = await fixture.AddLegalEntityAsync();
+        var partner = new BusinessPartner { PartnerNumber = "BP-FILTER", Name = "精确筛选单位", ShortName = "筛选单位" };
+        var partnerProject = new Project { ProjectNumber = "P-PARTNER", Name = "合作关系项目", Stage = ProjectStage.UnderConstruction };
+        partnerProject.Partners.Add(new ProjectPartner { Project = partnerProject, Partner = partner, RoleType = BusinessPartnerRoleType.MaterialSupplier });
+        partnerProject.LegalEntities.Add(new ProjectLegalEntity { Project = partnerProject, LegalEntity = company, IsPrimary = true });
+        var constructionProject = new Project { ProjectNumber = "P-CREW", Name = "施工记录项目", Stage = ProjectStage.Suspended };
+        constructionProject.ConstructionRecords.Add(new ProjectConstructionRecord { Project = constructionProject, CrewBusinessPartner = partner, RecordType = ProjectConstructionRecordType.ConstructionCrew });
+        var unrelated = new Project { ProjectNumber = "P-OTHER", Name = "无关项目", Stage = ProjectStage.SettledArchived };
+        fixture.Db.AddRange(partner, partnerProject, constructionProject, unrelated);
+        await fixture.Db.SaveChangesAsync();
+
+        var partnerOnly = await fixture.Service.SearchProjectsAsync(
+            new ProjectListActor("administrator", true),
+            new ProjectListQuery(null, [], null, null, null, null, null, false, BusinessPartnerId: partner.Id),
+            CancellationToken.None);
+        var intersected = await fixture.Service.SearchProjectsAsync(
+            new ProjectListActor("administrator", true),
+            new ProjectListQuery(null, [], company.Id, null, null, null, null, false, BusinessPartnerId: partner.Id),
+            CancellationToken.None);
+        var options = await fixture.Service.GetListOptionsAsync(new ProjectListActor("administrator", true), CancellationToken.None);
+
+        partnerOnly.Items.Select(item => item.Project.ProjectNumber).Should().BeEquivalentTo(["P-PARTNER", "P-CREW"]);
+        intersected.Items.Should().ContainSingle(item => item.Project.ProjectNumber == "P-PARTNER");
+        options.BusinessPartners.Should().Contain(item => item.Value == partner.Id.ToString());
+    }
+
+    [Fact]
     public async Task DuplicateProjectNumberIsRejected()
     {
         await using var fixture = await ProjectFixture.CreateAsync();

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EngineeringManager.Application.ConstructionCrews;
+using EngineeringManager.Application.Organization;
 using EngineeringManager.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,12 +9,15 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace EngineeringManager.Web.Pages.Crews;
 
 [Authorize]
-public sealed class DetailsModel(IConstructionCrewService crewService) : PageModel
+public sealed class DetailsModel(
+    IConstructionCrewService crewService,
+    IOrganizationSummaryService? organizationSummaryService = null) : PageModel
 {
     [BindProperty(SupportsGet = true)] public Guid Id { get; set; }
     [BindProperty] public WorkerInput NewWorker { get; set; } = new();
     [BindProperty] public TransferInput Transfer { get; set; } = new();
     public ConstructionCrewDetailsDto Details { get; private set; } = null!;
+    public OrganizationSummaryDto? OrganizationSummary { get; private set; }
     public IReadOnlyList<ConstructionCrewListItemDto> CrewOptions { get; private set; } = [];
     public bool CanManage => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.ProjectManager);
     public bool CanManageFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance);
@@ -40,6 +44,12 @@ public sealed class DetailsModel(IConstructionCrewService crewService) : PageMod
         var details = await crewService.GetAsync(Id, canViewSensitive, cancellationToken);
         if (details is null) return false;
         Details = details;
+        if (organizationSummaryService is not null)
+        {
+            OrganizationSummary = await organizationSummaryService.GetAsync(
+                new OrganizationSummaryQuery(OrganizationOwnerKind.BusinessPartner, Id, DateOnly.FromDateTime(DateTime.Today)),
+                cancellationToken);
+        }
         CrewOptions = await crewService.ListAsync(false, cancellationToken);
         NewWorker.StartDate = DateOnly.FromDateTime(DateTime.Today);
         NewWorker.Reason = "维护班组人员名册";

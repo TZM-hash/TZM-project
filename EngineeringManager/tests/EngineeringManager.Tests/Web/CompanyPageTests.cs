@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using EngineeringManager.Application.Certificates;
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Application.Organization;
 using EngineeringManager.Domain.Certificates;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Finance;
@@ -762,6 +763,8 @@ public sealed class CompanyPageTests
                 services.AddSingleton<ICompanyActorService, FakeCompanyActorService>();
                 services.RemoveAll<IEmployeeService>();
                 services.AddSingleton<IEmployeeService, FakeEmployeeService>();
+                services.RemoveAll<IOrganizationSummaryService>();
+                services.AddSingleton<IOrganizationSummaryService, FakeOrganizationSummaryService>();
             });
         });
 
@@ -804,6 +807,17 @@ public sealed class CompanyPageTests
         public Task<EmployeeDto> UpdateAsync(string userId, UpdateEmployeeRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeAffiliationDto> AddAffiliationAsync(CreateEmployeeAffiliationRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EmployeeDto?> GetAsync(Guid employeeId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeOrganizationSummaryService : IOrganizationSummaryService
+    {
+        public Task<OrganizationSummaryDto> GetAsync(OrganizationSummaryQuery query, CancellationToken cancellationToken) =>
+            Task.FromResult(new OrganizationSummaryDto(
+                query,
+                new OrganizationProjectStatsDto(3, 1, 1, 0, 0, 0, 1),
+                new OrganizationPersonnelStatsDto(1, 1, 1, 0, 0, 0, 0, 0),
+                new OrganizationDepartmentStatsDto(1, 1),
+                false));
     }
 
     private sealed class FakeCompanyService : ICompanyManagementService

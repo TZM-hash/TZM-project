@@ -223,6 +223,14 @@
                                 </div>
                             </td>
                         </tr>
+                        @if (Model.OrganizationSummaries.TryGetValue(partner.Id, out var organizationSummary))
+                        {
+                            <tr class="organization-summary-row">
+                                <td colspan="@(6 + financialColumnCount)">
+                                    <partial name="_OrganizationSummary" model="new OrganizationSummaryViewModel(organizationSummary, true)" />
+                                </td>
+                            </tr>
+                        }
                     }
                     </tbody>
                 </table>

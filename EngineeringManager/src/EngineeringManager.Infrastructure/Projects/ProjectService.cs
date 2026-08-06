@@ -306,6 +306,13 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
         {
             projectQuery = projectQuery.Where(project => project.LegalEntities.Any(item => item.LegalEntityId == query.LegalEntityId.Value));
         }
+        if (query.BusinessPartnerId.HasValue)
+        {
+            var partnerId = query.BusinessPartnerId.Value;
+            projectQuery = projectQuery.Where(project =>
+                project.Partners.Any(link => link.BusinessPartnerId == partnerId && link.IsActive)
+                || project.ConstructionRecords.Any(record => record.CrewBusinessPartnerId == partnerId));
+        }
         if (query.AffiliationType.HasValue)
         {
             projectQuery = projectQuery.Where(project => project.AffiliationType == query.AffiliationType.Value);
@@ -376,7 +383,20 @@ public sealed class ProjectService(ApplicationDbContext db) : IProjectService
             .ThenBy(item => item.EmployeeNumber)
             .Select(item => new ProjectFilterOptionDto(item.Id.ToString(), item.Name))
             .ToListAsync(cancellationToken);
-        return new ProjectListOptionsDto(legalEntities, responsibleUsers, responsibleEmployees);
+        var partnerRows = await db.ProjectPartners.AsNoTracking()
+            .Where(item => item.IsActive && projectIds.Contains(item.ProjectId) && item.Partner.IsActive)
+            .Select(item => new { item.BusinessPartnerId, item.Partner.ShortName })
+            .ToListAsync(cancellationToken);
+        var constructionPartnerRows = await db.ProjectConstructionRecords.AsNoTracking()
+            .Where(item => item.CrewBusinessPartnerId.HasValue && projectIds.Contains(item.ProjectId) && item.CrewBusinessPartner!.IsActive)
+            .Select(item => new { BusinessPartnerId = item.CrewBusinessPartnerId!.Value, item.CrewBusinessPartner!.ShortName })
+            .ToListAsync(cancellationToken);
+        var businessPartners = partnerRows.Concat(constructionPartnerRows)
+            .DistinctBy(item => item.BusinessPartnerId)
+            .Select(item => new ProjectFilterOptionDto(item.BusinessPartnerId.ToString(), item.ShortName))
+            .OrderBy(item => item.Label)
+            .ToArray();
+        return new ProjectListOptionsDto(legalEntities, responsibleUsers, responsibleEmployees, businessPartners);
     }
 
     public async Task<ProjectDetailsDto?> GetProjectAsync(Guid projectId, CancellationToken cancellationToken)

@@ -156,7 +156,8 @@ public sealed record ProjectListQuery(
     int PageSize = 20,
     ProjectAffiliationType? AffiliationType = null,
     bool IncludeInactive = false,
-    Guid? ResponsibleEmployeeId = null);
+    Guid? ResponsibleEmployeeId = null,
+    Guid? BusinessPartnerId = null);
 
 public sealed record ProjectListPageDto(
     IReadOnlyList<ProjectListItemDto> Items,
@@ -178,7 +179,8 @@ public sealed record ProjectFilterOptionDto(string Value, string Label);
 public sealed record ProjectListOptionsDto(
     IReadOnlyList<ProjectFilterOptionDto> LegalEntities,
     IReadOnlyList<ProjectFilterOptionDto> ResponsibleUsers,
-    IReadOnlyList<ProjectFilterOptionDto>? ResponsibleEmployees = null);
+    IReadOnlyList<ProjectFilterOptionDto>? ResponsibleEmployees = null,
+    IReadOnlyList<ProjectFilterOptionDto>? BusinessPartners = null);
 
 public sealed record ProjectDetailsDto(
     ProjectDto Project,

@@ -69,7 +69,7 @@ public sealed class IndexModel(
 
     private static readonly DataViewDefinition ViewDefinition = new(
         "projects",
-        new HashSet<string>(["Search", "Stages", "LegalEntityId", "ResponsibleUserId", "ResponsibleEmployeeId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
+        new HashSet<string>(["Search", "Stages", "LegalEntityId", "BusinessPartnerId", "ResponsibleUserId", "ResponsibleEmployeeId", "AffiliationType", "MinimumCurrentAmount", "MaximumCurrentAmount"], StringComparer.Ordinal),
         new HashSet<string>(ProjectExportColumnKeys.Append("actions"), StringComparer.Ordinal),
         new HashSet<string>(["ProjectNumber", "Name", "Stage", "ContractAmount", "CurrentAmount", "SettlementStatus"], StringComparer.Ordinal));
 
@@ -94,6 +94,7 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public List<ProjectStage> Stages { get; set; } = [];
     [BindProperty(SupportsGet = true)] public Guid? LegalEntityId { get; set; }
+    [BindProperty(SupportsGet = true)] public Guid? BusinessPartnerId { get; set; }
     [BindProperty(SupportsGet = true)] public string? ResponsibleUserId { get; set; }
     [BindProperty(SupportsGet = true)] public Guid? ResponsibleEmployeeId { get; set; }
     [BindProperty(SupportsGet = true)] public ProjectAffiliationType? AffiliationType { get; set; }
@@ -114,6 +115,7 @@ public sealed class IndexModel(
     [BindProperty] public string? ExportSearch { get; set; }
     [BindProperty] public List<ProjectStage> ExportStages { get; set; } = [];
     [BindProperty] public Guid? ExportLegalEntityId { get; set; }
+    [BindProperty] public Guid? ExportBusinessPartnerId { get; set; }
     [BindProperty] public string? ExportResponsibleUserId { get; set; }
     [BindProperty] public Guid? ExportResponsibleEmployeeId { get; set; }
     [BindProperty] public ProjectAffiliationType? ExportAffiliationType { get; set; }
@@ -223,6 +225,7 @@ public sealed class IndexModel(
         ExportSearch = Search;
         ExportStages = [.. Stages];
         ExportLegalEntityId = LegalEntityId;
+        ExportBusinessPartnerId = BusinessPartnerId;
         ExportResponsibleUserId = ResponsibleUserId;
         ExportResponsibleEmployeeId = ResponsibleEmployeeId;
         ExportAffiliationType = AffiliationType;
@@ -294,7 +297,8 @@ public sealed class IndexModel(
         100,
         ExportFiltersInitialized ? ExportAffiliationType : AffiliationType,
         false,
-        ExportFiltersInitialized ? ExportResponsibleEmployeeId : ResponsibleEmployeeId);
+        ExportFiltersInitialized ? ExportResponsibleEmployeeId : ResponsibleEmployeeId,
+        ExportFiltersInitialized ? ExportBusinessPartnerId : BusinessPartnerId);
 
     private IReadOnlyList<DataWorkbenchFilterField> BuildProjectExportFilters(ProjectListOptionsDto options) =>
     [
@@ -303,6 +307,8 @@ public sealed class IndexModel(
             Enum.GetValues<ProjectStage>().Select(value => new DataWorkbenchFilterOption(((int)value).ToString(System.Globalization.CultureInfo.InvariantCulture), StageLabel(value))).ToArray()),
         new("ExportLegalEntityId", "签约公司", (ExportFiltersInitialized ? ExportLegalEntityId : LegalEntityId)?.ToString(), DataWorkbenchFilterKind.Select,
             options.LegalEntities.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
+        new("ExportBusinessPartnerId", "合作单位 / 班组", (ExportFiltersInitialized ? ExportBusinessPartnerId : BusinessPartnerId)?.ToString(), DataWorkbenchFilterKind.Select,
+            (options.BusinessPartners ?? []).Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
         new("ExportResponsibleUserId", "负责人账号", ExportFiltersInitialized ? ExportResponsibleUserId : ResponsibleUserId, DataWorkbenchFilterKind.Select,
             options.ResponsibleUsers.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
         new("ExportResponsibleEmployeeId", "员工负责人", (ExportFiltersInitialized ? ExportResponsibleEmployeeId : ResponsibleEmployeeId)?.ToString(), DataWorkbenchFilterKind.Select,
@@ -334,7 +340,8 @@ public sealed class IndexModel(
         PageSize,
         AffiliationType,
         false,
-        ResponsibleEmployeeId);
+        ResponsibleEmployeeId,
+        BusinessPartnerId);
 
     private static int NormalizePageSize(int pageSize) => pageSize is 20 or 50 or 100 ? pageSize : 20;
 
@@ -356,6 +363,8 @@ public sealed class IndexModel(
                 Enum.GetValues<ProjectStage>().Select(value => new DataWorkbenchFilterOption(((int)value).ToString(System.Globalization.CultureInfo.InvariantCulture), StageLabel(value))).ToArray()),
             new("LegalEntityId", "签约公司", LegalEntityId?.ToString(), DataWorkbenchFilterKind.Select,
                 options.LegalEntities.Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
+            new("BusinessPartnerId", "合作单位 / 班组", BusinessPartnerId?.ToString(), DataWorkbenchFilterKind.Select,
+                (options.BusinessPartners ?? []).Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
             new("ResponsibleEmployeeId", "项目负责人", ResponsibleEmployeeId?.ToString(), DataWorkbenchFilterKind.Select,
                 (options.ResponsibleEmployees ?? []).Select(item => new DataWorkbenchFilterOption(item.Value, item.Label)).ToArray()),
             new("AffiliationType", "项目合作方式", AffiliationType.HasValue ? ((int)AffiliationType.Value).ToString(System.Globalization.CultureInfo.InvariantCulture) : null, DataWorkbenchFilterKind.Select,
@@ -367,6 +376,7 @@ public sealed class IndexModel(
         if (!string.IsNullOrWhiteSpace(Search)) chips.Add(new("Search", "关键词", Search));
         if (Stages.Count > 0) chips.Add(new("Stages", "阶段", string.Join("、", Stages.Select(StageLabel))));
         if (LegalEntityId.HasValue) chips.Add(new("LegalEntityId", "签约公司", options.LegalEntities.FirstOrDefault(item => item.Value == LegalEntityId.Value.ToString())?.Label ?? LegalEntityId.Value.ToString()));
+        if (BusinessPartnerId.HasValue) chips.Add(new("BusinessPartnerId", "合作单位 / 班组", (options.BusinessPartners ?? []).FirstOrDefault(item => item.Value == BusinessPartnerId.Value.ToString())?.Label ?? BusinessPartnerId.Value.ToString()));
         if (ResponsibleEmployeeId.HasValue) chips.Add(new("ResponsibleEmployeeId", "负责人", (options.ResponsibleEmployees ?? []).FirstOrDefault(item => item.Value == ResponsibleEmployeeId.Value.ToString())?.Label ?? ResponsibleEmployeeId.Value.ToString()));
         if (AffiliationType.HasValue) chips.Add(new("AffiliationType", "合作方式", AffiliationTypeLabel(AffiliationType.Value)));
         if (MinimumCurrentAmount.HasValue) chips.Add(new("MinimumCurrentAmount", "最低金额", MinimumCurrentAmount.Value.ToString("N2", System.Globalization.CultureInfo.CurrentCulture)));
@@ -442,6 +452,7 @@ public sealed class IndexModel(
         Search = ReadString(filters, "Search") ?? Search;
         if (TryReadStage(ReadString(filters, "Stages"), out var parsedStage)) Stages = [parsedStage];
         if (Guid.TryParse(ReadString(filters, "LegalEntityId"), out var legalEntityId)) LegalEntityId = legalEntityId;
+        if (Guid.TryParse(ReadString(filters, "BusinessPartnerId"), out var businessPartnerId)) BusinessPartnerId = businessPartnerId;
         ResponsibleUserId = ReadString(filters, "ResponsibleUserId") ?? ResponsibleUserId;
         if (Guid.TryParse(ReadString(filters, "ResponsibleEmployeeId"), out var responsibleEmployeeId)) ResponsibleEmployeeId = responsibleEmployeeId;
         if (int.TryParse(ReadString(filters, "AffiliationType"), out var affiliation) && Enum.IsDefined(typeof(ProjectAffiliationType), affiliation)) AffiliationType = (ProjectAffiliationType)affiliation;

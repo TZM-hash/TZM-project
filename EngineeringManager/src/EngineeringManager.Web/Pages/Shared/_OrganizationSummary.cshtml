@@ -1,0 +1,65 @@
+@using EngineeringManager.Application.Organization
+@using EngineeringManager.Domain.Employees
+@using EngineeringManager.Domain.Personnel
+@using EngineeringManager.Domain.Projects
+@model EngineeringManager.Web.OrganizationSummaryViewModel
+@{
+    var summary = Model.Summary;
+    var ownerKind = summary.Query.Kind;
+    var ownerId = summary.Query.Id;
+    var isCompany = ownerKind == OrganizationOwnerKind.LegalEntity;
+    var allPersonnelUrl = isCompany
+        ? OrganizationSummaryLinks.InternalPersonnel(ownerId, isActive: null)
+        : OrganizationSummaryLinks.ExternalPersonnel(ownerId, isActive: null);
+    var activePersonnelUrl = isCompany
+        ? OrganizationSummaryLinks.InternalPersonnel(ownerId)
+        : OrganizationSummaryLinks.ExternalPersonnel(ownerId);
+}
+
+<section class="organization-summary @(Model.Compact ? "organization-summary--compact" : string.Empty)" aria-label="组织项目、人员和部门统计">
+    @if (!Model.Compact)
+    {
+        <div class="organization-summary__heading">
+            <div><p class="eyebrow">实时联动</p><h2>项目、人员与部门状态</h2></div>
+            <small>统计日期 @summary.Query.AsOf.ToString("yyyy-MM-dd")，点击指标进入精确筛选页。</small>
+        </div>
+    }
+    <div class="organization-summary__groups">
+        <div class="organization-summary__group">
+            <h3>项目状态</h3>
+            <div class="organization-summary__metrics">
+                <a class="organization-summary__metric organization-summary__metric--project" href="@OrganizationSummaryLinks.Projects(ownerKind, ownerId)"><span>项目总数</span><strong>@summary.Projects.TotalCount</strong></a>
+                <a class="organization-summary__metric organization-summary__metric--project" href="@OrganizationSummaryLinks.Projects(ownerKind, ownerId, ProjectStage.AwaitingMobilization, ProjectStage.UnderConstruction)"><span>进行中</span><strong>@summary.Projects.InProgressCount</strong></a>
+                <a class="organization-summary__metric organization-summary__metric--project" href="@OrganizationSummaryLinks.Projects(ownerKind, ownerId, ProjectStage.Suspended)"><span>停工中</span><strong>@summary.Projects.SuspendedCount</strong></a>
+                <a class="organization-summary__metric organization-summary__metric--project" href="@OrganizationSummaryLinks.Projects(ownerKind, ownerId, ProjectStage.CompletedUnsettled)"><span>已完工未结算</span><strong>@summary.Projects.CompletedUnsettledCount</strong></a>
+                <a class="organization-summary__metric organization-summary__metric--project" href="@OrganizationSummaryLinks.Projects(ownerKind, ownerId, ProjectStage.PartiallySettled)"><span>部分结算</span><strong>@summary.Projects.PartiallySettledCount</strong></a>
+                <a class="organization-summary__metric organization-summary__metric--project" href="@OrganizationSummaryLinks.Projects(ownerKind, ownerId, ProjectStage.SettledArchived)"><span>已结算归档</span><strong>@summary.Projects.SettledArchivedCount</strong></a>
+            </div>
+        </div>
+        <div class="organization-summary__group">
+            <h3>人员状态</h3>
+            <div class="organization-summary__metrics">
+                <a class="organization-summary__metric organization-summary__metric--personnel" href="@allPersonnelUrl"><span>当前人员</span><strong>@summary.Personnel.TotalCurrentCount</strong></a>
+                <a class="organization-summary__metric organization-summary__metric--personnel" href="@activePersonnelUrl"><span>启用人员</span><strong>@summary.Personnel.ActiveCount</strong></a>
+                @if (isCompany)
+                {
+                    <a class="organization-summary__metric organization-summary__metric--personnel" href="@OrganizationSummaryLinks.InternalPersonnel(ownerId, EmployeeType.Formal)"><span>正式员工</span><strong>@summary.Personnel.FormalCount</strong></a>
+                    <a class="organization-summary__metric organization-summary__metric--personnel" href="@OrganizationSummaryLinks.InternalPersonnel(ownerId, EmployeeType.Labor)"><span>劳务员工</span><strong>@summary.Personnel.LaborCount</strong></a>
+                    <a class="organization-summary__metric organization-summary__metric--personnel" href="@OrganizationSummaryLinks.InternalPersonnel(ownerId, EmployeeType.Temporary)"><span>特殊临时人员</span><strong>@summary.Personnel.TemporaryCount</strong></a>
+                }
+                else
+                {
+                    <a class="organization-summary__metric organization-summary__metric--personnel" href="@OrganizationSummaryLinks.ExternalPersonnel(ownerId, ExternalPersonnelType.ConstructionCrew)"><span>班组人员</span><strong>@summary.Personnel.ConstructionCrewCount</strong></a>
+                    <a class="organization-summary__metric organization-summary__metric--personnel" href="@OrganizationSummaryLinks.ExternalPersonnel(ownerId, ExternalPersonnelType.BusinessPartner)"><span>合作单位人员</span><strong>@summary.Personnel.BusinessPartnerCount</strong></a>
+                    <a class="organization-summary__metric organization-summary__metric--personnel" href="@OrganizationSummaryLinks.ExternalPersonnel(ownerId, ExternalPersonnelType.Other)"><span>其他外部人员</span><strong>@summary.Personnel.OtherExternalCount</strong></a>
+                }
+            </div>
+        </div>
+        <div class="organization-summary__group organization-summary__group--departments">
+            <h3>部门</h3>
+            <div class="organization-summary__metrics">
+                <a class="organization-summary__metric organization-summary__metric--department" href="@OrganizationSummaryLinks.Departments(ownerKind, ownerId)"><span>启用 / 总部门</span><strong>@summary.Departments.ActiveCount / @summary.Departments.TotalCount</strong></a>
+            </div>
+        </div>
+    </div>
+</section>

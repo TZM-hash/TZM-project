@@ -1,6 +1,7 @@
 using EngineeringManager.Application.Certificates;
 using EngineeringManager.Application.Companies;
 using EngineeringManager.Application.Employees;
+using EngineeringManager.Application.Organization;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Security;
 using EngineeringManager.Web.Presentation;
@@ -16,13 +17,15 @@ public sealed class DetailsModel(
     ICompanyManagementService companyService,
     ICompanyCertificateService certificateService,
     ICompanyActorService actorService,
-    IEmployeeService employeeService) : CompanyPageModel(actorService)
+    IEmployeeService employeeService,
+    IOrganizationSummaryService? organizationSummaryService = null) : CompanyPageModel(actorService)
 {
     public CompanyDetailsDto Company { get; private set; } = null!;
     public CompanyDashboardDto Dashboard { get; private set; } = null!;
     public IReadOnlyList<CompanyCategoryDto> Categories { get; private set; } = [];
     public IReadOnlyList<CompanyListItemDto> CompanyOptions { get; private set; } = [];
     public CompanyWorkspaceSummaryDto? WorkspaceSummary { get; private set; }
+    public OrganizationSummaryDto? OrganizationSummary { get; private set; }
     public IReadOnlyList<CompanyActivityItemDto> RecentActivity { get; private set; } = [];
     public IReadOnlyList<CompanyProjectRowDto> Projects { get; private set; } = [];
     public IReadOnlyList<CompanyContractRowDto> Contracts { get; private set; } = [];
@@ -425,6 +428,12 @@ public sealed class DetailsModel(
     {
         var actor = await ResolveActorAsync(cancellationToken);
         Company = await companyService.GetAsync(actor, id, cancellationToken);
+        if (organizationSummaryService is not null)
+        {
+            OrganizationSummary = await organizationSummaryService.GetAsync(
+                new OrganizationSummaryQuery(OrganizationOwnerKind.LegalEntity, id, DateOnly.FromDateTime(DateTime.Today)),
+                cancellationToken);
+        }
         Dashboard = await companyService.GetDashboardAsync(actor, id, cancellationToken);
         CompanyOptions = await companyService.ListAsync(actor, cancellationToken);
         var employees = await employeeService.ListAsync(null, false, cancellationToken);
