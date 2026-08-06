@@ -94,7 +94,22 @@ public sealed class BusinessPartnerService(ApplicationDbContext db) : IBusinessP
         partner.UpdatedAt = DateTimeOffset.UtcNow;
         db.Entry(partner).Property(item => item.ConcurrencyStamp).OriginalValue = request.ConcurrencyStamp;
         partner.ConcurrencyStamp = Guid.NewGuid();
+        var previousRoleType = request.PreviousRoleType ?? request.Role.RoleType;
+        var previousRole = partner.Roles.FirstOrDefault(item => item.RoleType == previousRoleType);
         var role = partner.Roles.FirstOrDefault(item => item.RoleType == request.Role.RoleType);
+        if (previousRole is not null && previousRole.RoleType != request.Role.RoleType)
+        {
+            if (role is null)
+            {
+                previousRole.RoleType = request.Role.RoleType;
+                role = previousRole;
+            }
+            else
+            {
+                partner.Roles.Remove(previousRole);
+                db.BusinessPartnerRoles.Remove(previousRole);
+            }
+        }
         if (role is null)
         {
             role = new BusinessPartnerRole { Partner = partner, RoleType = request.Role.RoleType };

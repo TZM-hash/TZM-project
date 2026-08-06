@@ -42,7 +42,8 @@ public sealed record UpdateBusinessPartnerRequest(
     PartnerContactRequest? PrimaryContact,
     bool IsActive,
     Guid ConcurrencyStamp,
-    string Reason);
+    string Reason,
+    BusinessPartnerRoleType? PreviousRoleType = null);
 
 public sealed record LinkPartnerToProjectRequest(
     Guid PartnerId,

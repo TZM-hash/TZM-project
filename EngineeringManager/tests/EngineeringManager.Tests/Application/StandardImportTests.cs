@@ -3,6 +3,7 @@ using EngineeringManager.Domain.DataExchange;
 using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Infrastructure.Data;
 using EngineeringManager.Infrastructure.DataExchange;
 using FluentAssertions;
@@ -55,6 +56,37 @@ public sealed class StandardImportTests
             .And.Contain(ExportDataset.StageResults)
             .And.NotContain(ExportDataset.ProjectOverview)
             .And.NotContain(ExportDataset.Accounts);
+    }
+
+    [Fact]
+    public async Task PartnerImportCreatesAndReplacesChineseBusinessRoles()
+    {
+        await using var fixture = await ImportFixture.CreateAsync();
+        var createWorkbook = new SimpleXlsxWorkbook();
+        createWorkbook.AddWorksheet(
+            "合作单位导入",
+            ["单位编号", "单位名称", "简称", "业务角色"],
+            [["HZ-ROLE", "角色导入单位", "角色单位", "施工班组"]]);
+
+        var createPreview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("partner-role", ExportDataset.Partners, "合作单位.xlsx", createWorkbook.ToArray(), null),
+            CancellationToken.None);
+        createPreview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(createPreview.BatchId, CancellationToken.None);
+
+        var updateWorkbook = new SimpleXlsxWorkbook();
+        updateWorkbook.AddWorksheet(
+            "合作单位导入",
+            ["单位编号", "单位名称", "简称", "业务角色"],
+            [["HZ-ROLE", "角色导入单位", "角色单位", "甲方/总包"]]);
+        var updatePreview = await fixture.Service.PreviewAsync(
+            new ImportPreviewRequest("partner-role", ExportDataset.Partners, "合作单位更新.xlsx", updateWorkbook.ToArray(), null, ImportMode.Update),
+            CancellationToken.None);
+        updatePreview.Errors.Should().BeEmpty();
+        await fixture.Service.ConfirmAsync(updatePreview.BatchId, CancellationToken.None);
+
+        var roles = await fixture.Db.BusinessPartnerRoles.Select(item => item.RoleType).ToListAsync();
+        roles.Should().Equal(BusinessPartnerRoleType.CustomerOrGeneralContractor);
     }
 
     [Fact]

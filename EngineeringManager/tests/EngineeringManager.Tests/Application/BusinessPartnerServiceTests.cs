@@ -96,13 +96,36 @@ public sealed class BusinessPartnerServiceTests
     public async Task UpdateChangesMasterDataAndPreservesAuditTrail()
     {
         await using var fixture = await PartnerFixture.CreateAsync();
-        var partner = await fixture.Service.CreateAsync(new CreateBusinessPartnerRequest("BP-UPD", "原单位", "原单位", null, null, [new PartnerRoleRequest(BusinessPartnerRoleType.ConstructionCrew, "土建", null, null)], []), CancellationToken.None);
+        var partner = await fixture.Service.CreateAsync(new CreateBusinessPartnerRequest(
+            "BP-UPD",
+            "原单位",
+            "原单位",
+            null,
+            null,
+            [
+                new PartnerRoleRequest(BusinessPartnerRoleType.ConstructionCrew, "土建", null, null),
+                new PartnerRoleRequest(BusinessPartnerRoleType.MiscellaneousSupplier, "设备", null, null)
+            ],
+            []), CancellationToken.None);
 
-        var updated = await fixture.Service.UpdateAsync("admin", new UpdateBusinessPartnerRequest(partner.Id, partner.PartnerNumber, "修改后单位", "修改后", null, "更新备注", new PartnerRoleRequest(BusinessPartnerRoleType.MaterialSupplier, "材料", null, null), new PartnerContactRequest("新联系人", "13800000002", null, null, true, "联系人备注"), true, partner.ConcurrencyStamp, "维护合作单位"), CancellationToken.None);
+        var updated = await fixture.Service.UpdateAsync("admin", new UpdateBusinessPartnerRequest(
+            partner.Id,
+            partner.PartnerNumber,
+            "修改后单位",
+            "修改后",
+            null,
+            "更新备注",
+            new PartnerRoleRequest(BusinessPartnerRoleType.MaterialSupplier, "材料", null, null),
+            new PartnerContactRequest("新联系人", "13800000002", null, null, true, "联系人备注"),
+            true,
+            partner.ConcurrencyStamp,
+            "维护合作单位",
+            BusinessPartnerRoleType.ConstructionCrew), CancellationToken.None);
 
         updated.Name.Should().Be("修改后单位");
-        updated.Roles.Should().Contain(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew);
+        updated.Roles.Should().NotContain(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew);
         updated.Roles.Should().Contain(item => item.RoleType == BusinessPartnerRoleType.MaterialSupplier);
+        updated.Roles.Should().Contain(item => item.RoleType == BusinessPartnerRoleType.MiscellaneousSupplier);
         updated.Contacts.Should().ContainSingle().Which.Notes.Should().Be("联系人备注");
         (await fixture.Db.AuditLogs.SingleAsync()).Action.Should().Be("UpdateBusinessPartner");
     }

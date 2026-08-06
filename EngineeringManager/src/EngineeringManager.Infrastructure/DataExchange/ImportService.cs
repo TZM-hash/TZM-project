@@ -7,6 +7,7 @@ using EngineeringManager.Domain.Employees;
 using EngineeringManager.Domain.Equipment;
 using EngineeringManager.Domain.Finance;
 using EngineeringManager.Domain.Organization;
+using EngineeringManager.Domain.Partners;
 using EngineeringManager.Domain.Personnel;
 using EngineeringManager.Domain.Projects;
 using EngineeringManager.Infrastructure.Data;
@@ -270,7 +271,8 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         [
             new("单位编号", "partner_number", true),
             new("单位名称", "name", true),
-            new("简称", "short_name", true)
+            new("简称", "short_name", true),
+            new("业务角色", "roles", false)
         ],
         [ExportDataset.Projects] =
         [
@@ -1224,6 +1226,14 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
             {
                 errors.Add(new ImportErrorDto(excelRow, "员工类型", "员工类型必须是正式员工、劳务员工或特殊临时人员。", type));
             }
+            if (dataset == ExportDataset.Partners
+                && values.TryGetValue("roles", out var roles)
+                && !string.IsNullOrWhiteSpace(roles)
+                && !IsClearMarker(roles)
+                && !TryParseBusinessPartnerRoles(roles, out _))
+            {
+                errors.Add(new ImportErrorDto(excelRow, "业务角色", "业务角色无法识别，请使用甲方/总包、施工班组、材料供应商或其他合作单位。", roles));
+            }
             if (dataset == ExportDataset.Employees
                 && !IsClearMarker(values.GetValueOrDefault("identity_number"))
                 && PersonPublicDataSynchronizer.NormalizeIdentityNumber(values.GetValueOrDefault("identity_number")) is { } normalizedIdentityNumber)
@@ -1789,12 +1799,20 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                 });
                 break;
             case ExportDataset.Partners:
-                db.BusinessPartners.Add(new BusinessPartner
+                var importedPartner = new BusinessPartner
                 {
                     PartnerNumber = values["partner_number"]!,
                     Name = values["name"]!,
                     ShortName = values["short_name"]!
-                });
+                };
+                if (TryParseBusinessPartnerRoles(values.GetValueOrDefault("roles"), out var importedRoles))
+                {
+                    foreach (var roleType in importedRoles)
+                    {
+                        importedPartner.Roles.Add(new BusinessPartnerRole { Partner = importedPartner, RoleType = roleType });
+                    }
+                }
+                db.BusinessPartners.Add(importedPartner);
                 break;
             case ExportDataset.Projects:
                 var stage = Enum.TryParse<ProjectStage>(values.GetValueOrDefault("stage"), ignoreCase: true, out var parsedStage) ? parsedStage : ProjectStage.AwaitingMobilization;
@@ -2315,10 +2333,32 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
                     person.IsActive);
                 return true;
             case ExportDataset.Partners:
-                var partner = systemId.HasValue ? db.BusinessPartners.SingleOrDefault(item => item.Id == systemId.Value) : db.BusinessPartners.SingleOrDefault(item => item.PartnerNumber == values.GetValueOrDefault("partner_number"));
+                var partnerQuery = db.BusinessPartners.Include(item => item.Roles);
+                var partner = systemId.HasValue ? partnerQuery.SingleOrDefault(item => item.Id == systemId.Value) : partnerQuery.SingleOrDefault(item => item.PartnerNumber == values.GetValueOrDefault("partner_number"));
                 if (partner is null) return false;
                 partner.Name = values.GetValueOrDefault("name") ?? partner.Name;
                 partner.ShortName = values.GetValueOrDefault("short_name") ?? partner.ShortName;
+                if (values.TryGetValue("roles", out var importedRoleValue) && importedRoleValue is not null)
+                {
+                    IReadOnlyList<BusinessPartnerRoleType> importedRoleTypes = IsClearMarker(importedRoleValue)
+                        ? []
+                        : TryParseBusinessPartnerRoles(importedRoleValue, out var parsedRoleTypes)
+                            ? parsedRoleTypes
+                            : [];
+                    var requestedRoles = importedRoleTypes.ToHashSet();
+                    var removedRoles = partner.Roles.Where(item => !requestedRoles.Contains(item.RoleType)).ToArray();
+                    db.BusinessPartnerRoles.RemoveRange(removedRoles);
+                    foreach (var removedRole in removedRoles)
+                    {
+                        partner.Roles.Remove(removedRole);
+                    }
+                    foreach (var roleType in requestedRoles.Where(roleType => partner.Roles.All(item => item.RoleType != roleType)))
+                    {
+                        var importedRole = new BusinessPartnerRole { Partner = partner, RoleType = roleType };
+                        partner.Roles.Add(importedRole);
+                        db.BusinessPartnerRoles.Add(importedRole);
+                    }
+                }
                 partner.ConcurrencyStamp = Guid.NewGuid();
                 return true;
             case ExportDataset.Projects:
@@ -2730,6 +2770,42 @@ public sealed class ImportService(ApplicationDbContext db) : IImportService
         if (value is "特殊临时人员" or "Temporary") { employeeType = EmployeeType.Temporary; return true; }
         employeeType = default;
         return false;
+    }
+
+    private static bool TryParseBusinessPartnerRoles(string? value, out IReadOnlyList<BusinessPartnerRoleType> roles)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            roles = [];
+            return true;
+        }
+
+        var parsed = new List<BusinessPartnerRoleType>();
+        foreach (var item in value.Split(['、', ',', '，', ';', '；'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var roleType = item switch
+            {
+                "甲方/总包" or "客户/总包" or "甲方" or "总包" => BusinessPartnerRoleType.CustomerOrGeneralContractor,
+                "施工班组" or "班组" => BusinessPartnerRoleType.ConstructionCrew,
+                "材料供应商" or "材料" => BusinessPartnerRoleType.MaterialSupplier,
+                "其他合作单位" or "其他供应商" or "零星供应商" or "零星" => BusinessPartnerRoleType.MiscellaneousSupplier,
+                _ when Enum.TryParse<BusinessPartnerRoleType>(item, true, out var enumValue) && Enum.IsDefined(enumValue) => enumValue,
+                _ => default
+            };
+            if (roleType == default)
+            {
+                roles = [];
+                return false;
+            }
+
+            if (!parsed.Contains(roleType))
+            {
+                parsed.Add(roleType);
+            }
+        }
+
+        roles = parsed;
+        return parsed.Count > 0;
     }
 
     private static bool TryParseAccountType(string? value, out EngineeringManager.Domain.Finance.FinancialAccountType accountType)
