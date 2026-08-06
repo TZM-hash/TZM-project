@@ -14,11 +14,10 @@
     {
         new("true", "启用"), new("false", "停用")
     };
-    var inlineFilters = new List<DataWorkbenchFilterField>();
-    if (!Model.IsCustomerScope)
+    var inlineFilters = new List<DataWorkbenchFilterField>
     {
-        inlineFilters.Add(new("Role", "角色", Model.Role.HasValue ? ((int)Model.Role.Value).ToString() : null, DataWorkbenchFilterKind.Select, roleOptions));
-    }
+        new("Role", "角色", Model.Role.HasValue ? ((int)Model.Role.Value).ToString() : null, DataWorkbenchFilterKind.Select, roleOptions)
+    };
     inlineFilters.Add(new("Search", "搜索", Model.Search, Placeholder: "搜索名称、编号、联系人或专业"));
     inlineFilters.Add(new("IsActive", "状态", Model.IsActive?.ToString().ToLowerInvariant(), DataWorkbenchFilterKind.Select, statusOptions));
     var financialColumnKeys = new HashSet<string>(StringComparer.Ordinal) { "receipts", "invoices", "payments" };
@@ -27,10 +26,10 @@
         : new HashSet<string>(StringComparer.Ordinal) { "payments", "invoices" };
     var invoiceColumnLabel = Model.IsCustomerScope ? "进项票" : "销项票";
     var partnerPreset = DataWorkbenchPresets.Partners;
-    var tableId = Model.IsCustomerScope ? "customers-table" : partnerPreset.TableId;
+    var tableId = partnerPreset.TableId;
     var workbench = partnerPreset with
     {
-        PageKey = Model.IsCustomerScope ? "customers" : partnerPreset.PageKey,
+        PageKey = partnerPreset.PageKey,
         TableId = tableId,
         Columns = partnerPreset.Columns
             .Where(column => !financialColumnKeys.Contains(column.Key) || (Model.CanViewFinance && visibleFinancialColumnKeys.Contains(column.Key)))
@@ -39,12 +38,16 @@
         InlineFilters = inlineFilters,
         Filters = inlineFilters
     };
-    var scopeName = Model.IsCustomerScope
-        ? (Model.IsActive.HasValue ? (Model.IsActive.Value ? "启用甲方/总包" : "停用甲方/总包") : "全部甲方/总包")
-        : Model.Role?.ToChinese() ?? (Model.IsActive.HasValue ? (Model.IsActive.Value ? "启用单位" : "停用单位") : "全部合作单位");
+    var scopeName = Model.Role?.ToChinese()
+        ?? (Model.IsActive.HasValue
+            ? (Model.IsActive.Value ? $"启用{Model.CategoryLabel}" : $"停用{Model.CategoryLabel}")
+            : Model.CategoryLabel);
     var financialColumnCount = Model.CanViewFinance ? 2 : 0;
     var financeJsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     var returnUrl = Request.Path + Request.QueryString;
+    var crewCategoryCount = Model.CategorySummaries.FirstOrDefault(item => item.Category == "crews")?.Count ?? 0;
+    var customerCategoryCount = Model.CategorySummaries.FirstOrDefault(item => item.Category == "customers")?.Count ?? 0;
+    var otherCategoryCount = Model.CategorySummaries.FirstOrDefault(item => item.Category == "other")?.Count ?? 0;
 
     static string FinancialProgressState(decimal target, decimal completed)
     {
@@ -95,6 +98,13 @@
         @if (Model.CanManage) { <button class="button button--primary" type="button" data-partner-dialog-open="create">新增@(Model.EntityLabel)</button> }
     </section>
 
+    <nav class="partner-category-tabs" data-partner-category-tabs aria-label="合作单位分类">
+        <a class="partner-category-tab @(Model.Category is null ? "is-active" : string.Empty)" aria-current="@(Model.Category is null ? "page" : null)" asp-page="Index" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>全部合作单位</span><strong>@Model.AllPartners.Count</strong></a>
+        <a class="partner-category-tab @(Model.Category == "crews" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "crews" ? "page" : null)" asp-page="Index" asp-route-category="crews" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>施工班组</span><strong>@crewCategoryCount</strong></a>
+        <a class="partner-category-tab @(Model.Category == "customers" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "customers" ? "page" : null)" asp-page="Index" asp-route-category="customers" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>甲方/总包</span><strong>@customerCategoryCount</strong></a>
+        <a class="partner-category-tab @(Model.Category == "other" ? "is-active" : string.Empty)" aria-current="@(Model.Category == "other" ? "page" : null)" asp-page="Index" asp-route-category="other" asp-route-search="@Model.Search" asp-route-role="@Model.Role" asp-route-isActive="@Model.IsActive"><span>其他合作单位</span><strong>@otherCategoryCount</strong></a>
+    </nav>
+
     <section class="partner-workspace-layout">
         <aside class="partner-workspace-summary" data-partner-workspace-summary>
             <div class="equipment-summary-heading"><span>单位概览</span><strong>全部@(Model.EntityLabel)</strong></div>
@@ -104,24 +114,21 @@
                 <article><span>停用</span><strong>@Model.AllPartners.Count(item => !item.IsActive)</strong></article>
                 <article><span>参与项目</span><strong>@Model.AllPartners.Sum(item => item.ProjectCount)</strong></article>
             </div>
-            @if (!Model.IsCustomerScope)
-            {
-                <section class="partner-role-summary" aria-label="合作单位角色筛选">
+            <section class="partner-role-summary" aria-label="合作单位角色筛选">
                     <div class="equipment-company-summary-heading"><div><span>业务角色</span><strong>按角色筛选</strong></div><small>@Model.RoleSummaries.Count 类</small></div>
                     <div class="partner-role-summary-list">
                         @foreach (var item in Model.RoleSummaries)
                         {
-                            <a class="partner-role-summary-row @(Model.Role == item.Role ? "is-active" : string.Empty)" asp-page="Index" asp-route-scope="@Model.Scope" asp-route-search="@Model.Search" asp-route-role="@((int)item.Role)" asp-route-isActive="@Model.IsActive">
+                            <a class="partner-role-summary-row @(Model.Role == item.Role ? "is-active" : string.Empty)" asp-page="Index" asp-route-category="@Model.Category" asp-route-search="@Model.Search" asp-route-role="@((int)item.Role)" asp-route-isActive="@Model.IsActive">
                                 <span>@item.Role.ToChinese()</span><strong>@item.Count</strong>
                             </a>
                         }
                     </div>
                     @if (Model.Role.HasValue)
                     {
-                        <a class="button button--secondary partner-role-clear" asp-page="Index" asp-route-scope="@Model.Scope" asp-route-search="@Model.Search" asp-route-isActive="@Model.IsActive">显示全部角色</a>
+                        <a class="button button--secondary partner-role-clear" asp-page="Index" asp-route-category="@Model.Category" asp-route-search="@Model.Search" asp-route-isActive="@Model.IsActive">显示全部角色</a>
                     }
-                </section>
-            }
+            </section>
         </aside>
 
         <section class="partner-workspace-list" data-partner-workspace-list>
@@ -136,9 +143,18 @@
                     @if (Model.Partners.Count == 0) { <tr><td colspan="@(6 + financialColumnCount)" class="empty-state">当前筛选范围暂无@(Model.EntityLabel)。</td></tr> }
                     @foreach (var partner in Model.Partners)
                     {
-                        var primaryRole = partner.Roles.FirstOrDefault();
+                        var primaryRole = Model.Role.HasValue
+                            ? partner.Roles.FirstOrDefault(item => item.RoleType == Model.Role.Value)
+                            : Model.Category switch
+                            {
+                                "crews" => partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew),
+                                "customers" => partner.Roles.FirstOrDefault(item => item.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor),
+                                _ => partner.Roles.FirstOrDefault()
+                            };
                         var primaryContact = partner.Contacts.FirstOrDefault(contact => contact.IsPrimary) ?? partner.Contacts.FirstOrDefault();
-                        var role = primaryRole?.RoleType ?? BusinessPartnerRoleType.ConstructionCrew;
+                        var role = primaryRole?.RoleType ?? Model.DefaultRole;
+                        var roleLabel = primaryRole is null ? "未分类" : role.ToChinese();
+                        var isConstructionCrew = partner.Roles.Any(item => item.RoleType == BusinessPartnerRoleType.ConstructionCrew);
                         var financialSummary = Model.PartnerFinancialSummaries.GetValueOrDefault(partner.Id) ?? PartnerLedgerSummaryDto.Empty(partner.Id);
                         var receivableTotal = financialSummary.Receivable.ActualAmount;
                         var payableTotal = financialSummary.Payable.ActualAmount;
@@ -161,7 +177,8 @@
                             shortName = partner.ShortName,
                             unifiedSocialCreditCode = partner.UnifiedSocialCreditCode,
                             roleType = (int)role,
-                            roleLabel = role.ToChinese(),
+                            previousRoleType = primaryRole is null ? null : (int?)primaryRole.RoleType,
+                            roleLabel,
                             tradeCategory = primaryRole?.TradeCategory,
                             contactName = primaryContact?.Name,
                             contactPhone = primaryContact?.Phone,
@@ -183,7 +200,7 @@
                         }, financeJsonOptions);
                         <tr>
                             <td data-column-key="partner" data-sort-value="@partner.PartnerNumber"><strong class="partner-name-clamp" title="@partner.Name">@partner.Name</strong><span class="table-secondary">@partner.PartnerNumber · @partner.ShortName</span><span class="table-secondary partner-notes-summary" data-column-key="notes" title="@partner.Notes">@(partner.Notes ?? "暂无备注")</span></td>
-                            <td data-column-key="role_trade"><strong>@role.ToChinese()</strong><span class="table-secondary partner-name-clamp" title="@primaryRole?.TradeCategory">@(primaryRole?.TradeCategory ?? "未填写专业")</span></td>
+                            <td data-column-key="role_trade"><strong>@roleLabel</strong><span class="table-secondary partner-name-clamp" title="@primaryRole?.TradeCategory">@(primaryRole?.TradeCategory ?? "未填写专业")</span></td>
                             <td data-column-key="contact"><strong>@(primaryContact?.Name ?? "未设置")</strong><span class="table-secondary">@(primaryContact?.Phone ?? "未设置电话")</span></td>
                             <td data-column-key="projects"><strong class="partner-project-count">@partner.ProjectCount</strong></td>
                             @if (Model.CanViewFinance)
@@ -211,11 +228,15 @@
                             <td data-column-key="actions">
                                 <div class="partner-row-actions">
                                     <button class="action-button action-button--view" type="button" title="查看@(Model.EntityLabel)" data-partner-dialog-open="details" data-partner-payload="@payload">查看</button>
-                                    @if (Model.CanManage)
-                                    {
-                                        <button class="action-button action-button--edit" type="button" title="编辑@(Model.EntityLabel)" data-partner-dialog-open="edit" data-partner-payload="@payload">编辑</button>
-                                        <button class="action-button action-button--copy" type="button" title="复制@(Model.EntityLabel)" data-partner-dialog-open="copy" data-partner-payload="@payload">复制</button>
-                                    }
+                                     @if (Model.CanManage)
+                                     {
+                                         <button class="action-button action-button--edit" type="button" title="编辑@(Model.EntityLabel)" data-partner-dialog-open="edit" data-partner-payload="@payload">编辑</button>
+                                         <button class="action-button action-button--copy" type="button" title="复制@(Model.EntityLabel)" data-partner-dialog-open="copy" data-partner-payload="@payload">复制</button>
+                                     }
+                                     @if (isConstructionCrew)
+                                     {
+                                         <a class="action-button action-button--view" href="@Url.Page("/Crews/Details", new { id = partner.Id, ReturnUrl = returnUrl })" title="打开施工班组档案">班组档案</a>
+                                     }
                                     @if (Model.CanManageFinance)
                                     {
                                         <button class="action-button action-button--usage" type="button" title="查看财务汇总" data-partner-dialog-open="finance" data-partner-payload="@financePayload">财务</button>
@@ -241,13 +262,13 @@
     @if (Model.CanManage)
     {
         <dialog class="workbench-dialog partner-editor-dialog mac-window-dialog" data-partner-editor-dialog data-dialog-open="@(Model.ActiveDialog == "editor" ? "true" : "false")">
-            <form method="post" asp-page-handler="Save" asp-route-scope="@Model.Scope" data-partner-editor-form>
+            <form method="post" asp-page-handler="Save" asp-route-category="@Model.Category" data-partner-editor-form>
                 <input type="hidden" name="Search" value="@Model.Search" /><input type="hidden" name="Role" value="@Model.Role" /><input type="hidden" name="IsActive" value="@Model.IsActive" />
-                <input type="hidden" asp-for="Editor.Id" /><input type="hidden" asp-for="Editor.ConcurrencyStamp" />
+                <input type="hidden" asp-for="Editor.Id" /><input type="hidden" asp-for="Editor.ConcurrencyStamp" /><input type="hidden" asp-for="Editor.PreviousRoleType" />
                 <div class="workbench-dialog-heading"><span class="mac-window-controls" aria-hidden="true"><i></i><i></i><i></i></span><div><strong data-partner-editor-title>新增@(Model.EntityLabel)</strong><span>@(Model.EntityLabel) 主档</span></div><button type="button" class="dialog-close" aria-label="关闭@(Model.EntityLabel)编辑窗口" data-partner-dialog-close>×</button></div>
                 <div class="partner-editor-grid">
                     <section><h3>单位资料</h3><label>单位编号<input asp-for="Editor.PartnerNumber" required /><span asp-validation-for="Editor.PartnerNumber"></span></label><label>单位全称<input asp-for="Editor.Name" required /><span asp-validation-for="Editor.Name"></span></label><label>单位简称<input asp-for="Editor.ShortName" required /><span asp-validation-for="Editor.ShortName"></span></label><label>统一社会信用代码<input asp-for="Editor.UnifiedSocialCreditCode" /></label></section>
-                    <section><h3>业务角色</h3>@if (Model.IsCustomerScope) { <input type="hidden" name="Editor.RoleType" value="@((int)Model.DefaultRole)" /><label>角色<input value="@Model.DefaultRole.ToChinese()" disabled /></label> } else { <label>角色<select asp-for="Editor.RoleType">@foreach (var value in Model.AvailableRoles) { <option value="@((int)value)">@value.ToChinese()</option> }</select></label> }<label>专业 / 类别<input asp-for="Editor.TradeCategory" /></label><label class="partner-editor-wide">单位备注<textarea asp-for="Editor.Notes" rows="4"></textarea></label></section>
+                    <section><h3>业务角色</h3><label>角色<select asp-for="Editor.RoleType">@foreach (var value in Model.AvailableRoles) { <option value="@((int)value)">@value.ToChinese()</option> }</select></label><label>专业 / 类别<input asp-for="Editor.TradeCategory" /></label><label class="partner-editor-wide">单位备注<textarea asp-for="Editor.Notes" rows="4"></textarea></label></section>
                     <section><h3>主要联系人</h3><label>联系人<input asp-for="Editor.ContactName" /></label><label>联系电话<input asp-for="Editor.ContactPhone" /></label><label class="partner-editor-wide">联系人备注<textarea asp-for="Editor.ContactNotes" rows="3"></textarea></label></section>
                     <section data-partner-status-section hidden><h3>档案状态</h3><label>状态<select asp-for="Editor.IsActive"><option value="true">启用</option><option value="false">停用</option></select></label><label>修改原因<input asp-for="Editor.Reason" required /><span asp-validation-for="Editor.Reason"></span></label><p class="partner-status-note partner-editor-wide">@(Model.EntityLabel) 与项目、账务记录关联时使用停用状态，不提供物理删除。</p></section>
                 </div>

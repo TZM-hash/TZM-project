@@ -1,9 +1,28 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 
 namespace EngineeringManager.Tests.Web;
 
 public sealed class ConstructionCrewPageTests
 {
+    [Fact]
+    public async Task CrewListRouteRedirectsToUnifiedPartnerCategory()
+    {
+        var model = new EngineeringManager.Web.Pages.Crews.IndexModel(null!, null!, null!, null!)
+        {
+            Search = "钢筋",
+            IsActive = true
+        };
+
+        var result = await model.OnGetAsync(CancellationToken.None);
+
+        var redirect = result.Should().BeOfType<RedirectToPageResult>().Subject;
+        redirect.PageName.Should().Be("/Partners/Index");
+        redirect.RouteValues!["Category"].Should().Be(EngineeringManager.Web.Pages.Partners.IndexModel.CrewCategory);
+        redirect.RouteValues["Search"].Should().Be("钢筋");
+        redirect.RouteValues["IsActive"].Should().Be(true);
+    }
+
     [Fact]
     public void CrewPagesExposeRosterProjectAndPayrollHistory()
     {

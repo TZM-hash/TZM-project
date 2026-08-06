@@ -270,7 +270,7 @@ public sealed class PartnerWorkspacePageTests
     }
 
     [Fact]
-    public void CustomerGeneralContractorUsesDedicatedScopedWorkspace()
+    public void PartnerWorkspaceUsesUnifiedRoleDerivedCategoriesAndNavigation()
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml");
         var model = ReadFile("src", "EngineeringManager.Web", "Pages", "Partners", "Index.cshtml.cs");
@@ -279,27 +279,33 @@ public sealed class PartnerWorkspacePageTests
         var script = ReadFileIfExists("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "partner-workspace.js");
 
         page.Should().Contain("@page \"{scope?}\"")
-            .And.Contain("Model.IsCustomerScope")
-            .And.Contain("Model.AvailableRoles")
-            .And.Contain("Model.IsCustomerScope ? \"customers-table\"")
+            .And.Contain("data-partner-category-tabs")
+            .And.Contain("asp-route-category")
+            .And.Contain("施工班组")
+            .And.Contain("甲方/总包")
+            .And.Contain("其他合作单位")
+            .And.Contain("Editor.PreviousRoleType")
+            .And.Contain("Url.Page(\"/Crews/Details\"")
             .And.Contain("id=\"@tableId\"")
             .And.Contain("data-default-role")
-            .And.Contain("data-entity-label")
-            .And.Contain("asp-route-scope=\"@Model.Scope\"");
+            .And.Contain("data-entity-label");
 
         model.Should().Contain("public const string CustomerScope = \"customers\";")
-            .And.Contain("public bool IsCustomerScope")
-            .And.Contain("public IReadOnlyList<BusinessPartnerRoleType> AvailableRoles")
+            .And.Contain("public const string CrewCategory = \"crews\";")
+            .And.Contain("public const string CustomerCategory = \"customers\";")
+            .And.Contain("public const string OtherCategory = \"other\";")
+            .And.Contain("public string? Category")
+            .And.Contain("CategorySummaries")
             .And.Contain("BusinessPartnerRoleType.CustomerOrGeneralContractor")
-            .And.Contain("ApplyScope(")
-            .And.Contain("Editor.RoleType = BusinessPartnerRoleType.CustomerOrGeneralContractor")
-            .And.Contain("await EnsureEditorTargetMatchesScopeAsync(cancellationToken)")
+            .And.Contain("ApplyCategory(")
+            .And.Contain("directorySynchronizer.SynchronizeAsync(null, cancellationToken)")
             .And.Contain("partnerService.ListForManagementAsync(null, null, cancellationToken)")
-            .And.Contain("Scope = IsCustomerScope ? CustomerScope : null");
+            .And.Contain("Editor.PreviousRoleType");
 
         script.Should().Contain("const defaultRole = Number.parseInt(page.dataset.defaultRole")
             .And.Contain("const entityLabel = page.dataset.entityLabel")
-            .And.Contain("payload.roleType ?? defaultRole");
+            .And.Contain("payload.roleType ?? defaultRole")
+            .And.Contain("setField(\"PreviousRoleType\"");
 
         details.Should().Contain("Request.Query[\"ReturnUrl\"]")
             .And.Contain("Url.IsLocalUrl(requestedReturnUrl)")
@@ -307,14 +313,11 @@ public sealed class PartnerWorkspacePageTests
             .And.Contain("href=\"@returnUrl\"")
             .And.Contain("@if (!isCustomerReturn)");
 
-        var customerNav = layout.IndexOf(">甲方/总包</span>", StringComparison.Ordinal);
-        var crewNav = layout.IndexOf(">施工班组</span>", StringComparison.Ordinal);
-        var partnerNav = layout.IndexOf(">合作单位</span>", StringComparison.Ordinal);
-        customerNav.Should().BeGreaterThan(-1).And.BeLessThan(crewNav);
-        crewNav.Should().BeLessThan(partnerNav);
-        layout.Should().Contain("asp-route-scope=\"customers\"")
-            .And.Contain("NavExact(\"/Partners\")")
-            .And.Contain("string.Equals(currentPage.TrimEnd('/'), \"/Partners/customers\"");
+        layout.Split(">合作单位</span>", StringSplitOptions.None).Should().HaveCount(2);
+        layout.Should().NotContain(">施工班组</span>")
+            .And.NotContain(">甲方/总包</span>")
+            .And.Contain("currentPage.StartsWith(\"/Crews\"")
+            .And.Contain("asp-page=\"/Partners/Index\"");
     }
 
     [Fact]

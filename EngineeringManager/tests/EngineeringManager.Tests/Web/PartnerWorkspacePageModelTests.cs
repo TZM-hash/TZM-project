@@ -14,56 +14,64 @@ namespace EngineeringManager.Tests.Web;
 public sealed class PartnerWorkspacePageModelTests
 {
     [Theory]
-    [InlineData(IndexModel.CustomerScope, BusinessPartnerRoleType.MaterialSupplier)]
-    [InlineData(null, BusinessPartnerRoleType.CustomerOrGeneralContractor)]
-    public async Task SaveRejectsAnEditorTargetOutsideTheCurrentScope(
-        string? scope,
-        BusinessPartnerRoleType existingRole)
+    [InlineData(null, "施工班组|甲方单位|材料单位|未分类单位")]
+    [InlineData(IndexModel.CrewCategory, "施工班组")]
+    [InlineData(IndexModel.CustomerCategory, "甲方单位")]
+    [InlineData(IndexModel.OtherCategory, "材料单位|未分类单位")]
+    public async Task CategoryFiltersAreDerivedFromRolesAndSynchronizeBeforeLoading(string? category, string expectedNames)
     {
-        var partner = Partner(existingRole);
-        var service = new RecordingPartnerService(partner);
-        var model = new IndexModel(service, null!, null!)
+        var service = new RecordingPartnerService(Partners());
+        var synchronizer = new RecordingDirectorySynchronizer();
+        var model = new IndexModel(service, null!, null!, null, synchronizer)
         {
-            Scope = scope,
-            Editor = new IndexModel.PartnerEditorInput
-            {
-                Id = partner.Id,
-                PartnerNumber = partner.PartnerNumber,
-                Name = partner.Name,
-                ShortName = partner.ShortName,
-                RoleType = BusinessPartnerRoleType.MaterialSupplier,
-                IsActive = true,
-                ConcurrencyStamp = partner.ConcurrencyStamp,
-                Reason = "测试跨范围编辑"
-            },
-            PageContext = PageContextForProjectManager()
+            Category = category,
+            PageContext = AnonymousPageContext()
         };
 
-        var result = await model.OnPostSaveAsync(CancellationToken.None);
+        await model.OnGetAsync(CancellationToken.None);
 
-        result.Should().BeOfType<PageResult>();
-        model.ModelState.IsValid.Should().BeFalse();
-        service.UpdateCount.Should().Be(0);
+        synchronizer.CallCount.Should().Be(1);
+        model.Partners.Select(item => item.Name).Should().Equal(expectedNames.Split('|'));
+        model.CategorySummaries.Single(item => item.Category == IndexModel.CrewCategory).Count.Should().Be(1);
+        model.CategorySummaries.Single(item => item.Category == IndexModel.CustomerCategory).Count.Should().Be(1);
+        model.CategorySummaries.Single(item => item.Category == IndexModel.OtherCategory).Count.Should().Be(2);
     }
 
     [Fact]
-    public async Task SaveAllowsAnInactiveEditorTargetInsideTheCurrentScope()
+    public async Task LegacyCustomerScopeMapsToCustomerCategory()
     {
-        var partner = Partner(BusinessPartnerRoleType.MaterialSupplier, isActive: false);
-        var service = new RecordingPartnerService(partner);
+        var model = new IndexModel(new RecordingPartnerService(Partners()), null!, null!)
+        {
+            Scope = IndexModel.CustomerScope,
+            PageContext = AnonymousPageContext()
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        model.Category.Should().Be(IndexModel.CustomerCategory);
+        model.Partners.Should().ContainSingle(item => item.Name == "甲方单位");
+    }
+
+    [Fact]
+    public async Task SavePassesPreviousRoleAndPreservesTheCurrentCategory()
+    {
+        var partner = Partners()[0];
+        var service = new RecordingPartnerService([partner]);
         var pageContext = PageContextForProjectManager();
         var model = new IndexModel(service, null!, null!)
         {
+            Category = IndexModel.CrewCategory,
             Editor = new IndexModel.PartnerEditorInput
             {
                 Id = partner.Id,
                 PartnerNumber = partner.PartnerNumber,
                 Name = partner.Name,
                 ShortName = partner.ShortName,
+                PreviousRoleType = BusinessPartnerRoleType.ConstructionCrew,
                 RoleType = BusinessPartnerRoleType.MaterialSupplier,
                 IsActive = true,
                 ConcurrencyStamp = partner.ConcurrencyStamp,
-                Reason = "重新启用单位"
+                Reason = "调整合作单位分类"
             },
             PageContext = pageContext,
             TempData = new TempDataDictionary(pageContext.HttpContext, new NullTempDataProvider())
@@ -72,8 +80,15 @@ public sealed class PartnerWorkspacePageModelTests
         var result = await model.OnPostSaveAsync(CancellationToken.None);
 
         result.Should().BeOfType<RedirectToPageResult>();
-        service.UpdateCount.Should().Be(1);
+        service.LastUpdate.Should().NotBeNull();
+        service.LastUpdate!.PreviousRoleType.Should().Be(BusinessPartnerRoleType.ConstructionCrew);
+        ((RedirectToPageResult)result).RouteValues!["Category"].Should().Be(IndexModel.CrewCategory);
     }
+
+    private static PageContext AnonymousPageContext() => new()
+    {
+        HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) }
+    };
 
     private static PageContext PageContextForProjectManager()
     {
@@ -86,23 +101,42 @@ public sealed class PartnerWorkspacePageModelTests
         };
     }
 
-    private static BusinessPartnerDto Partner(BusinessPartnerRoleType role, bool isActive = true) =>
+    private static BusinessPartnerDto[] Partners() =>
+    [
+        Partner("BP-CREW", "施工班组", BusinessPartnerRoleType.ConstructionCrew),
+        Partner("BP-CUSTOMER", "甲方单位", BusinessPartnerRoleType.CustomerOrGeneralContractor),
+        Partner("BP-MATERIAL", "材料单位", BusinessPartnerRoleType.MaterialSupplier),
+        new BusinessPartnerDto(Guid.NewGuid(), "BP-UNCATEGORIZED", "未分类单位", "未分类", null, null, [], [], 0, true, Guid.NewGuid())
+    ];
+
+    private static BusinessPartnerDto Partner(string number, string name, BusinessPartnerRoleType role) =>
         new(
             Guid.NewGuid(),
-            "BP-TEST",
-            "测试单位",
-            "测试",
+            number,
+            name,
+            name,
             null,
             null,
             [new PartnerRoleDto(role, null, null, null)],
             [],
             0,
-            isActive,
+            true,
             Guid.NewGuid());
 
-    private sealed class RecordingPartnerService(BusinessPartnerDto existing) : IBusinessPartnerService
+    private sealed class RecordingDirectorySynchronizer : IBusinessPartnerDirectorySynchronizer
     {
-        public int UpdateCount { get; private set; }
+        public int CallCount { get; private set; }
+
+        public Task SynchronizeAsync(Guid? projectId, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingPartnerService(IReadOnlyList<BusinessPartnerDto> partners) : IBusinessPartnerService
+    {
+        public UpdateBusinessPartnerRequest? LastUpdate { get; private set; }
 
         public Task<BusinessPartnerDto> CreateAsync(CreateBusinessPartnerRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
@@ -112,21 +146,26 @@ public sealed class PartnerWorkspacePageModelTests
 
         public Task<BusinessPartnerDto> UpdateAsync(string userId, UpdateBusinessPartnerRequest request, CancellationToken cancellationToken)
         {
-            UpdateCount++;
-            return Task.FromResult(existing);
+            LastUpdate = request;
+            return Task.FromResult(partners.Single(item => item.Id == request.Id));
         }
 
         public Task LinkToProjectAsync(LinkPartnerToProjectRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<BusinessPartnerDto>> ListAsync(string? search, BusinessPartnerRoleType? role, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<BusinessPartnerDto>>([existing]);
+            ListForManagementAsync(search, role, cancellationToken);
 
-        public Task<IReadOnlyList<BusinessPartnerDto>> ListForManagementAsync(string? search, BusinessPartnerRoleType? role, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<BusinessPartnerDto>>([existing]);
+        public Task<IReadOnlyList<BusinessPartnerDto>> ListForManagementAsync(string? search, BusinessPartnerRoleType? role, CancellationToken cancellationToken)
+        {
+            var result = role.HasValue
+                ? partners.Where(item => item.Roles.Any(value => value.RoleType == role.Value)).ToArray()
+                : partners;
+            return Task.FromResult<IReadOnlyList<BusinessPartnerDto>>(result);
+        }
 
         public Task<BusinessPartnerDto?> GetAsync(Guid partnerId, CancellationToken cancellationToken) =>
-            Task.FromResult<BusinessPartnerDto?>(partnerId == existing.Id && existing.IsActive ? existing : null);
+            Task.FromResult(partners.SingleOrDefault(item => item.Id == partnerId));
     }
 
     private sealed class NullTempDataProvider : ITempDataProvider

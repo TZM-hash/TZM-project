@@ -20,13 +20,18 @@ public sealed class IndexModel(
     IBusinessPartnerService partnerService,
     ICentralLedgerQueryService ledgerQueryService,
     ApplicationDbContext db,
-    IOrganizationSummaryService? organizationSummaryService = null) : PageModel
+    IOrganizationSummaryService? organizationSummaryService = null,
+    IBusinessPartnerDirectorySynchronizer? directorySynchronizer = null) : PageModel
 {
     public const string CustomerScope = "customers";
+    public const string CrewCategory = "crews";
+    public const string CustomerCategory = "customers";
+    public const string OtherCategory = "other";
 
     public IReadOnlyList<BusinessPartnerDto> AllPartners { get; private set; } = [];
     public IReadOnlyList<BusinessPartnerDto> Partners { get; private set; } = [];
     public IReadOnlyList<PartnerRoleSummary> RoleSummaries { get; private set; } = [];
+    public IReadOnlyList<PartnerCategorySummary> CategorySummaries { get; private set; } = [];
     public IReadOnlyDictionary<Guid, PartnerLedgerSummaryDto> PartnerFinancialSummaries { get; private set; }
         = new Dictionary<Guid, PartnerLedgerSummaryDto>();
     public IReadOnlyDictionary<Guid, OrganizationSummaryDto> OrganizationSummaries { get; private set; }
@@ -36,18 +41,25 @@ public sealed class IndexModel(
     public bool CanViewFinance => User.IsInRole(SystemRoles.SystemAdministrator) || User.IsInRole(SystemRoles.ApplicationAdministrator) || User.IsInRole(SystemRoles.Finance) || User.IsInRole(SystemRoles.QueryOnly);
     public string? ActiveDialog { get; private set; }
     public string NextPartnerNumber { get; private set; } = "HZ0001";
-    public bool IsCustomerScope => string.Equals(Scope, CustomerScope, StringComparison.OrdinalIgnoreCase);
-    public string EntityLabel => IsCustomerScope ? "甲方/总包" : "合作单位";
-    public BusinessPartnerRoleType DefaultRole => IsCustomerScope
-        ? BusinessPartnerRoleType.CustomerOrGeneralContractor
-        : BusinessPartnerRoleType.ConstructionCrew;
-    public IReadOnlyList<BusinessPartnerRoleType> AvailableRoles => IsCustomerScope
-        ? [BusinessPartnerRoleType.CustomerOrGeneralContractor]
-        : Enum.GetValues<BusinessPartnerRoleType>()
-            .Where(role => role != BusinessPartnerRoleType.CustomerOrGeneralContractor)
-            .ToArray();
+    public bool IsCustomerScope => string.Equals(Category, CustomerCategory, StringComparison.OrdinalIgnoreCase);
+    public string EntityLabel => "合作单位";
+    public string CategoryLabel => Category switch
+    {
+        CrewCategory => "施工班组",
+        CustomerCategory => "甲方/总包",
+        OtherCategory => "其他合作单位",
+        _ => "全部合作单位"
+    };
+    public BusinessPartnerRoleType DefaultRole => Category switch
+    {
+        CrewCategory => BusinessPartnerRoleType.ConstructionCrew,
+        CustomerCategory => BusinessPartnerRoleType.CustomerOrGeneralContractor,
+        _ => BusinessPartnerRoleType.MaterialSupplier
+    };
+    public IReadOnlyList<BusinessPartnerRoleType> AvailableRoles { get; } = Enum.GetValues<BusinessPartnerRoleType>();
 
     [BindProperty(SupportsGet = true)] public string? Scope { get; set; }
+    [BindProperty(SupportsGet = true)] public string? Category { get; set; }
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [BindProperty(SupportsGet = true)] public BusinessPartnerRoleType? Role { get; set; }
     [BindProperty(SupportsGet = true)] public bool? IsActive { get; set; }
@@ -55,23 +67,18 @@ public sealed class IndexModel(
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        NormalizeRoleFilter();
+        NormalizeCategory();
+        if (directorySynchronizer is not null)
+        {
+            await directorySynchronizer.SynchronizeAsync(null, cancellationToken);
+        }
         await LoadAsync(cancellationToken);
     }
 
     public async Task<IActionResult> OnPostSaveAsync(CancellationToken cancellationToken)
     {
         if (!CanManage) return Forbid();
-        NormalizeRoleFilter();
-        if (IsCustomerScope)
-        {
-            Editor.RoleType = BusinessPartnerRoleType.CustomerOrGeneralContractor;
-        }
-        else if (Editor.RoleType == BusinessPartnerRoleType.CustomerOrGeneralContractor)
-        {
-            ModelState.AddModelError(string.Empty, "甲方/总包请在独立页面中维护。");
-        }
-        await EnsureEditorTargetMatchesScopeAsync(cancellationToken);
+        NormalizeCategory();
 
         if (!ModelState.IsValid)
         {
@@ -102,9 +109,10 @@ public sealed class IndexModel(
                         contact,
                         Editor.IsActive,
                         Editor.ConcurrencyStamp,
-                        Editor.Reason),
+                        Editor.Reason,
+                        Editor.PreviousRoleType),
                     cancellationToken);
-                TempData["SuccessMessage"] = $"{EntityLabel}已更新。";
+                TempData["SuccessMessage"] = "合作单位已更新。";
             }
             else
             {
@@ -118,16 +126,10 @@ public sealed class IndexModel(
                         [role],
                         contact is null ? [] : [contact]),
                     cancellationToken);
-                TempData["SuccessMessage"] = $"{EntityLabel}已新增。";
+                TempData["SuccessMessage"] = "合作单位已新增。";
             }
 
-            return RedirectToPage(new
-            {
-                Scope = IsCustomerScope ? CustomerScope : null,
-                Search,
-                Role = IsCustomerScope ? null : Role,
-                IsActive
-            });
+            return RedirectToPage(new { Category, Search, Role, IsActive });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or DbUpdateConcurrencyException)
         {
@@ -142,15 +144,18 @@ public sealed class IndexModel(
     {
         var allPartners = await partnerService.ListForManagementAsync(null, null, cancellationToken);
         NextPartnerNumber = ShortBusinessNumber.Next(allPartners.Select(item => item.PartnerNumber), "HZ");
-        AllPartners = ApplyScope(allPartners).ToArray();
-        var filtered = await partnerService.ListForManagementAsync(
-            Search,
-            IsCustomerScope ? BusinessPartnerRoleType.CustomerOrGeneralContractor : Role,
-            cancellationToken);
-        var scoped = ApplyScope(filtered);
-        Partners = (IsActive.HasValue ? scoped.Where(item => item.IsActive == IsActive.Value) : scoped).ToArray();
+        AllPartners = allPartners.ToArray();
+        var filtered = await partnerService.ListForManagementAsync(Search, Role, cancellationToken);
+        var categorized = ApplyCategory(filtered);
+        Partners = (IsActive.HasValue ? categorized.Where(item => item.IsActive == IsActive.Value) : categorized).ToArray();
+        CategorySummaries =
+        [
+            new PartnerCategorySummary(CrewCategory, "施工班组", ApplyCategory(allPartners, CrewCategory).Count()),
+            new PartnerCategorySummary(CustomerCategory, "甲方/总包", ApplyCategory(allPartners, CustomerCategory).Count()),
+            new PartnerCategorySummary(OtherCategory, "其他合作单位", ApplyCategory(allPartners, OtherCategory).Count())
+        ];
         RoleSummaries = AvailableRoles
-            .Select(role => new PartnerRoleSummary(role, AllPartners.Count(item => item.Roles.Any(value => value.RoleType == role))))
+            .Select(role => new PartnerRoleSummary(role, AllPartners.Count(item => HasRole(item, role))))
             .ToArray();
         if (organizationSummaryService is not null)
         {
@@ -174,42 +179,40 @@ public sealed class IndexModel(
         }
     }
 
-    private IEnumerable<BusinessPartnerDto> ApplyScope(IEnumerable<BusinessPartnerDto> partners) =>
-        IsCustomerScope
-            ? partners.Where(item => HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor))
-            : partners.Where(item => !HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor));
+    private IEnumerable<BusinessPartnerDto> ApplyCategory(IEnumerable<BusinessPartnerDto> partners) =>
+        ApplyCategory(partners, Category);
 
-    private void NormalizeRoleFilter()
+    private static IEnumerable<BusinessPartnerDto> ApplyCategory(IEnumerable<BusinessPartnerDto> partners, string? category) =>
+        category switch
+        {
+            CrewCategory => partners.Where(item => HasRole(item, BusinessPartnerRoleType.ConstructionCrew)),
+            CustomerCategory => partners.Where(item => HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor)),
+            OtherCategory => partners.Where(item => !HasRole(item, BusinessPartnerRoleType.ConstructionCrew)
+                && !HasRole(item, BusinessPartnerRoleType.CustomerOrGeneralContractor)),
+            _ => partners
+        };
+
+    private void NormalizeCategory()
     {
-        if (IsCustomerScope || Role == BusinessPartnerRoleType.CustomerOrGeneralContractor)
+        if (string.IsNullOrWhiteSpace(Category) && string.Equals(Scope, CustomerScope, StringComparison.OrdinalIgnoreCase))
         {
-            Role = null;
-        }
-    }
-
-    private async Task EnsureEditorTargetMatchesScopeAsync(CancellationToken cancellationToken)
-    {
-        if (!Editor.Id.HasValue) return;
-
-        var partners = await partnerService.ListForManagementAsync(null, null, cancellationToken);
-        var existing = partners.SingleOrDefault(item => item.Id == Editor.Id.Value);
-        if (existing is null)
-        {
-            ModelState.AddModelError(string.Empty, "单位不存在或已删除，请刷新后重试。");
-            return;
+            Category = CustomerCategory;
         }
 
-        var belongsToCustomerScope = HasRole(existing, BusinessPartnerRoleType.CustomerOrGeneralContractor);
-        if (belongsToCustomerScope != IsCustomerScope)
+        Category = Category?.Trim().ToLowerInvariant() switch
         {
-            ModelState.AddModelError(string.Empty, "当前单位不属于此维护页面，请刷新后重试。");
-        }
+            CrewCategory => CrewCategory,
+            CustomerCategory => CustomerCategory,
+            OtherCategory => OtherCategory,
+            _ => null
+        };
     }
 
     private static bool HasRole(BusinessPartnerDto partner, BusinessPartnerRoleType role) =>
         partner.Roles.Any(item => item.RoleType == role);
 
     public sealed record PartnerRoleSummary(BusinessPartnerRoleType Role, int Count);
+    public sealed record PartnerCategorySummary(string Category, string Label, int Count);
 
     public sealed class PartnerEditorInput
     {
@@ -218,7 +221,8 @@ public sealed class IndexModel(
         [Required(ErrorMessage = "请填写单位全称。"), StringLength(200)] public string Name { get; set; } = string.Empty;
         [Required(ErrorMessage = "请填写单位简称。"), StringLength(100)] public string ShortName { get; set; } = string.Empty;
         [StringLength(50)] public string? UnifiedSocialCreditCode { get; set; }
-        public BusinessPartnerRoleType RoleType { get; set; } = BusinessPartnerRoleType.ConstructionCrew;
+        public BusinessPartnerRoleType? PreviousRoleType { get; set; }
+        public BusinessPartnerRoleType RoleType { get; set; } = BusinessPartnerRoleType.MaterialSupplier;
         [StringLength(100)] public string? TradeCategory { get; set; }
         [StringLength(100)] public string? ContactName { get; set; }
         [StringLength(50)] public string? ContactPhone { get; set; }

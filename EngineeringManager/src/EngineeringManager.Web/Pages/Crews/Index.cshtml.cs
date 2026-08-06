@@ -49,7 +49,15 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true)] public bool? IsActive { get; set; }
     [BindProperty] public CrewEditorInput Editor { get; set; } = new();
 
-    public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken);
+    public Task<IActionResult> OnGetAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IActionResult>(RedirectToPage(
+            "/Partners/Index",
+            new
+            {
+                Category = Partners.IndexModel.CrewCategory,
+                Search,
+                IsActive
+            }));
 
     public async Task<IActionResult> OnGetRosterAsync(Guid id, CancellationToken cancellationToken)
     {

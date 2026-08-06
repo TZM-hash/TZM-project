@@ -63,6 +63,7 @@ if (page) {
         setField("ShortName", copy ? `${payload.shortName}副本` : payload.shortName);
         setField("UnifiedSocialCreditCode", copy ? "" : payload.unifiedSocialCreditCode);
         setField("RoleType", payload.roleType ?? defaultRole);
+        setField("PreviousRoleType", editing ? (payload.previousRoleType ?? payload.roleType ?? "") : "");
         setField("TradeCategory", payload.tradeCategory);
         setField("ContactName", copy ? "" : payload.contactName);
         setField("ContactPhone", copy ? "" : payload.contactPhone);

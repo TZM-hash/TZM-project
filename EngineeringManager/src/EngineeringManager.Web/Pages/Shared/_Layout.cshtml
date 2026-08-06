@@ -64,9 +64,7 @@
                     <div class="nav-submenu"><a class='@Nav("/Personnel/Internal")' asp-page="/Personnel/Internal/Index">内部人员</a><a class='@Nav("/Personnel/External")' asp-page="/Personnel/External/Index">外部人员</a><a class='@Nav("/Employees")' asp-page="/Employees/Index">员工业务档案</a></div>
                 </details>
                 <a class='@Nav("/Payroll")' asp-page="/Payroll/Index"><svg><use href="/img/icons.svg#finance"></use></svg><span>工资台账</span></a>
-                <a class='@Nav("/Partners/customers")' asp-page="/Partners/Index" asp-route-scope="customers"><svg><use href="/img/icons.svg#partners"></use></svg><span>甲方/总包</span></a>
-                <a class='@Nav("/Crews")' asp-page="/Crews/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>施工班组</span></a>
-                <a class='@NavExact("/Partners")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
+                <a class='@(currentPage.StartsWith("/Partners", StringComparison.OrdinalIgnoreCase) || currentPage.StartsWith("/Crews", StringComparison.OrdinalIgnoreCase) ? "nav-link is-active" : "nav-link")' asp-page="/Partners/Index"><svg><use href="/img/icons.svg#partners"></use></svg><span>合作单位</span></a>
             </div>
             <div class="nav-group"><span class="nav-group-label">公司与设备</span>
                 <a class='@NavExact("/Companies")' asp-page="/Companies/Index"><svg><use href="/img/icons.svg#company"></use></svg><span>自有公司</span></a>
