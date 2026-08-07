@@ -114,7 +114,8 @@ public sealed class PersonnelResponsiveUiTests
     }
 
     private static string ReadFile(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()));
+        File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()))
+            .ReplaceLineEndings("\n");
 
     private static string RepositoryRoot()
     {

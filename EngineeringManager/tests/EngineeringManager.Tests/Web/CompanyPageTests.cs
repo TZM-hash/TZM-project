@@ -734,7 +734,8 @@ public sealed class CompanyPageTests
     public void CompanyAccountDtoCarriesConcurrencyStampForReliableEditing()
     {
         var root = RepositoryRoot();
-        var source = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Application", "Companies", "CompanyDtos.cs"));
+        var source = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Application", "Companies", "CompanyDtos.cs"))
+            .ReplaceLineEndings("\n");
 
         source.Should().Contain("string? Notes = null,\n    Guid ConcurrencyStamp = default");
     }

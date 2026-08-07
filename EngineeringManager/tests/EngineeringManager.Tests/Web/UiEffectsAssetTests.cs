@@ -156,10 +156,13 @@ public sealed class UiEffectsAssetTests
     private static string ReadJavaScript()
     {
         var directory = Path.Combine(RepositoryRoot(), "src", "EngineeringManager.Web", "wwwroot", "js");
-        return string.Join('\n', Directory.EnumerateFiles(directory, "*.js", SearchOption.AllDirectories).Select(File.ReadAllText));
+        return string.Join('\n', Directory.EnumerateFiles(directory, "*.js", SearchOption.AllDirectories)
+            .Select(file => File.ReadAllText(file).ReplaceLineEndings("\n")));
     }
 
-    private static string ReadFile(params string[] parts) => File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()));
+    private static string ReadFile(params string[] parts) =>
+        File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()))
+            .ReplaceLineEndings("\n");
 
     private static string RepositoryRoot()
     {

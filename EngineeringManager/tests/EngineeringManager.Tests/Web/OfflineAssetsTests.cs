@@ -39,7 +39,7 @@ public sealed class OfflineAssetsTests
         await using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
 
-        var script = await client.GetStringAsync("/service-worker.js");
+        var script = (await client.GetStringAsync("/service-worker.js")).ReplaceLineEndings("\n");
 
         script.Should().Contain("engineering-manager-shell-v10");
         script.Should().Contain("/js/components/data-table.js");
