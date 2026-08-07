@@ -215,6 +215,30 @@ public sealed class PersonnelPageTests
             .And.Contain("asp-page=\"/Crews/Details\"");
     }
 
+    [Fact]
+    public void PersonnelWorkspacesUseSharedWorkbenchWithSelectableSalaryColumnsAndExport()
+    {
+        var pages = new[]
+        {
+            ReadPage("Personnel", "Internal", "Index.cshtml"),
+            ReadPage("Personnel", "External", "Index.cshtml")
+        };
+        var models = new[]
+        {
+            ReadSourceFile("src", "EngineeringManager.Web", "Pages", "Personnel", "Internal", "Index.cshtml.cs"),
+            ReadSourceFile("src", "EngineeringManager.Web", "Pages", "Personnel", "External", "Index.cshtml.cs")
+        };
+
+        pages.Should().OnlyContain(page => page.Contains("_DataWorkbench", StringComparison.Ordinal))
+            .And.OnlyContain(page => page.Contains("data-personnel-export-item", StringComparison.Ordinal))
+            .And.OnlyContain(page => page.Contains("data-column-key=\"current_year_new_payable\"", StringComparison.Ordinal))
+            .And.OnlyContain(page => page.Contains("data-column-key=\"current_year_unpaid\"", StringComparison.Ordinal))
+            .And.OnlyContain(page => page.Contains("data-column-key=\"received_amount\"", StringComparison.Ordinal));
+        models.Should().OnlyContain(model => model.Contains("OnPostExportAsync", StringComparison.Ordinal))
+            .And.OnlyContain(model => model.Contains("EmployeeAnnualLedgerSummary", StringComparison.Ordinal))
+            .And.OnlyContain(model => model.Contains("ISavedDataViewService", StringComparison.Ordinal));
+    }
+
     private static PageContext PageContextForViewer() => PageContextWithRoles("Finance");
 
     private static PageContext PageContextForAdministrator() => PageContextWithRoles("SystemAdministrator");
@@ -232,6 +256,8 @@ public sealed class PersonnelPageTests
         var path = Path.Combine(new[] { RepositoryRoot(), "src", "EngineeringManager.Web", "Pages" }.Concat(parts).ToArray());
         return File.ReadAllText(path);
     }
+
+    private static string ReadSourceFile(params string[] parts) => File.ReadAllText(Path.Combine(new[] { RepositoryRoot() }.Concat(parts).ToArray()));
 
     private static string RepositoryRoot()
     {

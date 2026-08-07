@@ -23,6 +23,7 @@ public sealed class IndexModel(
     public CompanyDashboardDto Dashboard { get; private set; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DateTimeOffset.UtcNow);
     public IReadOnlyList<CompanyCategoryDto> Categories { get; private set; } = [];
     public IReadOnlyDictionary<Guid, CompanyDetailsDto> CompanyDetails { get; private set; } = new Dictionary<Guid, CompanyDetailsDto>();
+    public IReadOnlyDictionary<Guid, CompanyDashboardDto> CompanyDashboards { get; private set; } = new Dictionary<Guid, CompanyDashboardDto>();
     public IReadOnlyDictionary<Guid, OrganizationSummaryDto> OrganizationSummaries { get; private set; } = new Dictionary<Guid, OrganizationSummaryDto>();
     public IReadOnlyList<CompanyCertificateItemDto> CompanyCertificates { get; private set; } = [];
     public int EmployeeCount { get; private set; }
@@ -144,11 +145,14 @@ public sealed class IndexModel(
         Dashboard = await companyService.GetDashboardAsync(actor, CompanyId, cancellationToken);
         Categories = await companyService.ListCategoriesAsync(cancellationToken);
         var details = new Dictionary<Guid, CompanyDetailsDto>();
+        var companyDashboards = new Dictionary<Guid, CompanyDashboardDto>();
         foreach (var company in Companies)
         {
             details[company.Id] = await companyService.GetAsync(actor, company.Id, cancellationToken);
+            companyDashboards[company.Id] = await companyService.GetDashboardAsync(actor, company.Id, cancellationToken);
         }
         CompanyDetails = details;
+        CompanyDashboards = companyDashboards;
         if (organizationSummaryService is not null)
         {
             var asOf = DateOnly.FromDateTime(DateTime.Today);

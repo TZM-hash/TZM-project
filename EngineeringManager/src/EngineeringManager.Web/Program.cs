@@ -154,6 +154,7 @@ public sealed class Program
         builder.Services.AddScoped<IImportService, ImportService>();
         builder.Services.AddScoped<IDataExchangeTaskService, DataExchangeTaskService>();
         builder.Services.AddScoped<IProjectWorkbookService, ProjectWorkbookService>();
+        builder.Services.AddScoped<IPersonnelWorkbookService, PersonnelWorkbookExporter>();
         builder.Services.AddSingleton<IDatabaseBackupExecutor>(_ => new SqlServerBackupExecutor(connectionString));
         builder.Services.AddScoped<IBackupService>(services => new BackupService(
             services.GetRequiredService<ApplicationDbContext>(),

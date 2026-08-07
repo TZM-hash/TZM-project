@@ -753,6 +753,7 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             .Select(item => new { item.Amount, item.ContractLineItem.Contract.Project.Stage }).ToListAsync(cancellationToken);
         var settlements = await db.FinanceSettlements.AsNoTracking()
             .Include(item => item.Adjustments)
+            .Include(item => item.Deductions)
             .Where(item => item.Scope == LedgerScope.External && item.Status == LedgerRecordStatus.Active && ids.Contains(item.LegalEntityId))
             .ToListAsync(cancellationToken);
         var cashEntries = await db.FinanceCashEntries.AsNoTracking()
@@ -788,6 +789,14 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
         var paidAmount = cashEntries
             .Where(item => item.Direction == LedgerDirection.Payable)
             .Sum(item => item.IsReversal ? -item.Amount : item.Amount);
+        var outputInvoiceRequiredAmount = settlements
+            .Where(item => item.Direction == LedgerDirection.Receivable)
+            .Sum(CalculateShouldInvoiceAmount);
+        var inputInvoiceRequiredAmount = settlements
+            .Where(item => item.Direction == LedgerDirection.Payable)
+            .Sum(CalculateShouldInvoiceAmount);
+        var outputInvoiceAmount = invoices.Where(item => item.Direction == LedgerDirection.Receivable).Sum(item => item.Amount);
+        var inputInvoiceAmount = invoices.Where(item => item.Direction == LedgerDirection.Payable).Sum(item => item.Amount);
         return new CompanyDashboardDto(
             ids.Count,
             contractAmount,
@@ -797,12 +806,31 @@ public sealed class CompanyManagementService(ApplicationDbContext db) : ICompany
             collectedAmount,
             settlementAmounts.Where(item => item.Direction == LedgerDirection.Payable).Sum(item => item.Amount),
             paidAmount,
-            invoices.Where(item => item.Direction == LedgerDirection.Receivable).Sum(item => item.Amount),
-            invoices.Where(item => item.Direction == LedgerDirection.Payable).Sum(item => item.Amount),
+            outputInvoiceAmount,
+            inputInvoiceAmount,
             payroll.Sum(),
             0m,
             accountBalance,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            new CompanyInvoiceSummaryDto(
+                outputInvoiceRequiredAmount,
+                outputInvoiceAmount,
+                Math.Max(outputInvoiceRequiredAmount - outputInvoiceAmount, 0m),
+                inputInvoiceRequiredAmount,
+                inputInvoiceAmount,
+                Math.Max(inputInvoiceRequiredAmount - inputInvoiceAmount, 0m)));
+    }
+
+    private static decimal CalculateShouldInvoiceAmount(FinanceSettlement settlement)
+    {
+        var baseInvoiceAmount = settlement.OriginalInvoiceAmount
+            + settlement.Adjustments
+                .Where(item => item.Status == LedgerRecordStatus.Active)
+                .Sum(item => item.InvoiceAmountDelta);
+        var invoiceReducingDeductions = settlement.Deductions
+            .Where(item => item.Status == LedgerRecordStatus.Active && item.ReduceInvoiceAmount)
+            .Sum(item => item.Amount);
+        return Math.Max(baseInvoiceAmount - invoiceReducingDeductions, 0m);
     }
 
     private async Task<IReadOnlyList<CompanyCashProjection>> LoadCompanyCashRowsAsync(

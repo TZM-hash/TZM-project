@@ -29,6 +29,8 @@ public sealed class ProjectOverviewExportTests
         sheets.Select(item => item.Name).Should().Equal("总览汇总", "项目明细");
         sheets[0].Rows.Should().Contain(row => row.Count > 0 && Equals(row[0], "未收款"));
         sheets[1].Rows[0].Should().Contain("项目编号");
+        sheets[1].Rows[0].Should().Contain("合同金额").And.Contain("当前工程金额")
+            .And.NotContain("预计金额").And.NotContain("已结算金额").And.NotContain("清单项数量");
         sheets[1].Rows.Should().Contain(row => row.Count > 1 && row.Contains(fixture.Project.ProjectNumber));
     }
 

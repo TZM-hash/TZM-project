@@ -1,0 +1,87 @@
+@model EngineeringManager.Web.Pages.Personnel.PersonnelWorkbookExportViewModel
+@using EngineeringManager.Web.Workbenches
+@{
+    var exportScopeError = ViewData.ModelState[string.Empty]?.Errors.FirstOrDefault()?.ErrorMessage;
+    var exportColumnError = ViewData.ModelState["ExportColumns"]?.Errors.FirstOrDefault()?.ErrorMessage;
+    var hasExportColumnError = !string.IsNullOrWhiteSpace(exportColumnError);
+    var hasExportError = !string.IsNullOrWhiteSpace(exportScopeError) || !string.IsNullOrWhiteSpace(exportColumnError);
+    var exportColumnKeys = Model.ExportColumns.Select(column => column.Key).ToHashSet(StringComparer.Ordinal);
+}
+
+<form id="@Model.FormId" method="post" asp-page-handler="Export" class="project-workbook-export-toolbar personnel-workbook-export-toolbar" data-project-export-scope>
+    @foreach (var parameter in Model.PreservedQueryParameters)
+    {
+        if (!string.IsNullOrWhiteSpace(parameter.Value))
+        {
+            <input type="hidden" name="@parameter.Key" value="@parameter.Value" />
+        }
+    }
+
+    <details class="project-workbook-export-menu" data-project-workbook-export-menu data-check-selector data-check-selector-persist open="@(hasExportError ? "open" : null)">
+        <summary class="button button--primary workbench-tool-button project-workbook-export-trigger">
+            <span>导出@Model.ScopeLabel</span>
+            <span class="project-workbook-export-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="project-workbook-export-popover">
+            <div class="project-workbook-export-heading">
+                <div><strong>@($"{Model.ScopeLabel}导出")</strong><span>按勾选人员或当前筛选范围生成 Excel</span></div>
+                <span class="project-workbook-export-count"><strong data-project-export-selected-count>0</strong> 项已选</span>
+            </div>
+
+            <section class="project-workbook-export-section" aria-labelledby="personnel-export-scope-title">
+                <div class="project-workbook-export-section-title" id="personnel-export-scope-title">导出范围</div>
+                <label class="project-workbook-export-option">
+                    <input type="checkbox" name="SelectAllMatching" value="true" data-project-export-all-matching />
+                    <span><strong>当前筛选的全部人员</strong><small>提交时按当前筛选重新计算授权范围</small></span>
+                </label>
+                <p>未开启时，仅导出表格中已勾选的人员。</p>
+                <p class="project-workbook-export-scope-error" data-project-export-scope-error aria-live="polite" role="alert" hidden="@string.IsNullOrWhiteSpace(exportScopeError)">@(exportScopeError ?? $"请至少勾选一个{Model.ScopeLabel}，或选择导出当前筛选命中的全部人员。")</p>
+            </section>
+
+            <section class="project-workbook-export-section" aria-labelledby="personnel-export-content-title">
+                <div class="project-workbook-export-section-title" id="personnel-export-content-title">导出内容</div>
+                <div class="project-workbook-export-column-mode-list" role="radiogroup" aria-label="导出列来源">
+                    <label class="project-workbook-export-option">
+                        <input type="radio" name="ExportColumnMode" value="table" checked="@(Model.UsesTableExportColumns ? "checked" : null)" data-project-export-column-source="table" />
+                        <span><strong>按列管理导出</strong><small>使用当前页面“列管理”显示的列</small></span>
+                    </label>
+                    <label class="project-workbook-export-option">
+                        <input type="radio" name="ExportColumnMode" value="content" checked="@(Model.UsesContentExportColumns ? "checked" : null)" data-project-export-column-source="content" />
+                        <span><strong>按内容筛选导出</strong><small>使用下方独立勾选的列，并按当前用户保存</small></span>
+                    </label>
+                </div>
+                @foreach (var column in Model.TableColumns.Where(column => exportColumnKeys.Contains(column.Key)))
+                {
+                    <input type="hidden" name="TableExportColumns" value="@column.Key" data-export-column-key="@column.Key" data-project-export-column-source="table" />
+                }
+                <details class="project-workbook-export-columns-details" data-project-export-columns-details open="@(hasExportColumnError ? "open" : null)">
+                    <summary class="project-workbook-export-page-format">
+                        <div><strong>@($"{Model.ScopeLabel}列")</strong><small>按内容筛选模式下生效；设置按当前用户保存</small></div>
+                        <strong data-check-selector-count>未选择</strong>
+                    </summary>
+                    <div class="project-workbook-export-columns-body">
+                        <div class="project-workbook-export-column-heading">
+                            <span>勾选需要导出的列</span>
+                            <div>
+                                <button type="button" class="button button--ghost button--small" data-check-selector-all>全选</button>
+                                <button type="button" class="button button--ghost button--small" data-check-selector-default>恢复默认</button>
+                            </div>
+                        </div>
+                        <div class="project-workbook-export-column-grid">
+                        @foreach (var column in Model.ExportColumns)
+                        {
+                            <label>
+                                <input type="checkbox" name="ExportColumns" value="@column.Key" checked="@(Model.SelectedExportColumns.Contains(column.Key) ? "checked" : null)" data-check-selector-option data-project-export-columns data-default="true" />
+                                <span>@column.Label</span>
+                            </label>
+                        }
+                        </div>
+                        <p class="project-workbook-export-columns-error" data-project-export-columns-error hidden="@string.IsNullOrWhiteSpace(exportColumnError)">@(exportColumnError ?? "至少选择一列导出。")</p>
+                    </div>
+                </details>
+            </section>
+
+            <button class="button button--primary project-workbook-export-submit" type="submit" data-project-export-submit>生成人员清单</button>
+        </div>
+    </details>
+</form>

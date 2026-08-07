@@ -286,6 +286,7 @@ public sealed class ProjectAuthorizationTests
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         html.Should().Contain("工程量明细");
+        html.Should().NotContain("工程量明细 <span>");
         html.Should().Contain("收款明细");
         html.Should().Contain("开票明细");
         html.Should().Contain("付款明细");
@@ -575,7 +576,7 @@ public sealed class ProjectAuthorizationTests
     }
 
     [Fact]
-    public void ProjectListExposesStableSerialColumnAndCompleteOverviewColumns()
+    public void ProjectListExposesCurrentOverviewColumnsWithoutRedundantFields()
     {
         var root = RepositoryRoot();
         var page = File.ReadAllText(Path.Combine(root, "src", "EngineeringManager.Web", "Pages", "Projects", "Index.cshtml"));
@@ -588,14 +589,20 @@ public sealed class ProjectAuthorizationTests
             .And.Contain("data-column-key=\"contract_signing_status\"")
             .And.Contain("data-column-key=\"actual_start_date\"")
             .And.Contain("data-column-key=\"actual_completion_date\"")
-            .And.Contain("data-column-key=\"estimated_amount\"")
-            .And.Contain("data-column-key=\"settled_amount\"")
+            .And.Contain("data-column-key=\"contract_amount\"")
+            .And.Contain("data-column-key=\"current_project_amount\"")
+            .And.Contain("data-column-key=\"settlement_status\"")
             .And.Contain("data-column-key=\"contract_count\"")
-            .And.Contain("data-column-key=\"line_item_count\"");
+            .And.NotContain("data-column-key=\"estimated_amount\"")
+            .And.NotContain("data-column-key=\"settled_amount\"")
+            .And.NotContain("data-column-key=\"line_item_count\"");
         model.Should().Contain("new(\"serial_number\", \"序号\", true, true)")
             .And.Contain("new(\"project_number\", \"项目编号\", true, false)")
             .And.Contain("new(\"general_contractor\", \"总包单位\")")
-            .And.Contain("new(\"contract_signing_status\", \"合同签订\")");
+            .And.Contain("new(\"contract_signing_status\", \"合同签订\")")
+            .And.NotContain("new(\"estimated_amount\", \"预计金额\")")
+            .And.NotContain("new(\"settled_amount\", \"已结算金额\")")
+            .And.NotContain("new(\"line_item_count\", \"清单项数量\")");
     }
 
     [Fact]
@@ -724,7 +731,7 @@ public sealed class ProjectAuthorizationTests
             IReadOnlyList<ProjectListItemDto> items = hasProjectAccess
                 ? [new ProjectListItemDto(
                     new ProjectDto(FakeProjectWorkspaceService.ProjectId, "P-WEB-001", "项目工作台页面测试", "测试总包单位", ProjectStage.UnderConstruction, ProjectAffiliationType.ExternalPartyAttachedToUs),
-                    new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1))]
+                    new ProjectSummaryDto(300m, 200m, ProjectSettlementStatus.Estimated, 1))]
                 : [];
             IReadOnlyList<Guid> projectIds = hasProjectAccess ? [FakeProjectWorkspaceService.ProjectId] : [];
             return Task.FromResult(new ProjectListPageDto(
@@ -808,7 +815,7 @@ public sealed class ProjectAuthorizationTests
                         ProjectInvoiceType.Special,
                         true,
                         Guid.Parse("71000000-0000-0000-0000-000000000014"))]),
-                new ProjectSummaryDto(300m, 200m, 0m, 200m, ProjectSettlementStatus.Estimated, 1, 1),
+                new ProjectSummaryDto(300m, 200m, ProjectSettlementStatus.Estimated, 1),
                 new FinanceProjectSummaryDto(ProjectId, 100m, 40m, 60m, 80m, 25m, 0m, 55m, 30m, 70m, 0m, false, false),
                 [new ContractDto(ContractId, "C-WEB-001", "测试合同", ContractType.MainContract, ContractAllocationMode.SingleCompany, 300m,
                     [new ContractLineItemDto(LineItemId, "001", "土方工程", "m³", 10m, 20m, 200m, null, null, 0m, false, Guid.NewGuid())])],

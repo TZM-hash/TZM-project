@@ -14,12 +14,9 @@ public static class ProjectSummaryService
             new LineItemAmountInput(line.Quantity, line.UnitPrice, line.RequiresInvoice)));
         return new ProjectSummaryDto(
             contracts.Sum(contract => contract.TotalAmount),
-            amountSummary.EstimatedAmount,
-            amountSummary.SettledAmount,
             amountSummary.CurrentAmount,
             amountSummary.SettlementStatus,
             contracts.Length,
-            lineItems.Length,
             amountSummary.InvoiceRequiredAmount);
     }
 }

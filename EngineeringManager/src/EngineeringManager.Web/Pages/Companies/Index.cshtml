@@ -1,5 +1,8 @@
 @page
 @model EngineeringManager.Web.Pages.Companies.IndexModel
+@using EngineeringManager.Application.Organization
+@using EngineeringManager.Domain.Employees
+@using EngineeringManager.Domain.Projects
 @using EngineeringManager.Web.Workbenches
 @using System.Text.Json
 @{
@@ -217,7 +220,102 @@
                                 </td>
                                 <td data-column-key="actions">
                                     <div class="company-row-actions">
-                                        @{ var details = Model.CompanyDetails[company.Id]; var payload = JsonSerializer.Serialize(new { details.Id, details.Code, details.Name, details.ShortName, details.CompanyCategoryId, details.CompanyCategoryName, details.LegalRepresentative, details.UnifiedSocialCreditCode, details.RegisteredAddress, details.BusinessAddress, details.Phone, details.InvoiceTitle, details.Notes, details.IsActive, details.ConcurrencyStamp }); }
+                                        @{
+                                            var details = Model.CompanyDetails[company.Id];
+                                            var companyDashboard = Model.CompanyDashboards.GetValueOrDefault(company.Id);
+                                            var organizationSummary = Model.OrganizationSummaries.GetValueOrDefault(company.Id);
+                                            var organizationPayload = organizationSummary is null
+                                                ? null
+                                                : new
+                                                {
+                                                    AsOf = organizationSummary.Query.AsOf.ToString("yyyy-MM-dd"),
+                                                    Projects = new
+                                                    {
+                                                        TotalCount = organizationSummary.Projects.TotalCount,
+                                                        InProgressCount = organizationSummary.Projects.InProgressCount,
+                                                        SuspendedCount = organizationSummary.Projects.SuspendedCount,
+                                                        CompletedUnsettledCount = organizationSummary.Projects.CompletedUnsettledCount,
+                                                        PartiallySettledCount = organizationSummary.Projects.PartiallySettledCount,
+                                                        SettledArchivedCount = organizationSummary.Projects.SettledArchivedCount,
+                                                        Links = new
+                                                        {
+                                                            Total = OrganizationSummaryLinks.Projects(OrganizationOwnerKind.LegalEntity, company.Id),
+                                                            InProgress = OrganizationSummaryLinks.Projects(OrganizationOwnerKind.LegalEntity, company.Id, ProjectStage.AwaitingMobilization, ProjectStage.UnderConstruction),
+                                                            Suspended = OrganizationSummaryLinks.Projects(OrganizationOwnerKind.LegalEntity, company.Id, ProjectStage.Suspended),
+                                                            CompletedUnsettled = OrganizationSummaryLinks.Projects(OrganizationOwnerKind.LegalEntity, company.Id, ProjectStage.CompletedUnsettled),
+                                                            PartiallySettled = OrganizationSummaryLinks.Projects(OrganizationOwnerKind.LegalEntity, company.Id, ProjectStage.PartiallySettled),
+                                                            SettledArchived = OrganizationSummaryLinks.Projects(OrganizationOwnerKind.LegalEntity, company.Id, ProjectStage.SettledArchived)
+                                                        }
+                                                    },
+                                                    Personnel = new
+                                                    {
+                                                        TotalCurrentCount = organizationSummary.Personnel.TotalCurrentCount,
+                                                        ActiveCount = organizationSummary.Personnel.ActiveCount,
+                                                        FormalCount = organizationSummary.Personnel.FormalCount,
+                                                        LaborCount = organizationSummary.Personnel.LaborCount,
+                                                        TemporaryCount = organizationSummary.Personnel.TemporaryCount,
+                                                        Links = new
+                                                        {
+                                                            All = OrganizationSummaryLinks.InternalPersonnel(company.Id, isActive: null),
+                                                            Active = OrganizationSummaryLinks.InternalPersonnel(company.Id),
+                                                            Formal = OrganizationSummaryLinks.InternalPersonnel(company.Id, EmployeeType.Formal),
+                                                            Labor = OrganizationSummaryLinks.InternalPersonnel(company.Id, EmployeeType.Labor),
+                                                            Temporary = OrganizationSummaryLinks.InternalPersonnel(company.Id, EmployeeType.Temporary)
+                                                        }
+                                                    },
+                                                    Departments = new
+                                                    {
+                                                        TotalCount = organizationSummary.Departments.TotalCount,
+                                                        ActiveCount = organizationSummary.Departments.ActiveCount,
+                                                        Link = $"{OrganizationSummaryLinks.Departments(OrganizationOwnerKind.LegalEntity, company.Id)}&ReturnPage={Uri.EscapeDataString("/Companies/Details")}"
+                                                    }
+                                                };
+                                            var financePayload = companyDashboard is null
+                                                ? null
+                                                : new
+                                                {
+                                                    ContractAmount = companyDashboard.ContractAmount,
+                                                    CurrentEngineeringAmount = companyDashboard.EstimatedAmount + companyDashboard.SettledAmount,
+                                                    ReceivableAmount = companyDashboard.ReceivableAmount,
+                                                    CollectedAmount = companyDashboard.CollectedAmount,
+                                                    UncollectedAmount = companyDashboard.ReceivableAmount - companyDashboard.CollectedAmount,
+                                                    PayableAmount = companyDashboard.PayableAmount,
+                                                    PaidAmount = companyDashboard.PaidAmount,
+                                                    UnpaidAmount = companyDashboard.PayableAmount - companyDashboard.PaidAmount,
+                                                    OutputInvoice = new
+                                                    {
+                                                        RequiredAmount = companyDashboard.InvoiceSummary?.OutputRequiredAmount ?? companyDashboard.OutputInvoiceAmount,
+                                                        IssuedAmount = companyDashboard.InvoiceSummary?.OutputIssuedAmount ?? companyDashboard.OutputInvoiceAmount,
+                                                        UnissuedAmount = companyDashboard.InvoiceSummary?.OutputUnissuedAmount ?? 0m
+                                                    },
+                                                    InputInvoice = new
+                                                    {
+                                                        RequiredAmount = companyDashboard.InvoiceSummary?.InputRequiredAmount ?? companyDashboard.InputInvoiceAmount,
+                                                        IssuedAmount = companyDashboard.InvoiceSummary?.InputIssuedAmount ?? companyDashboard.InputInvoiceAmount,
+                                                        UnissuedAmount = companyDashboard.InvoiceSummary?.InputUnissuedAmount ?? 0m
+                                                    }
+                                                };
+                                            var payload = JsonSerializer.Serialize(new
+                                            {
+                                                details.Id,
+                                                details.Code,
+                                                details.Name,
+                                                details.ShortName,
+                                                details.CompanyCategoryId,
+                                                details.CompanyCategoryName,
+                                                details.LegalRepresentative,
+                                                details.UnifiedSocialCreditCode,
+                                                details.RegisteredAddress,
+                                                details.BusinessAddress,
+                                                details.Phone,
+                                                details.InvoiceTitle,
+                                                details.Notes,
+                                                details.IsActive,
+                                                details.ConcurrencyStamp,
+                                                OrganizationSummary = organizationPayload,
+                                                FinanceSummary = financePayload
+                                            });
+                                        }
                                         <button class="action-button action-button--view" type="button" data-company-view-open data-company-payload="@payload">查看</button>
                                         @if (Model.CanManage)
                                         {
@@ -228,14 +326,6 @@
                                     </div>
                                 </td>
                             </tr>
-                            @if (Model.OrganizationSummaries.TryGetValue(company.Id, out var organizationSummary))
-                            {
-                                <tr class="organization-summary-row" data-row-group="company-@company.Id">
-                                    <td colspan="8">
-                                        <partial name="_OrganizationSummary" model="new OrganizationSummaryViewModel(organizationSummary, true)" />
-                                    </td>
-                                </tr>
-                            }
                         }
                         </tbody>
                     </table>

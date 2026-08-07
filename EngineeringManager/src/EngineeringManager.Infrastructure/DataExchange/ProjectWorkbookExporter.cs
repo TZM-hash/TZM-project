@@ -520,7 +520,7 @@ public sealed class ProjectWorkbookExporter(
             var finance = await financeService.GetSummaryAsync(new FinanceSummaryFilter(project.Id, CutoffDate: cutoffDate), cancellationToken);
             rows.Add(Project(fields, new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["project_number"] = project.ProjectNumber, ["project_name"] = project.Name, ["contract_amount"] = summary.ContractAmount, ["estimated_amount"] = summary.EstimatedAmount, ["settled_amount"] = summary.SettledAmount, ["current_project_amount"] = summary.CurrentAmount,
+                ["project_number"] = project.ProjectNumber, ["project_name"] = project.Name, ["contract_amount"] = summary.ContractAmount, ["current_project_amount"] = summary.CurrentAmount,
                 ["receivable_amount"] = finance.ReceivableAmount, ["collected_amount"] = finance.CollectedAmount, ["uncollected_amount"] = finance.UncollectedAmount, ["payable_amount"] = finance.PayableAmount, ["paid_amount"] = finance.PaidAmount, ["unpaid_amount"] = finance.UnpaidAmount, ["output_invoice_amount"] = finance.OutputInvoiceAmount, ["uninvoiced_amount"] = finance.UninvoicedAmount, ["_dataset_version"] = ProjectWorkbookVersions.Dataset
             }));
         }

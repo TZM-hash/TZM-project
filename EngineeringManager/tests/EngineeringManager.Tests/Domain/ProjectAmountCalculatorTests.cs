@@ -6,7 +6,7 @@ namespace EngineeringManager.Tests.Domain;
 public sealed class ProjectAmountCalculatorTests
 {
     [Fact]
-    public void TreatsPartiallySettledStageAsSettlementAmount()
+    public void TreatsPartiallySettledStageAsUnifiedCurrentAmount()
     {
         var summary = ProjectAmountCalculator.Calculate(ProjectStage.PartiallySettled,
         [
@@ -14,15 +14,13 @@ public sealed class ProjectAmountCalculatorTests
             new LineItemAmountInput(4m, 8m, false)
         ]);
 
-        summary.EstimatedAmount.Should().Be(0m);
-        summary.SettledAmount.Should().Be(82m);
         summary.CurrentAmount.Should().Be(82m);
         summary.InvoiceRequiredAmount.Should().Be(50m);
         summary.SettlementStatus.Should().Be(ProjectSettlementStatus.PartiallySettled);
     }
 
     [Fact]
-    public void TreatsUnsettledStageAsEstimatedAmount()
+    public void TreatsUnsettledStageAsUnifiedCurrentAmount()
     {
         var summary = ProjectAmountCalculator.Calculate(ProjectStage.UnderConstruction,
         [
@@ -30,11 +28,16 @@ public sealed class ProjectAmountCalculatorTests
             new LineItemAmountInput(null, 8m, true)
         ]);
 
-        summary.EstimatedAmount.Should().Be(50m);
-        summary.SettledAmount.Should().Be(0m);
         summary.CurrentAmount.Should().Be(50m);
         summary.InvoiceRequiredAmount.Should().Be(50m);
         summary.SettlementStatus.Should().Be(ProjectSettlementStatus.Estimated);
+    }
+
+    [Fact]
+    public void ProjectAmountSummaryExposesNoRedundantAmountBuckets()
+    {
+        typeof(ProjectAmountSummary).GetProperty("EstimatedAmount").Should().BeNull();
+        typeof(ProjectAmountSummary).GetProperty("SettledAmount").Should().BeNull();
     }
 
     [Fact]

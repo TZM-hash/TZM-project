@@ -43,8 +43,6 @@ public static class ProjectWorkbookCatalog
             Field("project_number", "项目编号", ExportFieldDataType.Text, true, CanImport: false),
             Field("project_name", "项目名称", ExportFieldDataType.Text, CanImport: false),
             Field("contract_amount", "合同金额", ExportFieldDataType.Number, CanImport: false, IsCalculated: true),
-            Field("estimated_amount", "预计金额", ExportFieldDataType.Number, CanImport: false, IsCalculated: true),
-            Field("settled_amount", "已结算金额", ExportFieldDataType.Number, CanImport: false, IsCalculated: true),
             Field("current_project_amount", "当前工程金额", ExportFieldDataType.Number, CanImport: false, IsCalculated: true),
             Field("receivable_amount", "应收款", ExportFieldDataType.Number, CanImport: false, IsCalculated: true),
             Field("collected_amount", "已收款", ExportFieldDataType.Number, CanImport: false, IsCalculated: true),

@@ -5,6 +5,9 @@
 @{
     ViewData["Title"] = "人员管理 - 内部人员";
     var activeCount = Model.Personnel.Count(item => item.IsActive);
+    var currentYearName = Model.BusinessYears.FirstOrDefault(item => item.Id == Model.CurrentBusinessYearId)?.Name ?? "当前业务年度";
+    string Money(decimal? value) => value?.ToString("N2") ?? string.Empty;
+    string Progress(decimal? value) => value.HasValue ? $"{value.Value:N2}%" : string.Empty;
 }
 
 <nav class="page-tabs page-tabs--buttons employee-sub-navigation" aria-label="人员管理子导航">
@@ -29,8 +32,7 @@
                 <option value="">全部公司</option>
                 @foreach (var item in Model.Options.LegalEntities)
                 {
-                    if (Model.LegalEntityId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
-                    else { <option value="@item.Id">@item.Name</option> }
+                    <option value="@item.Id" selected="@(Model.LegalEntityId == item.Id ? "selected" : null)">@item.Name</option>
                 }
             </select>
         </label>
@@ -39,8 +41,7 @@
                 <option value="">全部班组</option>
                 @foreach (var item in Model.Options.Crews)
                 {
-                    if (Model.CrewBusinessPartnerId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
-                    else { <option value="@item.Id">@item.Name</option> }
+                    <option value="@item.Id" selected="@(Model.CrewBusinessPartnerId == item.Id ? "selected" : null)">@item.Name</option>
                 }
             </select>
         </label>
@@ -49,8 +50,7 @@
                 <option value="">全部部门</option>
                 @foreach (var item in Model.Options.Departments)
                 {
-                    if (Model.DepartmentId == item.Id) { <option value="@item.Id" selected>@item.Name</option> }
-                    else { <option value="@item.Id">@item.Name</option> }
+                    <option value="@item.Id" selected="@(Model.DepartmentId == item.Id ? "selected" : null)">@item.Name</option>
                 }
             </select>
         </label>
@@ -59,16 +59,15 @@
                 <option value="">全部类型</option>
                 @foreach (var value in Enum.GetValues<EmployeeType>())
                 {
-                    if (Model.InternalType == value) { <option value="@value" selected>@value.ToChinese()</option> }
-                    else { <option value="@value">@value.ToChinese()</option> }
+                    <option value="@value" selected="@(Model.InternalType == value ? "selected" : null)">@value.ToChinese()</option>
                 }
             </select>
         </label>
         <label>状态
             <select name="IsActive">
                 <option value="">全部状态</option>
-                @if (Model.IsActive == true) { <option value="true" selected>启用</option> } else { <option value="true">启用</option> }
-                @if (Model.IsActive == false) { <option value="false" selected>停用</option> } else { <option value="false">停用</option> }
+                <option value="true" selected="@(Model.IsActive == true ? "selected" : null)">启用</option>
+                <option value="false" selected="@(Model.IsActive == false ? "selected" : null)">停用</option>
             </select>
         </label>
         <label>归属日期<input type="date" name="AsOf" value="@Model.AsOf?.ToString("yyyy-MM-dd")" /></label>
@@ -86,33 +85,84 @@
         </aside>
 
         <section class="employee-workspace-list">
-            <div class="equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar"><div><p class="eyebrow">人员清单</p><h2>内部人员工作台</h2></div></div>
-            <div class="table-wrap"><table class="data-table employee-workspace-table"><thead><tr><th>人员</th><th>类型 / 岗位</th><th>公司 / 部门</th><th>项目 / 班组</th><th>状态</th><th>操作</th></tr></thead><tbody>
+            <div class="equipment-list-toolbar equipment-list-toolbar--integrated employee-list-toolbar">
+                <div><p class="eyebrow">人员清单</p><h2>内部人员工作台</h2><span class="table-secondary">薪资列按 @currentYearName 读取，默认隐藏，可在列管理中勾选。</span></div>
+                <partial name="_DataWorkbench" model="Model.Workbench" />
+            </div>
             @if (Model.Personnel.Count == 0)
             {
-                <tr><td colspan="6" class="empty-state">当前筛选条件下暂无内部人员。</td></tr>
+                <div class="empty-state"><strong>当前筛选条件下暂无内部人员。</strong><p>可以调整筛选条件，或清除筛选后查看授权范围内的全部人员。</p></div>
             }
-            @foreach (var item in Model.Personnel)
+            else
             {
-                var affiliation = item.CurrentAffiliation;
-                <tr>
-                    <td><strong>@item.Name</strong><span class="table-secondary">@item.PersonNumber · @(item.Phone ?? "未填写电话")</span></td>
-                    <td><strong>@(item.InternalType?.ToChinese() ?? "内部人员")</strong><span class="table-secondary">@(affiliation?.PositionTitle ?? "未填写岗位")</span></td>
-                    <td><strong>@(affiliation?.LegalEntityName ?? affiliation?.BusinessPartnerName ?? "未归属单位")</strong><span class="table-secondary">@(affiliation?.OrganizationUnitName ?? "未归属部门")</span></td>
-                    <td><strong>@(affiliation?.ProjectName ?? "未归属项目")</strong><span class="table-secondary">@(affiliation?.CrewBusinessPartnerName ?? "未归属班组")</span></td>
-                    <td><span class="partner-status partner-status--@(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "启用" : "停用")</span></td>
-                    <td><div class="employee-row-actions">
-                        <a class="action-button action-button--view" asp-page="/Personnel/Details" asp-route-personId="@item.Id" asp-route-asOf="@Model.AsOf">统一档案</a>
-                        @if (item.EmployeeId.HasValue)
-                        {
-                            <a class="action-button action-button--edit" asp-page="/Employees/Details" asp-route-id="@item.EmployeeId">员工台账</a>
-                            <a class="action-button" asp-page="/Employees/Ledger">年度总账</a>
-                            <a class="action-button" asp-page="/Employees/Certificates/Index" asp-route-employeeId="@item.EmployeeId">证书</a>
-                        }
-                    </div></td>
-                </tr>
+                <div class="personnel-table-wrap"><table class="data-table personnel-workspace-table" id="@Model.Workbench.TableId"><thead><tr>
+                    <th data-column-key="selection">选择</th>
+                    <th data-column-key="name">姓名</th>
+                    <th data-column-key="person_number">人员编号</th>
+                    <th data-column-key="phone">电话</th>
+                    <th data-column-key="personnel_type">人员类型</th>
+                    <th data-column-key="position">岗位</th>
+                    <th data-column-key="organization">公司 / 单位</th>
+                    <th data-column-key="department">部门</th>
+                    <th data-column-key="project">项目</th>
+                    <th data-column-key="crew">班组</th>
+                    <th data-column-key="status">状态</th>
+                    <th data-column-key="prior_year_carry_forward">往年结转</th>
+                    <th data-column-key="current_year_wage_payable">工资应付</th>
+                    <th data-column-key="expense_payable">报销应付</th>
+                    <th data-column-key="other_payable">其他应付</th>
+                    <th data-column-key="adjustment_amount">调整金额</th>
+                    <th data-column-key="current_year_new_payable">本年应发合计</th>
+                    <th data-column-key="received_amount">已发合计</th>
+                    <th data-column-key="current_year_unpaid">未发合计</th>
+                    <th data-column-key="current_balance">当前余额</th>
+                    <th data-column-key="settlement_progress">结算进度</th>
+                    <th data-column-key="overpaid_status">超付状态</th>
+                    <th data-column-key="penalty_amount">罚款扣减</th>
+                    <th data-column-key="actions">操作</th>
+                </tr></thead><tbody>
+                @foreach (var item in Model.Personnel)
+                {
+                    var affiliation = item.CurrentAffiliation;
+                    var summary = item.EmployeeId.HasValue ? Model.AnnualSummaries.GetValueOrDefault(item.EmployeeId.Value) : null;
+                    var organization = affiliation?.LegalEntityName ?? affiliation?.BusinessPartnerName ?? "未归属单位";
+                    <tr>
+                        <td data-column-key="selection">@if (Model.CanExportWorkbook) { <input type="checkbox" name="SelectedPersonnelIds" value="@item.Id" form="@($"{Model.Workbench.TableId}-export-form")" data-project-export-item data-personnel-export-item aria-label="选择人员 @item.PersonNumber @item.Name" /> }</td>
+                        <td data-column-key="name" data-sort-value="@item.Name"><strong title="@item.Name">@item.Name</strong></td>
+                        <td data-column-key="person_number" data-sort-value="@item.PersonNumber"><span class="personnel-number-cell" title="@item.PersonNumber">@item.PersonNumber</span></td>
+                        <td data-column-key="phone" data-sort-value="@item.Phone">@(item.Phone ?? "未填写电话")</td>
+                        <td data-column-key="personnel_type">@(item.InternalType?.ToChinese() ?? "内部人员")</td>
+                        <td data-column-key="position" class="personnel-text-cell">@(affiliation?.PositionTitle ?? "未填写岗位")</td>
+                        <td data-column-key="organization" class="personnel-text-cell" title="@organization">@organization</td>
+                        <td data-column-key="department" class="personnel-text-cell">@(affiliation?.OrganizationUnitName ?? "未归属部门")</td>
+                        <td data-column-key="project" class="personnel-text-cell">@(affiliation?.ProjectName ?? "未归属项目")</td>
+                        <td data-column-key="crew" class="personnel-text-cell">@(affiliation?.CrewBusinessPartnerName ?? "未归属班组")</td>
+                        <td data-column-key="status"><span class="partner-status partner-status--@(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "启用" : "停用")</span></td>
+                        <td data-column-key="prior_year_carry_forward" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.PriorYearCarryForward">@Money(summary?.PriorYearCarryForward)</td>
+                        <td data-column-key="current_year_wage_payable" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.CurrentYearWagePayable">@Money(summary?.CurrentYearWagePayable)</td>
+                        <td data-column-key="expense_payable" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.ExpensePayable">@Money(summary?.ExpensePayable)</td>
+                        <td data-column-key="other_payable" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.OtherPayable">@Money(summary?.OtherPayable)</td>
+                        <td data-column-key="adjustment_amount" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.AdjustmentAmount">@Money(summary?.AdjustmentAmount)</td>
+                        <td data-column-key="current_year_new_payable" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.CurrentYearNewPayable">@Money(summary?.CurrentYearNewPayable)</td>
+                        <td data-column-key="received_amount" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.ReceivedAmount">@Money(summary?.ReceivedAmount)</td>
+                        <td data-column-key="current_year_unpaid" class="numeric-cell personnel-salary-cell" data-sort-value="@(summary is null ? null : summary.CurrentYearNewPayable - summary.ReceivedAmount)">@Money(summary is null ? null : summary.CurrentYearNewPayable - summary.ReceivedAmount)</td>
+                        <td data-column-key="current_balance" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.CurrentBalance">@Money(summary?.CurrentBalance)</td>
+                        <td data-column-key="settlement_progress" class="numeric-cell personnel-salary-cell" data-sort-value="@summary?.SettlementProgressPercent">@Progress(summary?.SettlementProgressPercent)</td>
+                        <td data-column-key="overpaid_status" class="personnel-text-cell">@(summary is null ? string.Empty : summary.IsOverpaid ? "超付" : "正常")</td>
+                        <td data-column-key="penalty_amount" class="numeric-cell personnel-salary-cell" data-sort-value="@(summary is null ? null : Model.PenaltyAmounts.GetValueOrDefault(item.EmployeeId!.Value))">@Money(summary is null ? null : Model.PenaltyAmounts.GetValueOrDefault(item.EmployeeId!.Value))</td>
+                        <td data-column-key="actions" class="personnel-action-cell"><div class="personnel-row-actions">
+                            <a class="action-button action-button--view" asp-page="/Personnel/Details" asp-route-personId="@item.Id" asp-route-asOf="@Model.AsOf">统一档案</a>
+                            @if (item.EmployeeId.HasValue)
+                            {
+                                <a class="action-button action-button--edit" asp-page="/Employees/Details" asp-route-id="@item.EmployeeId" asp-route-businessYearId="@Model.CurrentBusinessYearId">员工台账</a>
+                                <a class="action-button" asp-page="/Employees/Ledger" asp-route-businessYearId="@Model.CurrentBusinessYearId">年度总账</a>
+                                <a class="action-button" asp-page="/Employees/Certificates/Index" asp-route-employeeId="@item.EmployeeId">证书</a>
+                            }
+                        </div></td>
+                    </tr>
+                }
+                </tbody></table></div>
             }
-            </tbody></table></div>
         </section>
     </section>
 </div>

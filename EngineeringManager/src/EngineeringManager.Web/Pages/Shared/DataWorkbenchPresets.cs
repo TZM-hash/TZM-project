@@ -2,6 +2,34 @@ namespace EngineeringManager.Web.Workbenches;
 
 public static class DataWorkbenchPresets
 {
+    public static IReadOnlyList<DataWorkbenchColumn> PersonnelColumns { get; } =
+    [
+        new("selection", "选择", true, true),
+        new("name", "姓名", true, true),
+        new("person_number", "人员编号"),
+        new("phone", "电话"),
+        new("personnel_type", "人员类型"),
+        new("position", "岗位"),
+        new("organization", "公司 / 单位"),
+        new("department", "部门"),
+        new("project", "项目"),
+        new("crew", "班组"),
+        new("status", "状态"),
+        new("prior_year_carry_forward", "往年结转", false),
+        new("current_year_wage_payable", "工资应付", false),
+        new("expense_payable", "报销应付", false),
+        new("other_payable", "其他应付", false),
+        new("adjustment_amount", "调整金额", false),
+        new("current_year_new_payable", "本年应发合计", false),
+        new("received_amount", "已发合计", false),
+        new("current_year_unpaid", "未发合计", false),
+        new("current_balance", "当前余额", false),
+        new("settlement_progress", "结算进度", false),
+        new("overpaid_status", "超付状态", false),
+        new("penalty_amount", "罚款扣减", false),
+        new("actions", "操作", true, true)
+    ];
+
     public static DataWorkbenchViewModel Employees => Create("employees", "employees-table", [
         ("employee_number", "员工编号"), ("name", "姓名"), ("employee_type", "类型"), ("position", "岗位"), ("phone", "电话"),
         ("current_company", "当前公司"), ("current_department", "当前部门"), ("payable", "应付合计"), ("paid", "已付款"), ("unpaid", "未付款"), ("status", "状态"), ("actions", "操作")], "employee_number");

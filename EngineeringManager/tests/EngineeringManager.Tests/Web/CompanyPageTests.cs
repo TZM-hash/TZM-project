@@ -87,6 +87,43 @@ public sealed class CompanyPageTests
     }
 
     [Fact]
+    public async Task CompanyListMovesOrganizationAndFinanceSummaryIntoViewDialog()
+    {
+        await using var factory = CreateFactory("ApplicationAdministrator");
+        using var client = factory.CreateClient();
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/Companies"));
+        var script = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "EngineeringManager.Web",
+            "wwwroot",
+            "js",
+            "pages",
+            "company-workspace.js"));
+
+        html.Should().NotContain("class=\"organization-summary-row\"")
+            .And.Contain("data-company-view-dialog")
+            .And.Contain("\"OrganizationSummary\"")
+            .And.Contain("\"FinanceSummary\"")
+            .And.Contain("\"OutputInvoice\"")
+            .And.Contain("\"InputInvoice\"");
+        script.Should().Contain("OrganizationSummary")
+            .And.Contain("FinanceSummary")
+            .And.Contain("收款")
+            .And.Contain("收款率")
+            .And.Contain("付款")
+            .And.Contain("付款率")
+            .And.Contain("应开")
+            .And.Contain("已开")
+            .And.Contain("未开")
+            .And.Contain("销项发票")
+            .And.Contain("进项发票");
+        script.IndexOf("title: \"收款\"", StringComparison.Ordinal)
+            .Should().BeLessThan(script.IndexOf("title: \"付款\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AdministratorCanOpenCategoryBatchEditorWithStatusAndDeleteControls()
     {
         await using var factory = CreateFactory("ApplicationAdministrator");
@@ -836,7 +873,9 @@ public sealed class CompanyPageTests
             Task.FromResult<IReadOnlyList<CompanyListItemDto>>([new(CompanyId, "TEST", "测试自有公司", "测试公司", "一般纳税人有限公司", "测试法人", true, null, 1, 1)]);
 
         public Task<CompanyDashboardDto> GetDashboardAsync(CompanyActor actor, Guid? companyId, CancellationToken cancellationToken) =>
-            Task.FromResult(new CompanyDashboardDto(1, 1000m, 800m, 0m, 600m, 400m, 300m, 100m, 200m, 50m, 80m, 0m, 500m, DateTimeOffset.UtcNow));
+            Task.FromResult(new CompanyDashboardDto(
+                1, 1000m, 800m, 0m, 600m, 400m, 300m, 100m, 200m, 50m, 80m, 0m, 500m, DateTimeOffset.UtcNow,
+                new CompanyInvoiceSummaryDto(600m, 200m, 400m, 300m, 50m, 250m)));
 
         public Task<IReadOnlyList<CompanyCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<CompanyCategoryDto>>([new(CategoryId, "GENERAL", "一般纳税人有限公司", 10, true, CategoryStamp)]);
         public Task<CompanyDetailsDto> GetAsync(CompanyActor actor, Guid id, CancellationToken cancellationToken) => Task.FromResult(new CompanyDetailsDto(CompanyId, "TEST", "测试自有公司", "测试公司", CategoryId, "一般纳税人有限公司", "测试法人", "913000000000000001", "注册地址", "经营地址", "13800000000", "测试开票抬头", null, true, Guid.NewGuid(), [new(AccountId, "基本户", null, null, "Bank", 0m, false, false, false, true, "账户备注", AccountStamp)], []));

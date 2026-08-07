@@ -258,6 +258,13 @@ public sealed class CompanyManagementServiceTests
         dashboard.PayableAmount.Should().Be(300m);
         dashboard.PaidAmount.Should().Be(100m);
         dashboard.OutputInvoiceAmount.Should().Be(400m);
+        dashboard.InvoiceSummary.Should().NotBeNull();
+        dashboard.InvoiceSummary!.OutputRequiredAmount.Should().Be(800m);
+        dashboard.InvoiceSummary.OutputIssuedAmount.Should().Be(400m);
+        dashboard.InvoiceSummary.OutputUnissuedAmount.Should().Be(400m);
+        dashboard.InvoiceSummary.InputRequiredAmount.Should().Be(300m);
+        dashboard.InvoiceSummary.InputIssuedAmount.Should().Be(0m);
+        dashboard.InvoiceSummary.InputUnissuedAmount.Should().Be(300m);
         dashboard.AccountBalance.Should().Be(420m);
     }
 

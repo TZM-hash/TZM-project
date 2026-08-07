@@ -200,7 +200,7 @@ public sealed class ProjectWorkspaceServiceTests
 
         workspace.Should().NotBeNull();
         workspace!.Overview.AffiliationType.Should().Be(ProjectAffiliationType.ExternalPartyAttachedToUs);
-        workspace.ProjectSummary.EstimatedAmount.Should().Be(200m);
+        workspace.ProjectSummary.CurrentAmount.Should().Be(200m);
         workspace.Contracts.Should().ContainSingle().Which.LineItems.Should().ContainSingle(item => item.EstimatedAmount == 200m);
         workspace.FinanceSummary.ReceivableAmount.Should().Be(300m);
         workspace.FinanceSummary.CollectedAmount.Should().Be(40m);

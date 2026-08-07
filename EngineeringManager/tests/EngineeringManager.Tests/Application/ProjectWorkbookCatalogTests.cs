@@ -52,4 +52,15 @@ public sealed class ProjectWorkbookCatalogTests
             }
         }
     }
+
+    [Fact]
+    public void SummaryCatalogKeepsCurrentAmountAndQuantityCalculationInputs()
+    {
+        var summaryFields = ProjectWorkbookCatalog.Get(ProjectWorkbookSheet.ProjectSummary).Fields;
+        summaryFields.Select(item => item.Key).Should().Contain("contract_amount").And.Contain("current_project_amount")
+            .And.NotContain("estimated_amount").And.NotContain("settled_amount").And.NotContain("line_item_count");
+
+        var quantityFields = ProjectWorkbookCatalog.Get(ProjectWorkbookSheet.QuantityLines).Fields;
+        quantityFields.Select(item => item.Key).Should().Contain("quantity").And.Contain("unit_price").And.Contain("accounting_label");
+    }
 }

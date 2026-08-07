@@ -271,10 +271,11 @@ public sealed class ProjectServiceTests
 
         details.Should().NotBeNull();
         details!.Summary.ContractAmount.Should().Be(100m);
-        details.Summary.EstimatedAmount.Should().Be(0m);
-        details.Summary.SettledAmount.Should().Be(80m);
         details.Summary.CurrentAmount.Should().Be(80m);
         details.Summary.SettlementStatus.Should().Be(ProjectSettlementStatus.PartiallySettled);
+        typeof(ProjectSummaryDto).GetProperty("EstimatedAmount").Should().BeNull();
+        typeof(ProjectSummaryDto).GetProperty("SettledAmount").Should().BeNull();
+        typeof(ProjectSummaryDto).GetProperty("LineItemCount").Should().BeNull();
     }
 
     [Fact]

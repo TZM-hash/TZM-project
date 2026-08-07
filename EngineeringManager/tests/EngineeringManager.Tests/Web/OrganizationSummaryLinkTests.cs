@@ -29,7 +29,7 @@ public sealed class OrganizationSummaryLinkTests
     }
 
     [Fact]
-    public void AllOrganizationPagesRenderSharedSummaryAndExactDestinations()
+    public void OrganizationPagesRenderSharedSummaryAndCompanyPayloadKeepsExactDestinations()
     {
         var shared = ReadPage("Shared", "_OrganizationSummary.cshtml");
         var pages = new[]
@@ -42,7 +42,11 @@ public sealed class OrganizationSummaryLinkTests
             ReadPage("Crews", "Details.cshtml")
         };
 
-        pages.Should().OnlyContain(page => page.Contains("_OrganizationSummary", StringComparison.Ordinal));
+        pages.Skip(1).Should().OnlyContain(page => page.Contains("_OrganizationSummary", StringComparison.Ordinal));
+        pages[0].Should().Contain("OrganizationSummary")
+            .And.Contain("OrganizationSummaryLinks.Projects")
+            .And.Contain("OrganizationSummaryLinks.InternalPersonnel")
+            .And.Contain("OrganizationSummaryLinks.Departments");
         shared.Should().Contain("OrganizationSummaryLinks.Projects")
             .And.Contain("OrganizationSummaryLinks.InternalPersonnel")
             .And.Contain("OrganizationSummaryLinks.ExternalPersonnel")

@@ -375,7 +375,7 @@ public sealed class EquipmentPageTests
         private static readonly ProjectDto Project = new(ProjectId, "PRJ-001", "测试项目", null, ProjectStage.UnderConstruction);
 
         public Task<IReadOnlyList<ProjectListItemDto>> ListProjectsAsync(string? search, ProjectStage? stage, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<ProjectListItemDto>>([new ProjectListItemDto(Project, new ProjectSummaryDto(0, 0, 0, 0, default, 0, 0))]);
+            Task.FromResult<IReadOnlyList<ProjectListItemDto>>([new ProjectListItemDto(Project, new ProjectSummaryDto(0, 0, default, 0))]);
         public Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ContractDto> AddContractAsync(CreateContractRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ContractLineItemDto> AddLineItemAsync(CreateContractLineItemRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();

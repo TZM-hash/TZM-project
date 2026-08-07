@@ -6,8 +6,6 @@ public sealed record LineItemAmountInput(
     bool RequiresInvoice = true);
 
 public sealed record ProjectAmountSummary(
-    decimal EstimatedAmount,
-    decimal SettledAmount,
     decimal CurrentAmount,
     decimal InvoiceRequiredAmount,
     ProjectSettlementStatus SettlementStatus);
@@ -23,15 +21,13 @@ public static class ProjectAmountCalculator
             .Sum(item => CalculateAmount(item.Quantity, item.UnitPrice));
         var isPartiallySettled = stage == ProjectStage.PartiallySettled;
         var isSettled = stage == ProjectStage.SettledArchived;
-        var estimatedAmount = isPartiallySettled || isSettled ? 0m : currentAmount;
-        var settledAmount = isPartiallySettled || isSettled ? currentAmount : 0m;
         var settlementStatus = isPartiallySettled
             ? ProjectSettlementStatus.PartiallySettled
             : isSettled
                 ? ProjectSettlementStatus.Settled
                 : ProjectSettlementStatus.Estimated;
 
-        return new ProjectAmountSummary(estimatedAmount, settledAmount, currentAmount, invoiceRequiredAmount, settlementStatus);
+        return new ProjectAmountSummary(currentAmount, invoiceRequiredAmount, settlementStatus);
     }
 
     private static decimal CalculateAmount(decimal? quantity, decimal? unitPrice) =>

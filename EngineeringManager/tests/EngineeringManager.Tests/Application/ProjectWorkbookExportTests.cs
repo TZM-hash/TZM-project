@@ -90,7 +90,10 @@ public sealed class ProjectWorkbookExportTests
         var sheets = SimpleXlsxReader.Read(file.Content);
 
         sheets.Single(item => item.Name == "项目主档").Rows.Should().HaveCount(3);
-        sheets.Single(item => item.Name == "项目经营汇总").Rows.Should().HaveCount(3);
+        var summary = sheets.Single(item => item.Name == "项目经营汇总");
+        summary.Rows.Should().HaveCount(3);
+        summary.Rows[0].Should().Contain("合同金额").And.Contain("当前工程金额")
+            .And.NotContain("预计金额").And.NotContain("已结算金额").And.NotContain("清单项数量");
         (await fixture.Db.DataExchangeTasks.SingleAsync()).RowCount.Should().Be(4);
     }
 
@@ -191,6 +194,27 @@ public sealed class ProjectWorkbookExportTests
         rows[1][6].Should().Be("这是一个页面导出测试备注");
         rows[3][0].Should().Be("WB-LIST-001");
         rows[3][6].Should().Be("—");
+    }
+
+    [Fact]
+    public async Task PageListExportDropsDeprecatedProjectSummaryColumns()
+    {
+        await using var fixture = await ProjectWorkbookFixture.CreateAsync();
+        var project = AddProject(fixture.Db, "WB-LEGACY-COLUMNS", "旧列配置项目", null);
+        await fixture.Db.SaveChangesAsync();
+
+        var file = await fixture.Service.ExportAsync(new ProjectWorkbookExportRequest(
+            new ProjectWorkbookScope(
+                new ProjectListActor("administrator", true),
+                new ProjectListQuery(project.ProjectNumber, [], null, null, null, null, null, false),
+                false,
+                [project.Id]),
+            [ProjectWorkbookSheet.ProjectMaster],
+            Actor: ProjectWorkbookActor.Administrator("administrator"),
+            ProjectListColumns: ["estimated_amount", "settled_amount", "line_item_count", "contract_amount", "current_project_amount", "settlement_status", "contract_count"]), CancellationToken.None);
+
+        SimpleXlsxReader.Read(file.Content).Single().Rows[0].Should().Equal(
+            "合同金额", "当前工程金额", "结算状态", "合同数量");
     }
 
     [Fact]

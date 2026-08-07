@@ -5,6 +5,42 @@ namespace EngineeringManager.Tests.Web;
 public sealed class PersonnelResponsiveUiTests
 {
     [Fact]
+    public void PersonnelFiltersUseSingleRowDesktopLayoutWithResponsiveFallback()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var pages = new[]
+        {
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Personnel", "Internal", "Index.cshtml"),
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Personnel", "External", "Index.cshtml")
+        };
+
+        pages.Should().OnlyContain(page => page.Contains(
+            "class=\"panel filter-bar personnel-filter-bar\"",
+            StringComparison.Ordinal));
+        css.Should().Contain(".personnel-filter-bar {\n  display: grid;")
+            .And.Contain("grid-template-columns: minmax(10rem, 1.35fr) repeat(6, minmax(0, 1fr)) auto;")
+            .And.Contain(".personnel-filter-bar > .page-actions-inline { flex-wrap: nowrap;")
+            .And.Contain("@media (max-width: 1100px)")
+            .And.Contain(".personnel-filter-bar { grid-template-columns: repeat(4, minmax(0, 1fr)); }")
+            .And.Contain("@media (max-width: 680px)")
+            .And.Contain(".personnel-filter-bar { grid-template-columns: 1fr; }");
+    }
+
+    [Fact]
+    public void PersonnelTablesConstrainLongCellsAndKeepActionsOnOneLine()
+    {
+        var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        css.Should().Contain(".personnel-workspace-table { width: 100%;")
+            .And.Contain("table-layout: fixed")
+            .And.Contain(".personnel-table-wrap { min-width: 0; max-width: 100%; overflow-x: auto;")
+            .And.Contain(".personnel-number-cell")
+            .And.Contain("text-overflow: ellipsis")
+            .And.Contain(".personnel-row-actions { display: flex; flex-wrap: nowrap;")
+            .And.Contain("white-space: nowrap");
+    }
+
+    [Fact]
     public void AffiliationEditorUsesFingerprintedModuleAndAccessibleWrappedLabels()
     {
         var page = ReadFile("src", "EngineeringManager.Web", "Pages", "Employees", "Details.cshtml");

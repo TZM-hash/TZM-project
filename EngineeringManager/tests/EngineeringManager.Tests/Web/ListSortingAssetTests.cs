@@ -71,10 +71,10 @@ public sealed class ListSortingAssetTests
     }
 
     [Theory]
-    [InlineData("Companies/Index.cshtml")]
-    [InlineData("Partners/Index.cshtml")]
-    [InlineData("Crews/Index.cshtml")]
-    public void OrganizationSummaryRowsShareAStableSortingGroupWithTheirBusinessRow(string relativePath)
+    [InlineData("Companies/Index.cshtml", false)]
+    [InlineData("Partners/Index.cshtml", true)]
+    [InlineData("Crews/Index.cshtml", true)]
+    public void OrganizationSummaryRowsShareAStableSortingGroupWithTheirBusinessRow(string relativePath, bool rendersInlineSummary)
     {
         var razor = File.ReadAllText(Path.Combine(
             RepositoryRoot(),
@@ -83,8 +83,15 @@ public sealed class ListSortingAssetTests
             "Pages",
             relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
-        Regex.Matches(razor, "data-row-group=", RegexOptions.IgnoreCase)
-            .Should().HaveCountGreaterThanOrEqualTo(2, "the business row and its summary row must move together");
+        var rowGroupCount = Regex.Matches(razor, "data-row-group=", RegexOptions.IgnoreCase).Count;
+        if (rendersInlineSummary)
+        {
+            rowGroupCount.Should().BeGreaterThanOrEqualTo(2, "the business row and its summary row must move together");
+        }
+        else
+        {
+            rowGroupCount.Should().Be(1, "the company summary is rendered in the view dialog instead of a second table row");
+        }
     }
 
     [Fact]

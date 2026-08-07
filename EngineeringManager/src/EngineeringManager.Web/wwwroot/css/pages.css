@@ -857,7 +857,11 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .company-comparison-chart { gap: .9rem; }
 .company-money-panel .company-comparison-chart { gap: .55rem; margin-top: .7rem; }
 .company-money-panel .company-chart-ring [data-chart-canvas] { width: 3.35rem; height: 3.35rem; }
-.company-money-panel > .panel-heading { gap: .5rem; }
+.company-money-panel > .panel-heading { align-items: stretch; flex-direction: column; gap: .65rem; }
+.company-money-panel > .panel-heading > div:first-child { min-width: 0; }
+.company-money-panel .company-chart-ring { width: 100%; justify-content: space-between; }
+.company-money-panel .chart-label { align-items: flex-start; flex-direction: column; gap: .18rem; }
+.company-money-panel .chart-label span { max-width: 100%; overflow-wrap: anywhere; }
 .company-money-panel .chart-label span { font-size: .68rem; }
 .company-chart-ring { display: flex; align-items: center; gap: .65rem; color: var(--app-muted); font-size: .68rem; font-weight: 700; white-space: nowrap; }
 .company-chart-ring [data-chart-canvas] { width: 4.25rem; height: 4.25rem; flex: 0 0 auto; }
@@ -1232,14 +1236,14 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .company-certificate-workspace-summary, .company-certificate-workspace-list { border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); box-shadow: var(--app-shadow-soft); }
 .company-certificate-workspace-summary { position: sticky; top: 5rem; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: .72rem; min-height: 0; max-height: none; padding: .9rem; overflow: hidden; }
 .company-certificate-workspace-list { min-width: 0; overflow: hidden; }
-.company-certificate-summary-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .42rem; }
-.company-certificate-summary-metrics article { display: grid; gap: .12rem; min-height: 3.8rem; padding: .55rem; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-raised); }
-.company-certificate-summary-metrics span { color: var(--app-muted); font-size: .7rem; }
-.company-certificate-summary-metrics strong { align-self: end; font-size: 1.12rem; }
-.company-certificate-reminder-scale { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; padding-block: .1rem .65rem; border-bottom: 1px solid var(--app-border); }
-.company-certificate-reminder-scale > div { display: flex; align-items: center; justify-content: space-between; gap: .35rem; min-width: 0; }
+.company-certificate-summary-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .42rem; }
+.company-certificate-summary-metrics article { display: grid; gap: .12rem; min-width: 0; min-height: 4.15rem; padding: .55rem; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-raised); }
+.company-certificate-summary-metrics span { min-width: 0; color: var(--app-muted); font-size: .7rem; line-height: 1.25; overflow-wrap: anywhere; }
+.company-certificate-summary-metrics strong { align-self: end; font-size: 1.12rem; line-height: 1.1; }
+.company-certificate-reminder-scale { display: grid; grid-template-columns: 1fr; gap: .35rem; padding-block: .1rem .65rem; border-bottom: 1px solid var(--app-border); }
+.company-certificate-reminder-scale > div { display: flex; align-items: center; justify-content: flex-start; gap: .35rem .5rem; min-width: 0; flex-wrap: wrap; }
 .company-certificate-reminder-scale .certificate-status { min-height: 1.5rem; padding: .14rem .45rem; font-size: .68rem; }
-.company-certificate-reminder-scale small { color: var(--app-muted); font-size: .65rem; white-space: nowrap; }
+.company-certificate-reminder-scale small { color: var(--app-muted); font-size: .65rem; white-space: normal; overflow-wrap: anywhere; }
 .company-certificate-company-summary { padding-top: 0; }
 .company-certificate-composition { display: flex; width: 100%; height: .38rem; overflow: hidden; border-radius: 3px; background: #e9eef5; }
 .company-certificate-composition span { display: block; min-width: 0; height: 100%; }
@@ -1652,6 +1656,17 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 /* Employee workspace: partner-management parity */
 .employee-workspace-page { display: grid; gap: .85rem; }
 .employee-workspace-heading { margin-bottom: 0; }
+.personnel-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.35fr) repeat(6, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: .55rem;
+  padding: .75rem .85rem;
+}
+.personnel-filter-bar > label { min-width: 0; gap: .25rem; font-size: .72rem; font-weight: 650; white-space: nowrap; }
+.personnel-filter-bar > label input, .personnel-filter-bar > label select { min-width: 0; min-height: 2.25rem; padding: .4rem .52rem; font-size: .78rem; }
+.personnel-filter-bar > .page-actions-inline { flex-wrap: nowrap; gap: .35rem; }
+.personnel-filter-bar > .page-actions-inline .button { min-height: 2.25rem; padding: .4rem .6rem; font-size: .78rem; white-space: nowrap; }
 .employee-workspace-layout { display: grid; grid-template-columns: minmax(210px, 220px) minmax(0, 1fr); gap: .85rem; align-items: stretch; }
 .employee-workspace-summary, .employee-workspace-list { border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); box-shadow: var(--app-shadow-soft); }
 .employee-workspace-summary { position: sticky; top: 5rem; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: .72rem; min-height: 0; max-height: none; padding: .9rem; overflow: hidden; }
@@ -1670,6 +1685,42 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-type-summary-row:hover, .employee-type-summary-row.is-active { border-color: rgba(37, 99, 235, .2); background: #f4f7fb; }
 .employee-type-clear { width: 100%; justify-content: center; }
 .employee-list-toolbar { border: 0; border-bottom: 1px solid var(--app-border); border-radius: 0; }
+.personnel-table-wrap { min-width: 0; max-width: 100%; overflow-x: auto; border: 0; border-radius: 0; }
+.personnel-workspace-table { width: 100%; min-width: 112rem; table-layout: fixed; font-size: .82rem; }
+.personnel-workspace-table th, .personnel-workspace-table td { min-width: 0; padding: .52rem .42rem; vertical-align: middle; overflow-wrap: anywhere; }
+.personnel-workspace-table th[data-column-key="selection"] { width: 3.5rem; }
+.personnel-workspace-table th[data-column-key="name"] { width: 8rem; }
+.personnel-workspace-table th[data-column-key="person_number"] { width: 8.5rem; }
+.personnel-workspace-table th[data-column-key="phone"] { width: 10rem; }
+.personnel-workspace-table th[data-column-key="personnel_type"] { width: 8rem; }
+.personnel-workspace-table th[data-column-key="position"] { width: 9rem; }
+.personnel-workspace-table th[data-column-key="organization"] { width: 12rem; }
+.personnel-workspace-table th[data-column-key="department"] { width: 9rem; }
+.personnel-workspace-table th[data-column-key="project"] { width: 12rem; }
+.personnel-workspace-table th[data-column-key="crew"] { width: 9rem; }
+.personnel-workspace-table th[data-column-key="status"] { width: 5rem; }
+.personnel-workspace-table th[data-column-key="prior_year_carry_forward"],
+.personnel-workspace-table th[data-column-key="current_year_wage_payable"],
+.personnel-workspace-table th[data-column-key="expense_payable"],
+.personnel-workspace-table th[data-column-key="other_payable"],
+.personnel-workspace-table th[data-column-key="adjustment_amount"],
+.personnel-workspace-table th[data-column-key="current_year_new_payable"],
+.personnel-workspace-table th[data-column-key="received_amount"],
+.personnel-workspace-table th[data-column-key="current_year_unpaid"],
+.personnel-workspace-table th[data-column-key="current_balance"],
+.personnel-workspace-table th[data-column-key="penalty_amount"] { width: 8.25rem; }
+.personnel-workspace-table th[data-column-key="settlement_progress"] { width: 7.5rem; }
+.personnel-workspace-table th[data-column-key="overpaid_status"] { width: 6.5rem; }
+.personnel-workspace-table th[data-column-key="actions"] { width: 15rem; }
+.personnel-workspace-table td[data-column-key="name"] > strong,
+.personnel-workspace-table td[data-column-key="person_number"] > span,
+.personnel-workspace-table td[data-column-key="phone"],
+.personnel-workspace-table td[data-column-key="personnel_type"] { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.personnel-number-cell { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.personnel-text-cell { line-height: 1.4; overflow-wrap: anywhere; white-space: normal; }
+.personnel-salary-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.personnel-row-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: .28rem; min-width: max-content; white-space: nowrap; }
+.personnel-row-actions .action-button { flex: 0 0 auto; white-space: nowrap; }
 .employee-table-wrap { min-width: 0; max-width: 100%; overflow-x: auto; border: 0; border-radius: 0; }
 .employee-workspace-table { width: 100%; min-width: 73rem; table-layout: fixed; font-size: .84rem; }
 .employee-workspace-table th, .employee-workspace-table td { min-width: 0; padding: .52rem .42rem; vertical-align: middle; overflow-wrap: anywhere; }
@@ -1724,6 +1775,19 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-certificate-table .employee-row-actions .action-button { width: 100%; padding-inline: .2rem; font-size: .78rem; }
 .employee-certificate-authority { display: block; min-width: 0; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
 
+@media (max-width: 1100px) {
+  .personnel-filter-bar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .personnel-filter-bar > label:first-child, .personnel-filter-bar > .page-actions-inline { grid-column: 1 / -1; }
+  .personnel-filter-bar > .page-actions-inline { justify-content: flex-start; }
+}
+
+@media (max-width: 680px) {
+  .personnel-filter-bar { grid-template-columns: 1fr; }
+  .personnel-filter-bar > label:first-child, .personnel-filter-bar > .page-actions-inline { grid-column: auto; }
+  .personnel-filter-bar > .page-actions-inline { width: 100%; }
+  .personnel-filter-bar > .page-actions-inline .button { flex: 1 1 0; }
+}
+
 /* Shared read-only details dialogs */
 .entity-details-body, .employee-view-dialog-body.entity-details-body, .company-view-dialog-body.entity-details-body { display: block; min-height: 0; padding: 1rem; background: #f4f7fb; overflow-y: auto; }
 .employee-view-dialog-body > .entity-detail-sections { min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
@@ -1744,7 +1808,31 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .entity-detail-section .payroll-details-metrics article { min-height: 5.4rem; padding: .68rem .8rem; border-right: 1px solid #d8e2ee; border-bottom: 1px solid #d8e2ee; border-radius: 0; background: #fff; }
 .entity-detail-section .payroll-details-metrics article:nth-child(even) { border-right: 0; }
 .entity-detail-section .payroll-details-metrics article:nth-last-child(-n+2) { border-bottom: 0; }
+.company-view-summary-section { overflow: hidden; }
+.company-view-summary-groups { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.55fr) minmax(10rem, .72fr); gap: .8rem; padding: .8rem; background: #f8fafc; }
+.company-view-summary-group { min-width: 0; }
+.company-view-summary-group h4 { margin: 0 0 .42rem; color: var(--app-muted); font-size: .78rem; font-weight: 750; }
+.company-view-summary-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.9rem, 1fr)); gap: .42rem; }
+.company-view-summary-metric { min-height: 3.7rem; padding: .52rem .58rem; }
+.organization-summary__metric--finance { border-top-color: #0f766e; background: #f3fcfa; }
+.organization-summary__metric--cash { border-top-color: #059669; background: #f2fdf8; }
+.organization-summary__metric--payment { border-top-color: #d97706; background: #fffaf1; }
+.organization-summary__metric--invoice { border-top-color: #7c3aed; background: #fbf9ff; }
+.company-view-finance-groups { display: grid; grid-template-columns: 1fr; gap: .68rem; padding: .8rem; background: #f8fafc; }
+.company-view-finance-row { min-width: 0; }
+.company-view-finance-row .company-view-summary-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.company-view-finance-row--engineering .company-view-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.company-view-finance-invoice-group { padding: 0 .8rem .8rem; background: #f8fafc; }
+.company-view-finance-invoice-heading { margin: 0 0 .42rem; color: var(--app-muted); font-size: .78rem; font-weight: 750; }
+.company-view-finance-invoice-directions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.company-view-invoice-direction { min-width: 0; padding: .68rem; border: 1px solid #d8e2ee; border-radius: 8px; background: #fff; }
+.company-view-invoice-direction .company-view-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .equipment-details-dialog .entity-details-body > [data-equipment-detail-attachment] { margin-top: .85rem; }
+
+@media (max-width: 900px) {
+  .company-view-summary-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .company-view-finance-row .company-view-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 @media (max-width: 900px) {
   .employee-workspace-layout { grid-template-columns: 1fr; }
@@ -1754,6 +1842,9 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 
 @media (max-width: 680px) {
   .entity-detail-sections, .entity-detail-field-grid, .equipment-detail-grid.entity-detail-field-grid { grid-template-columns: 1fr; }
+  .company-view-summary-groups, .company-view-finance-invoice-directions { grid-template-columns: 1fr; }
+  .company-view-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .company-view-finance-row .company-view-summary-metrics, .company-view-invoice-direction .company-view-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .entity-detail-section--wide, .entity-detail-field-grid > div:last-child:nth-child(odd), .entity-detail-field-grid > .entity-detail-field--wide { grid-column: auto; }
   .entity-detail-field-grid > div, .entity-detail-field-grid > div:nth-child(even), .entity-detail-field-grid > div:nth-last-child(-n+2) { border-right: 0; border-bottom: 1px solid #d8e2ee; }
   .entity-detail-field-grid > div:last-child { border-bottom: 0; }

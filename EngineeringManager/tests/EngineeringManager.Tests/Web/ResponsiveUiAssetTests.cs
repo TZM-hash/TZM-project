@@ -83,6 +83,9 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain(".company-portfolio-grid { grid-template-columns: minmax(210px, 220px) minmax(0, 1fr); align-items: stretch; }")
             .And.Contain(".company-dashboard-stack { display: grid; min-width: 0; grid-template-rows: auto minmax(0, 1fr); align-content: stretch;")
             .And.Contain(".company-dashboard-stack--single { align-self: stretch; grid-template-rows: minmax(0, 1fr); }")
+            .And.Contain(".company-money-panel > .panel-heading { align-items: stretch; flex-direction: column;")
+            .And.Contain(".company-money-panel .chart-label { align-items: flex-start; flex-direction: column;")
+            .And.Contain(".company-money-panel .chart-label span { max-width: 100%; overflow-wrap: anywhere; }")
             .And.Contain("grid-template-columns: minmax(210px, 220px) minmax(0, 1fr)")
             .And.Contain(".company-category-table-wrap { max-height: none; overflow: visible; }")
             .And.Contain(".company-list-panel { display: flex; min-width: 0; align-self: stretch; flex-direction: column; padding: 0;")
@@ -170,6 +173,12 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain("initAttachmentPreview()");
 
         css.Should().Contain(".company-certificate-workspace-layout { display: grid; grid-template-columns: minmax(210px, 220px) minmax(0, 1fr);")
+            .And.Contain(".company-certificate-summary-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));")
+            .And.Contain(".company-certificate-summary-metrics article { display: grid; gap: .12rem; min-width: 0; min-height: 4.15rem;")
+            .And.Contain(".company-certificate-summary-metrics span { min-width: 0;")
+            .And.Contain(".company-certificate-reminder-scale { display: grid; grid-template-columns: 1fr;")
+            .And.Contain(".company-certificate-reminder-scale > div { display: flex; align-items: center; justify-content: flex-start; gap: .35rem .5rem; min-width: 0; flex-wrap: wrap;")
+            .And.Contain(".company-certificate-reminder-scale small { color: var(--app-muted); font-size: .65rem; white-space: normal;")
             .And.Contain("align-items: stretch")
             .And.Contain(".company-certificate-list-toolbar .data-workbench-toolbar { min-width: 0; flex-wrap: wrap;")
             .And.Contain(".company-certificate-list-toolbar .workbench-inline-filters { flex-wrap: wrap;")
@@ -250,9 +259,16 @@ public sealed class ResponsiveUiAssetTests
             .And.Contain(".company-dialog > form { display: grid; grid-template-rows: auto minmax(0, 1fr) auto;")
             .And.Contain(".company-dialog-form-grid > .form-section { grid-column: auto;")
             .And.Contain(".company-view-dialog-body { grid-template-columns: repeat(3, minmax(0, 1fr));")
+            .And.Contain(".company-view-finance-groups { display: grid; grid-template-columns: 1fr;")
+            .And.Contain(".company-view-finance-row .company-view-summary-metrics { grid-template-columns: repeat(4, minmax(0, 1fr));")
+            .And.Contain(".company-view-finance-row--engineering .company-view-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr));")
+            .And.Contain(".company-view-finance-invoice-directions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));")
+            .And.Contain(".company-view-invoice-direction .company-view-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr));")
             .And.Contain(".mac-window-dialog .workbench-dialog-heading .mac-window-controls { display: inline-flex;")
             .And.Contain(".mac-window-controls i { display: block;")
             .And.Contain("@media (max-width: 680px)")
+            .And.Contain(".company-view-finance-row .company-view-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }")
+            .And.Contain(".company-view-summary-groups, .company-view-finance-invoice-directions { grid-template-columns: 1fr; }")
             .And.Contain(".company-dialog-form-grid, .company-view-dialog-body { grid-template-columns: 1fr; }");
     }
 

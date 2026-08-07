@@ -173,6 +173,22 @@ public sealed class DevelopmentSampleDataSeederTests
         script.Should().NotContain("EngineeringManager_Production");
     }
 
+    [Fact]
+    public void SampleDataCleanupScriptIsBoundedAndRecoverable()
+    {
+        var script = ReadRepositoryFile("scripts", "remove-development-sample-data.ps1");
+
+        script.Should().Contain("$ErrorActionPreference = 'Stop'");
+        script.Should().Contain("_Test$");
+        script.Should().Contain("BACKUP DATABASE");
+        script.Should().Contain("-Execute");
+        script.Should().Contain("DEMO-COMP-");
+        script.Should().Contain("DEMO-EQ-");
+        script.Should().Contain("AuditLogs");
+        script.Should().Contain("正式资料，禁止按测试数据删除");
+        script.Should().NotContain("DROP DATABASE");
+    }
+
     private static string ReadRepositoryFile(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

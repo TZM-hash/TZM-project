@@ -119,6 +119,14 @@ public sealed record SaveCompanyCertificateRequest(
     Guid? ConcurrencyStamp,
     string Reason);
 
+public sealed record CompanyInvoiceSummaryDto(
+    decimal OutputRequiredAmount,
+    decimal OutputIssuedAmount,
+    decimal OutputUnissuedAmount,
+    decimal InputRequiredAmount,
+    decimal InputIssuedAmount,
+    decimal InputUnissuedAmount);
+
 public sealed record CompanyDashboardDto(
     int CompanyCount,
     decimal ContractAmount,
@@ -133,7 +141,8 @@ public sealed record CompanyDashboardDto(
     decimal PayrollCost,
     decimal EquipmentCost,
     decimal AccountBalance,
-    DateTimeOffset GeneratedAt);
+    DateTimeOffset GeneratedAt,
+    CompanyInvoiceSummaryDto? InvoiceSummary = null);
 
 public sealed record CompanyWorkspaceSummaryDto(
     int ProjectCount,
