@@ -30,14 +30,32 @@ public sealed class PersonnelResponsiveUiTests
     public void PersonnelTablesConstrainLongCellsAndKeepActionsOnOneLine()
     {
         var css = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+        var pages = new[]
+        {
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Personnel", "Internal", "Index.cshtml"),
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Personnel", "External", "Index.cshtml")
+        };
 
         css.Should().Contain(".personnel-workspace-table { width: 100%;")
             .And.Contain("table-layout: fixed")
             .And.Contain(".personnel-table-wrap { min-width: 0; max-width: 100%; overflow-x: auto;")
             .And.Contain(".personnel-number-cell")
+            .And.Contain(".personnel-phone-cell")
+            .And.Contain(".personnel-type-cell")
             .And.Contain("text-overflow: ellipsis")
             .And.Contain(".personnel-row-actions { display: flex; flex-wrap: nowrap;")
             .And.Contain("white-space: nowrap");
+        pages.Should().OnlyContain(page => page.Contains("class=\"personnel-phone-cell\"", StringComparison.Ordinal))
+            .And.OnlyContain(page => page.Contains("class=\"personnel-type-cell\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PersonnelExportTriggerRendersScopeLabelAsRazorExpression()
+    {
+        var export = ReadFile("src", "EngineeringManager.Web", "Pages", "Personnel", "_PersonnelWorkbookExport.cshtml");
+
+        export.Should().Contain("<span>@($\"导出{Model.ScopeLabel}\")</span>")
+            .And.NotContain("<span>导出@Model.ScopeLabel</span>");
     }
 
     [Fact]

@@ -19,7 +19,7 @@
 
     <details class="project-workbook-export-menu" data-project-workbook-export-menu data-check-selector data-check-selector-persist open="@(hasExportError ? "open" : null)">
         <summary class="button button--primary workbench-tool-button project-workbook-export-trigger">
-            <span>导出@Model.ScopeLabel</span>
+            <span>@($"导出{Model.ScopeLabel}")</span>
             <span class="project-workbook-export-chevron" aria-hidden="true"></span>
         </summary>
         <div class="project-workbook-export-popover">

@@ -534,15 +534,20 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                 .Include(item => item.Adjustments)
                 .Include(item => item.Deductions)
                 .Include(item => item.InvoiceAllocations).ThenInclude(item => item.Invoice)
+                .Include(item => item.InvoiceAllocations).ThenInclude(item => item.Project)
+                .Include(item => item.InvoiceAllocations).ThenInclude(item => item.Contract)
+                .Include(item => item.InvoiceAllocations).ThenInclude(item => item.ContractLineItem)
                 .Include(item => item.CashAllocations).ThenInclude(item => item.CashEntry)
+                .Include(item => item.CashAllocations).ThenInclude(item => item.Project)
+                .Include(item => item.CashAllocations).ThenInclude(item => item.Contract)
+                .Include(item => item.CashAllocations).ThenInclude(item => item.ContractLineItem)
                 .SingleOrDefaultAsync(item => item.Id == id, token);
             if (settlement is null) return null;
             EnsureCanRead(actor, settlement.LegalEntityId, settlement.CounterLegalEntityId, settlement.ProjectId);
             var row = ToRow(settlement);
-            var allocations = settlement.InvoiceAllocations.Select(item => new FinanceAllocationDto(
-                    item.Id, item.SettlementId, item.ProjectId, item.ContractId, item.ContractLineItemId, item.Amount, item.AllocationOrder))
-                .Concat(settlement.CashAllocations.Select(item => new FinanceAllocationDto(
-                    item.Id, item.SettlementId, item.ProjectId, item.ContractId, item.ContractLineItemId, item.Amount, item.AllocationOrder)))
+            var settlementLabel = BuildSettlementLabel(settlement);
+            var allocations = settlement.InvoiceAllocations.Select(item => ToAllocation(item, settlementLabel, settlement))
+                .Concat(settlement.CashAllocations.Select(item => ToAllocation(item, settlementLabel, settlement)))
                 .ToArray();
             return new CentralLedgerDetailsDto(
                 type,
@@ -566,7 +571,9 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                     BusinessPartner = settlement.BusinessPartner?.Name,
                     CounterLegalEntity = settlement.CounterLegalEntity?.Name,
                     Project = settlement.Project?.Name,
+                    ProjectNumber = settlement.Project?.ProjectNumber,
                     Contract = settlement.Contract?.Name,
+                    ContractNumber = settlement.Contract?.ContractNumber,
                     settlement.Notes
                 }),
                 row.Metrics,
@@ -710,6 +717,10 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
         {
             var invoice = await db.FinanceInvoices.AsNoTracking()
                 .Include(item => item.Allocations)
+                .Include(item => item.Allocations).ThenInclude(item => item.Project)
+                .Include(item => item.Allocations).ThenInclude(item => item.Contract)
+                .Include(item => item.Allocations).ThenInclude(item => item.ContractLineItem)
+                .Include(item => item.Allocations).ThenInclude(item => item.Settlement)
                 .Include(item => item.LegalEntity)
                 .Include(item => item.BusinessPartner)
                 .Include(item => item.CounterLegalEntity)
@@ -744,11 +755,13 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                     BusinessPartner = invoice.BusinessPartner?.Name,
                     CounterLegalEntity = invoice.CounterLegalEntity?.Name,
                     Project = invoice.Project?.Name,
+                    ProjectNumber = invoice.Project?.ProjectNumber,
                     Contract = invoice.Contract?.Name,
+                    ContractNumber = invoice.Contract?.ContractNumber,
                     invoice.Notes
                 }),
                 CentralLedgerMetrics.Zero,
-                invoice.Allocations.Select(item => new FinanceAllocationDto(item.Id, item.SettlementId, item.ProjectId, item.ContractId, item.ContractLineItemId, item.Amount, item.AllocationOrder)).ToArray(),
+                invoice.Allocations.Select(item => ToAllocation(item)).ToArray(),
                 invoice.ConcurrencyStamp)
             {
                 SourceType = invoice.SourceType,
@@ -761,6 +774,10 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
         {
             var cash = await db.FinanceCashEntries.AsNoTracking()
                 .Include(item => item.Allocations)
+                .Include(item => item.Allocations).ThenInclude(item => item.Project)
+                .Include(item => item.Allocations).ThenInclude(item => item.Contract)
+                .Include(item => item.Allocations).ThenInclude(item => item.ContractLineItem)
+                .Include(item => item.Allocations).ThenInclude(item => item.Settlement)
                 .Include(item => item.LegalEntity)
                 .Include(item => item.BusinessPartner)
                 .Include(item => item.CounterLegalEntity)
@@ -795,13 +812,15 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                     BusinessPartner = cash.BusinessPartner?.Name,
                     CounterLegalEntity = cash.CounterLegalEntity?.Name,
                     Project = cash.Project?.Name,
+                    ProjectNumber = cash.Project?.ProjectNumber,
                     Contract = cash.Contract?.Name,
+                    ContractNumber = cash.Contract?.ContractNumber,
                     Account = cash.Account?.AccountName,
                     CounterAccount = cash.CounterAccount?.AccountName,
                     cash.Notes
                 }),
                 CentralLedgerMetrics.Zero,
-                cash.Allocations.Select(item => new FinanceAllocationDto(item.Id, item.SettlementId, item.ProjectId, item.ContractId, item.ContractLineItemId, item.Amount, item.AllocationOrder)).ToArray(),
+                cash.Allocations.Select(item => ToAllocation(item)).ToArray(),
                 cash.ConcurrencyStamp)
             {
                 SourceType = cash.SourceType,
@@ -817,6 +836,7 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                 .Include(item => item.Settlement).ThenInclude(item => item.BusinessPartner)
                 .Include(item => item.Settlement).ThenInclude(item => item.CounterLegalEntity)
                 .Include(item => item.Settlement).ThenInclude(item => item.Project)
+                .Include(item => item.Settlement).ThenInclude(item => item.Contract)
                 .SingleOrDefaultAsync(item => item.Id == id, token);
             if (deduction is null) return null;
             EnsureCanRead(actor, deduction.Settlement.LegalEntityId, deduction.Settlement.CounterLegalEntityId, deduction.Settlement.ProjectId);
@@ -839,7 +859,10 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
                     LegalEntity = deduction.Settlement.LegalEntity.Name,
                     BusinessPartner = deduction.Settlement.BusinessPartner?.Name,
                     CounterLegalEntity = deduction.Settlement.CounterLegalEntity?.Name,
-                    Project = deduction.Settlement.Project?.Name
+                    Project = deduction.Settlement.Project?.Name,
+                    ProjectNumber = deduction.Settlement.Project?.ProjectNumber,
+                    Contract = deduction.Settlement.Contract?.Name,
+                    ContractNumber = deduction.Settlement.Contract?.ContractNumber
                 }),
                 CentralLedgerMetrics.Zero,
                 [],
@@ -885,6 +908,56 @@ public sealed class CentralLedgerQueryService(ApplicationDbContext db) : ICentra
         }
         throw new ArgumentOutOfRangeException(nameof(type), type, "不支持的财务记录类型。");
     }
+
+    private static FinanceAllocationDto ToAllocation(
+        FinanceInvoiceAllocation allocation,
+        string? settlementLabel = null,
+        FinanceSettlement? fallbackSettlement = null)
+    {
+        var project = allocation.Project ?? fallbackSettlement?.Project;
+        var contract = allocation.Contract ?? fallbackSettlement?.Contract;
+        return new FinanceAllocationDto(
+            allocation.Id,
+            allocation.SettlementId,
+            settlementLabel ?? BuildSettlementLabel(allocation.Settlement),
+            allocation.ProjectId ?? fallbackSettlement?.ProjectId,
+            project?.ProjectNumber,
+            project?.Name,
+            allocation.ContractId ?? fallbackSettlement?.ContractId,
+            contract?.ContractNumber,
+            contract?.Name,
+            allocation.ContractLineItemId,
+            allocation.ContractLineItem?.Name,
+            allocation.Amount,
+            allocation.AllocationOrder);
+    }
+
+    private static FinanceAllocationDto ToAllocation(
+        FinanceCashAllocation allocation,
+        string? settlementLabel = null,
+        FinanceSettlement? fallbackSettlement = null)
+    {
+        var project = allocation.Project ?? fallbackSettlement?.Project;
+        var contract = allocation.Contract ?? fallbackSettlement?.Contract;
+        return new FinanceAllocationDto(
+            allocation.Id,
+            allocation.SettlementId,
+            settlementLabel ?? BuildSettlementLabel(allocation.Settlement),
+            allocation.ProjectId ?? fallbackSettlement?.ProjectId,
+            project?.ProjectNumber,
+            project?.Name,
+            allocation.ContractId ?? fallbackSettlement?.ContractId,
+            contract?.ContractNumber,
+            contract?.Name,
+            allocation.ContractLineItemId,
+            allocation.ContractLineItem?.Name,
+            allocation.Amount,
+            allocation.AllocationOrder);
+    }
+
+    private static string? BuildSettlementLabel(FinanceSettlement? settlement) => settlement is null
+        ? null
+        : $"结算 · {settlement.BusinessDate:yyyy-MM-dd} · {(settlement.SettlementState == LedgerSettlementState.Provisional ? "暂估" : "正式")}";
 
     private static CentralLedgerRowDto ToRow(FinanceSettlement settlement)
     {

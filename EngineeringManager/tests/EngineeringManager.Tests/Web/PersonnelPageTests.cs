@@ -228,6 +228,7 @@ public sealed class PersonnelPageTests
             ReadSourceFile("src", "EngineeringManager.Web", "Pages", "Personnel", "Internal", "Index.cshtml.cs"),
             ReadSourceFile("src", "EngineeringManager.Web", "Pages", "Personnel", "External", "Index.cshtml.cs")
         };
+        var workspaceModel = ReadSourceFile("src", "EngineeringManager.Web", "Pages", "Personnel", "PersonnelWorkspacePageModel.cs");
 
         pages.Should().OnlyContain(page => page.Contains("_DataWorkbench", StringComparison.Ordinal))
             .And.OnlyContain(page => page.Contains("data-personnel-export-item", StringComparison.Ordinal))
@@ -237,6 +238,7 @@ public sealed class PersonnelPageTests
         models.Should().OnlyContain(model => model.Contains("OnPostExportAsync", StringComparison.Ordinal))
             .And.OnlyContain(model => model.Contains("EmployeeAnnualLedgerSummary", StringComparison.Ordinal))
             .And.OnlyContain(model => model.Contains("ISavedDataViewService", StringComparison.Ordinal));
+        workspaceModel.Should().Contain("ToolbarActionsPartial: CanExportWorkbook ? \"_PersonnelWorkbookExport\" : null");
     }
 
     private static PageContext PageContextForViewer() => PageContextWithRoles("Finance");

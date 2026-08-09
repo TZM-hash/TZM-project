@@ -136,8 +136,8 @@
                         <td data-column-key="selection">@if (Model.CanExportWorkbook) { <input type="checkbox" name="SelectedPersonnelIds" value="@item.Id" form="@($"{Model.Workbench.TableId}-export-form")" data-project-export-item data-personnel-export-item aria-label="选择人员 @item.PersonNumber @item.Name" /> }</td>
                         <td data-column-key="name" data-sort-value="@item.Name"><strong title="@item.Name">@item.Name</strong></td>
                         <td data-column-key="person_number" data-sort-value="@item.PersonNumber"><span class="personnel-number-cell" title="@item.PersonNumber">@item.PersonNumber</span></td>
-                        <td data-column-key="phone" data-sort-value="@item.Phone">@(item.Phone ?? "未填写电话")</td>
-                        <td data-column-key="personnel_type">@ExternalTypeLabel(item.ExternalType)</td>
+                        <td data-column-key="phone" data-sort-value="@item.Phone"><span class="personnel-phone-cell">@(item.Phone ?? "未填写电话")</span></td>
+                        <td data-column-key="personnel_type"><span class="personnel-type-cell">@ExternalTypeLabel(item.ExternalType)</span></td>
                         <td data-column-key="position" class="personnel-text-cell">@(affiliation?.PositionTitle ?? "未填写岗位")</td>
                         <td data-column-key="organization" class="personnel-text-cell" title="@organization">@organization</td>
                         <td data-column-key="department" class="personnel-text-cell">@(affiliation?.OrganizationUnitName ?? "未归属部门")</td>

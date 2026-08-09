@@ -150,6 +150,22 @@ public sealed class CentralLedgerPageTests
     }
 
     [Fact]
+    public void LedgerDetailsUseReadableReferencesAndRowsNavigateToProjects()
+    {
+        var dto = ReadFile("src", "EngineeringManager.Application", "Finance", "CentralLedgerDtos.cs");
+        var queryService = ReadFile("src", "EngineeringManager.Infrastructure", "Finance", "CentralLedgerQueryService.cs");
+        var workspace = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "pages", "central-ledger-workspace.js");
+        var external = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "External", "Index.cshtml");
+        var internalLedger = ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Internal", "Index.cshtml");
+
+        dto.Should().ContainAll("SettlementLabel", "ProjectNumber", "ProjectName", "ContractNumber", "ContractName");
+        queryService.Should().ContainAll("ProjectNumber = settlement.Project?.ProjectNumber", "ContractNumber = settlement.Contract?.ContractNumber");
+        workspace.Should().ContainAll("\"1\": \"结算\"", "\"1\": \"项目工程量\"", "SettlementLabel", "window.location.assign");
+        external.Should().Contain("data-ledger-project-url");
+        internalLedger.Should().Contain("data-ledger-project-url");
+    }
+
+    [Fact]
     public void FinanceYearPageExplicitlyStatesItsIndependentScope()
     {
         ReadFile("src", "EngineeringManager.Web", "Pages", "Ledger", "Years", "Index.cshtml")

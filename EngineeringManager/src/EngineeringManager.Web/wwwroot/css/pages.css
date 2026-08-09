@@ -1714,8 +1714,8 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .personnel-workspace-table th[data-column-key="actions"] { width: 15rem; }
 .personnel-workspace-table td[data-column-key="name"] > strong,
 .personnel-workspace-table td[data-column-key="person_number"] > span,
-.personnel-workspace-table td[data-column-key="phone"],
-.personnel-workspace-table td[data-column-key="personnel_type"] { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.personnel-workspace-table td[data-column-key="phone"] > .personnel-phone-cell,
+.personnel-workspace-table td[data-column-key="personnel_type"] > .personnel-type-cell { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .personnel-number-cell { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .personnel-text-cell { line-height: 1.4; overflow-wrap: anywhere; white-space: normal; }
 .personnel-salary-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -2043,6 +2043,9 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .ledger-header-table th, .ledger-header-table td { overflow-wrap: anywhere; white-space: normal; }
 .ledger-header-table td.ledger-wrap-cell { line-height: 1.45; white-space: normal; }
 .ledger-row-actions { min-width: 0; display: flex; flex-wrap: wrap; gap: .22rem; }
+.ledger-project-row { cursor: pointer; }
+.ledger-project-row:hover > td { background: #f1f5f9; }
+.ledger-project-row:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
 .table-wrap > table.ledger-workspace-table .ledger-direction,
 .table-wrap > table.ledger-workspace-table .ledger-source-pill,
 .table-wrap > table.ledger-workspace-table .ledger-amount,
@@ -2118,6 +2121,7 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .ledger-source-summary span { color: var(--app-muted); font-size: .7rem; }
 .ledger-source-summary strong { overflow-wrap: anywhere; font-size: .82rem; }
 .ledger-source-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+.ledger-details-dialog [data-ledger-detail-edit][hidden], .ledger-details-dialog [data-ledger-delete-open][hidden] { display: none !important; }
 .ledger-delete-dialog { width: min(34rem, calc(100vw - 2rem)); }
 .ledger-danger-note, .ledger-readonly-banner { display: grid; gap: .25rem; padding: .72rem .8rem; border-left: 3px solid #dc2626; color: #991b1b; background: #fef2f2; font-size: .76rem; line-height: 1.5; }
 .ledger-readonly-banner { margin: 0 1rem; border-left-color: #d97706; color: #92400e; background: #fffbeb; }

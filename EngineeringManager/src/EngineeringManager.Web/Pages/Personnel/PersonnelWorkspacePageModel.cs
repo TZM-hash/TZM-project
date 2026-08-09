@@ -19,7 +19,6 @@ public abstract class PersonnelWorkspacePageModel : PageModel
 {
     private const string ExportColumnModeContent = "content";
     private const string ExportColumnModeTable = "table";
-    private const string PersonnelWorkbookPartial = "/Pages/Personnel/_PersonnelWorkbookExport";
 
     protected PersonnelWorkspacePageModel(
         IPersonnelService personnelService,
@@ -213,7 +212,7 @@ public abstract class PersonnelWorkspacePageModel : PageModel
             false,
             SavedViewService is not null,
             false,
-            ToolbarActionsPartial: CanExportWorkbook ? PersonnelWorkbookPartial : null,
+            ToolbarActionsPartial: CanExportWorkbook ? "_PersonnelWorkbookExport" : null,
             ToolbarActionsModel: exportModel,
             SortOptions:
             [

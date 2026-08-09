@@ -400,9 +400,15 @@ public sealed record UpdateFinanceCashRequest(
 public sealed record FinanceAllocationDto(
     Guid Id,
     Guid SettlementId,
+    string? SettlementLabel,
     Guid? ProjectId,
+    string? ProjectNumber,
+    string? ProjectName,
     Guid? ContractId,
+    string? ContractNumber,
+    string? ContractName,
     Guid? ContractLineItemId,
+    string? ContractLineItemName,
     decimal Amount,
     int AllocationOrder);
 
