@@ -332,14 +332,16 @@ function initNavigationFeedback() {
     indicator.hidden = true;
     document.body.classList.remove("navigation-pending");
   };
-  document.querySelectorAll("a[href]").forEach((link) => link.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    if (!link) return;
     if (link.target && link.target !== "_self" || link.hasAttribute("download")) return;
     const target = new URL(link.href, window.location.href);
     if (target.origin !== window.location.origin || target.href === window.location.href) return;
     indicator.hidden = false;
     document.body.classList.add("navigation-pending");
-  }));
+  });
   window.addEventListener("pageshow", clear);
 }
 

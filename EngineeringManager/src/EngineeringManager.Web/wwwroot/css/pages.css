@@ -1684,7 +1684,12 @@ tr.is-highlighted { outline: 2px solid var(--color-primary); outline-offset: -2p
 .employee-type-summary-row { display: flex; align-items: center; justify-content: space-between; gap: .7rem; min-height: 2.2rem; padding: .45rem .52rem; border: 1px solid transparent; border-radius: 6px; color: var(--app-text); text-decoration: none; }
 .employee-type-summary-row:hover, .employee-type-summary-row.is-active { border-color: rgba(37, 99, 235, .2); background: #f4f7fb; }
 .employee-type-clear { width: 100%; justify-content: center; }
-.employee-list-toolbar { border: 0; border-bottom: 1px solid var(--app-border); border-radius: 0; }
+.employee-list-toolbar { align-items: stretch; flex-direction: column; border: 0; border-bottom: 1px solid var(--app-border); border-radius: 0; }
+.employee-list-toolbar.equipment-list-toolbar--integrated > .data-workbench { display: flex; width: 100%; align-items: flex-start; gap: .55rem; margin-top: 0; overflow-x: auto; }
+.employee-list-toolbar .data-workbench-toolbar { flex: 0 0 auto; }
+.employee-list-toolbar .workbench-list-pagination { width: auto; flex-wrap: nowrap; flex: 0 0 auto; padding-top: 0; }
+.employee-list-toolbar .workbench-list-pagination .table-pagination { flex-wrap: nowrap; }
+.employee-list-toolbar .workbench-list-pagination .pagination__actions { flex-wrap: nowrap; }
 .personnel-table-wrap { min-width: 0; max-width: 100%; overflow-x: auto; border: 0; border-radius: 0; }
 .personnel-workspace-table { width: 100%; min-width: 112rem; table-layout: fixed; font-size: .82rem; }
 .personnel-workspace-table th, .personnel-workspace-table td { min-width: 0; padding: .52rem .42rem; vertical-align: middle; overflow-wrap: anywhere; }

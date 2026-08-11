@@ -126,6 +126,8 @@ body.table-density-spacious .data-table th, body.table-density-spacious .data-ta
 .standalone-list-sort + .table-wrap, .standalone-list-sort + .data-table-wrap { margin-top: 0; }
 .standalone-list-pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .7rem; width: 100%; margin: .7rem 0 .35rem; }
 .standalone-list-pagination .table-pagination { margin-top: 0; }
+.workbench-list-pagination { box-sizing: border-box; margin: 0; padding-top: .15rem; }
+.workbench-list-pagination .table-pagination { flex-wrap: wrap; }
 .workbench-view-picker, .page-size-picker { display: flex; align-items: center; gap: .45rem; color: var(--app-muted); font-size: .78rem; font-weight: 700; }
 .workbench-view-picker select, .page-size-picker select { min-height: 2.35rem; padding: .38rem 2rem .38rem .65rem; border: 1px solid var(--app-border-strong); border-radius: 7px; color: var(--app-text); background: var(--app-surface); font: inherit; }
 .workbench-view-picker select { min-width: 11rem; }

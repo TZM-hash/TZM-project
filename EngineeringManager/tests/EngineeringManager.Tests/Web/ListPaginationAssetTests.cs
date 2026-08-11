@@ -34,6 +34,15 @@ public sealed class ListPaginationAssetTests
     }
 
     [Fact]
+    public void NavigationFeedbackUsesDelegationForDynamicallyInsertedPaginationLinks()
+    {
+        var site = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "site.js");
+
+        site.Should().Contain("document.addEventListener(\"click\"")
+            .And.Contain("closest(\"a[href]\")");
+    }
+
+    [Fact]
     public void SharedPaginationCountsAndShowsGroupedRowsAsOneBusinessRecord()
     {
         var script = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "list-pagination.js");
@@ -65,6 +74,38 @@ public sealed class ListPaginationAssetTests
             .And.Contain("data-list-pagination-current-page")
             .And.Contain("data-list-pagination-total-pages")
             .And.Contain("data-list-pagination-page-size");
+    }
+
+    [Fact]
+    public void PersonnelWorkbenchesEnableSharedPageSizeAndPaginationControls()
+    {
+        var workspaceModel = ReadFile("src", "EngineeringManager.Web", "Pages", "Personnel", "PersonnelWorkspacePageModel.cs");
+        var workbenchPartial = ReadFile("src", "EngineeringManager.Web", "Pages", "Shared", "_DataWorkbench.cshtml");
+        var paginationScript = ReadFile("src", "EngineeringManager.Web", "wwwroot", "js", "components", "list-pagination.js");
+
+        workspaceModel.Should().Contain("CanChangePageSize: true");
+        workbenchPartial.Should().Contain("standalone-list-pagination workbench-list-pagination")
+            .And.Contain("data-list-pagination-host")
+            .And.Contain("data-list-pagination-for=\"@Model.TableId\"");
+        paginationScript.Should().Contain("[data-list-pagination-host][data-list-pagination-for]")
+            .And.Contain("host.append(pickerLabel, state.nav)");
+        foreach (var scope in new[] { "Internal", "External" })
+        {
+            ReadFile("src", "EngineeringManager.Web", "Pages", "Personnel", scope, "Index.cshtml")
+                .Should().Contain("_DataWorkbench")
+                .And.Contain("data-table personnel-workspace-table");
+        }
+    }
+
+    [Fact]
+    public void PersonnelIntegratedWorkbenchKeepsToolsAndPaginationOnOneDesktopRow()
+    {
+        var styles = ReadFile("src", "EngineeringManager.Web", "wwwroot", "css", "pages.css");
+
+        styles.Should().Contain(".employee-list-toolbar { align-items: stretch; flex-direction: column;")
+            .And.Contain(".employee-list-toolbar.equipment-list-toolbar--integrated > .data-workbench { display: flex;")
+            .And.Contain(".employee-list-toolbar .workbench-list-pagination { width: auto; flex-wrap: nowrap;")
+            .And.Contain(".employee-list-toolbar .workbench-list-pagination .table-pagination { flex-wrap: nowrap;");
     }
 
     [Fact]

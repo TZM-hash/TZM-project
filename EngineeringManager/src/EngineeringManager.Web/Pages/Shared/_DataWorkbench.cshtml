@@ -163,18 +163,6 @@
                 <button type="button" data-row-spacing="standard" aria-pressed="@(Model.RowDensity == TableDensity.Standard ? "true" : "false")">标准</button>
                 <button type="button" data-row-spacing="spacious" aria-pressed="@(Model.RowDensity == TableDensity.Spacious ? "true" : "false")">宽松</button>
             </div>
-            @if (Model.CanChangePageSize)
-            {
-            <label class="page-size-picker">
-                <span>每页</span>
-                <select data-current-page-size aria-label="每页显示条数">
-                    @foreach (var size in new[] { 20, 50, 100 })
-                    {
-                        <option value="@size" selected="@(Model.CurrentPageSize == size)">@size 条</option>
-                    }
-                </select>
-            </label>
-            }
             @if (Model.CanSaveViews)
             {
                 <button class="button button--secondary workbench-tool-button" type="button" data-open-save-view>保存视图</button>
@@ -189,6 +177,22 @@
             }
         </div>
     </div>
+
+    @if (Model.CanChangePageSize)
+    {
+        <div class="standalone-list-pagination workbench-list-pagination"
+             data-list-pagination-host data-list-pagination-for="@Model.TableId">
+            <label class="page-size-picker">
+                <span>每页</span>
+                <select data-current-page-size aria-label="每页显示条数">
+                    @foreach (var size in new[] { 20, 50, 100 })
+                    {
+                        <option value="@size" selected="@(Model.CurrentPageSize == size)">@size 条</option>
+                    }
+                </select>
+            </label>
+        </div>
+    }
 
     @if (Model.ActiveFilters.Count > 0)
     {

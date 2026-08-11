@@ -44,6 +44,12 @@ function workbenchForTable(table) {
     .find((workbench) => workbench.dataset.tableId === table.id) || null;
 }
 
+function dedicatedPaginationHostForTable(table) {
+  if (!table.id) return null;
+  return Array.from(document.querySelectorAll("[data-list-pagination-host][data-list-pagination-for]"))
+    .find((host) => host.dataset.listPaginationFor === table.id) || null;
+}
+
 function tableToken(table, index) {
   if (!table.dataset.listPaginationId) {
     table.dataset.listPaginationId = table.id || table.dataset.listSortId || `table-${index + 1}`;
@@ -139,6 +145,16 @@ function createNav() {
   nav.dataset.listPaginationNav = "";
   nav.setAttribute("aria-label", "分页控件");
   return nav;
+}
+
+function attachDedicatedPagination(state, host) {
+  if (!host || !state.select) return false;
+  const pickerLabel = state.select.closest(".page-size-picker");
+  if (!pickerLabel) return false;
+  if (!state.nav) state.nav = createNav();
+  host.replaceChildren();
+  host.append(pickerLabel, state.nav);
+  return true;
 }
 
 function tableWrapper(table) {
@@ -312,6 +328,7 @@ function bindPageSize(state) {
 
 function initTable(table, index) {
   const workbench = workbenchForTable(table);
+  const dedicatedHost = dedicatedPaginationHostForTable(table);
   const server = isServerPagination(table, workbench);
   const existingSelect = workbench?.querySelector("[data-current-page-size]") || null;
   const key = storageKey(table, workbench, index);
@@ -338,6 +355,7 @@ function initTable(table, index) {
   state.totalCount = serverMeta?.totalCount ?? state.totalCount;
   states.set(table, state);
   updateSelect(state.select, state.pageSize);
+  const usesDedicatedHost = attachDedicatedPagination(state, dedicatedHost);
 
   if (!state.select) {
     const picker = pageSizePicker(state.pageSize);
@@ -357,10 +375,10 @@ function initTable(table, index) {
       bar.append(state.nav);
       insertBeforeTable(table, bar);
     }
-  } else if (!state.server && !state.nav) {
+  } else if (!usesDedicatedHost && !state.server && !state.nav) {
     state.nav = createNav();
     insertAfter(tableWrapper(table), state.nav);
-  } else if (state.server && !workbench && !state.nav) {
+  } else if (!usesDedicatedHost && state.server && !workbench && !state.nav) {
     state.nav = createNav();
     insertAfter(tableWrapper(table), state.nav);
   }

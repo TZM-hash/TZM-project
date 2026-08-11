@@ -209,9 +209,9 @@ public abstract class PersonnelWorkspacePageModel : PageModel
             SortKey,
             SortDescending,
             selected?.Id,
-            false,
-            SavedViewService is not null,
-            false,
+            CanExport: false,
+            CanSaveViews: SavedViewService is not null,
+            CanChangePageSize: true,
             ToolbarActionsPartial: CanExportWorkbook ? "_PersonnelWorkbookExport" : null,
             ToolbarActionsModel: exportModel,
             SortOptions:
